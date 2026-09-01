@@ -92,10 +92,15 @@ verification and sitemap submission (these require a live deployment).
 
 ## Environment variables
 
-None required yet for the marketing site. When the application layer is
-added, secrets (database URL, broker API keys, JWT signing key, etc.)
-must be provided via environment variables / AWS Secrets Manager — never
-committed to source control.
+Copy `.env.example` to `.env.local` and fill in:
+
+| Variable | Required | Description |
+|---|---|---|
+| `NEXT_PUBLIC_GA_MEASUREMENT_ID` | No | GA4 Measurement ID (`G-XXXXXXXXXX`). Analytics is skipped entirely if unset. |
+
+When the application layer is added, secrets (database URL, broker API
+keys, JWT signing key, etc.) must be provided via environment variables /
+AWS Secrets Manager — never committed to source control.
 
 ## Roadmap
 
