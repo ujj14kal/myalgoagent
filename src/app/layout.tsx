@@ -1,0 +1,113 @@
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+import Header from "@/components/header";
+import Footer from "@/components/footer";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+const siteUrl = "https://myalgoagent.com";
+
+export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "my ALGO agent — Algo Trading Platform",
+    template: "%s | my ALGO agent",
+  },
+  description:
+    "my ALGO agent is an algo-trading software platform for building, backtesting, paper trading and running rule-based strategies with risk controls built in.",
+  applicationName: "my ALGO agent",
+  keywords: [
+    "algo trading",
+    "algorithmic trading platform",
+    "strategy builder",
+    "backtesting engine",
+    "paper trading",
+    "trading risk management",
+  ],
+  authors: [{ name: "my ALGO agent" }],
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/brand/apple-touch-icon.png" }],
+  },
+  manifest: "/manifest.webmanifest",
+  openGraph: {
+    type: "website",
+    url: siteUrl,
+    siteName: "my ALGO agent",
+    title: "my ALGO agent — Algo Trading Platform",
+    description:
+      "Build, backtest, paper trade and run rule-based algo trading strategies with risk controls built in.",
+    images: [{ url: "/brand/icon-512.png", width: 512, height: 512, alt: "my ALGO agent" }],
+  },
+  twitter: {
+    card: "summary",
+    title: "my ALGO agent — Algo Trading Platform",
+    description:
+      "Build, backtest, paper trade and run rule-based algo trading strategies with risk controls built in.",
+    images: ["/brand/icon-512.png"],
+  },
+  alternates: {
+    canonical: siteUrl,
+  },
+};
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "my ALGO agent",
+    url: siteUrl,
+    logo: `${siteUrl}/brand/icon-512.png`,
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "my ALGO agent",
+    url: siteUrl,
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "my ALGO agent",
+    applicationCategory: "FinanceApplication",
+    operatingSystem: "Web",
+    url: siteUrl,
+    description:
+      "Software platform for building, backtesting, paper trading and running rule-based algo trading strategies with risk controls.",
+  },
+];
+
+export default function RootLayout({ children }: LayoutProps<"/">) {
+  return (
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+    >
+      <body className="min-h-full flex flex-col bg-brand-bg text-brand-navy">
+        {jsonLd.map((ld, i) => (
+          <script
+            key={i}
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
+          />
+        ))}
+        <Header />
+        <main className="flex-1">{children}</main>
+        <Footer />
+      </body>
+    </html>
+  );
+}
