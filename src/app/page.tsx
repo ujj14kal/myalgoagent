@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import { siteUrl } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "my ALGO agent — Algo Trading Platform",
+  title: "MyAlgoAgent — Algo Trading Platform",
   description:
     "Build, backtest, paper trade and run rule-based algo trading strategies with market data, technical indicators and risk controls built in.",
   alternates: { canonical: siteUrl },
@@ -41,7 +41,7 @@ export default function Home() {
               Build, backtest and run trading strategies without guesswork.
             </h1>
             <p className="mt-5 max-w-xl text-lg text-brand-navy/70">
-              my ALGO agent is a software platform for creating rule-based
+              MyAlgoAgent is a software platform for creating rule-based
               trading strategies, testing them against history, and running
               them in paper or live mode with risk controls built in.
             </p>
@@ -68,7 +68,7 @@ export default function Home() {
           <div className="flex justify-center">
             <Image
               src="/brand/icon-mark.svg"
-              alt="my ALGO agent"
+              alt="MyAlgoAgent"
               width={280}
               height={280}
               priority

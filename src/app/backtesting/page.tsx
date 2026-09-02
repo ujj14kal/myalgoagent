@@ -33,7 +33,7 @@ export default function BacktestingPage() {
         <h2>Why it matters</h2>
         <p>
           A backtest that ignores fees, slippage and realistic fills will
-          overstate performance. my ALGO agent&rsquo;s backtesting engine
+          overstate performance. MyAlgoAgent&rsquo;s backtesting engine
           applies the same cost assumptions a live strategy would face, so
           results are a more honest estimate of what actually happened.
         </p>

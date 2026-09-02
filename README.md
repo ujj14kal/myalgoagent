@@ -1,4 +1,4 @@
-# my ALGO agent
+# MyAlgoAgent
 
 An algo-trading software platform for building, backtesting, paper trading
 and running rule-based trading strategies with risk controls built in.

@@ -5,7 +5,7 @@ import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Risk Disclosure",
-  description: "Trading and algo-trading risk disclosure for my ALGO agent.",
+  description: "Trading and algo-trading risk disclosure for MyAlgoAgent.",
   alternates: { canonical: `${siteUrl}/risk-disclosure` },
 };
 
@@ -30,8 +30,8 @@ export default function RiskDisclosurePage() {
 
         <h2>Past and backtested performance</h2>
         <p>
-          Backtested, simulated and historical performance shown on my
-          ALGO agent does not guarantee future results. Backtests rely on
+          Backtested, simulated and historical performance shown on
+          MyAlgoAgent&trade; does not guarantee future results. Backtests rely on
           modeled assumptions (fees, slippage, fills) that may differ from
           actual market conditions. Paper-trading results reflect simulated
           orders, not real execution.
@@ -39,7 +39,7 @@ export default function RiskDisclosurePage() {
 
         <h2>No investment advice</h2>
         <p>
-          my ALGO agent provides software tools for building, testing and
+          MyAlgoAgent provides software tools for building, testing and
           operating trading strategies. Nothing on this platform constitutes
           personalized investment advice, a recommendation to buy or sell
           any security, or a guarantee of profit. AI-generated content is

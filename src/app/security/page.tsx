@@ -6,7 +6,7 @@ import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Security",
   description:
-    "How my ALGO agent protects credentials, trading data and infrastructure: secret management, encryption, authorization, audit logging and safe failure states.",
+    "How MyAlgoAgent protects credentials, trading data and infrastructure: secret management, encryption, authorization, audit logging and safe failure states.",
   alternates: { canonical: `${siteUrl}/security` },
 };
 

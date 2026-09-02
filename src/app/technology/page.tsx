@@ -6,7 +6,7 @@ import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Technology & AWS Infrastructure",
   description:
-    "The technology stack behind my ALGO agent and the AWS architecture used to run it: compute, database, storage, APIs, monitoring and cost-conscious design.",
+    "The technology stack behind MyAlgoAgent and the AWS architecture used to run it: compute, database, storage, APIs, monitoring and cost-conscious design.",
   alternates: { canonical: `${siteUrl}/technology` },
 };
 
@@ -92,7 +92,7 @@ export default function TechnologyPage() {
 
         <h2>Important note</h2>
         <p>
-          my ALGO agent is not endorsed, sponsored, certified or partnered
+          MyAlgoAgent is not endorsed, sponsored, certified or partnered
           with Amazon or AWS. AWS is used as third-party cloud
           infrastructure, the same way any software company uses a cloud
           provider.

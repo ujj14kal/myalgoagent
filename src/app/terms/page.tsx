@@ -5,7 +5,7 @@ import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Terms & Conditions",
-  description: "Terms of service for using the my ALGO agent platform.",
+  description: "Terms of service for using the MyAlgoAgent platform.",
   alternates: { canonical: `${siteUrl}/terms` },
 };
 
@@ -22,14 +22,14 @@ export default function TermsPage() {
       <Prose>
         <h2>Acceptance</h2>
         <p>
-          By creating an account or using my ALGO agent, you agree to these
+          By creating an account or using MyAlgoAgent&trade;, you agree to these
           Terms, our <a href="/privacy-policy">Privacy Policy</a> and our{" "}
           <a href="/risk-disclosure">Risk Disclosure</a>.
         </p>
 
         <h2>The service</h2>
         <p>
-          my ALGO agent provides software for building, backtesting, paper
+          MyAlgoAgent provides software for building, backtesting, paper
           trading and — where a broker is connected — live-executing
           rule-based trading strategies. We are a software provider, not a
           broker-dealer, exchange or investment advisor.
@@ -51,7 +51,7 @@ export default function TermsPage() {
 
         <h2>Broker connections</h2>
         <p>
-          Connecting a broker account authorizes my ALGO agent to place,
+          Connecting a broker account authorizes MyAlgoAgent to place,
           modify and cancel orders on your behalf strictly according to the
           strategies you configure and start. You may disconnect a broker
           or trigger the kill switch at any time.
@@ -73,7 +73,7 @@ export default function TermsPage() {
 
         <h2>Limitation of liability</h2>
         <p>
-          To the maximum extent permitted by law, my ALGO agent is not
+          To the maximum extent permitted by law, MyAlgoAgent is not
           liable for trading losses, lost profits, or indirect damages
           arising from your use of the platform.
         </p>

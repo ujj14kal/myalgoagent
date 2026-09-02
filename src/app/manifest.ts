@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "my ALGO agent",
-    short_name: "my ALGO agent",
+    name: "MyAlgoAgent",
+    short_name: "MyAlgoAgent",
     description:
       "Build, backtest, paper trade and run rule-based algo trading strategies with risk controls built in.",
     start_url: "/",

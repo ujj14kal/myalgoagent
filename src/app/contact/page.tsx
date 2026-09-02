@@ -5,7 +5,7 @@ import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Contact",
-  description: "Get in touch with the my ALGO agent team.",
+  description: "Get in touch with the MyAlgoAgent team.",
   alternates: { canonical: `${siteUrl}/contact` },
 };
 

@@ -1,5 +1,5 @@
 export const siteUrl = "https://myalgoagent.com";
-export const siteName = "my ALGO agent";
+export const siteName = "MyAlgoAgent";
 
 export function breadcrumbJsonLd(items: { name: string; url: string }[]) {
   return {

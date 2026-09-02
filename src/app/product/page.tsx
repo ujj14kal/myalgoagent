@@ -5,9 +5,9 @@ import { Breadcrumbs, Prose } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "Product Overview — What my ALGO agent Does",
+  title: "Product Overview — What MyAlgoAgent Does",
   description:
-    "A plain-language overview of my ALGO agent: an algo-trading software platform covering strategy building, backtesting, paper trading, live broker execution and risk management.",
+    "A plain-language overview of MyAlgoAgent: an algo-trading software platform covering strategy building, backtesting, paper trading, live broker execution and risk management.",
   alternates: { canonical: `${siteUrl}/product` },
 };
 
@@ -26,8 +26,8 @@ export default function ProductPage() {
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/product", label: "Product Overview" }]} />
       <PageHeader
         eyebrow="Product Overview"
-        title="my ALGO agent — Algo Trading Platform"
-        description="my ALGO agent is a software platform that helps traders and developers build, test and run rule-based trading strategies. It is not a financial advisor and does not manage money on a user's behalf without explicit, user-initiated broker connections."
+        title="MyAlgoAgent — Algo Trading Platform"
+        description="MyAlgoAgent is a software platform that helps traders and developers build, test and run rule-based trading strategies. It is not a financial advisor and does not manage money on a user's behalf without explicit, user-initiated broker connections."
       />
       <Prose>
         <h2>What is algo trading?</h2>
@@ -42,7 +42,7 @@ export default function ProductPage() {
 
         <h2>What our platform does</h2>
         <p>
-          my ALGO agent lets a user connect market data, define entry and
+          MyAlgoAgent lets a user connect market data, define entry and
           exit rules using technical indicators and price conditions,
           simulate that strategy against historical data, validate it in a
           risk-free paper-trading mode, and — only with explicit
@@ -131,7 +131,7 @@ export default function ProductPage() {
         <h2>Important disclosure</h2>
         <p>
           Historical and backtested performance does not guarantee future
-          results. my ALGO agent is software infrastructure for building
+          results. MyAlgoAgent is software infrastructure for building
           and operating trading strategies; it is not a broker-dealer,
           investment advisor, or provider of personalized investment advice.
           Read the full <Link href="/risk-disclosure">Risk Disclosure</Link>.
@@ -139,7 +139,7 @@ export default function ProductPage() {
 
         <h2>Product stage</h2>
         <p>
-          my ALGO agent is in active development. Public marketing and
+          MyAlgoAgent is in active development. Public marketing and
           documentation pages describe the target product architecture;
           features are being built out in stages, starting with the
           strategy, backtesting and risk-management core described above.

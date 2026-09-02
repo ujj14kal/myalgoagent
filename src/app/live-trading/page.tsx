@@ -58,7 +58,7 @@ export default function LiveTradingPage() {
 
         <h2>Important disclosure</h2>
         <p>
-          Live trading risks real capital. my ALGO agent provides the
+          Live trading risks real capital. MyAlgoAgent provides the
           software and broker-connectivity architecture; it does not
           custody funds, guarantee execution quality, or provide
           personalized investment advice. See{" "}

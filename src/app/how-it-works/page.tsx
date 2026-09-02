@@ -7,7 +7,7 @@ import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
 export const metadata: Metadata = {
   title: "How It Works",
   description:
-    "From market data to a live, risk-managed strategy: how my ALGO agent takes a trading idea through strategy building, backtesting, paper trading and live execution.",
+    "From market data to a live, risk-managed strategy: how MyAlgoAgent takes a trading idea through strategy building, backtesting, paper trading and live execution.",
   alternates: { canonical: `${siteUrl}/how-it-works` },
 };
 

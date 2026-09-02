@@ -5,7 +5,7 @@ import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Cookie Policy",
-  description: "How my ALGO agent uses cookies and similar technologies.",
+  description: "How MyAlgoAgent uses cookies and similar technologies.",
   alternates: { canonical: `${siteUrl}/cookie-policy` },
 };
 

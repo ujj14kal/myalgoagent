@@ -20,12 +20,12 @@ const siteUrl = "https://myalgoagent.com";
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "my ALGO agent — Algo Trading Platform",
-    template: "%s | my ALGO agent",
+    default: "MyAlgoAgent — Algo Trading Platform",
+    template: "%s | MyAlgoAgent",
   },
   description:
-    "my ALGO agent is an algo-trading software platform for building, backtesting, paper trading and running rule-based strategies with risk controls built in.",
-  applicationName: "my ALGO agent",
+    "MyAlgoAgent is an algo-trading software platform for building, backtesting, paper trading and running rule-based strategies with risk controls built in.",
+  applicationName: "MyAlgoAgent",
   keywords: [
     "algo trading",
     "algorithmic trading platform",
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     "paper trading",
     "trading risk management",
   ],
-  authors: [{ name: "my ALGO agent" }],
+  authors: [{ name: "MyAlgoAgent" }],
   icons: {
     icon: [
       { url: "/favicon.ico" },
@@ -47,15 +47,15 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: siteUrl,
-    siteName: "my ALGO agent",
-    title: "my ALGO agent — Algo Trading Platform",
+    siteName: "MyAlgoAgent",
+    title: "MyAlgoAgent — Algo Trading Platform",
     description:
       "Build, backtest, paper trade and run rule-based algo trading strategies with risk controls built in.",
-    images: [{ url: "/brand/icon-512.png", width: 512, height: 512, alt: "my ALGO agent" }],
+    images: [{ url: "/brand/icon-512.png", width: 512, height: 512, alt: "MyAlgoAgent" }],
   },
   twitter: {
     card: "summary",
-    title: "my ALGO agent — Algo Trading Platform",
+    title: "MyAlgoAgent — Algo Trading Platform",
     description:
       "Build, backtest, paper trade and run rule-based algo trading strategies with risk controls built in.",
     images: ["/brand/icon-512.png"],
@@ -69,20 +69,20 @@ const jsonLd = [
   {
     "@context": "https://schema.org",
     "@type": "Organization",
-    name: "my ALGO agent",
+    name: "MyAlgoAgent",
     url: siteUrl,
     logo: `${siteUrl}/brand/icon-512.png`,
   },
   {
     "@context": "https://schema.org",
     "@type": "WebSite",
-    name: "my ALGO agent",
+    name: "MyAlgoAgent",
     url: siteUrl,
   },
   {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    name: "my ALGO agent",
+    name: "MyAlgoAgent",
     applicationCategory: "FinanceApplication",
     operatingSystem: "Web",
     url: siteUrl,

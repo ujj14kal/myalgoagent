@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 300">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 300">
   <g transform="translate(0,0)">
     <rect x="10" y="10" width="280" height="280" rx="48" fill="#471898"/>
     <rect x="140" y="46" width="20" height="42" rx="10" fill="#ffffff"/>
@@ -9,9 +9,5 @@
     <circle cx="130" cy="173" r="19" fill="#471898"/>
     <circle cx="200" cy="173" r="19" fill="#471898"/>
   </g>
-  <g font-family="Arial, Helvetica, sans-serif" fill="#471898">
-    <text x="345" y="185" font-size="92" font-weight="500">my</text>
-    <text x="470" y="185" font-size="92" font-weight="800" letter-spacing="1">ALGO</text>
-    <text x="780" y="185" font-size="92" font-weight="400">agent</text>
-  </g>
+  <text x="345" y="185" font-family="Arial, Helvetica, sans-serif" font-size="92" font-weight="400" fill="#471898">MyAlgoAgent</text>
 </svg>

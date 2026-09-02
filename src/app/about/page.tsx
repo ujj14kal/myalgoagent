@@ -6,7 +6,7 @@ import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
 export const metadata: Metadata = {
   title: "About",
   description:
-    "my ALGO agent is built by Shagoon Softech to give traders and developers a structured, risk-aware way to build and run algorithmic trading strategies.",
+    "MyAlgoAgent is built by Shagoon Softech to give traders and developers a structured, risk-aware way to build and run algorithmic trading strategies.",
   alternates: { canonical: `${siteUrl}/about` },
 };
 
@@ -19,11 +19,11 @@ export default function AboutPage() {
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/about", label: "About" }]} />
-      <PageHeader eyebrow="About" title="About my ALGO agent" description="Built by Shagoon Softech." />
+      <PageHeader eyebrow="About" title="About MyAlgoAgent" description="Built by Shagoon Softech." />
       <Prose>
         <h2>Our focus</h2>
         <p>
-          my ALGO agent exists to make algorithmic trading approachable
+          MyAlgoAgent exists to make algorithmic trading approachable
           without hiding the parts that actually matter: realistic
           backtesting, honest risk disclosure, and risk controls that are
           enforced by the system rather than left to good intentions.
@@ -38,7 +38,7 @@ export default function AboutPage() {
 
         <h2>Company</h2>
         <p>
-          my ALGO agent is developed and operated by Shagoon Softech. For
+          MyAlgoAgent is developed and operated by Shagoon Softech. For
           company or product inquiries, see the <a href="/contact">Contact</a> page.
         </p>
       </Prose>
