@@ -9,5 +9,5 @@
     <circle cx="130" cy="173" r="19" fill="#471898"/>
     <circle cx="200" cy="173" r="19" fill="#471898"/>
   </g>
-  <text x="345" y="185" font-family="Arial, Helvetica, sans-serif" font-size="92" font-weight="400" fill="#471898">MyAlgoAgent</text>
+  <text x="345" y="185" font-family="Arial, Helvetica, sans-serif" font-size="92" font-weight="700" fill="#471898">MyAlgoAgent</text>
 </svg>
