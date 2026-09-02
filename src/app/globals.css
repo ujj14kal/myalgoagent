@@ -25,7 +25,7 @@
   --color-brand-bg: var(--brand-bg);
   --color-brand-buy: var(--brand-buy);
   --color-brand-sell: var(--brand-sell);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
 }
 
