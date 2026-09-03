@@ -6,6 +6,7 @@ const navGroups = [
     label: "Trading",
     items: [
       { href: "/app/dashboard", label: "Dashboard" },
+      { href: "/app/instruments", label: "Market Data" },
       { href: "/app/strategies", label: "Strategies" },
       { href: "/app/backtests", label: "Backtests" },
       { href: "/app/paper-trading", label: "Paper Trading" },

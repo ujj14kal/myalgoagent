@@ -54,3 +54,12 @@ model VerificationToken {
 
   @@unique([identifier, token])
 }
+
+model Instrument {
+  id        String   @id @default(cuid())
+  symbol    String   @unique
+  name      String
+  exchange  String
+  sector    String?
+  createdAt DateTime @default(now())
+}
