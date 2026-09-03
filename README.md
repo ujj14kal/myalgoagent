@@ -117,3 +117,4 @@ AWS Secrets Manager — never committed to source control.
 Pages under `/privacy-policy`, `/terms`, `/risk-disclosure` and
 `/cookie-policy` are **templates** and must be reviewed by qualified legal
 counsel for your jurisdiction and business model before public launch.
+
