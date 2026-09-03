@@ -26,10 +26,10 @@ export default function Header() {
             </Link>
           ))}
         </nav>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
           <Link
             href="/login"
-            className="rounded-full bg-brand-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-primary-light"
+            className="whitespace-nowrap rounded-full bg-brand-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-primary-light sm:px-4 sm:py-2 sm:text-sm"
           >
             Get Started
           </Link>

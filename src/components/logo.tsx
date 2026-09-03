@@ -11,7 +11,7 @@ export default function Logo({ className = "" }: { className?: string }) {
         height={36}
         priority
       />
-      <span className="text-lg font-bold tracking-tight text-brand-primary">
+      <span className="whitespace-nowrap text-base font-bold tracking-tight text-brand-primary sm:text-lg">
         MyAlgoAgent
       </span>
     </Link>
