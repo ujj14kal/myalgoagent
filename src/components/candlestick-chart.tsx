@@ -3,14 +3,19 @@
 import { useEffect, useRef } from "react";
 import {
   createChart,
+  createSeriesMarkers,
   CandlestickSeries,
   LineSeries,
   type IChartApi,
   type ISeriesApi,
+  type ISeriesMarkersPluginApi,
+  type SeriesMarker,
+  type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
 import type { Candle } from "@/lib/market-data";
 import type { IndicatorPoint } from "@/lib/indicators";
+import type { Signal } from "@/lib/strategy";
 
 export interface Overlay {
   label: string;
@@ -21,14 +26,17 @@ export interface Overlay {
 export default function CandlestickChart({
   candles,
   overlays = [],
+  markers = [],
 }: {
   candles: Candle[];
   overlays?: Overlay[];
+  markers?: Signal[];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const overlaySeriesRef = useRef<ISeriesApi<"Line">[]>([]);
+  const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -55,6 +63,7 @@ export default function CandlestickChart({
 
     chartRef.current = chart;
     seriesRef.current = series;
+    markersPluginRef.current = createSeriesMarkers(series, []);
 
     const handleResize = () => {
       if (containerRef.current) {
@@ -69,6 +78,7 @@ export default function CandlestickChart({
       chartRef.current = null;
       seriesRef.current = null;
       overlaySeriesRef.current = [];
+      markersPluginRef.current = null;
     };
   }, []);
 
@@ -108,6 +118,18 @@ export default function CandlestickChart({
       overlaySeriesRef.current.push(line);
     }
   }, [overlays]);
+
+  useEffect(() => {
+    if (!markersPluginRef.current) return;
+    const seriesMarkers: SeriesMarker<Time>[] = markers.map((m) => ({
+      time: m.time as UTCTimestamp,
+      position: m.type === "entry" ? "belowBar" : "aboveBar",
+      color: m.type === "entry" ? "#00a83e" : "#d60000",
+      shape: m.type === "entry" ? "arrowUp" : "arrowDown",
+      text: m.type === "entry" ? "Entry" : "Exit",
+    }));
+    markersPluginRef.current.setMarkers(seriesMarkers);
+  }, [markers]);
 
   return <div ref={containerRef} className="w-full" />;
 }

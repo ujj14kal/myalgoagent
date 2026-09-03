@@ -1,9 +1,13 @@
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 export const metadata = { title: "Dashboard", robots: { index: false } };
 
 export default async function DashboardPage() {
   const session = await auth();
+  const activeStrategies = session?.user?.id
+    ? await prisma.strategy.count({ where: { userId: session.user.id, status: "ACTIVE" } })
+    : 0;
 
   return (
     <div>
@@ -20,7 +24,7 @@ export default async function DashboardPage() {
           <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
             Active strategies
           </p>
-          <p className="mt-2 text-2xl font-bold text-brand-navy">0</p>
+          <p className="mt-2 text-2xl font-bold text-brand-navy">{activeStrategies}</p>
         </div>
         <div className="rounded-2xl border border-black/5 bg-white p-5">
           <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">

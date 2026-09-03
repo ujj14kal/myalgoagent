@@ -18,6 +18,8 @@ model User {
   accounts       Account[]
   sessions       Session[]
   watchlistItems WatchlistItem[]
+  strategies     Strategy[]
+  backtestRuns   BacktestRun[]
 }
 
 model Account {
@@ -65,6 +67,7 @@ model Instrument {
   createdAt DateTime @default(now())
 
   watchlistItems WatchlistItem[]
+  strategies     Strategy[]
 }
 
 model WatchlistItem {
@@ -77,4 +80,79 @@ model WatchlistItem {
   instrument Instrument @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
 
   @@unique([userId, instrumentId])
+}
+
+enum StrategyStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum StrategyMode {
+  NO_CODE
+  CODE
+}
+
+model Strategy {
+  id             String         @id @default(cuid())
+  userId         String
+  instrumentId   String
+  name           String
+  mode           StrategyMode
+  entryCondition Json
+  exitCondition  Json
+  entrySource    String?        @db.Text
+  exitSource     String?        @db.Text
+  status         StrategyStatus @default(DRAFT)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instrument Instrument @relation(fields: [instrumentId], references: [id])
+  backtestRuns BacktestRun[]
+}
+
+model BacktestRun {
+  id               String   @id @default(cuid())
+  userId           String
+  strategyId       String?
+  strategyName     String
+  instrumentSymbol String
+  startingCapital  Float
+  brokeragePercent Float
+  slippagePercent  Float
+  range            String
+  entryCondition   Json
+  exitCondition    Json
+  totalReturnPct   Float
+  cagrPct          Float
+  winRatePct       Float
+  profitFactor     Float
+  maxDrawdownPct   Float
+  sharpeRatio      Float
+  expectancy       Float
+  tradeCount       Int
+  equityCurve      Json
+  createdAt        DateTime @default(now())
+
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategy Strategy?       @relation(fields: [strategyId], references: [id], onDelete: SetNull)
+  trades   BacktestTrade[]
+}
+
+model BacktestTrade {
+  id            String @id @default(cuid())
+  backtestRunId String
+  entryTime     Int
+  entryPrice    Float
+  exitTime      Int
+  exitPrice     Float
+  quantity      Float
+  grossPnl      Float
+  fees          Float
+  netPnl        Float
+  netPnlPct     Float
+  holdingBars   Int
+
+  backtestRun BacktestRun @relation(fields: [backtestRunId], references: [id], onDelete: Cascade)
 }
