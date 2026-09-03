@@ -20,6 +20,7 @@ model User {
   watchlistItems WatchlistItem[]
   strategies     Strategy[]
   backtestRuns   BacktestRun[]
+  paperSessions  PaperSession[]
 }
 
 model Account {
@@ -109,7 +110,8 @@ model Strategy {
 
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   instrument Instrument @relation(fields: [instrumentId], references: [id])
-  backtestRuns BacktestRun[]
+  backtestRuns  BacktestRun[]
+  paperSessions PaperSession[]
 }
 
 model BacktestRun {
@@ -155,4 +157,54 @@ model BacktestTrade {
   holdingBars   Int
 
   backtestRun BacktestRun @relation(fields: [backtestRunId], references: [id], onDelete: Cascade)
+}
+
+enum PaperSessionStatus {
+  ACTIVE
+  PAUSED
+  STOPPED
+}
+
+enum PaperOrderSide {
+  BUY
+  SELL
+}
+
+model PaperSession {
+  id                 String             @id @default(cuid())
+  userId             String
+  strategyId         String?
+  strategyName       String
+  instrumentSymbol   String
+  entryCondition     Json
+  exitCondition      Json
+  startingCapital    Float
+  brokeragePercent   Float
+  slippagePercent    Float
+  cash               Float
+  positionEntryTime  Int?
+  positionEntryPrice Float?
+  positionQuantity   Float?
+  lastSyncedTime     Int?
+  status             PaperSessionStatus @default(ACTIVE)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategy Strategy?   @relation(fields: [strategyId], references: [id], onDelete: SetNull)
+  orders   PaperOrder[]
+}
+
+model PaperOrder {
+  id             String         @id @default(cuid())
+  paperSessionId String
+  side           PaperOrderSide
+  time           Int
+  price          Float
+  quantity       Float
+  fees           Float
+  netPnl         Float?
+  createdAt      DateTime       @default(now())
+
+  paperSession PaperSession @relation(fields: [paperSessionId], references: [id], onDelete: Cascade)
 }

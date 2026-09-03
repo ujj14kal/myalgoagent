@@ -1,6 +1,7 @@
 import type { Candle } from "@/lib/market-data";
 import { evaluateConditionsPerBar } from "@/lib/strategy";
 import type { ConditionNode } from "@/lib/strategy";
+import { stepBar, forceClose, markToMarket, type EngineState, type EngineTrade } from "@/lib/trading-engine/step";
 
 export interface BacktestConfig {
   startingCapital: number;
@@ -8,18 +9,7 @@ export interface BacktestConfig {
   slippagePercent: number;
 }
 
-export interface BacktestTradeResult {
-  entryTime: number;
-  entryPrice: number;
-  exitTime: number;
-  exitPrice: number;
-  quantity: number;
-  grossPnl: number;
-  fees: number;
-  netPnl: number;
-  netPnlPct: number;
-  holdingBars: number;
-}
+export type BacktestTradeResult = EngineTrade;
 
 export interface EquityPoint {
   time: number;
@@ -112,61 +102,26 @@ export function runBacktest(
   config: BacktestConfig,
 ): BacktestResult {
   const { entry, exit } = evaluateConditionsPerBar(candles, entryCondition, exitCondition);
-
-  function closeTrade(
-    pos: { entryIdx: number; entryPrice: number; quantity: number },
-    exitIdx: number,
-    exitPrice: number,
-  ): BacktestTradeResult {
-    const entryValue = pos.entryPrice * pos.quantity;
-    const exitValue = exitPrice * pos.quantity;
-    const grossPnl = exitValue - entryValue;
-    const fees = (entryValue + exitValue) * (config.brokeragePercent / 100);
-    const netPnl = grossPnl - fees;
-    return {
-      entryTime: candles[pos.entryIdx].time,
-      entryPrice: pos.entryPrice,
-      exitTime: candles[exitIdx].time,
-      exitPrice,
-      quantity: pos.quantity,
-      grossPnl,
-      fees,
-      netPnl,
-      netPnlPct: (netPnl / entryValue) * 100,
-      holdingBars: exitIdx - pos.entryIdx,
-    };
-  }
+  const engineConfig = { brokeragePercent: config.brokeragePercent, slippagePercent: config.slippagePercent };
 
   const trades: BacktestTradeResult[] = [];
   const equityCurve: EquityPoint[] = [];
-  let capital = config.startingCapital;
-  let position: { entryIdx: number; entryPrice: number; quantity: number } | null = null;
+  let state: EngineState = { cash: config.startingCapital, position: null };
 
   for (let i = 0; i < candles.length; i++) {
-    const nextBar = candles[i + 1];
+    const stepped = stepBar(candles, i, entry[i], exit[i], state, engineConfig);
+    state = stepped.state;
+    if (stepped.trade) trades.push(stepped.trade);
 
-    if (!position && entry[i] && nextBar) {
-      const fillPrice = nextBar.open * (1 + config.slippagePercent / 100);
-      const quantity = Math.floor(capital / fillPrice);
-      if (quantity > 0) {
-        position = { entryIdx: i + 1, entryPrice: fillPrice, quantity };
-      }
-    } else if (position && exit[i] && nextBar) {
-      trades.push(closeTrade(position, i + 1, nextBar.open * (1 - config.slippagePercent / 100)));
-      capital += trades.at(-1)!.netPnl;
-      position = null;
-    }
-
-    const markPrice = candles[i].close;
-    const unrealized = position ? (markPrice - position.entryPrice) * position.quantity : 0;
-    equityCurve.push({ time: candles[i].time, equity: capital + unrealized });
+    equityCurve.push({ time: candles[i].time, equity: markToMarket(candles, i, state) });
   }
 
-  if (position) {
+  if (state.position) {
     const lastIdx = candles.length - 1;
-    trades.push(closeTrade(position, lastIdx, candles[lastIdx].close));
-    capital += trades.at(-1)!.netPnl;
-    if (equityCurve.length > 0) equityCurve[equityCurve.length - 1] = { time: candles[lastIdx].time, equity: capital };
+    const closed = forceClose(candles, lastIdx, state, engineConfig);
+    state = closed.state;
+    if (closed.trade) trades.push(closed.trade);
+    if (equityCurve.length > 0) equityCurve[equityCurve.length - 1] = { time: candles[lastIdx].time, equity: state.cash };
   }
 
   return {
