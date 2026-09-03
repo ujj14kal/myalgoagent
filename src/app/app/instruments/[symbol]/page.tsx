@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { marketDataProvider } from "@/lib/market-data";
-import CandlestickChart from "@/components/candlestick-chart";
+import { sma, ema, rsi } from "@/lib/indicators";
+import InstrumentChartPanel from "@/components/instrument-chart-panel";
 
 export async function generateMetadata({ params }: { params: Promise<{ symbol: string }> }) {
   const { symbol } = await params;
@@ -54,13 +55,22 @@ export default async function InstrumentDetailPage({
         {" · "}Daily bars, not real-time
       </p>
 
-      <div className="mt-6 rounded-2xl border border-black/5 bg-white p-4">
+      <div className="mt-6">
         {fetchError ? (
-          <p className="py-16 text-center text-sm text-brand-sell">{fetchError}</p>
+          <div className="rounded-2xl border border-black/5 bg-white p-4">
+            <p className="py-16 text-center text-sm text-brand-sell">{fetchError}</p>
+          </div>
         ) : candles.length === 0 ? (
-          <p className="py-16 text-center text-sm text-brand-navy/50">No data available.</p>
+          <div className="rounded-2xl border border-black/5 bg-white p-4">
+            <p className="py-16 text-center text-sm text-brand-navy/50">No data available.</p>
+          </div>
         ) : (
-          <CandlestickChart candles={candles} />
+          <InstrumentChartPanel
+            candles={candles}
+            sma20={sma(candles, 20)}
+            ema50={ema(candles, 50)}
+            rsi14={rsi(candles, 14)}
+          />
         )}
       </div>
     </div>

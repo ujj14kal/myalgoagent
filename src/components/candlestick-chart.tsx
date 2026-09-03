@@ -4,16 +4,31 @@ import { useEffect, useRef } from "react";
 import {
   createChart,
   CandlestickSeries,
+  LineSeries,
   type IChartApi,
   type ISeriesApi,
   type UTCTimestamp,
 } from "lightweight-charts";
 import type { Candle } from "@/lib/market-data";
+import type { IndicatorPoint } from "@/lib/indicators";
 
-export default function CandlestickChart({ candles }: { candles: Candle[] }) {
+export interface Overlay {
+  label: string;
+  color: string;
+  points: IndicatorPoint[];
+}
+
+export default function CandlestickChart({
+  candles,
+  overlays = [],
+}: {
+  candles: Candle[];
+  overlays?: Overlay[];
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const overlaySeriesRef = useRef<ISeriesApi<"Line">[]>([]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -51,6 +66,9 @@ export default function CandlestickChart({ candles }: { candles: Candle[] }) {
     return () => {
       window.removeEventListener("resize", handleResize);
       chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
+      overlaySeriesRef.current = [];
     };
   }, []);
 
@@ -67,6 +85,29 @@ export default function CandlestickChart({ candles }: { candles: Candle[] }) {
     );
     chartRef.current?.timeScale().fitContent();
   }, [candles]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    // Clear previous overlay series before drawing the current set.
+    for (const s of overlaySeriesRef.current) {
+      chart.removeSeries(s);
+    }
+    overlaySeriesRef.current = [];
+
+    for (const overlay of overlays) {
+      const line = chart.addSeries(LineSeries, {
+        color: overlay.color,
+        lineWidth: 2,
+        title: overlay.label,
+      });
+      line.setData(
+        overlay.points.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })),
+      );
+      overlaySeriesRef.current.push(line);
+    }
+  }, [overlays]);
 
   return <div ref={containerRef} className="w-full" />;
 }
