@@ -15,8 +15,9 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  accounts Account[]
-  sessions Session[]
+  accounts       Account[]
+  sessions       Session[]
+  watchlistItems WatchlistItem[]
 }
 
 model Account {
@@ -62,4 +63,18 @@ model Instrument {
   exchange  String
   sector    String?
   createdAt DateTime @default(now())
+
+  watchlistItems WatchlistItem[]
+}
+
+model WatchlistItem {
+  id           String   @id @default(cuid())
+  userId       String
+  instrumentId String
+  createdAt    DateTime @default(now())
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instrument Instrument @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, instrumentId])
 }
