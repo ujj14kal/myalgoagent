@@ -10,4 +10,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: {
     signIn: "/login",
   },
+  // Vercel auto-detects itself and trusts its own host; AWS Amplify
+  // doesn't get that same auto-detection, so Auth.js needs this set
+  // explicitly or it throws a generic "server configuration" error.
+  trustHost: true,
 });
