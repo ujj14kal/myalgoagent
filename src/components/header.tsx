@@ -28,7 +28,7 @@ export default function Header() {
         </nav>
         <div className="flex items-center gap-3">
           <Link
-            href="/#get-started"
+            href="/login"
             className="rounded-full bg-brand-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-primary-light"
           >
             Get Started
