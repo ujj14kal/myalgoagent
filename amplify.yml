@@ -11,7 +11,7 @@ frontend:
         # server code only reads vars that are actually present in
         # .env.production at build time. See:
         # https://docs.aws.amazon.com/amplify/latest/userguide/ssr-environment-variables.html
-        - env | grep -e AUTH_SECRET -e AUTH_GOOGLE_ID -e AUTH_GOOGLE_SECRET -e DATABASE_URL -e NEXT_PUBLIC_ >> .env.production
+        - env | grep -e AUTH_ -e DATABASE_URL -e NEXT_PUBLIC_ >> .env.production
         - npm run build
   artifacts:
     baseDirectory: .next
