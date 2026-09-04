@@ -1,8 +1,11 @@
 import { notFound } from "next/navigation";
+import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { marketDataProvider } from "@/lib/market-data";
-import { sma, ema, rsi } from "@/lib/indicators";
 import InstrumentChartPanel from "@/components/instrument-chart-panel";
+import type { ChartType } from "@/components/candlestick-chart";
+import type { Drawing } from "@/lib/chart-drawing-primitive";
+import type { CandleInterval } from "@/lib/market-data";
 
 export async function generateMetadata({ params }: { params: Promise<{ symbol: string }> }) {
   const { symbol } = await params;
@@ -17,10 +20,20 @@ export default async function InstrumentDetailPage({
   const { symbol: rawSymbol } = await params;
   const symbol = decodeURIComponent(rawSymbol);
 
+  const session = await auth();
   const instrument = await prisma.instrument.findUnique({ where: { symbol } });
   if (!instrument) {
     notFound();
   }
+
+  const [allInstruments, savedLayout] = await Promise.all([
+    prisma.instrument.findMany({ orderBy: { symbol: "asc" }, select: { id: true, symbol: true, name: true } }),
+    session?.user?.id
+      ? prisma.chartLayout.findUnique({
+          where: { userId_instrumentId: { userId: session.user.id, instrumentId: instrument.id } },
+        })
+      : null,
+  ]);
 
   let candles: Awaited<ReturnType<typeof marketDataProvider.getHistoricalCandles>> = [];
   let fetchError: string | null = null;
@@ -31,6 +44,17 @@ export default async function InstrumentDetailPage({
   }
 
   const latest = candles.at(-1);
+  const savedConfig = savedLayout
+    ? (savedLayout.config as unknown as {
+        chartType: ChartType;
+        interval: CandleInterval;
+        overlays: string[];
+        oscillators: string[];
+        showVolume: boolean;
+        drawings: Drawing[];
+        compareSymbol: string | null;
+      })
+    : null;
 
   return (
     <div>
@@ -66,10 +90,11 @@ export default async function InstrumentDetailPage({
           </div>
         ) : (
           <InstrumentChartPanel
+            instrumentId={instrument.id}
+            symbol={instrument.symbol}
             candles={candles}
-            sma20={sma(candles, 20)}
-            ema50={ema(candles, 50)}
-            rsi14={rsi(candles, 14)}
+            allInstruments={allInstruments}
+            savedLayout={savedConfig}
           />
         )}
       </div>

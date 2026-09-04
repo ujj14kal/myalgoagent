@@ -23,6 +23,8 @@ model User {
   paperSessions  PaperSession[]
   riskSettings   RiskSettings?
   riskEvents     RiskEvent[]
+  chartLayouts   ChartLayout[]
+  notifications  Notification[]
 }
 
 model Account {
@@ -71,6 +73,7 @@ model Instrument {
 
   watchlistItems WatchlistItem[]
   strategies     Strategy[]
+  chartLayouts   ChartLayout[]
 }
 
 model WatchlistItem {
@@ -235,6 +238,37 @@ model RiskEvent {
   type           RiskEventType
   message        String
   createdAt      DateTime      @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ChartLayout {
+  id           String   @id @default(cuid())
+  userId       String
+  instrumentId String
+  config       Json
+  updatedAt    DateTime @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instrument Instrument @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, instrumentId])
+}
+
+enum NotificationType {
+  ORDER_FILLED
+  RISK_EVENT
+  SESSION_STOPPED
+}
+
+model Notification {
+  id             String           @id @default(cuid())
+  userId         String
+  type           NotificationType
+  message        String
+  paperSessionId String?
+  read           Boolean          @default(false)
+  createdAt      DateTime         @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

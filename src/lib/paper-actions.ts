@@ -23,6 +23,8 @@ function revalidatePaperPaths(id?: string) {
   revalidatePath("/app/orders");
   revalidatePath("/app/positions");
   revalidatePath("/app/portfolio");
+  revalidatePath("/app/notifications");
+  revalidatePath("/app/dashboard");
 }
 
 export async function startPaperSession(input: StartPaperSessionInput) {
@@ -67,12 +69,13 @@ export async function startPaperSession(input: StartPaperSessionInput) {
 export async function syncPaperSessionAction(id: string) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
+  const userId = session.user.id;
 
-  const paperSession = await prisma.paperSession.findFirst({ where: { id, userId: session.user.id } });
+  const paperSession = await prisma.paperSession.findFirst({ where: { id, userId } });
   if (!paperSession) throw new Error("Paper session not found");
   if (paperSession.status !== "ACTIVE") throw new Error("This session is not active");
 
-  const riskSettings = await prisma.riskSettings.findUnique({ where: { userId: session.user.id } });
+  const riskSettings = await prisma.riskSettings.findUnique({ where: { userId } });
   const riskContext = {
     killSwitchEnabled: riskSettings?.killSwitchEnabled ?? false,
     maxLossPercent: riskSettings?.maxLossPercent ?? null,
@@ -149,28 +152,36 @@ export async function syncPaperSessionAction(id: string) {
         },
       }),
     ),
+    ...result.newOrders.map((o) =>
+      prisma.notification.create({
+        data: {
+          userId,
+          paperSessionId: id,
+          type: "ORDER_FILLED",
+          message: `${o.side === "BUY" ? "Bought" : "Sold"} ${o.quantity} ${paperSession.instrumentSymbol} at ₹${o.price.toFixed(2)} (${paperSession.strategyName})`,
+        },
+      }),
+    ),
   ];
 
   if (postCheck.breach) {
+    const message = `${paperSession.strategyName} (${paperSession.instrumentSymbol}): ${postCheck.breach.message}`;
     writes.push(
       prisma.riskEvent.create({
-        data: {
-          userId: session.user.id,
-          paperSessionId: id,
-          type: postCheck.breach.type,
-          message: `${paperSession.strategyName} (${paperSession.instrumentSymbol}): ${postCheck.breach.message}`,
-        },
+        data: { userId, paperSessionId: id, type: postCheck.breach.type, message },
+      }),
+      prisma.notification.create({
+        data: { userId, paperSessionId: id, type: "SESSION_STOPPED", message: `Session stopped — ${message}` },
       }),
     );
   } else if (!preCheck.allowNewEntries && riskContext.killSwitchEnabled && result.suppressedEntrySignal) {
+    const message = `${paperSession.strategyName} (${paperSession.instrumentSymbol}): an entry signal fired but was blocked — kill switch is on.`;
     writes.push(
       prisma.riskEvent.create({
-        data: {
-          userId: session.user.id,
-          paperSessionId: id,
-          type: "KILL_SWITCH_BLOCKED",
-          message: `${paperSession.strategyName} (${paperSession.instrumentSymbol}): an entry signal fired but was blocked — kill switch is on.`,
-        },
+        data: { userId, paperSessionId: id, type: "KILL_SWITCH_BLOCKED", message },
+      }),
+      prisma.notification.create({
+        data: { userId, paperSessionId: id, type: "RISK_EVENT", message },
       }),
     );
   }

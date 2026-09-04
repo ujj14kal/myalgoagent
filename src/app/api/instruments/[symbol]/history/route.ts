@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { marketDataProvider } from "@/lib/market-data";
 import type { CandleInterval, CandleRange } from "@/lib/market-data";
 
@@ -22,6 +23,14 @@ export async function GET(
 
   if (!VALID_RANGES.includes(range) || !VALID_INTERVALS.includes(interval)) {
     return NextResponse.json({ error: "Invalid range or interval" }, { status: 400 });
+  }
+
+  // Only ever fetch symbols we actually know about — the fetch URL is
+  // built from this value, so this keeps it from being used to make the
+  // server request arbitrary attacker-supplied strings.
+  const instrument = await prisma.instrument.findUnique({ where: { symbol } });
+  if (!instrument) {
+    return NextResponse.json({ error: "Unknown instrument" }, { status: 404 });
   }
 
   try {
