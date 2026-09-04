@@ -21,6 +21,8 @@ model User {
   strategies     Strategy[]
   backtestRuns   BacktestRun[]
   paperSessions  PaperSession[]
+  riskSettings   RiskSettings?
+  riskEvents     RiskEvent[]
 }
 
 model Account {
@@ -207,4 +209,32 @@ model PaperOrder {
   createdAt      DateTime       @default(now())
 
   paperSession PaperSession @relation(fields: [paperSessionId], references: [id], onDelete: Cascade)
+}
+
+model RiskSettings {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  killSwitchEnabled    Boolean  @default(false)
+  maxLossPercent       Float?
+  maxConsecutiveLosses Int?
+  updatedAt            DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum RiskEventType {
+  KILL_SWITCH_BLOCKED
+  MAX_LOSS_HIT
+  MAX_CONSECUTIVE_LOSSES_HIT
+}
+
+model RiskEvent {
+  id             String        @id @default(cuid())
+  userId         String
+  paperSessionId String?
+  type           RiskEventType
+  message        String
+  createdAt      DateTime      @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

@@ -1,7 +1,7 @@
 import { marketDataProvider } from "@/lib/market-data";
 import { evaluateConditionsPerBar } from "@/lib/strategy";
 import type { ConditionNode } from "@/lib/strategy";
-import { stepBar, type EngineState } from "@/lib/trading-engine/step";
+import { stepBar, markToMarket, type EngineState } from "@/lib/trading-engine/step";
 
 export interface PaperSessionState {
   instrumentSymbol: string;
@@ -30,6 +30,8 @@ export interface SyncResult {
   cash: number;
   position: { entryTime: number; entryPrice: number; quantity: number } | null;
   lastSyncedTime: number | null;
+  suppressedEntrySignal: boolean;
+  equity: number;
 }
 
 /**
@@ -41,7 +43,7 @@ export interface SyncResult {
  * need history before the "new" bars to be correct); only bars after
  * `lastSyncedTime` are actually acted on.
  */
-export async function syncPaperSession(session: PaperSessionState): Promise<SyncResult> {
+export async function syncPaperSession(session: PaperSessionState, allowNewEntries: boolean): Promise<SyncResult> {
   const candles = await marketDataProvider.getHistoricalCandles(session.instrumentSymbol, "3mo", "1d");
 
   const { entry, exit } = evaluateConditionsPerBar(candles, session.entryCondition, session.exitCondition);
@@ -67,12 +69,17 @@ export async function syncPaperSession(session: PaperSessionState): Promise<Sync
   const engineConfig = { brokeragePercent: session.brokeragePercent, slippagePercent: session.slippagePercent };
   const newOrders: NewPaperOrder[] = [];
   let lastSyncedTime = session.lastSyncedTime;
+  let suppressedEntrySignal = false;
 
   for (let i = 0; i < candles.length; i++) {
     if (session.lastSyncedTime !== null && candles[i].time <= session.lastSyncedTime) continue;
 
+    if (!allowNewEntries && !state.position && entry[i]) {
+      suppressedEntrySignal = true;
+    }
+
     const wasFlat = !state.position;
-    const stepped = stepBar(candles, i, entry[i], exit[i], state, engineConfig);
+    const stepped = stepBar(candles, i, allowNewEntries && entry[i], exit[i], state, engineConfig);
     state = stepped.state;
 
     if (stepped.trade) {
@@ -109,5 +116,7 @@ export async function syncPaperSession(session: PaperSessionState): Promise<Sync
         }
       : null,
     lastSyncedTime,
+    suppressedEntrySignal,
+    equity: candles.length > 0 ? markToMarket(candles, candles.length - 1, state) : state.cash,
   };
 }

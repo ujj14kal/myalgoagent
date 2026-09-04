@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -8,9 +9,21 @@ export default async function DashboardPage() {
   const activeStrategies = session?.user?.id
     ? await prisma.strategy.count({ where: { userId: session.user.id, status: "ACTIVE" } })
     : 0;
+  const riskSettings = session?.user?.id
+    ? await prisma.riskSettings.findUnique({ where: { userId: session.user.id } })
+    : null;
 
   return (
     <div>
+      {riskSettings?.killSwitchEnabled && (
+        <div className="mb-4 rounded-xl border border-brand-sell/30 bg-brand-sell/10 px-4 py-2 text-sm font-medium text-brand-sell">
+          Trading halted — kill switch is on. Turn it off in{" "}
+          <Link href="/app/risk-controls" className="underline">
+            Risk Controls
+          </Link>{" "}
+          to resume.
+        </div>
+      )}
       <h1 className="text-2xl font-bold text-brand-navy">
         Welcome, {session?.user?.name ?? session?.user?.email}
       </h1>

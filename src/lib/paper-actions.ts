@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { marketDataProvider } from "@/lib/market-data";
 import { syncPaperSession } from "@/lib/paper/sync";
+import { evaluateRisk } from "@/lib/risk/evaluate";
 import type { ConditionNode } from "@/lib/strategy";
 import type { Prisma } from "@prisma/client";
 
@@ -71,20 +72,59 @@ export async function syncPaperSessionAction(id: string) {
   if (!paperSession) throw new Error("Paper session not found");
   if (paperSession.status !== "ACTIVE") throw new Error("This session is not active");
 
-  const result = await syncPaperSession({
-    instrumentSymbol: paperSession.instrumentSymbol,
-    entryCondition: paperSession.entryCondition as unknown as ConditionNode,
-    exitCondition: paperSession.exitCondition as unknown as ConditionNode,
-    brokeragePercent: paperSession.brokeragePercent,
-    slippagePercent: paperSession.slippagePercent,
-    cash: paperSession.cash,
-    positionEntryTime: paperSession.positionEntryTime,
-    positionEntryPrice: paperSession.positionEntryPrice,
-    positionQuantity: paperSession.positionQuantity,
-    lastSyncedTime: paperSession.lastSyncedTime,
-  });
+  const riskSettings = await prisma.riskSettings.findUnique({ where: { userId: session.user.id } });
+  const riskContext = {
+    killSwitchEnabled: riskSettings?.killSwitchEnabled ?? false,
+    maxLossPercent: riskSettings?.maxLossPercent ?? null,
+    maxConsecutiveLosses: riskSettings?.maxConsecutiveLosses ?? null,
+  };
 
-  await prisma.$transaction([
+  const recentClosedOrders = await prisma.paperOrder.findMany({
+    where: { paperSessionId: id, side: "SELL" },
+    orderBy: { time: "desc" },
+    take: 20,
+  });
+  const priorEquity =
+    paperSession.cash + (paperSession.positionEntryPrice ?? 0) * (paperSession.positionQuantity ?? 0);
+
+  const preCheck = evaluateRisk(
+    {
+      startingCapital: paperSession.startingCapital,
+      currentEquity: priorEquity,
+      recentNetPnls: recentClosedOrders.map((o) => o.netPnl ?? 0),
+    },
+    riskContext,
+  );
+
+  const result = await syncPaperSession(
+    {
+      instrumentSymbol: paperSession.instrumentSymbol,
+      entryCondition: paperSession.entryCondition as unknown as ConditionNode,
+      exitCondition: paperSession.exitCondition as unknown as ConditionNode,
+      brokeragePercent: paperSession.brokeragePercent,
+      slippagePercent: paperSession.slippagePercent,
+      cash: paperSession.cash,
+      positionEntryTime: paperSession.positionEntryTime,
+      positionEntryPrice: paperSession.positionEntryPrice,
+      positionQuantity: paperSession.positionQuantity,
+      lastSyncedTime: paperSession.lastSyncedTime,
+    },
+    preCheck.allowNewEntries,
+  );
+
+  const postCheck = evaluateRisk(
+    {
+      startingCapital: paperSession.startingCapital,
+      currentEquity: result.equity,
+      recentNetPnls: [
+        ...result.newOrders.filter((o) => o.side === "SELL").map((o) => o.netPnl ?? 0).reverse(),
+        ...recentClosedOrders.map((o) => o.netPnl ?? 0),
+      ],
+    },
+    riskContext,
+  );
+
+  const writes: Prisma.PrismaPromise<unknown>[] = [
     prisma.paperSession.update({
       where: { id },
       data: {
@@ -93,6 +133,7 @@ export async function syncPaperSessionAction(id: string) {
         positionEntryPrice: result.position ? result.position.entryPrice : null,
         positionQuantity: result.position ? result.position.quantity : null,
         lastSyncedTime: result.lastSyncedTime,
+        status: postCheck.breach ? "STOPPED" : undefined,
       },
     }),
     ...result.newOrders.map((o) =>
@@ -108,7 +149,33 @@ export async function syncPaperSessionAction(id: string) {
         },
       }),
     ),
-  ]);
+  ];
+
+  if (postCheck.breach) {
+    writes.push(
+      prisma.riskEvent.create({
+        data: {
+          userId: session.user.id,
+          paperSessionId: id,
+          type: postCheck.breach.type,
+          message: `${paperSession.strategyName} (${paperSession.instrumentSymbol}): ${postCheck.breach.message}`,
+        },
+      }),
+    );
+  } else if (!preCheck.allowNewEntries && riskContext.killSwitchEnabled && result.suppressedEntrySignal) {
+    writes.push(
+      prisma.riskEvent.create({
+        data: {
+          userId: session.user.id,
+          paperSessionId: id,
+          type: "KILL_SWITCH_BLOCKED",
+          message: `${paperSession.strategyName} (${paperSession.instrumentSymbol}): an entry signal fired but was blocked — kill switch is on.`,
+        },
+      }),
+    );
+  }
+
+  await prisma.$transaction(writes);
 
   revalidatePaperPaths(id);
 }
