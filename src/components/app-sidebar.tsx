@@ -44,7 +44,7 @@ export default function AppSidebar() {
     <aside className="hidden w-64 shrink-0 border-r border-black/5 bg-white md:block">
       <div className="flex h-16 items-center gap-2 border-b border-black/5 px-5">
         <Link href="/" className="flex items-center gap-2">
-          <Image src="/brand/icon-mark.svg" alt="MyAlgoAgent" width={28} height={28} />
+          <Image src="/brand/icon-mark.png" alt="MyAlgoAgent" width={28} height={28} />
           <span className="text-base font-bold text-brand-primary">MyAlgoAgent</span>
         </Link>
       </div>

@@ -15,7 +15,7 @@ export default async function LoginPage() {
 
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-sm flex-col items-center justify-center px-4 text-center">
-      <Image src="/brand/icon-mark.svg" alt="MyAlgoAgent" width={64} height={64} />
+      <Image src="/brand/icon-mark.png" alt="MyAlgoAgent" width={64} height={64} />
       <h1 className="mt-6 text-2xl font-bold text-brand-navy">
         Sign in to MyAlgoAgent
       </h1>

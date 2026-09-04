@@ -5,7 +5,7 @@ export default function Logo({ className = "" }: { className?: string }) {
   return (
     <Link href="/" className={`flex items-center gap-2 shrink-0 ${className}`}>
       <Image
-        src="/brand/icon-mark.svg"
+        src="/brand/icon-mark.png"
         alt="MyAlgoAgent logo"
         width={36}
         height={36}

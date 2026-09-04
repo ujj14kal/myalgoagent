@@ -30,7 +30,7 @@ export function LegalAttribution() {
       <span>A product of</span>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/brand/shagoon-softech-logo.png"
+        src="/brand/shagoon-softech-logo.svg"
         alt="Shagoon Softech Pvt. Ltd."
         className="h-4 w-auto opacity-70"
       />

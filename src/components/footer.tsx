@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import Logo from "@/components/logo";
 
 const columns = [
@@ -73,11 +72,10 @@ export default function Footer() {
             <span className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
               A product of
             </span>
-            <Image
-              src="/brand/shagoon-softech-logo.png"
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/brand/shagoon-softech-logo.svg"
               alt="Shagoon Softech Pvt. Ltd."
-              width={150}
-              height={22}
               className="h-5 w-auto opacity-80"
             />
           </div>

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import PageHeader from "@/components/page-header";
 import { Breadcrumbs, Prose } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
@@ -45,11 +44,10 @@ export default function AboutPage() {
           Ltd. For company or product inquiries, see the{" "}
           <a href="/contact">Contact</a> page.
         </p>
-        <Image
-          src="/brand/shagoon-softech-logo.png"
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/brand/shagoon-softech-logo.svg"
           alt="Shagoon Softech Pvt. Ltd."
-          width={220}
-          height={32}
           className="mt-4 h-8 w-auto"
         />
       </Prose>
