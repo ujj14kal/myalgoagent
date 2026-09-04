@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import AppSidebar from "@/components/app-sidebar";
 import AppTopbar from "@/components/app-topbar";
+import FeedbackWidget from "@/components/feedback-widget";
 
 export const metadata = {
   robots: { index: false, follow: false },
@@ -32,6 +33,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <AppTopbar user={session.user} unreadCount={unreadCount} />
         <main className="flex-1 p-6">{children}</main>
       </div>
+      <FeedbackWidget />
     </div>
   );
 }
