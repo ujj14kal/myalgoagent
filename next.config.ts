@@ -14,13 +14,15 @@ const securityHeaders = [
     value: [
       "default-src 'self'",
       // Next.js needs inline/eval script in dev; kept permissive enough for
-      // Next's own runtime/hydration scripts in both dev and prod.
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      // Next's own runtime/hydration scripts in both dev and prod. Google
+      // Analytics (gtag.js) is loaded from googletagmanager.com.
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: https:",
       "font-src 'self' data:",
-      // Google's OAuth pages and our own API/market-data routes.
-      "connect-src 'self' https://accounts.google.com https://query1.finance.yahoo.com",
+      // Google's OAuth pages, our own API/market-data routes, and GA4's
+      // beacon endpoints (gtag sends hits to both of these hosts).
+      "connect-src 'self' https://accounts.google.com https://query1.finance.yahoo.com https://www.googletagmanager.com https://www.google-analytics.com https://region1.google-analytics.com",
       "frame-src https://accounts.google.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",

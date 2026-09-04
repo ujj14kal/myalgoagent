@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { marketDataProvider } from "@/lib/market-data";
 import CandlestickChart from "@/components/candlestick-chart";
 import PaperSessionControls from "@/components/paper-session-controls";
+import { describePositionSizing } from "@/components/position-sizing-fields";
 import type { Signal } from "@/lib/strategy";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -51,7 +52,9 @@ export default async function PaperSessionDetailPage({ params }: { params: Promi
       <div className="mt-4 flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-brand-navy">{paperSession.strategyName}</h1>
-          <p className="mt-1 text-sm text-brand-navy/60">{paperSession.instrumentSymbol}</p>
+          <p className="mt-1 text-sm text-brand-navy/60">
+            {paperSession.instrumentSymbol} · Sizing: {describePositionSizing(paperSession.positionSizingMode, paperSession.positionSizingValue)}
+          </p>
         </div>
         <PaperSessionControls sessionId={paperSession.id} status={paperSession.status} />
       </div>

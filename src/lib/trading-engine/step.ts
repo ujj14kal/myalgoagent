@@ -11,9 +11,39 @@ export interface EngineState {
   position: EnginePosition | null;
 }
 
+export type PositionSizingMode = "FULL_CAPITAL" | "FIXED_QUANTITY" | "FIXED_CAPITAL" | "PERCENT_OF_CAPITAL";
+
+export interface PositionSizing {
+  mode: PositionSizingMode;
+  value: number | null;
+}
+
 export interface EngineConfig {
   brokeragePercent: number;
   slippagePercent: number;
+  positionSizing: PositionSizing;
+}
+
+/**
+ * Computes how many whole units to buy given available cash, the fill
+ * price, and the configured sizing mode. Always rounds down to the
+ * nearest whole tradable unit (universal convention — never round up)
+ * and never exceeds what `cash` can actually afford, regardless of mode.
+ */
+export function computeQuantity(cash: number, fillPrice: number, sizing: PositionSizing): number {
+  const affordable = Math.floor(cash / fillPrice);
+
+  switch (sizing.mode) {
+    case "FIXED_QUANTITY":
+      return Math.min(Math.floor(sizing.value ?? 0), affordable);
+    case "FIXED_CAPITAL":
+      return Math.floor(Math.min(sizing.value ?? 0, cash) / fillPrice);
+    case "PERCENT_OF_CAPITAL":
+      return Math.floor((cash * (sizing.value ?? 0)) / 100 / fillPrice);
+    case "FULL_CAPITAL":
+    default:
+      return affordable;
+  }
 }
 
 export interface EngineTrade {
@@ -69,15 +99,16 @@ export function stepBar(
   exitSignal: boolean,
   state: EngineState,
   config: EngineConfig,
-): { state: EngineState; trade?: EngineTrade } {
+): { state: EngineState; trade?: EngineTrade; sizeTooSmall?: boolean } {
   const nextBar = candles[i + 1];
 
   if (!state.position && entrySignal && nextBar) {
     const fillPrice = nextBar.open * (1 + config.slippagePercent / 100);
-    const quantity = Math.floor(state.cash / fillPrice);
+    const quantity = computeQuantity(state.cash, fillPrice, config.positionSizing);
     if (quantity > 0) {
       return { state: { ...state, position: { entryIdx: i + 1, entryPrice: fillPrice, quantity } } };
     }
+    return { state, sizeTooSmall: true };
   } else if (state.position && exitSignal && nextBar) {
     const fillPrice = nextBar.open * (1 - config.slippagePercent / 100);
     const trade = closeTrade(candles, state.position, i + 1, fillPrice, config.brokeragePercent);
@@ -99,6 +130,19 @@ export function forceClose(
   if (!state.position) return { state };
   const trade = closeTrade(candles, state.position, idx, candles[idx].close, config.brokeragePercent);
   return { state: { cash: state.cash + trade.netPnl, position: null }, trade };
+}
+
+export function validatePositionSizing(sizing: PositionSizing): void {
+  if (sizing.mode === "FULL_CAPITAL") return;
+  if (sizing.value === null || !Number.isFinite(sizing.value) || sizing.value <= 0) {
+    throw new Error("Position sizing value must be a positive number for this mode");
+  }
+  if (sizing.mode === "FIXED_QUANTITY" && !Number.isInteger(sizing.value)) {
+    throw new Error("Fixed quantity sizing must be a whole number of shares");
+  }
+  if (sizing.mode === "PERCENT_OF_CAPITAL" && sizing.value > 100) {
+    throw new Error("Percent of capital sizing cannot exceed 100%");
+  }
 }
 
 export function markToMarket(candles: Candle[], idx: number, state: EngineState): number {

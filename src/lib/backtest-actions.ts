@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { marketDataProvider, type CandleRange } from "@/lib/market-data";
 import { runBacktest } from "@/lib/backtest/run";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { validatePositionSizing, type PositionSizingMode } from "@/lib/trading-engine/step";
 import type { ConditionNode } from "@/lib/strategy";
 import type { Prisma } from "@prisma/client";
 
@@ -15,6 +16,8 @@ export interface RunBacktestInput {
   startingCapital: number;
   brokeragePercent: number;
   slippagePercent: number;
+  positionSizingMode: PositionSizingMode;
+  positionSizingValue: number | null;
   range: CandleRange;
 }
 
@@ -27,6 +30,8 @@ export async function runBacktestAction(input: RunBacktestInput) {
   if (input.brokeragePercent < 0 || input.slippagePercent < 0) {
     throw new Error("Brokerage and slippage must be zero or positive");
   }
+  const positionSizing = { mode: input.positionSizingMode, value: input.positionSizingValue };
+  validatePositionSizing(positionSizing);
 
   const strategy = await prisma.strategy.findFirst({
     where: { id: input.strategyId, userId: session.user.id },
@@ -44,6 +49,7 @@ export async function runBacktestAction(input: RunBacktestInput) {
     startingCapital: input.startingCapital,
     brokeragePercent: input.brokeragePercent,
     slippagePercent: input.slippagePercent,
+    positionSizing,
   });
 
   const run = await prisma.backtestRun.create({
@@ -55,6 +61,8 @@ export async function runBacktestAction(input: RunBacktestInput) {
       startingCapital: input.startingCapital,
       brokeragePercent: input.brokeragePercent,
       slippagePercent: input.slippagePercent,
+      positionSizingMode: input.positionSizingMode,
+      positionSizingValue: input.positionSizingValue,
       range: input.range,
       entryCondition: entryCondition as unknown as Prisma.InputJsonValue,
       exitCondition: exitCondition as unknown as Prisma.InputJsonValue,

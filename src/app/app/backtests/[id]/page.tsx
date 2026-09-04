@@ -5,6 +5,7 @@ import { marketDataProvider } from "@/lib/market-data";
 import type { CandleRange } from "@/lib/market-data";
 import CandlestickChart from "@/components/candlestick-chart";
 import EquityCurveChart from "@/components/equity-curve-chart";
+import { describePositionSizing } from "@/components/position-sizing-fields";
 import type { Signal } from "@/lib/strategy";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -59,7 +60,8 @@ export default async function BacktestDetailPage({ params }: { params: Promise<{
     <div>
       <h1 className="text-2xl font-bold text-brand-navy">{run.strategyName}</h1>
       <p className="mt-1 text-sm text-brand-navy/60">
-        {run.instrumentSymbol} · {run.range} · started with ₹{run.startingCapital.toLocaleString("en-IN")}
+        {run.instrumentSymbol} · {run.range} · started with ₹{run.startingCapital.toLocaleString("en-IN")} ·
+        Sizing: {describePositionSizing(run.positionSizingMode, run.positionSizingValue)}
       </p>
       <p className="mt-1 text-xs text-brand-navy/40">
         Data: {marketDataProvider.name}

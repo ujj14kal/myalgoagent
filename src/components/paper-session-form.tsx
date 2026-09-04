@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { startPaperSession } from "@/lib/paper-actions";
+import PositionSizingFields from "@/components/position-sizing-fields";
+import type { PositionSizingMode } from "@/lib/trading-engine/step";
 
 interface StrategyOption {
   id: string;
@@ -15,6 +17,8 @@ export default function PaperSessionForm({ strategies }: { strategies: StrategyO
   const [startingCapital, setStartingCapital] = useState(100000);
   const [brokeragePercent, setBrokeragePercent] = useState(0.03);
   const [slippagePercent, setSlippagePercent] = useState(0.05);
+  const [positionSizingMode, setPositionSizingMode] = useState<PositionSizingMode>("FULL_CAPITAL");
+  const [positionSizingValue, setPositionSizingValue] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -23,7 +27,14 @@ export default function PaperSessionForm({ strategies }: { strategies: StrategyO
     setError(null);
     startTransition(async () => {
       try {
-        await startPaperSession({ strategyId, startingCapital, brokeragePercent, slippagePercent });
+        await startPaperSession({
+          strategyId,
+          startingCapital,
+          brokeragePercent,
+          slippagePercent,
+          positionSizingMode,
+          positionSizingValue,
+        });
       } catch (err) {
         if (err && typeof err === "object" && "digest" in err && String(err.digest).startsWith("NEXT_REDIRECT")) {
           throw err;
@@ -93,6 +104,15 @@ export default function PaperSessionForm({ strategies }: { strategies: StrategyO
             className="w-full rounded-lg border border-brand-navy/15 px-3 py-2 text-sm outline-none focus:border-brand-primary"
           />
         </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <PositionSizingFields
+          mode={positionSizingMode}
+          value={positionSizingValue}
+          onModeChange={setPositionSizingMode}
+          onValueChange={setPositionSizingValue}
+        />
       </div>
 
       <div className="mt-4">

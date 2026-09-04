@@ -1,7 +1,7 @@
 import { marketDataProvider } from "@/lib/market-data";
 import { evaluateConditionsPerBar } from "@/lib/strategy";
 import type { ConditionNode } from "@/lib/strategy";
-import { stepBar, markToMarket, type EngineState } from "@/lib/trading-engine/step";
+import { stepBar, markToMarket, type EngineState, type PositionSizing } from "@/lib/trading-engine/step";
 
 export interface PaperSessionState {
   instrumentSymbol: string;
@@ -9,6 +9,7 @@ export interface PaperSessionState {
   exitCondition: ConditionNode;
   brokeragePercent: number;
   slippagePercent: number;
+  positionSizing: PositionSizing;
   cash: number;
   positionEntryTime: number | null;
   positionEntryPrice: number | null;
@@ -31,6 +32,7 @@ export interface SyncResult {
   position: { entryTime: number; entryPrice: number; quantity: number } | null;
   lastSyncedTime: number | null;
   suppressedEntrySignal: boolean;
+  sizeTooSmall: boolean;
   equity: number;
 }
 
@@ -66,10 +68,15 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
         : null,
   };
 
-  const engineConfig = { brokeragePercent: session.brokeragePercent, slippagePercent: session.slippagePercent };
+  const engineConfig = {
+    brokeragePercent: session.brokeragePercent,
+    slippagePercent: session.slippagePercent,
+    positionSizing: session.positionSizing,
+  };
   const newOrders: NewPaperOrder[] = [];
   let lastSyncedTime = session.lastSyncedTime;
   let suppressedEntrySignal = false;
+  let sizeTooSmall = false;
 
   for (let i = 0; i < candles.length; i++) {
     if (session.lastSyncedTime !== null && candles[i].time <= session.lastSyncedTime) continue;
@@ -81,6 +88,7 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
     const wasFlat = !state.position;
     const stepped = stepBar(candles, i, allowNewEntries && entry[i], exit[i], state, engineConfig);
     state = stepped.state;
+    if (stepped.sizeTooSmall) sizeTooSmall = true;
 
     if (stepped.trade) {
       newOrders.push({
@@ -117,6 +125,7 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
       : null,
     lastSyncedTime,
     suppressedEntrySignal,
+    sizeTooSmall,
     equity: candles.length > 0 ? markToMarket(candles, candles.length - 1, state) : state.cash,
   };
 }

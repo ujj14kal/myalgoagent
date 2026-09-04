@@ -119,15 +119,24 @@ model Strategy {
   paperSessions PaperSession[]
 }
 
+enum PositionSizingMode {
+  FULL_CAPITAL
+  FIXED_QUANTITY
+  FIXED_CAPITAL
+  PERCENT_OF_CAPITAL
+}
+
 model BacktestRun {
-  id               String   @id @default(cuid())
-  userId           String
-  strategyId       String?
-  strategyName     String
-  instrumentSymbol String
-  startingCapital  Float
-  brokeragePercent Float
-  slippagePercent  Float
+  id                  String             @id @default(cuid())
+  userId              String
+  strategyId          String?
+  strategyName        String
+  instrumentSymbol    String
+  startingCapital     Float
+  brokeragePercent    Float
+  slippagePercent     Float
+  positionSizingMode  PositionSizingMode @default(FULL_CAPITAL)
+  positionSizingValue Float?
   range            String
   entryCondition   Json
   exitCondition    Json
@@ -186,6 +195,8 @@ model PaperSession {
   startingCapital    Float
   brokeragePercent   Float
   slippagePercent    Float
+  positionSizingMode  PositionSizingMode @default(FULL_CAPITAL)
+  positionSizingValue Float?
   cash               Float
   positionEntryTime  Int?
   positionEntryPrice Float?

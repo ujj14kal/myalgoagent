@@ -8,6 +8,7 @@ import { marketDataProvider } from "@/lib/market-data";
 import { syncPaperSession } from "@/lib/paper/sync";
 import { evaluateRisk } from "@/lib/risk/evaluate";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { validatePositionSizing, type PositionSizingMode } from "@/lib/trading-engine/step";
 import type { ConditionNode } from "@/lib/strategy";
 import type { Prisma } from "@prisma/client";
 
@@ -16,6 +17,8 @@ export interface StartPaperSessionInput {
   startingCapital: number;
   brokeragePercent: number;
   slippagePercent: number;
+  positionSizingMode: PositionSizingMode;
+  positionSizingValue: number | null;
 }
 
 function revalidatePaperPaths(id?: string) {
@@ -37,6 +40,7 @@ export async function startPaperSession(input: StartPaperSessionInput) {
   if (input.brokeragePercent < 0 || input.slippagePercent < 0) {
     throw new Error("Brokerage and slippage must be zero or positive");
   }
+  validatePositionSizing({ mode: input.positionSizingMode, value: input.positionSizingValue });
 
   const strategy = await prisma.strategy.findFirst({
     where: { id: input.strategyId, userId: session.user.id },
@@ -59,6 +63,8 @@ export async function startPaperSession(input: StartPaperSessionInput) {
       startingCapital: input.startingCapital,
       brokeragePercent: input.brokeragePercent,
       slippagePercent: input.slippagePercent,
+      positionSizingMode: input.positionSizingMode,
+      positionSizingValue: input.positionSizingValue,
       cash: input.startingCapital,
       lastSyncedTime: latestTime,
     },
@@ -109,6 +115,7 @@ export async function syncPaperSessionAction(id: string) {
       exitCondition: paperSession.exitCondition as unknown as ConditionNode,
       brokeragePercent: paperSession.brokeragePercent,
       slippagePercent: paperSession.slippagePercent,
+      positionSizing: { mode: paperSession.positionSizingMode, value: paperSession.positionSizingValue },
       cash: paperSession.cash,
       positionEntryTime: paperSession.positionEntryTime,
       positionEntryPrice: paperSession.positionEntryPrice,
@@ -185,6 +192,19 @@ export async function syncPaperSessionAction(id: string) {
       }),
       prisma.notification.create({
         data: { userId, paperSessionId: id, type: "RISK_EVENT", message },
+      }),
+    );
+  }
+
+  if (result.sizeTooSmall) {
+    writes.push(
+      prisma.notification.create({
+        data: {
+          userId,
+          paperSessionId: id,
+          type: "RISK_EVENT",
+          message: `${paperSession.strategyName} (${paperSession.instrumentSymbol}): an entry signal fired but the configured position size rounds to 0 shares at the current price — skipped.`,
+        },
       }),
     );
   }

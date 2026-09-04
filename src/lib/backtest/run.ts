@@ -1,12 +1,13 @@
 import type { Candle } from "@/lib/market-data";
 import { evaluateConditionsPerBar } from "@/lib/strategy";
 import type { ConditionNode } from "@/lib/strategy";
-import { stepBar, forceClose, markToMarket, type EngineState, type EngineTrade } from "@/lib/trading-engine/step";
+import { stepBar, forceClose, markToMarket, type EngineState, type EngineTrade, type PositionSizing } from "@/lib/trading-engine/step";
 
 export interface BacktestConfig {
   startingCapital: number;
   brokeragePercent: number;
   slippagePercent: number;
+  positionSizing: PositionSizing;
 }
 
 export type BacktestTradeResult = EngineTrade;
@@ -102,7 +103,11 @@ export function runBacktest(
   config: BacktestConfig,
 ): BacktestResult {
   const { entry, exit } = evaluateConditionsPerBar(candles, entryCondition, exitCondition);
-  const engineConfig = { brokeragePercent: config.brokeragePercent, slippagePercent: config.slippagePercent };
+  const engineConfig = {
+    brokeragePercent: config.brokeragePercent,
+    slippagePercent: config.slippagePercent,
+    positionSizing: config.positionSizing,
+  };
 
   const trades: BacktestTradeResult[] = [];
   const equityCurve: EquityPoint[] = [];
