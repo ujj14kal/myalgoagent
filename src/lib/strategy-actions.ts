@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseDsl, validateConditionNode } from "@/lib/strategy";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import type { ConditionNode } from "@/lib/strategy";
 import type { Prisma } from "@prisma/client";
 
@@ -55,6 +56,7 @@ function compile(input: StrategyInput): {
 export async function createStrategy(input: StrategyInput) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
+  await enforceRateLimit(`strategy-write:${session.user.id}`, 30, 60_000);
 
   const compiled = compile(input);
 
@@ -78,6 +80,7 @@ export async function createStrategy(input: StrategyInput) {
 export async function updateStrategy(id: string, input: StrategyInput) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
+  await enforceRateLimit(`strategy-write:${session.user.id}`, 30, 60_000);
 
   const compiled = compile(input);
 

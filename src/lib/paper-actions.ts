@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { marketDataProvider } from "@/lib/market-data";
 import { syncPaperSession } from "@/lib/paper/sync";
 import { evaluateRisk } from "@/lib/risk/evaluate";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import type { ConditionNode } from "@/lib/strategy";
 import type { Prisma } from "@prisma/client";
 
@@ -30,6 +31,7 @@ function revalidatePaperPaths(id?: string) {
 export async function startPaperSession(input: StartPaperSessionInput) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
+  await enforceRateLimit(`paper-start:${session.user.id}`, 10, 60_000);
 
   if (input.startingCapital <= 0) throw new Error("Starting capital must be positive");
   if (input.brokeragePercent < 0 || input.slippagePercent < 0) {
@@ -70,6 +72,7 @@ export async function syncPaperSessionAction(id: string) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
   const userId = session.user.id;
+  await enforceRateLimit(`paper-sync:${userId}`, 20, 60_000);
 
   const paperSession = await prisma.paperSession.findFirst({ where: { id, userId } });
   if (!paperSession) throw new Error("Paper session not found");

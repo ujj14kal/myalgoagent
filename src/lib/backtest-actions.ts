@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { marketDataProvider, type CandleRange } from "@/lib/market-data";
 import { runBacktest } from "@/lib/backtest/run";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import type { ConditionNode } from "@/lib/strategy";
 import type { Prisma } from "@prisma/client";
 
@@ -20,6 +21,7 @@ export interface RunBacktestInput {
 export async function runBacktestAction(input: RunBacktestInput) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
+  await enforceRateLimit(`backtest:${session.user.id}`, 10, 60_000);
 
   if (input.startingCapital <= 0) throw new Error("Starting capital must be positive");
   if (input.brokeragePercent < 0 || input.slippagePercent < 0) {
