@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
 import { Breadcrumbs, Prose } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import Reveal from "@/components/reveal";
 
 export const metadata: Metadata = {
   title: "Security",
@@ -20,6 +21,7 @@ export default function SecurityPage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/security", label: "Security" }]} />
       <PageHeader eyebrow="Security" title="Security practices" description="A financial-software platform handles credentials and account data that need to be protected by default, not as an afterthought." />
+      <Reveal>
       <Prose>
         <h2>Credentials & secrets</h2>
         <p>
@@ -68,6 +70,7 @@ export default function SecurityPage() {
           so it can be investigated promptly.
         </p>
       </Prose>
+      </Reveal>
     </>
   );
 }

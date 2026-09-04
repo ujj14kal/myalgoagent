@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import PageHeader from "@/components/page-header";
 import { Breadcrumbs, Prose } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import Reveal from "@/components/reveal";
 
 export const metadata: Metadata = {
   title: "About",
@@ -20,6 +22,7 @@ export default function AboutPage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/about", label: "About" }]} />
       <PageHeader eyebrow="About" title="About MyAlgoAgent" description="Built by Shagoon Softech." />
+      <Reveal>
       <Prose>
         <h2>Our focus</h2>
         <p>
@@ -38,10 +41,19 @@ export default function AboutPage() {
 
         <h2>Company</h2>
         <p>
-          MyAlgoAgent is developed and operated by Shagoon Softech. For
-          company or product inquiries, see the <a href="/contact">Contact</a> page.
+          MyAlgoAgent is developed and operated by Shagoon Softech Pvt.
+          Ltd. For company or product inquiries, see the{" "}
+          <a href="/contact">Contact</a> page.
         </p>
+        <Image
+          src="/brand/shagoon-softech-logo.png"
+          alt="Shagoon Softech Pvt. Ltd."
+          width={220}
+          height={32}
+          className="mt-4 h-8 w-auto"
+        />
       </Prose>
+      </Reveal>
     </>
   );
 }

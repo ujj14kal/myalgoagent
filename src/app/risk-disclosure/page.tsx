@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
-import { Breadcrumbs, Prose } from "@/components/section";
+import { Breadcrumbs, Prose, Callout, LegalAttribution } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import Reveal from "@/components/reveal";
 
 export const metadata: Metadata = {
   title: "Risk Disclosure",
@@ -19,14 +20,15 @@ export default function RiskDisclosurePage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/risk-disclosure", label: "Risk Disclosure" }]} />
       <PageHeader eyebrow="Legal" title="Risk Disclosure" description="Last updated: draft — pending legal review." />
+      <Reveal>
       <Prose>
         <h2>Trading involves risk</h2>
-        <p>
+        <Callout tone="gold">
           Trading and algorithmic trading involve substantial risk of loss
           and are not suitable for every investor. You could lose some or
           all of your invested capital. Only trade with money you can
           afford to lose.
-        </p>
+        </Callout>
 
         <h2>Past and backtested performance</h2>
         <p>
@@ -46,6 +48,18 @@ export default function RiskDisclosurePage() {
           informational only.
         </p>
 
+        <h2>Regulatory status</h2>
+        <Callout tone="gold">
+          MyAlgoAgent and Shagoon Softech Pvt. Ltd. are not registered as
+          a stock broker, investment advisor, portfolio manager or
+          research analyst with SEBI or any other regulator. Live trading
+          through a connected broker API is subject to applicable Indian
+          securities regulations governing algorithmic trading, and it is
+          your responsibility &mdash; not MyAlgoAgent&rsquo;s &mdash; to
+          ensure your use of the platform complies with those regulations
+          and with your broker&rsquo;s own terms for API-based trading.
+        </Callout>
+
         <h2>Technology risk</h2>
         <p>
           Software, network, broker-API and market-data outages can affect
@@ -63,11 +77,14 @@ export default function RiskDisclosurePage() {
         </p>
 
         <p className="text-sm text-brand-navy/50">
-          This page is a template and must be reviewed by qualified legal
-          counsel for your jurisdiction and business model before public
-          launch.
+          This page reflects our current risk disclosures and is reviewed
+          and updated as the product evolves; it should still be reviewed
+          by qualified legal counsel for your jurisdiction before the
+          live-trading feature goes to public launch.
         </p>
+        <LegalAttribution />
       </Prose>
+      </Reveal>
     </>
   );
 }

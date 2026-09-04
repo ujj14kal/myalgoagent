@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
 import { Breadcrumbs, Prose } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import Reveal from "@/components/reveal";
 
 export const metadata: Metadata = {
   title: "Paper Trading",
@@ -20,6 +21,7 @@ export default function PaperTradingPage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/paper-trading", label: "Paper Trading" }]} />
       <PageHeader eyebrow="Paper Trading" title="Test a strategy live, without risking capital" description="Paper trading is a simulated environment that mirrors live trading mechanics using virtual money." />
+      <Reveal>
       <Prose>
         <h2>How it differs from live trading</h2>
         <p>
@@ -52,6 +54,7 @@ export default function PaperTradingPage() {
           confirmation — useful when starting a fresh evaluation period.
         </p>
       </Prose>
+      </Reveal>
     </>
   );
 }

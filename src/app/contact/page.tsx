@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
 import { Breadcrumbs, Prose } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import Reveal from "@/components/reveal";
 
 export const metadata: Metadata = {
   title: "Contact",
@@ -19,6 +20,7 @@ export default function ContactPage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/contact", label: "Contact" }]} />
       <PageHeader eyebrow="Contact" title="Get in touch" description="Questions about the product, security or a company inquiry — we'd like to hear from you." />
+      <Reveal>
       <Prose>
         <h2>General & support inquiries</h2>
         <p>
@@ -35,6 +37,7 @@ export default function ContactPage() {
           verified contact details before public launch.
         </p>
       </Prose>
+      </Reveal>
     </>
   );
 }

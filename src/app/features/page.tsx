@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
-import { Breadcrumbs, Prose } from "@/components/section";
+import { Breadcrumbs } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import Reveal from "@/components/reveal";
 
 export const metadata: Metadata = {
   title: "Features",
@@ -80,18 +81,24 @@ export default function FeaturesPage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/features", label: "Features" }]} />
       <PageHeader eyebrow="Features" title="Everything the platform is built to do" description="A structured feature set covering strategy creation, testing, execution and risk control." />
-      <Prose>
-        {groups.map((g) => (
-          <div key={g.title}>
-            <h2>{g.title}</h2>
-            <ul>
-              {g.items.map((i) => (
-                <li key={i}>{i}</li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </Prose>
+      <Reveal>
+        <div className="mx-auto grid max-w-5xl gap-6 px-4 py-14 sm:grid-cols-2">
+          {groups.map((g, i) => (
+            <div key={g.title} className="rounded-2xl border border-black/5 bg-white p-6 transition-shadow hover:shadow-lg">
+              <span className={`inline-block h-2 w-2 rounded-full ${i % 2 === 0 ? "bg-brand-gold" : "bg-brand-blue"}`} />
+              <h2 className="mt-3 text-lg font-semibold text-brand-navy">{g.title}</h2>
+              <ul className="mt-3 space-y-2 text-sm leading-relaxed text-brand-navy/70">
+                {g.items.map((i2) => (
+                  <li key={i2} className="flex gap-2">
+                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-brand-navy/30" />
+                    <span>{i2}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </Reveal>
     </>
   );
 }

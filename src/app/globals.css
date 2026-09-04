@@ -34,3 +34,25 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
+
+.accent-bar {
+  height: 3px;
+  width: 56px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--brand-gold), var(--brand-blue));
+}
+
+/* Hidden-until-revealed state only applies once the `js` class proves
+   JavaScript ran (set by an inline script in layout.tsx before paint).
+   Without JS, [data-reveal] content stays visible by default. */
+@media (prefers-reduced-motion: no-preference) {
+  .js [data-reveal] {
+    opacity: 0;
+    transform: translateY(16px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .js [data-reveal][data-visible="true"] {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

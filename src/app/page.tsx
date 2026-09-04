@@ -1,7 +1,7 @@
 import Link from "next/link";
-import Image from "next/image";
 import type { Metadata } from "next";
 import { siteUrl } from "@/lib/site";
+import Reveal from "@/components/reveal";
 
 export const metadata: Metadata = {
   title: "MyAlgoAgent — Algo Trading Platform",
@@ -65,100 +65,135 @@ export default function Home() {
               our <Link href="/risk-disclosure" className="underline">Risk Disclosure</Link>.
             </p>
           </div>
-          <div className="flex justify-center">
-            <Image
-              src="/brand/icon-mark.svg"
-              alt="MyAlgoAgent"
-              width={280}
-              height={280}
-              priority
-              className="drop-shadow-xl"
-            />
+          <div className="rounded-3xl border border-black/5 bg-gradient-to-br from-brand-primary to-brand-blue p-6 text-white shadow-xl">
+            <p className="text-xs font-semibold uppercase tracking-wide text-white/70">
+              Example backtest summary
+            </p>
+            <p className="mt-1 text-[11px] text-white/50">
+              Illustrative only — not live or guaranteed performance.
+            </p>
+            <div className="mt-5 grid grid-cols-3 gap-3">
+              <div className="rounded-xl bg-white/10 p-4">
+                <p className="text-2xl font-bold text-brand-gold">62%</p>
+                <p className="mt-1 text-xs text-white/70">Win rate</p>
+              </div>
+              <div className="rounded-xl bg-white/10 p-4">
+                <p className="text-2xl font-bold text-brand-gold">1.8</p>
+                <p className="mt-1 text-xs text-white/70">Sharpe</p>
+              </div>
+              <div className="rounded-xl bg-white/10 p-4">
+                <p className="text-2xl font-bold text-brand-gold">-9%</p>
+                <p className="mt-1 text-xs text-white/70">Max drawdown</p>
+              </div>
+            </div>
+            <div className="mt-4 space-y-2 border-t border-white/15 pt-4 text-sm text-white/80">
+              <div className="flex items-center justify-between">
+                <span>Strategy</span>
+                <span className="font-medium text-white">EMA Crossover + RSI</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Risk controls</span>
+                <span className="font-medium text-brand-buy">Active</span>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      <section id="how-it-works" className="mx-auto max-w-6xl px-4 py-20">
-        <div className="text-center">
-          <h2 className="text-3xl font-bold text-brand-navy">How the platform works</h2>
-          <p className="mx-auto mt-3 max-w-2xl text-brand-navy/70">
-            One workflow, from raw market data to a fully risk-managed live
-            strategy.
-          </p>
-        </div>
-        <ol className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {workflow.map((s) => (
-            <li key={s.step} className="rounded-2xl border border-black/5 bg-white p-6">
-              <span className="text-sm font-bold text-brand-gold">{s.step}</span>
-              <h3 className="mt-2 text-lg font-semibold text-brand-navy">{s.title}</h3>
-              <p className="mt-2 text-sm text-brand-navy/65">{s.text}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <section id="features" className="border-y border-black/5 bg-white">
-        <div className="mx-auto max-w-6xl px-4 py-20">
+      <Reveal>
+        <section id="how-it-works" className="mx-auto max-w-6xl px-4 py-20">
           <div className="text-center">
-            <h2 className="text-3xl font-bold text-brand-navy">Core features</h2>
-            <p className="mx-auto mt-3 max-w-2xl text-brand-navy/70">
-              Everything needed to go from idea to a monitored, risk-managed
+            <h2 className="text-3xl font-bold text-brand-navy">How the platform works</h2>
+            <div className="accent-bar mx-auto mt-3" />
+            <p className="mx-auto mt-4 max-w-2xl text-brand-navy/70">
+              One workflow, from raw market data to a fully risk-managed live
               strategy.
             </p>
           </div>
-          <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {features.map((f) => (
-              <div key={f.title} className="rounded-2xl border border-black/5 p-6">
-                <h3 className="text-lg font-semibold text-brand-navy">{f.title}</h3>
-                <p className="mt-2 text-sm text-brand-navy/65">{f.text}</p>
-              </div>
+          <ol className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {workflow.map((s) => (
+              <li key={s.step} className="group rounded-2xl border border-black/5 bg-white p-6 transition-shadow hover:shadow-lg">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-gold/15 text-sm font-bold text-brand-gold">
+                  {s.step}
+                </span>
+                <h3 className="mt-3 text-lg font-semibold text-brand-navy">{s.title}</h3>
+                <p className="mt-2 text-sm text-brand-navy/65">{s.text}</p>
+              </li>
             ))}
-          </div>
-        </div>
-      </section>
+          </ol>
+        </section>
+      </Reveal>
 
-      <section id="risk" className="mx-auto max-w-6xl px-4 py-20">
-        <div className="rounded-3xl bg-brand-navy px-8 py-16 text-center text-white">
-          <h2 className="text-3xl font-bold">Risk-first by design</h2>
-          <p className="mx-auto mt-4 max-w-2xl text-white/70">
-            Every strategy runs behind configurable position limits, daily
-            loss limits and a global kill switch — enforced independently of
-            the interface, not just suggested by it.
-          </p>
-          <Link
-            href="/risk-management"
-            className="mt-8 inline-block rounded-full bg-white px-6 py-3 text-sm font-semibold text-brand-navy hover:bg-white/90"
-          >
-            Explore risk management
-          </Link>
-        </div>
-      </section>
+      <Reveal>
+        <section id="features" className="border-y border-black/5 bg-white">
+          <div className="mx-auto max-w-6xl px-4 py-20">
+            <div className="text-center">
+              <h2 className="text-3xl font-bold text-brand-navy">Core features</h2>
+              <div className="accent-bar mx-auto mt-3" />
+              <p className="mx-auto mt-4 max-w-2xl text-brand-navy/70">
+                Everything needed to go from idea to a monitored, risk-managed
+                strategy.
+              </p>
+            </div>
+            <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {features.map((f) => (
+                <div key={f.title} className="rounded-2xl border border-black/5 p-6 transition-shadow hover:shadow-lg hover:border-brand-blue/30">
+                  <span className="inline-block h-2 w-2 rounded-full bg-brand-blue" />
+                  <h3 className="mt-3 text-lg font-semibold text-brand-navy">{f.title}</h3>
+                  <p className="mt-2 text-sm text-brand-navy/65">{f.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </Reveal>
 
-      <section id="get-started" className="mx-auto max-w-6xl px-4 pb-24">
-        <div className="rounded-3xl border border-black/5 bg-white px-8 py-14 text-center">
-          <h2 className="text-2xl font-bold text-brand-navy">
-            Start with the product overview
-          </h2>
-          <p className="mx-auto mt-3 max-w-xl text-brand-navy/70">
-            Read a plain-language walkthrough of the whole platform, or dig
-            into the technology and AWS infrastructure behind it.
-          </p>
-          <div className="mt-6 flex flex-wrap justify-center gap-3">
+      <Reveal>
+        <section id="risk" className="mx-auto max-w-6xl px-4 py-20">
+          <div className="rounded-3xl bg-brand-navy px-8 py-16 text-center text-white">
+            <h2 className="text-3xl font-bold">Risk-first by design</h2>
+            <p className="mx-auto mt-4 max-w-2xl text-white/70">
+              Every strategy runs behind configurable position limits, daily
+              loss limits and a global kill switch — enforced independently of
+              the interface, not just suggested by it.
+            </p>
             <Link
-              href="/product"
-              className="rounded-full bg-brand-primary px-6 py-3 text-sm font-semibold text-white hover:bg-brand-primary-light"
+              href="/risk-management"
+              className="mt-8 inline-block rounded-full bg-brand-gold px-6 py-3 text-sm font-semibold text-brand-navy hover:bg-brand-gold/90"
             >
-              Product Overview
-            </Link>
-            <Link
-              href="/contact"
-              className="rounded-full border border-brand-navy/15 px-6 py-3 text-sm font-semibold text-brand-navy hover:border-brand-primary hover:text-brand-primary"
-            >
-              Contact us
+              Explore risk management
             </Link>
           </div>
-        </div>
-      </section>
+        </section>
+      </Reveal>
+
+      <Reveal>
+        <section id="get-started" className="mx-auto max-w-6xl px-4 pb-24">
+          <div className="rounded-3xl border border-black/5 bg-white px-8 py-14 text-center">
+            <h2 className="text-2xl font-bold text-brand-navy">
+              Start with the product overview
+            </h2>
+            <p className="mx-auto mt-3 max-w-xl text-brand-navy/70">
+              Read a plain-language walkthrough of the whole platform, or dig
+              into the technology and AWS infrastructure behind it.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
+              <Link
+                href="/product"
+                className="rounded-full bg-brand-primary px-6 py-3 text-sm font-semibold text-white hover:bg-brand-primary-light"
+              >
+                Product Overview
+              </Link>
+              <Link
+                href="/contact"
+                className="rounded-full border border-brand-navy/15 px-6 py-3 text-sm font-semibold text-brand-navy hover:border-brand-blue hover:text-brand-blue"
+              >
+                Contact us
+              </Link>
+            </div>
+          </div>
+        </section>
+      </Reveal>
     </>
   );
 }

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
-import { Breadcrumbs, Prose } from "@/components/section";
+import { Breadcrumbs, Prose, Callout } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import Reveal from "@/components/reveal";
 
 export const metadata: Metadata = {
   title: "Backtesting Engine",
@@ -20,6 +21,7 @@ export default function BacktestingPage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/backtesting", label: "Backtesting" }]} />
       <PageHeader eyebrow="Backtesting" title="Realistic backtesting, not just raw price math" description="Backtests are built to reflect what a strategy would actually have cost and earned — not an idealized, frictionless simulation." />
+      <Reveal>
       <Prose>
         <h2>What&rsquo;s configurable</h2>
         <ul>
@@ -66,13 +68,14 @@ export default function BacktestingPage() {
         </p>
 
         <h2>Important disclosure</h2>
-        <p>
+        <Callout tone="gold">
           A backtest describes how a strategy would have performed on
           historical data under the modeled assumptions. It is not a
           guarantee of future performance. Markets change, and live
           execution can differ from simulated fills.
-        </p>
+        </Callout>
       </Prose>
+      </Reveal>
     </>
   );
 }

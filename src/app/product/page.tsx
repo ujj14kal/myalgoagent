@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import PageHeader from "@/components/page-header";
-import { Breadcrumbs, Prose } from "@/components/section";
+import { Breadcrumbs, Prose, Callout } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import Reveal from "@/components/reveal";
 
 export const metadata: Metadata = {
   title: "Product Overview — What MyAlgoAgent Does",
@@ -29,6 +30,7 @@ export default function ProductPage() {
         title="MyAlgoAgent — Algo Trading Platform"
         description="MyAlgoAgent is a software platform that helps traders and developers build, test and run rule-based trading strategies. It is not a financial advisor and does not manage money on a user's behalf without explicit, user-initiated broker connections."
       />
+      <Reveal>
       <Prose>
         <h2>What is algo trading?</h2>
         <p>
@@ -129,13 +131,13 @@ export default function ProductPage() {
         </p>
 
         <h2>Important disclosure</h2>
-        <p>
+        <Callout tone="gold">
           Historical and backtested performance does not guarantee future
           results. MyAlgoAgent is software infrastructure for building
           and operating trading strategies; it is not a broker-dealer,
           investment advisor, or provider of personalized investment advice.
           Read the full <Link href="/risk-disclosure">Risk Disclosure</Link>.
-        </p>
+        </Callout>
 
         <h2>Product stage</h2>
         <p>
@@ -156,6 +158,7 @@ export default function ProductPage() {
           <li><Link href="/contact">Contact</Link></li>
         </ul>
       </Prose>
+      </Reveal>
     </>
   );
 }

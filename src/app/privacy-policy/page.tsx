@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
-import { Breadcrumbs, Prose } from "@/components/section";
+import { Breadcrumbs, Prose, LegalAttribution } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import Reveal from "@/components/reveal";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -20,6 +21,7 @@ export default function PrivacyPolicyPage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/privacy-policy", label: "Privacy Policy" }]} />
       <PageHeader eyebrow="Legal" title="Privacy Policy" description="Last updated: September 2026." />
+      <Reveal>
       <Prose>
         <h2>Overview</h2>
         <p>
@@ -191,7 +193,9 @@ export default function PrivacyPolicyPage() {
           This policy is provided to describe our actual current data
           practices and is reviewed and updated as the product evolves.
         </p>
+        <LegalAttribution />
       </Prose>
+      </Reveal>
     </>
   );
 }

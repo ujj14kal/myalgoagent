@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
 import { Breadcrumbs, Prose } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import Reveal from "@/components/reveal";
 
 export const metadata: Metadata = {
   title: "FAQ",
@@ -43,6 +44,7 @@ export default function FaqPage() {
       ))}
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/faq", label: "FAQ" }]} />
       <PageHeader eyebrow="FAQ" title="Frequently asked questions" />
+      <Reveal>
       <Prose>
         {faqs.map((f) => (
           <div key={f.q}>
@@ -51,6 +53,7 @@ export default function FaqPage() {
           </div>
         ))}
       </Prose>
+      </Reveal>
     </>
   );
 }

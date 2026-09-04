@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import Logo from "@/components/logo";
 
 const columns = [
@@ -48,15 +49,15 @@ export default function Footer() {
           </div>
           {columns.map((col) => (
             <div key={col.title}>
-              <h3 className="text-sm font-semibold text-brand-navy">
+              <h3 className="relative inline-block text-sm font-semibold text-brand-navy after:absolute after:-bottom-1.5 after:left-0 after:h-0.5 after:w-6 after:rounded-full after:bg-brand-gold">
                 {col.title}
               </h3>
-              <ul className="mt-3 space-y-2">
-                {col.links.map((l, i) => (
-                  <li key={col.title + l.label + i}>
+              <ul className="mt-4 space-y-2">
+                {col.links.map((l, j) => (
+                  <li key={col.title + l.label + j}>
                     <Link
                       href={l.href}
-                      className="text-sm text-brand-navy/60 hover:text-brand-primary"
+                      className="text-sm text-brand-navy/60 transition-colors hover:text-brand-blue"
                     >
                       {l.label}
                     </Link>
@@ -66,8 +67,24 @@ export default function Footer() {
             </div>
           ))}
         </div>
-        <div className="mt-10 flex flex-col gap-2 border-t border-black/5 pt-6 text-xs text-brand-navy/50 sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} MyAlgoAgent™. All rights reserved.</p>
+
+        <div className="mt-10 flex flex-col items-start gap-3 border-t border-black/5 pt-8 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
+              A product of
+            </span>
+            <Image
+              src="/brand/shagoon-softech-logo.png"
+              alt="Shagoon Softech Pvt. Ltd."
+              width={150}
+              height={22}
+              className="h-5 w-auto opacity-80"
+            />
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-col gap-2 border-t border-black/5 pt-6 text-xs text-brand-navy/50 sm:flex-row sm:items-center sm:justify-between">
+          <p>© {new Date().getFullYear()} MyAlgoAgent™, a product of Shagoon Softech Pvt. Ltd. All rights reserved.</p>
           <p>
             Algo trading involves risk. Backtested and historical results do
             not guarantee future performance.

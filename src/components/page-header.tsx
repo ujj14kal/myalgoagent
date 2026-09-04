@@ -1,3 +1,5 @@
+import Reveal from "@/components/reveal";
+
 export default function PageHeader({
   eyebrow,
   title,
@@ -9,13 +11,14 @@ export default function PageHeader({
 }) {
   return (
     <div className="border-b border-black/5 bg-white">
-      <div className="mx-auto max-w-4xl px-4 py-16 text-center">
+      <Reveal className="mx-auto max-w-4xl px-4 py-16 text-center">
         {eyebrow && (
           <p className="text-sm font-semibold uppercase tracking-wide text-brand-primary">
             {eyebrow}
           </p>
         )}
-        <h1 className="mt-2 text-4xl font-bold tracking-tight text-brand-navy sm:text-5xl">
+        <div className="accent-bar mx-auto mt-3" />
+        <h1 className="mt-4 text-4xl font-bold tracking-tight text-brand-navy sm:text-5xl">
           {title}
         </h1>
         {description && (
@@ -23,7 +26,7 @@ export default function PageHeader({
             {description}
           </p>
         )}
-      </div>
+      </Reveal>
     </div>
   );
 }

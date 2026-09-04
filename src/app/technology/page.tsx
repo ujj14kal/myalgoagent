@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
 import { Breadcrumbs, Prose } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import Reveal from "@/components/reveal";
 
 export const metadata: Metadata = {
   title: "Technology & AWS Infrastructure",
@@ -25,6 +26,7 @@ export default function TechnologyPage() {
         title="Technology & Cloud Infrastructure"
         description="What the platform is built with, and why it needs cloud infrastructure to run reliably."
       />
+      <Reveal>
       <Prose>
         <h2>Technology stack</h2>
         <p>The public site and application are built on:</p>
@@ -98,6 +100,7 @@ export default function TechnologyPage() {
           provider.
         </p>
       </Prose>
+      </Reveal>
     </>
   );
 }

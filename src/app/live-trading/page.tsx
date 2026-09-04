@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
-import { Breadcrumbs, Prose } from "@/components/section";
+import { Breadcrumbs, Prose, Callout } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import Reveal from "@/components/reveal";
 
 export const metadata: Metadata = {
   title: "Live Algo Trading & Broker Integration",
@@ -20,6 +21,7 @@ export default function LiveTradingPage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/live-trading", label: "Live Trading" }]} />
       <PageHeader eyebrow="Live Trading" title="Live execution, protected by explicit confirmation and risk controls" description="Live trading is never enabled implicitly. It requires a connected broker account and explicit user authorization." />
+      <Reveal>
       <Prose>
         <h2>Broker connection</h2>
         <p>
@@ -57,14 +59,17 @@ export default function LiveTradingPage() {
         </p>
 
         <h2>Important disclosure</h2>
-        <p>
+        <Callout tone="gold">
           Live trading risks real capital. MyAlgoAgent provides the
           software and broker-connectivity architecture; it does not
           custody funds, guarantee execution quality, or provide
-          personalized investment advice. See{" "}
+          personalized investment advice. Live trading through a broker
+          API is also subject to applicable Indian securities regulation,
+          and you are responsible for your own regulatory compliance. See{" "}
           <a href="/risk-disclosure">Risk Disclosure</a>.
-        </p>
+        </Callout>
       </Prose>
+      </Reveal>
     </>
   );
 }

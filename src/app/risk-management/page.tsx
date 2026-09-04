@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
-import { Breadcrumbs, Prose } from "@/components/section";
+import { Breadcrumbs, Prose, Callout } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import Reveal from "@/components/reveal";
 
 export const metadata: Metadata = {
   title: "Risk Management",
@@ -33,6 +34,7 @@ export default function RiskManagementPage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/risk-management", label: "Risk Management" }]} />
       <PageHeader eyebrow="Risk Management" title="Risk controls that don't depend on the interface" description="Every limit below is designed to be enforced on the backend, so a strategy can be stopped safely even if the user isn't watching." />
+      <Reveal>
       <Prose>
         <h2>Configurable limits</h2>
         <ul>
@@ -62,7 +64,17 @@ export default function RiskManagementPage() {
           to an audit trail, along with the account and trading actions that
           triggered it, so behavior can be reviewed after the fact.
         </p>
+
+        <h2>Important disclosure</h2>
+        <Callout tone="gold">
+          Risk controls reduce, but cannot eliminate, the risk of loss.
+          Configuring these limits is your responsibility, and no
+          combination of limits guarantees a profitable outcome or full
+          protection of capital. See{" "}
+          <a href="/risk-disclosure">Risk Disclosure</a>.
+        </Callout>
       </Prose>
+      </Reveal>
     </>
   );
 }
