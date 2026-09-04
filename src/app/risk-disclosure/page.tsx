@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
-import { Breadcrumbs, Prose, Callout, LegalAttribution } from "@/components/section";
+import { Breadcrumbs, Prose, Callout } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
 import Reveal from "@/components/reveal";
 
@@ -82,7 +82,6 @@ export default function RiskDisclosurePage() {
           by qualified legal counsel for your jurisdiction before the
           live-trading feature goes to public launch.
         </p>
-        <LegalAttribution />
       </Prose>
       </Reveal>
     </>

@@ -24,20 +24,6 @@ export function Callout({
   );
 }
 
-export function LegalAttribution() {
-  return (
-    <div className="mt-8 flex items-center gap-2 border-t border-black/5 pt-6 text-xs text-brand-navy/40">
-      <span>A product of</span>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/brand/shagoon-softech-logo.svg"
-        alt="Shagoon Softech Pvt. Ltd."
-        className="h-4 w-auto opacity-70"
-      />
-    </div>
-  );
-}
-
 export function Breadcrumbs({
   items,
 }: {

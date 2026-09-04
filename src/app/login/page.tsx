@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
 import { auth, signIn } from "@/lib/auth";
+import LoginForm from "@/components/login-form";
 
 export const metadata = {
   title: "Sign in",
@@ -14,7 +15,7 @@ export default async function LoginPage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-[70vh] max-w-sm flex-col items-center justify-center px-4 text-center">
+    <div className="mx-auto flex min-h-[70vh] max-w-sm flex-col items-center px-4 py-12 text-center">
       <Image src="/brand/icon-mark.png" alt="MyAlgoAgent" width={64} height={64} />
       <h1 className="mt-6 text-2xl font-bold text-brand-navy">
         Sign in to MyAlgoAgent
@@ -42,6 +43,15 @@ export default async function LoginPage() {
           Continue with Google
         </button>
       </form>
+
+      <div className="mt-6 flex w-full items-center gap-3 text-xs text-brand-navy/40">
+        <div className="h-px flex-1 bg-black/10" />
+        or
+        <div className="h-px flex-1 bg-black/10" />
+      </div>
+
+      <LoginForm />
+
       <p className="mt-6 text-xs text-brand-navy/40">
         By continuing you agree to our{" "}
         <a href="/terms" className="underline">Terms</a> and{" "}

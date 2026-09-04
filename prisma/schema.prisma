@@ -6,6 +6,11 @@ datasource db {
   provider = "postgresql"
 }
 
+enum UserStatus {
+  ACTIVE
+  PENDING_DELETION
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String?
@@ -14,6 +19,18 @@ model User {
   image         String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  username     String?    @unique
+  phone        String?
+  passwordHash String?
+  status       UserStatus @default(ACTIVE)
+
+  deletionRequestedAt DateTime?
+  deletionScheduledFor DateTime?
+
+  twoFactorEnabled    Boolean   @default(false)
+  twoFactorSecret     String?
+  twoFactorRequiredBy DateTime?
 
   accounts       Account[]
   sessions       Session[]
@@ -25,6 +42,73 @@ model User {
   riskEvents     RiskEvent[]
   chartLayouts   ChartLayout[]
   notifications  Notification[]
+  passkeys       Passkey[]
+  otpCodes       OtpCode[]
+  passwordResetTokens PasswordResetToken[]
+  feedback       Feedback[]
+  supportCases   SupportCase[]
+}
+
+model Passkey {
+  id           String   @id @default(cuid())
+  userId       String
+  credentialId String   @unique
+  publicKey    String
+  counter      Int      @default(0)
+  deviceName   String?
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum OtpPurpose {
+  ACCOUNT_DELETION
+}
+
+model OtpCode {
+  id         String     @id @default(cuid())
+  userId     String
+  purpose    OtpPurpose
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int        @default(0)
+  createdAt  DateTime   @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Feedback {
+  id        String   @id @default(cuid())
+  userId    String
+  page      String
+  message   String   @db.Text
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SupportCase {
+  id         String   @id @default(cuid())
+  caseNumber Int      @unique @default(autoincrement())
+  userId     String?
+  email      String
+  subject    String
+  message    String   @db.Text
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 }
 
 model Account {

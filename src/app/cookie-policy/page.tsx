@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
-import { Breadcrumbs, Prose, LegalAttribution } from "@/components/section";
+import { Breadcrumbs, Prose } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
 import Reveal from "@/components/reveal";
 
@@ -45,7 +45,6 @@ export default function CookiePolicyPage() {
           evolves; it should still be reviewed by qualified legal counsel
           for your jurisdiction before public launch.
         </p>
-        <LegalAttribution />
       </Prose>
       </Reveal>
     </>

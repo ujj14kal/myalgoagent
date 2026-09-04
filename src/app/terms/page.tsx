@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
-import { Breadcrumbs, Prose, Callout, LegalAttribution } from "@/components/section";
+import { Breadcrumbs, Prose, Callout } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
 import Reveal from "@/components/reveal";
 
@@ -139,7 +139,6 @@ export default function TermsPage() {
           legal counsel for your jurisdiction and business model before
           the live-trading feature goes to public launch.
         </p>
-        <LegalAttribution />
       </Prose>
       </Reveal>
     </>

@@ -67,7 +67,7 @@ export default function Footer() {
           ))}
         </div>
 
-        <div className="mt-10 flex flex-col items-start gap-3 border-t border-black/5 pt-8 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-10 flex flex-col items-center justify-center gap-3 border-t border-black/5 pt-8">
           <div className="flex items-center gap-3">
             <span className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
               A product of

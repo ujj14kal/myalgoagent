@@ -10,13 +10,23 @@ export const metadata = {
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
-  if (!session?.user) {
+  if (!session?.user?.id) {
     redirect("/login");
   }
 
-  const unreadCount = session.user.id
-    ? await prisma.notification.count({ where: { userId: session.user.id, read: false } })
-    : 0;
+  const dbUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { username: true, twoFactorEnabled: true, twoFactorRequiredBy: true },
+  });
+
+  if (!dbUser?.username) {
+    redirect("/onboarding/username");
+  }
+  if (!dbUser.twoFactorEnabled && dbUser.twoFactorRequiredBy && dbUser.twoFactorRequiredBy < new Date()) {
+    redirect("/onboarding/security-required");
+  }
+
+  const unreadCount = await prisma.notification.count({ where: { userId: session.user.id, read: false } });
 
   return (
     <div className="flex min-h-screen bg-brand-bg">

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
-import { Breadcrumbs, Prose } from "@/components/section";
+import { Breadcrumbs } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
 import Reveal from "@/components/reveal";
 
@@ -45,14 +45,24 @@ export default function FaqPage() {
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/faq", label: "FAQ" }]} />
       <PageHeader eyebrow="FAQ" title="Frequently asked questions" />
       <Reveal>
-      <Prose>
-        {faqs.map((f) => (
-          <div key={f.q}>
-            <h2>{f.q}</h2>
-            <p>{f.a}</p>
-          </div>
-        ))}
-      </Prose>
+        <div className="mx-auto max-w-3xl space-y-4 px-4 py-14">
+          {faqs.map((f) => (
+            <div key={f.q} className="rounded-2xl border border-black/5 bg-white p-6">
+              <div className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-primary text-xs font-bold text-white">
+                  Q
+                </span>
+                <p className="font-semibold text-brand-navy">{f.q}</p>
+              </div>
+              <div className="mt-3 flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-gold/20 text-xs font-bold text-brand-gold">
+                  A
+                </span>
+                <p className="text-sm leading-relaxed text-brand-navy/70">{f.a}</p>
+              </div>
+            </div>
+          ))}
+        </div>
       </Reveal>
     </>
   );

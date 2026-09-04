@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
-import { Breadcrumbs, Prose, LegalAttribution } from "@/components/section";
+import { Breadcrumbs, Prose } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
 import Reveal from "@/components/reveal";
 
@@ -193,7 +193,6 @@ export default function PrivacyPolicyPage() {
           This policy is provided to describe our actual current data
           practices and is reviewed and updated as the product evolves.
         </p>
-        <LegalAttribution />
       </Prose>
       </Reveal>
     </>
