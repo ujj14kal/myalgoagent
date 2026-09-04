@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { marketDataProvider } from "@/lib/market-data";
 import CandlestickChart from "@/components/candlestick-chart";
 import PaperSessionControls from "@/components/paper-session-controls";
-import { describePositionSizing } from "@/components/position-sizing-fields";
+import { describePositionSizing } from "@/lib/position-sizing";
 import type { Signal } from "@/lib/strategy";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
