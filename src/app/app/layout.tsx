@@ -16,14 +16,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const dbUser = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { username: true, twoFactorEnabled: true, twoFactorRequiredBy: true },
+    select: { username: true },
   });
 
   if (!dbUser?.username) {
     redirect("/onboarding/username");
-  }
-  if (!dbUser.twoFactorEnabled && dbUser.twoFactorRequiredBy && dbUser.twoFactorRequiredBy < new Date()) {
-    redirect("/onboarding/security-required");
   }
 
   const unreadCount = await prisma.notification.count({ where: { userId: session.user.id, read: false } });

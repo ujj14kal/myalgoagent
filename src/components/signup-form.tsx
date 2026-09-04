@@ -52,7 +52,7 @@ export default function SignupForm() {
       setError(result.error);
       return;
     }
-    router.push("/onboarding/security");
+    router.push("/app/dashboard");
   }
 
   return (

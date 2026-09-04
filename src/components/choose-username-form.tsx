@@ -40,7 +40,7 @@ export default function ChooseUsernameForm({ seedSuggestions }: { seedSuggestion
       setError(result.error);
       return;
     }
-    router.push("/onboarding/security");
+    router.push("/app/dashboard");
   }
 
   return (

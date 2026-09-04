@@ -28,10 +28,6 @@ model User {
   deletionRequestedAt DateTime?
   deletionScheduledFor DateTime?
 
-  twoFactorEnabled    Boolean   @default(false)
-  twoFactorSecret     String?
-  twoFactorRequiredBy DateTime?
-
   accounts       Account[]
   sessions       Session[]
   watchlistItems WatchlistItem[]
@@ -42,23 +38,10 @@ model User {
   riskEvents     RiskEvent[]
   chartLayouts   ChartLayout[]
   notifications  Notification[]
-  passkeys       Passkey[]
   otpCodes       OtpCode[]
   passwordResetTokens PasswordResetToken[]
   feedback       Feedback[]
   supportCases   SupportCase[]
-}
-
-model Passkey {
-  id           String   @id @default(cuid())
-  userId       String
-  credentialId String   @unique
-  publicKey    String
-  counter      Int      @default(0)
-  deviceName   String?
-  createdAt    DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 enum OtpPurpose {

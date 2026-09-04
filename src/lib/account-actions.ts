@@ -60,7 +60,6 @@ export async function signupAction(input: SignupInput): Promise<{ ok: true } | {
   if (usernameTaken) return { ok: false, error: "That username was just taken — try another." };
 
   const passwordHash = await bcrypt.hash(input.password, 12);
-  const twoFactorRequiredBy = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
 
   const user = await prisma.user.create({
     data: {
@@ -69,7 +68,6 @@ export async function signupAction(input: SignupInput): Promise<{ ok: true } | {
       phone: input.phone.trim(),
       username,
       passwordHash,
-      twoFactorRequiredBy,
     },
   });
 
