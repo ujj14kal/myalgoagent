@@ -308,112 +308,112 @@ export default function InstrumentChartPanel({
 
   return (
     <div>
-      {/* Interval — candle size, TradingView's top toolbar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Interval</span>
-        {INTERVALS.map((iv) => {
-          const disabled = !isValidCombo(range, iv.value);
-          return (
+      {/* Everything lives in one card, wrapped tightly around the chart —
+          interval + chart-type + tool controls above, drawing tools as a
+          vertical rail beside the plot, the range strip directly under it. */}
+      <div className="overflow-hidden rounded-2xl border border-black/5 bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/5 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {INTERVALS.map((iv) => {
+              const disabled = !isValidCombo(range, iv.value);
+              return (
+                <button
+                  key={iv.value}
+                  disabled={disabled}
+                  title={disabled ? `Not available for the "${range}" range` : undefined}
+                  onClick={() => setIntervalValue(iv.value)}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                    disabled
+                      ? "cursor-not-allowed border-brand-navy/10 text-brand-navy/25"
+                      : interval === iv.value
+                        ? "border-transparent bg-brand-blue text-white"
+                        : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
+                  }`}
+                >
+                  {iv.label}
+                </button>
+              );
+            })}
+            {loading && <span className="text-xs text-brand-navy/40">Loading…</span>}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {CHART_TYPES.map((t) => (
+              <button
+                key={t.value}
+                onClick={() => setChartType(t.value)}
+                className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                  chartType === t.value ? "border-transparent bg-brand-navy text-white" : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
             <button
-              key={iv.value}
-              disabled={disabled}
-              title={disabled ? `Not available for the "${range}" range` : undefined}
-              onClick={() => setIntervalValue(iv.value)}
+              onClick={() => setShowVolume((v) => !v)}
               className={`rounded-full border px-3 py-1 text-xs font-medium ${
-                disabled
-                  ? "cursor-not-allowed border-brand-navy/10 text-brand-navy/25"
-                  : interval === iv.value
-                    ? "border-transparent bg-brand-blue text-white"
-                    : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
+                showVolume ? "border-transparent bg-brand-gold text-white" : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
               }`}
             >
-              {iv.label}
+              Volume
             </button>
-          );
-        })}
-        {loading && <span className="text-xs text-brand-navy/40">Loading…</span>}
-      </div>
-
-      {/* Range — visible time window, TradingView's bottom toolbar */}
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Range</span>
-        {RANGES.map((r) => (
-          <button
-            key={r.value}
-            onClick={() => handleRangeChange(r.value)}
-            className={`rounded-full border px-3 py-1 text-xs font-medium ${
-              range === r.value ? "border-transparent bg-brand-primary text-white" : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
-            }`}
-          >
-            {r.label}
-          </button>
-        ))}
-        <span className="mx-1 h-4 w-px bg-brand-navy/10" />
-        {CHART_TYPES.map((t) => (
-          <button
-            key={t.value}
-            onClick={() => setChartType(t.value)}
-            className={`rounded-full border px-3 py-1 text-xs font-medium ${
-              chartType === t.value ? "border-transparent bg-brand-navy text-white" : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-        <button
-          onClick={() => setShowVolume((v) => !v)}
-          className={`rounded-full border px-3 py-1 text-xs font-medium ${
-            showVolume ? "border-transparent bg-brand-gold text-white" : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
-          }`}
-        >
-          Volume
-        </button>
-      </div>
-
-      {error && (
-        <p className="mt-2 rounded-lg border border-brand-sell/30 bg-brand-sell/5 px-3 py-2 text-xs text-brand-sell">{error}</p>
-      )}
-
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <MultiSelectDropdown label="Overlays" options={OVERLAY_OPTIONS} selected={overlayKeys} onToggle={toggleOverlay} />
-        <MultiSelectDropdown label="Oscillators" options={OSCILLATOR_OPTIONS} selected={oscillatorKeys} onToggle={toggleOscillator} />
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-        <DrawingToolbar activeTool={activeTool} onSelectTool={setActiveTool} drawingsCount={drawings.length} onClear={() => setDrawings([])} />
-        <div className="flex items-center gap-2">
-          <select
-            value={compareSymbol ?? ""}
-            onChange={(e) => setCompareSymbol(e.target.value || null)}
-            className="rounded-lg border border-brand-navy/15 px-3 py-1.5 text-xs outline-none focus:border-brand-primary"
-          >
-            <option value="">Compare to…</option>
-            {allInstruments.filter((i) => i.symbol !== symbol).map((i) => (
-              <option key={i.id} value={i.symbol}>
-                {i.symbol}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={handleSaveLayout}
-            disabled={isPending}
-            className="rounded-full bg-brand-primary px-4 py-1.5 text-xs font-medium text-white hover:bg-brand-primary-light disabled:opacity-50"
-          >
-            {isPending ? "Saving…" : saveStatus === "saved" ? "Saved ✓" : "Save layout"}
-          </button>
+            <span className="mx-1 h-4 w-px bg-brand-navy/10" />
+            <MultiSelectDropdown label="Overlays" options={OVERLAY_OPTIONS} selected={overlayKeys} onToggle={toggleOverlay} />
+            <MultiSelectDropdown label="Oscillators" options={OSCILLATOR_OPTIONS} selected={oscillatorKeys} onToggle={toggleOscillator} />
+            <select
+              value={compareSymbol ?? ""}
+              onChange={(e) => setCompareSymbol(e.target.value || null)}
+              className="rounded-lg border border-brand-navy/15 px-3 py-1.5 text-xs outline-none focus:border-brand-primary"
+            >
+              <option value="">Compare to…</option>
+              {allInstruments.filter((i) => i.symbol !== symbol).map((i) => (
+                <option key={i.id} value={i.symbol}>
+                  {i.symbol}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={handleSaveLayout}
+              disabled={isPending}
+              className="rounded-full bg-brand-primary px-4 py-1.5 text-xs font-medium text-white hover:bg-brand-primary-light disabled:opacity-50"
+            >
+              {isPending ? "Saving…" : saveStatus === "saved" ? "Saved ✓" : "Save layout"}
+            </button>
+          </div>
         </div>
-      </div>
 
-      <div className="mt-4 rounded-2xl border border-black/5 bg-white p-4">
-        <CandlestickChart
-          candles={candles}
-          overlays={overlays}
-          chartType={chartType}
-          showVolume={showVolume}
-          drawings={drawings}
-          activeTool={activeTool}
-          onDrawingComplete={handleDrawingComplete}
-        />
+        {error && (
+          <p className="border-b border-black/5 bg-brand-sell/5 px-3 py-2 text-xs text-brand-sell">{error}</p>
+        )}
+
+        <div className="flex">
+          <DrawingToolbar activeTool={activeTool} onSelectTool={setActiveTool} drawingsCount={drawings.length} onClear={() => setDrawings([])} />
+          <div className="min-w-0 flex-1 p-3">
+            <CandlestickChart
+              candles={candles}
+              overlays={overlays}
+              chartType={chartType}
+              showVolume={showVolume}
+              drawings={drawings}
+              activeTool={activeTool}
+              onDrawingComplete={handleDrawingComplete}
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 border-t border-black/5 p-3">
+          {RANGES.map((r) => (
+            <button
+              key={r.value}
+              onClick={() => handleRangeChange(r.value)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                range === r.value ? "border-transparent bg-brand-primary text-white" : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
+              }`}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {oscillatorPanels.map((panel) => (
