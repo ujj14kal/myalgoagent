@@ -17,11 +17,22 @@ const GLOW: Record<RobotPose, string> = {
 const INK = "#471898";
 
 function mouthPath(pose: RobotPose) {
-  if (pose === "happy") return <path d="M64 82 Q80 96 96 82" stroke={INK} strokeWidth="5" strokeLinecap="round" fill="none" />;
-  if (pose === "sad") return <path d="M64 90 Q80 78 96 90" stroke={INK} strokeWidth="5" strokeLinecap="round" fill="none" />;
-  if (pose === "alert") return <ellipse cx="80" cy="85" rx="7" ry="9" fill={INK} />;
-  if (pose === "talk") return <rect x="66" y="82" width="28" height="6" rx="3" fill="#466fff" />;
-  return null;
+  switch (pose) {
+    case "happy":
+      return <path d="M62 80 Q80 98 98 80" stroke={INK} strokeWidth="6" strokeLinecap="round" fill="none" />;
+    case "sad":
+      return <path d="M62 92 Q80 76 98 92" stroke={INK} strokeWidth="6" strokeLinecap="round" fill="none" />;
+    case "alert":
+      return <ellipse cx="80" cy="84" rx="8" ry="11" fill={INK} />;
+    case "talk":
+      return <rect x="64" y="79" width="32" height="9" rx="4.5" fill="#466fff" />;
+    case "thinking":
+      // offset, slightly puckered — reads as "considering something"
+      return <path d="M68 84 Q84 88 94 78" stroke={INK} strokeWidth="6" strokeLinecap="round" fill="none" />;
+    default:
+      // idle / wave / point / sleep-adjacent neutral: a plain closed-lip line
+      return <rect x="64" y="82" width="32" height="7" rx="3.5" fill={INK} opacity="0.55" />;
+  }
 }
 
 export default function RobotAvatar({
@@ -39,7 +50,13 @@ export default function RobotAvatar({
   return (
     <div
       className={`shrink-0 rounded-full ${className}`}
-      style={{ width: size, height: size, background: glow + "1a" }}
+      style={{
+        width: size,
+        height: size,
+        background: glow + "26",
+        border: `2px solid ${glow}`,
+        boxShadow: `0 2px 6px ${glow}40`,
+      }}
     >
       <svg viewBox="20 0 120 106" width={size} height={size} fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M74 14 L80 2 L86 14Z" fill="#ffffff" />
@@ -48,13 +65,13 @@ export default function RobotAvatar({
         <rect x="138" y="42" width="16" height="34" rx="6" fill="#ffffff" />
         {asleep ? (
           <>
-            <line x1="50" y1="60" x2="66" y2="60" stroke={INK} strokeWidth="5" strokeLinecap="round" />
-            <line x1="94" y1="60" x2="110" y2="60" stroke={INK} strokeWidth="5" strokeLinecap="round" />
+            <line x1="50" y1="60" x2="66" y2="60" stroke={INK} strokeWidth="6" strokeLinecap="round" />
+            <line x1="94" y1="60" x2="110" y2="60" stroke={INK} strokeWidth="6" strokeLinecap="round" />
           </>
         ) : (
           <>
-            <circle cx="58" cy="60" r="10" fill={INK} />
-            <circle cx="102" cy="60" r="10" fill={INK} />
+            <circle cx="58" cy="60" r="11" fill={INK} />
+            <circle cx="102" cy="60" r="11" fill={INK} />
           </>
         )}
         {mouthPath(pose)}
