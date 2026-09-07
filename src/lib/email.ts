@@ -14,16 +14,21 @@ export async function sendEmail({
   subject,
   html,
   text,
+  replyTo,
 }: {
   to: string;
   subject: string;
   html: string;
   text: string;
+  /** Where a reply should actually go — e.g. the user who submitted feedback,
+   * so replying from an inbox reaches them instead of bouncing off noreply@. */
+  replyTo?: string;
 }): Promise<void> {
   await getClient().send(
     new SendEmailCommand({
       FromEmailAddress: FROM_ADDRESS,
       Destination: { ToAddresses: [to] },
+      ReplyToAddresses: replyTo ? [replyTo] : undefined,
       Content: {
         Simple: {
           Subject: { Data: subject, Charset: "UTF-8" },
@@ -93,6 +98,8 @@ export async function sendFeedbackNotice(page: string, message: string, fromEmai
     subject: `New feedback from ${page}`,
     html: wrap(`<p>From: ${fromEmail}</p><p>Page: ${page}</p><p>${message}</p>`),
     text: `From: ${fromEmail}\nPage: ${page}\n\n${message}`,
+    // reply goes straight to the user who submitted it, not into noreply@
+    replyTo: fromEmail,
   });
 }
 
@@ -102,6 +109,7 @@ export async function sendSupportCaseNotice(caseId: string, subject: string, mes
     subject: `[${caseId}] ${subject}`,
     html: wrap(`<p>Case: ${caseId}</p><p>From: ${fromEmail}</p><p>Subject: ${subject}</p><p>${message}</p>`),
     text: `Case: ${caseId}\nFrom: ${fromEmail}\nSubject: ${subject}\n\n${message}`,
+    replyTo: fromEmail,
   });
 }
 
@@ -111,5 +119,6 @@ export async function sendSupportCaseConfirmation(to: string, caseId: string) {
     subject: `We received your request — ${caseId}`,
     html: wrap(`<p>Thanks for reaching out. Your case ID is <strong>${caseId}</strong>.</p><p>Our support team will follow up at this email address within 2–3 days.</p>`),
     text: `Thanks for reaching out. Your case ID is ${caseId}.\n\nOur support team will follow up at this email address within 2-3 days.`,
+    replyTo: "support@myalgoagent.com",
   });
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import EmptyState from "@/components/empty-state";
 
 export const metadata = { title: "Strategies", robots: { index: false } };
 
@@ -38,37 +39,38 @@ export default async function StrategiesPage() {
         </Link>
       </div>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {strategies.map((s) => (
-          <Link
-            key={s.id}
-            href={`/app/strategies/${s.id}`}
-            className="rounded-2xl border border-black/5 bg-white p-5 hover:border-brand-primary"
-          >
-            <div className="flex items-start justify-between">
-              <p className="text-sm font-semibold text-brand-navy">{s.name}</p>
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[s.status]}`}>
-                {s.status}
-              </span>
-            </div>
-            <p className="mt-1 text-xs text-brand-navy/60">{s.instrument.symbol}</p>
-            <p className="mt-3 text-xs font-medium text-brand-navy/40">
-              {s.mode === "NO_CODE" ? "Built visually" : "Built with code"}
-            </p>
-          </Link>
-        ))}
-
-        {strategies.length === 0 && (
-          <div className="col-span-full rounded-2xl border border-dashed border-brand-navy/15 p-10 text-center">
-            <p className="text-sm text-brand-navy/50">
-              You haven&rsquo;t built any strategies yet.
-            </p>
-            <Link href="/app/strategies/new" className="mt-3 inline-block text-sm font-medium text-brand-primary hover:underline">
-              Create your first strategy →
+      {strategies.length === 0 ? (
+        <div className="mt-8">
+          <EmptyState
+            pose="point"
+            title="You haven't built any strategies yet."
+            description="Compose entry/exit rules visually or with code, then backtest against real historical data before risking anything."
+            ctaLabel="Create your first strategy"
+            ctaHref="/app/strategies/new"
+          />
+        </div>
+      ) : (
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {strategies.map((s) => (
+            <Link
+              key={s.id}
+              href={`/app/strategies/${s.id}`}
+              className="hover-lift rounded-2xl border border-black/5 bg-white p-5 hover:border-brand-primary"
+            >
+              <div className="flex items-start justify-between">
+                <p className="text-sm font-semibold text-brand-navy">{s.name}</p>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[s.status]}`}>
+                  {s.status}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-brand-navy/60">{s.instrument.symbol}</p>
+              <p className="mt-3 text-xs font-medium text-brand-navy/40">
+                {s.mode === "NO_CODE" ? "Built visually" : "Built with code"}
+              </p>
             </Link>
-          </div>
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

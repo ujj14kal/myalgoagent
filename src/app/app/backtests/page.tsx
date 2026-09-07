@@ -2,6 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import BacktestRunForm from "@/components/backtest-run-form";
+import EmptyState from "@/components/empty-state";
 
 export const metadata = { title: "Backtests", robots: { index: false } };
 
@@ -36,33 +37,33 @@ export default async function BacktestsPage() {
         />
       </div>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {runs.map((r) => (
-          <Link
-            key={r.id}
-            href={`/app/backtests/${r.id}`}
-            className="rounded-2xl border border-black/5 bg-white p-5 hover:border-brand-primary"
-          >
-            <p className="text-sm font-semibold text-brand-navy">{r.strategyName}</p>
-            <p className="mt-1 text-xs text-brand-navy/60">
-              {r.instrumentSymbol} · {r.range}
-            </p>
-            <p className={`mt-3 text-xl font-bold ${r.totalReturnPct >= 0 ? "text-brand-buy" : "text-brand-sell"}`}>
-              {r.totalReturnPct >= 0 ? "+" : ""}
-              {r.totalReturnPct.toFixed(2)}%
-            </p>
-            <p className="mt-1 text-xs text-brand-navy/40">
-              {r.tradeCount} trades · {r.winRatePct.toFixed(0)}% win rate
-            </p>
-          </Link>
-        ))}
-
-        {runs.length === 0 && (
-          <div className="col-span-full rounded-2xl border border-dashed border-brand-navy/15 p-10 text-center">
-            <p className="text-sm text-brand-navy/50">No backtests run yet.</p>
-          </div>
-        )}
-      </div>
+      {runs.length === 0 ? (
+        <div className="mt-8">
+          <EmptyState pose="thinking" title="No backtests run yet." description="Run one above against real historical data to see how a strategy would have performed." />
+        </div>
+      ) : (
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {runs.map((r) => (
+            <Link
+              key={r.id}
+              href={`/app/backtests/${r.id}`}
+              className="hover-lift rounded-2xl border border-black/5 bg-white p-5 hover:border-brand-primary"
+            >
+              <p className="text-sm font-semibold text-brand-navy">{r.strategyName}</p>
+              <p className="mt-1 text-xs text-brand-navy/60">
+                {r.instrumentSymbol} · {r.range}
+              </p>
+              <p className={`mt-3 text-xl font-bold ${r.totalReturnPct >= 0 ? "text-brand-buy" : "text-brand-sell"}`}>
+                {r.totalReturnPct >= 0 ? "+" : ""}
+                {r.totalReturnPct.toFixed(2)}%
+              </p>
+              <p className="mt-1 text-xs text-brand-navy/40">
+                {r.tradeCount} trades · {r.winRatePct.toFixed(0)}% win rate
+              </p>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

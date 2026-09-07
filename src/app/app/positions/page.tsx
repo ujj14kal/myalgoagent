@@ -2,6 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { marketDataProvider } from "@/lib/market-data";
+import EmptyState from "@/components/empty-state";
 
 export const metadata = { title: "Positions", robots: { index: false } };
 
@@ -38,50 +39,49 @@ export default async function PositionsPage() {
         Currently open positions across your paper trading sessions.
       </p>
 
-      <div className="mt-6 overflow-x-auto rounded-2xl border border-black/5 bg-white">
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="border-b border-black/5 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
-              <th className="px-4 py-3">Session</th>
-              <th className="px-4 py-3">Instrument</th>
-              <th className="px-4 py-3">Qty</th>
-              <th className="px-4 py-3">Entry price</th>
-              <th className="px-4 py-3">LTP</th>
-              <th className="px-4 py-3">Unrealized P&amp;L</th>
-              <th className="px-4 py-3">P&amp;L %</th>
-            </tr>
-          </thead>
-          <tbody>
-            {positions.map((p) => (
-              <tr key={p.session.id} className="border-b border-black/5 last:border-0">
-                <td className="px-4 py-2">
-                  <Link href={`/app/paper-trading/${p.session.id}`} className="text-brand-primary hover:underline">
-                    {p.session.strategyName}
-                  </Link>
-                </td>
-                <td className="px-4 py-2">{p.session.instrumentSymbol}</td>
-                <td className="px-4 py-2">{p.quantity}</td>
-                <td className="px-4 py-2">₹{p.entryPrice.toFixed(2)}</td>
-                <td className="px-4 py-2">₹{p.latestClose.toFixed(2)}</td>
-                <td className={`px-4 py-2 font-medium ${p.unrealizedPnl >= 0 ? "text-brand-buy" : "text-brand-sell"}`}>
-                  ₹{p.unrealizedPnl.toFixed(2)}
-                </td>
-                <td className={`px-4 py-2 ${p.unrealizedPnlPct >= 0 ? "text-brand-buy" : "text-brand-sell"}`}>
-                  {p.unrealizedPnlPct >= 0 ? "+" : ""}
-                  {p.unrealizedPnlPct.toFixed(2)}%
-                </td>
+      {positions.length === 0 ? (
+        <div className="mt-8">
+          <EmptyState pose="idle" title="No open positions right now." description="Positions from active paper trading sessions will show up here." ctaLabel="Go to Paper Trading" ctaHref="/app/paper-trading" />
+        </div>
+      ) : (
+        <div className="mt-6 overflow-x-auto rounded-2xl border border-black/5 bg-white">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-black/5 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
+                <th className="px-4 py-3">Session</th>
+                <th className="px-4 py-3">Instrument</th>
+                <th className="px-4 py-3">Qty</th>
+                <th className="px-4 py-3">Entry price</th>
+                <th className="px-4 py-3">LTP</th>
+                <th className="px-4 py-3">Unrealized P&amp;L</th>
+                <th className="px-4 py-3">P&amp;L %</th>
               </tr>
-            ))}
-            {positions.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-sm text-brand-navy/50">
-                  No open positions right now.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {positions.map((p) => (
+                <tr key={p.session.id} className="border-b border-black/5 last:border-0">
+                  <td className="px-4 py-2">
+                    <Link href={`/app/paper-trading/${p.session.id}`} className="text-brand-primary hover:underline">
+                      {p.session.strategyName}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-2">{p.session.instrumentSymbol}</td>
+                  <td className="px-4 py-2">{p.quantity}</td>
+                  <td className="px-4 py-2">₹{p.entryPrice.toFixed(2)}</td>
+                  <td className="px-4 py-2">₹{p.latestClose.toFixed(2)}</td>
+                  <td className={`px-4 py-2 font-medium ${p.unrealizedPnl >= 0 ? "text-brand-buy" : "text-brand-sell"}`}>
+                    ₹{p.unrealizedPnl.toFixed(2)}
+                  </td>
+                  <td className={`px-4 py-2 ${p.unrealizedPnlPct >= 0 ? "text-brand-buy" : "text-brand-sell"}`}>
+                    {p.unrealizedPnlPct >= 0 ? "+" : ""}
+                    {p.unrealizedPnlPct.toFixed(2)}%
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

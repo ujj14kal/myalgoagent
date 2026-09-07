@@ -2,6 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import NotificationActions from "@/components/notification-actions";
+import EmptyState from "@/components/empty-state";
 
 export const metadata = { title: "Notifications", robots: { index: false } };
 
@@ -35,6 +36,12 @@ export default async function NotificationsPage() {
         {unreadCount > 0 && <NotificationActions markAll />}
       </div>
 
+      {notifications.length === 0 && (
+        <div className="mt-8">
+          <EmptyState pose="alert" title="No notifications yet." description="Order fills, risk events, and session changes from your paper trading will show up here." />
+        </div>
+      )}
+
       <div className="mt-6 space-y-2">
         {notifications.map((n) => (
           <div
@@ -61,12 +68,6 @@ export default async function NotificationsPage() {
             {!n.read && <NotificationActions notificationId={n.id} />}
           </div>
         ))}
-
-        {notifications.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-brand-navy/15 p-10 text-center">
-            <p className="text-sm text-brand-navy/50">No notifications yet.</p>
-          </div>
-        )}
       </div>
     </div>
   );
