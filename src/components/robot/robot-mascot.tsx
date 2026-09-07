@@ -28,12 +28,21 @@ const GLOW: Record<RobotPose, string> = {
 const INK = "#471898";
 const BODY = "#471898";
 const BODY_DARK = "#3a1279";
+// A pure-white head disappears against the white cards this mascot sits
+// on almost everywhere — an off-white keeps the icon's look while staying
+// visible on any light background.
+const HEAD = "#f4f2fb";
+const HEAD_STROKE = "rgba(71,24,152,0.14)";
 
 // The icon mark has no mouth at all — only add one for poses where it's
-// functionally needed to read the expression (talking, happy, sad, alert).
+// functionally needed to read the expression. Happy is the resting/default
+// expression, so idle also smiles.
 function Mouth({ pose }: { pose: RobotPose }) {
   switch (pose) {
     case "happy":
+    case "idle":
+    case "wave":
+    case "point":
       return <path d="M64 82 Q80 96 96 82" stroke={INK} strokeWidth="5" strokeLinecap="round" fill="none" />;
     case "sad":
       return <path d="M64 90 Q80 78 96 90" stroke={INK} strokeWidth="5" strokeLinecap="round" fill="none" />;
@@ -59,7 +68,7 @@ function Mouth({ pose }: { pose: RobotPose }) {
 }
 
 export default function RobotMascot({
-  pose = "idle",
+  pose = "happy",
   size = 120,
   className = "",
 }: {
@@ -125,17 +134,18 @@ export default function RobotMascot({
         </motion.g>
 
         {/* neck */}
-        <rect x="70" y="100" width="20" height="20" fill="#ffffff" />
+        <rect x="70" y="100" width="20" height="20" fill={HEAD} />
 
-        {/* head — matches the icon mark: white rounded square, top/bottom
-            antenna nubs, solid violet eyes, white ear-tab bars, no mouth
-            or eyebrows by default */}
-        <path d="M74 14 L80 2 L86 14Z" fill="#ffffff" />
-        <rect x="20" y="14" width="120" height="92" rx="26" fill="#ffffff" />
-        <path d="M74 106 L80 118 L86 106Z" fill="#ffffff" />
+        {/* head — matches the icon mark: off-white rounded square,
+            top/bottom antenna nubs, solid violet eyes, ear-tab bars, no
+            mouth or eyebrows by default. A hairline stroke keeps the head
+            readable even on a near-white card. */}
+        <path d="M74 14 L80 2 L86 14Z" fill={HEAD} stroke={HEAD_STROKE} strokeWidth="1.5" />
+        <rect x="20" y="14" width="120" height="92" rx="26" fill={HEAD} stroke={HEAD_STROKE} strokeWidth="1.5" />
+        <path d="M74 106 L80 118 L86 106Z" fill={HEAD} stroke={HEAD_STROKE} strokeWidth="1.5" />
 
-        <rect x="6" y="42" width="16" height="34" rx="6" fill="#ffffff" />
-        <rect x="138" y="42" width="16" height="34" rx="6" fill="#ffffff" />
+        <rect x="6" y="42" width="16" height="34" rx="6" fill={HEAD} stroke={HEAD_STROKE} strokeWidth="1.5" />
+        <rect x="138" y="42" width="16" height="34" rx="6" fill={HEAD} stroke={HEAD_STROKE} strokeWidth="1.5" />
 
         {/* eyes */}
         {asleep ? (

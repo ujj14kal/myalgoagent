@@ -97,9 +97,9 @@ export default async function AccountPage() {
           <DangerZone />
         </div>
 
-        <div className="space-y-6">
+        <div className="sticky top-6 h-fit space-y-6">
           <section className="hover-lift rounded-2xl border border-black/5 bg-white p-6 text-center">
-            <RobotAvatar pose="idle" size={64} className="mx-auto" />
+            <RobotAvatar size={64} className="mx-auto" />
             <p className="mt-3 text-sm font-semibold text-brand-navy">
               {user.agentName ?? DEFAULT_AGENT_NAME}
             </p>

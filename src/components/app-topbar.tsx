@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { signOut } from "@/lib/auth";
 import ReplayTourButton from "@/components/tutorial/replay-tour-button";
+import RobotAvatar from "@/components/robot/robot-avatar";
 
 export default function AppTopbar({
   user,
@@ -13,6 +14,7 @@ export default function AppTopbar({
     <header className="flex h-16 items-center justify-between border-b border-black/5 bg-white px-6">
       <div />
       <div className="flex items-center gap-4">
+        <RobotAvatar size={34} />
         <ReplayTourButton />
         <Link
           href="/app/notifications"
