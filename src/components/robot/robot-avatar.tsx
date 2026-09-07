@@ -54,7 +54,8 @@ export default function RobotAvatar({
       }}
     >
       <svg viewBox="0 -10 160 116" width={faceSize} height={faceSize} fill="none" xmlns="http://www.w3.org/2000/svg">
-        <line x1="80" y1="6" x2="80" y2="-9" stroke={HEAD} strokeWidth="11" strokeLinecap="round" />
+        <path d="M73 5 L87 5 L80 -8 Z" fill={HEAD} />
+        <circle cx="80" cy="-7" r="4.5" fill={HEAD} />
         <rect x="34" y="4" width="92" height="92" rx="24" fill={HEAD} />
         <rect x="20" y="32" width="16" height="34" rx="6" fill={HEAD} />
         <rect x="124" y="32" width="16" height="34" rx="6" fill={HEAD} />

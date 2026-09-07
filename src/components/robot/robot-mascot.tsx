@@ -136,13 +136,14 @@ export default function RobotMascot({
         {/* neck */}
         <rect x="70" y="100" width="20" height="20" fill={HEAD} />
 
-        {/* head — matches the icon mark: off-white rounded square,
-            top/bottom antenna nubs, solid violet eyes, ear-tab bars, no
+        {/* head — matches the icon mark: off-white rounded square, a single
+            tapered antenna nub (wide base, rounded tip — not a rectangle
+            and not a sharp triangle), solid violet eyes, ear-tab bars, no
             mouth or eyebrows by default. A hairline stroke keeps the head
             readable even on a near-white card. */}
-        <line x1="80" y1="16" x2="80" y2="1" stroke={HEAD} strokeWidth="11" strokeLinecap="round" />
+        <path d="M73 15 L87 15 L80 2 Z" fill={HEAD} />
+        <circle cx="80" cy="3" r="4.5" fill={HEAD} />
         <rect x="34" y="14" width="92" height="92" rx="24" fill={HEAD} stroke={HEAD_STROKE} strokeWidth="1.5" />
-        <line x1="80" y1="104" x2="80" y2="119" stroke={HEAD} strokeWidth="11" strokeLinecap="round" />
 
         <rect x="20" y="42" width="16" height="34" rx="6" fill={HEAD} stroke={HEAD_STROKE} strokeWidth="1.5" />
         <rect x="124" y="42" width="16" height="34" rx="6" fill={HEAD} stroke={HEAD_STROKE} strokeWidth="1.5" />
