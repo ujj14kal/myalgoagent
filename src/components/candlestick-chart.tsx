@@ -225,6 +225,15 @@ export default function CandlestickChart({
     const series = seriesRef.current;
     if (!chart || !series) return;
 
+    // Show time-of-day on the axis for intraday candles (1m-1H) — without
+    // this every bar on the same day shows an identical date-only label
+    // (e.g. a whole session of 5-minute bars all reading "7 September"),
+    // which reads as broken even though the underlying timestamps are
+    // fine. Detected from the actual bar spacing rather than a passed-in
+    // interval prop, so it stays correct however the caller sources data.
+    const isIntraday = candles.length >= 2 && candles[1].time - candles[0].time < 24 * 60 * 60;
+    chart.applyOptions({ timeScale: { timeVisible: isIntraday, secondsVisible: false } });
+
     const priceData =
       chartType === "line" || chartType === "area"
         ? candles.map((c) => ({ time: c.time as UTCTimestamp, value: c.close }))
