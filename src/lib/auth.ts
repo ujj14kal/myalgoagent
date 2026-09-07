@@ -1,5 +1,6 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
+import GitHub from "next-auth/providers/github";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import { reactivateIfPending } from "@/lib/account-status";
@@ -15,7 +16,13 @@ import { reactivateIfPending } from "@/lib/account-status";
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: { strategy: "database" },
-  providers: [Google],
+  providers: [
+    Google,
+    // `repo` scope is requested up front (not just read:user/user:email) so
+    // a GitHub sign-in is immediately usable for the strategy-editor's
+    // "import from GitHub" feature too, without a second consent screen.
+    GitHub({ authorization: { params: { scope: "read:user user:email repo" } } }),
+  ],
   pages: {
     signIn: "/login",
   },
