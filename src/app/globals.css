@@ -41,8 +41,14 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
-p {
-  color: var(--brand-navy-soft);
+/* @layer base (not a bare rule) so this loses to any Tailwind text-color
+   utility — Tailwind v4 puts unlayered CSS ahead of @layer utilities
+   regardless of specificity, so a bare `p { color }` here would silently
+   beat text-white/70, text-brand-gold, etc. on every <p> site-wide. */
+@layer base {
+  p {
+    color: var(--brand-navy-soft);
+  }
 }
 
 .accent-bar {
