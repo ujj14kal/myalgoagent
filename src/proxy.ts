@@ -16,9 +16,12 @@ import type { NextRequest } from "next/server";
 export function proxy(request: NextRequest) {
   const host = request.headers.get("host");
   if (host === "www.myalgoagent.com") {
-    const url = new URL(request.url);
-    url.host = "myalgoagent.com";
-    return NextResponse.redirect(url, 308);
+    // Build the target from scratch rather than mutating request.url's
+    // host — that URL reflects Amplify's internal Lambda listener (http,
+    // port 3000), and setting just .host left the internal port attached
+    // to the public hostname in the redirect's Location header.
+    const target = `https://myalgoagent.com${request.nextUrl.pathname}${request.nextUrl.search}`;
+    return NextResponse.redirect(target, 308);
   }
 }
 
