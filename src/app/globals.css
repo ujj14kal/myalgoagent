@@ -49,6 +49,24 @@ body {
   p {
     color: var(--brand-navy-soft);
   }
+
+  /* Browsers don't give buttons a pointer cursor by default, and Tailwind's
+     preflight doesn't add it back — every clickable control site-wide
+     (buttons, links, labels for checkboxes/radios, anything explicitly
+     marked as a button/tab) should still look clickable on hover. */
+  button:not(:disabled),
+  a[href],
+  label,
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"],
+  select,
+  summary {
+    cursor: pointer;
+  }
+  button:disabled,
+  [role="button"][aria-disabled="true"] {
+    cursor: not-allowed;
+  }
 }
 
 .accent-bar {
