@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { marketDataProvider } from "@/lib/market-data";
+import { marketDataProvider, VALID_RANGES, VALID_INTERVALS, isValidCombo } from "@/lib/market-data";
 import type { CandleInterval, CandleRange } from "@/lib/market-data";
-
-const VALID_RANGES: CandleRange[] = ["1mo", "3mo", "6mo", "1y", "5y"];
-const VALID_INTERVALS: CandleInterval[] = ["1d", "1wk"];
 
 export async function GET(
   request: NextRequest,
@@ -23,6 +20,12 @@ export async function GET(
 
   if (!VALID_RANGES.includes(range) || !VALID_INTERVALS.includes(interval)) {
     return NextResponse.json({ error: "Invalid range or interval" }, { status: 400 });
+  }
+  if (!isValidCombo(range, interval)) {
+    return NextResponse.json(
+      { error: `The "${interval}" interval isn't available for the "${range}" range — the upstream feed only keeps that granularity for a shorter window.` },
+      { status: 400 },
+    );
   }
 
   // Only ever fetch symbols we actually know about — the fetch URL is

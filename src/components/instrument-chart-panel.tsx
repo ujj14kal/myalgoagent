@@ -5,7 +5,9 @@ import CandlestickChart, { type Overlay, type ChartType } from "@/components/can
 import OscillatorPanel, { type OscillatorSeries } from "@/components/oscillator-panel";
 import DrawingToolbar from "@/components/drawing-toolbar";
 import type { Drawing } from "@/lib/chart-drawing-primitive";
+import MultiSelectDropdown from "@/components/multi-select-dropdown";
 import { saveChartLayout } from "@/lib/chart-layout-actions";
+import { RANGES, INTERVALS, isValidCombo, defaultIntervalForRange } from "@/lib/market-data";
 import type { Candle, CandleInterval, CandleRange } from "@/lib/market-data";
 import {
   sma,
@@ -62,14 +64,6 @@ const OSCILLATOR_OPTIONS = [
 
 const OVERLAY_COLORS = ["#bda360", "#466fff", "#6a35c2", "#0e1b2d"];
 
-const RANGES: { value: CandleRange; label: string }[] = [
-  { value: "1mo", label: "1M" },
-  { value: "3mo", label: "3M" },
-  { value: "6mo", label: "6M" },
-  { value: "1y", label: "1Y" },
-  { value: "5y", label: "5Y" },
-];
-
 const CHART_TYPES: { value: ChartType; label: string }[] = [
   { value: "candlestick", label: "Candles" },
   { value: "line", label: "Line" },
@@ -108,6 +102,23 @@ export default function InstrumentChartPanel({
 }) {
   const [range, setRange] = useState<CandleRange>("6mo");
   const [interval, setIntervalValue] = useState<CandleInterval>(savedLayout?.interval ?? "1d");
+  const [error, setError] = useState<string | null>(null);
+
+  // Clicking a Range preset always jumps to that range's recommended
+  // interval — e.g. "1D" switches to 5-minute bars and "5Y" to weekly ones
+  // — the same behavior as TradingView's own bottom range selector.
+  // Without this, an interval that's technically servable for the new
+  // range but nonsensical for it (daily bars for a 1-day window render as
+  // a single giant candle; daily bars for 5 years render a wall of
+  // hundreds of bars) would otherwise stick around untouched, since
+  // isValidCombo only blocks combos the upstream feed can't serve at all,
+  // not ones that are merely a bad default. A user can still pick a
+  // different interval afterward via the Interval row above — that's a
+  // deliberate override, not the range picker fighting them.
+  function handleRangeChange(next: CandleRange) {
+    setRange(next);
+    setIntervalValue(defaultIntervalForRange(next));
+  }
   const [candles, setCandles] = useState<Candle[]>(initialCandles);
   const [loading, setLoading] = useState(false);
   const [chartType, setChartType] = useState<ChartType>(savedLayout?.chartType ?? "candlestick");
@@ -126,11 +137,15 @@ export default function InstrumentChartPanel({
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- kicks off a loading indicator for the fetch below, not derived state
     setLoading(true);
+    setError(null);
     fetch(`/api/instruments/${encodeURIComponent(symbol)}/history?range=${range}&interval=${interval}`)
       .then((r) => r.json())
       .then((data) => {
-        if (!cancelled && data.candles) setCandles(data.candles);
+        if (cancelled) return;
+        if (data.candles) setCandles(data.candles);
+        else if (data.error) setError(data.error);
       })
+      .catch(() => !cancelled && setError("Failed to load market data."))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
@@ -293,28 +308,44 @@ export default function InstrumentChartPanel({
 
   return (
     <div>
+      {/* Interval — candle size, TradingView's top toolbar */}
       <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Interval</span>
+        {INTERVALS.map((iv) => {
+          const disabled = !isValidCombo(range, iv.value);
+          return (
+            <button
+              key={iv.value}
+              disabled={disabled}
+              title={disabled ? `Not available for the "${range}" range` : undefined}
+              onClick={() => setIntervalValue(iv.value)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                disabled
+                  ? "cursor-not-allowed border-brand-navy/10 text-brand-navy/25"
+                  : interval === iv.value
+                    ? "border-transparent bg-brand-blue text-white"
+                    : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
+              }`}
+            >
+              {iv.label}
+            </button>
+          );
+        })}
+        {loading && <span className="text-xs text-brand-navy/40">Loading…</span>}
+      </div>
+
+      {/* Range — visible time window, TradingView's bottom toolbar */}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Range</span>
         {RANGES.map((r) => (
           <button
             key={r.value}
-            onClick={() => setRange(r.value)}
+            onClick={() => handleRangeChange(r.value)}
             className={`rounded-full border px-3 py-1 text-xs font-medium ${
               range === r.value ? "border-transparent bg-brand-primary text-white" : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
             }`}
           >
             {r.label}
-          </button>
-        ))}
-        <span className="mx-1 h-4 w-px bg-brand-navy/10" />
-        {(["1d", "1wk"] as CandleInterval[]).map((iv) => (
-          <button
-            key={iv}
-            onClick={() => setIntervalValue(iv)}
-            className={`rounded-full border px-3 py-1 text-xs font-medium ${
-              interval === iv ? "border-transparent bg-brand-blue text-white" : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
-            }`}
-          >
-            {iv === "1d" ? "Daily" : "Weekly"}
           </button>
         ))}
         <span className="mx-1 h-4 w-px bg-brand-navy/10" />
@@ -337,37 +368,15 @@ export default function InstrumentChartPanel({
         >
           Volume
         </button>
-        {loading && <span className="text-xs text-brand-navy/40">Loading…</span>}
       </div>
+
+      {error && (
+        <p className="mt-2 rounded-lg border border-brand-sell/30 bg-brand-sell/5 px-3 py-2 text-xs text-brand-sell">{error}</p>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Overlays</span>
-        {OVERLAY_OPTIONS.map((o) => (
-          <button
-            key={o.key}
-            onClick={() => toggleOverlay(o.key)}
-            className={`rounded-full border px-3 py-1 text-xs font-medium ${
-              overlayKeys.has(o.key) ? "border-transparent bg-brand-primary text-white" : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
-            }`}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Oscillators</span>
-        {OSCILLATOR_OPTIONS.map((o) => (
-          <button
-            key={o.key}
-            onClick={() => toggleOscillator(o.key)}
-            className={`rounded-full border px-3 py-1 text-xs font-medium ${
-              oscillatorKeys.has(o.key) ? "border-transparent bg-brand-blue text-white" : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
-            }`}
-          >
-            {o.label}
-          </button>
-        ))}
+        <MultiSelectDropdown label="Overlays" options={OVERLAY_OPTIONS} selected={overlayKeys} onToggle={toggleOverlay} />
+        <MultiSelectDropdown label="Oscillators" options={OSCILLATOR_OPTIONS} selected={oscillatorKeys} onToggle={toggleOscillator} />
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">

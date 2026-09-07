@@ -100,7 +100,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
         )}
       </div>
 
-      <div className="mt-10 max-w-3xl">
+      <div className="mt-10">
         <h2 className="text-lg font-semibold text-brand-navy">Edit strategy</h2>
         <div className="mt-4">
           <StrategyBuilderForm

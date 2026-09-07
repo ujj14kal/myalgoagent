@@ -29,6 +29,21 @@ export interface Overlay {
 
 export type ChartType = "candlestick" | "line" | "area" | "bar";
 
+// Stable empty defaults — a `= []` default parameter creates a NEW array
+// every call, so a caller that never passes overlays/markers/drawings (the
+// instrument chart page never passes markers, for instance) was giving each
+// of those effects a referentially-new empty array on every re-render,
+// re-firing them on every unrelated candles update. Reusing one constant
+// keeps those effects from firing until there's an actual change, which
+// also ties into a bug this uncovered: lightweight-charts' markers plugin
+// re-syncing at the same moment the price series receives a large jump in
+// candle count reliably crashed at its internal `ensureNotNull`/`findBar`
+// bar-lookup (reproduced switching straight from a 6-month to a 5-year
+// range with the markers effect re-firing on that same commit).
+const EMPTY_OVERLAYS: Overlay[] = [];
+const EMPTY_MARKERS: Signal[] = [];
+const EMPTY_DRAWINGS: Drawing[] = [];
+
 type PriceSeries = ISeriesApi<"Candlestick"> | ISeriesApi<"Line"> | ISeriesApi<"Area"> | ISeriesApi<"Bar">;
 
 interface HoverInfo {
@@ -42,11 +57,11 @@ interface HoverInfo {
 
 export default function CandlestickChart({
   candles,
-  overlays = [],
-  markers = [],
+  overlays = EMPTY_OVERLAYS,
+  markers = EMPTY_MARKERS,
   chartType = "candlestick",
   showVolume = false,
-  drawings = [],
+  drawings = EMPTY_DRAWINGS,
   activeTool = null,
   onDrawingComplete,
 }: {
@@ -62,7 +77,7 @@ export default function CandlestickChart({
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<PriceSeries | null>(null);
-  const overlaySeriesRef = useRef<ISeriesApi<"Line">[]>([]);
+  const overlaySeriesRef = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
   const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const drawingsPrimitiveRef = useRef<DrawingsPrimitive | null>(null);
@@ -136,7 +151,8 @@ export default function CandlestickChart({
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
-      overlaySeriesRef.current = [];
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- ref holds a plain Map, not a DOM node; clearing it here (not a captured stale value) is intentional
+      overlaySeriesRef.current.clear();
       markersPluginRef.current = null;
       volumeSeriesRef.current = null;
       drawingsPrimitiveRef.current = null;
@@ -188,34 +204,76 @@ export default function CandlestickChart({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chartType]);
 
-  // Candle data updates (same series, new data).
+  // Every series' data is synced in ONE effect, in a fixed order, all
+  // synchronously before a single fitContent() call at the end. This used
+  // to be four separate effects (candles, overlays, markers, volume) that
+  // each independently called setData — harmless individually, but when a
+  // large candle-count jump (e.g. switching from a 6-month to a 5-year
+  // range) landed in the same React commit as an overlay/volume update
+  // (which it does whenever either is turned on), the browser could paint
+  // a frame where the main series already reflected the new range while a
+  // secondary series still held the old, differently-sized dataset. That
+  // one mismatched frame reliably corrupted lightweight-charts' internal
+  // bar-lookup cache ("ensureNotNull" deep in its candlestick color-style
+  // code) permanently — every subsequent repaint kept throwing the same
+  // error, forever, even after the secondary series caught up. Updating
+  // every series here before yielding back to the browser means no paint
+  // can ever observe a mismatched intermediate state. Reproduced and fixed
+  // live while building the timeframe picker.
   useEffect(() => {
+    const chart = chartRef.current;
     const series = seriesRef.current;
-    if (!series) return;
-    const data =
+    if (!chart || !series) return;
+
+    const priceData =
       chartType === "line" || chartType === "area"
         ? candles.map((c) => ({ time: c.time as UTCTimestamp, value: c.close }))
         : candles.map((c) => ({ time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (series as any).setData(data);
-    chartRef.current?.timeScale().fitContent();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candles]);
+    (series as any).setData(priceData);
 
-  // Overlays.
-  useEffect(() => {
-    const chart = chartRef.current;
-    if (!chart) return;
-
-    for (const s of overlaySeriesRef.current) chart.removeSeries(s);
-    overlaySeriesRef.current = [];
-
-    for (const overlay of overlays) {
-      const line = chart.addSeries(LineSeries, { color: overlay.color, lineWidth: 2, title: overlay.label });
-      line.setData(overlay.points.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
-      overlaySeriesRef.current.push(line);
+    const map = overlaySeriesRef.current;
+    const nextLabels = new Set(overlays.map((o) => o.label));
+    for (const [label, s] of map) {
+      if (!nextLabels.has(label)) {
+        chart.removeSeries(s);
+        map.delete(label);
+      }
     }
-  }, [overlays]);
+    for (const overlay of overlays) {
+      let s = map.get(overlay.label);
+      if (!s) {
+        s = chart.addSeries(LineSeries, { color: overlay.color, lineWidth: 2, title: overlay.label });
+        map.set(overlay.label, s);
+      } else {
+        s.applyOptions({ color: overlay.color });
+      }
+      s.setData(overlay.points.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+    }
+
+    if (showVolume) {
+      if (!volumeSeriesRef.current) {
+        volumeSeriesRef.current = chart.addSeries(HistogramSeries, {
+          color: "#bda360",
+          priceFormat: { type: "volume" },
+          priceScaleId: "volume",
+        });
+        chart.priceScale("volume").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+      }
+      volumeSeriesRef.current.setData(
+        candles.map((c) => ({
+          time: c.time as UTCTimestamp,
+          value: c.volume,
+          color: c.close >= c.open ? "rgba(0,168,62,0.5)" : "rgba(214,0,0,0.5)",
+        })),
+      );
+    } else if (volumeSeriesRef.current) {
+      chart.removeSeries(volumeSeriesRef.current);
+      volumeSeriesRef.current = null;
+    }
+
+    chart.timeScale().fitContent();
+  }, [candles, overlays, showVolume, chartType]);
 
   // Markers.
   useEffect(() => {
@@ -229,34 +287,6 @@ export default function CandlestickChart({
     }));
     markersPluginRef.current.setMarkers(seriesMarkers);
   }, [markers, chartType]);
-
-  // Volume panel.
-  useEffect(() => {
-    const chart = chartRef.current;
-    if (!chart) return;
-
-    if (volumeSeriesRef.current) {
-      chart.removeSeries(volumeSeriesRef.current);
-      volumeSeriesRef.current = null;
-    }
-
-    if (!showVolume) return;
-
-    const volumeSeries = chart.addSeries(HistogramSeries, {
-      color: "#bda360",
-      priceFormat: { type: "volume" },
-      priceScaleId: "volume",
-    });
-    chart.priceScale("volume").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
-    volumeSeries.setData(
-      candles.map((c) => ({
-        time: c.time as UTCTimestamp,
-        value: c.volume,
-        color: c.close >= c.open ? "rgba(0,168,62,0.5)" : "rgba(214,0,0,0.5)",
-      })),
-    );
-    volumeSeriesRef.current = volumeSeries;
-  }, [showVolume, candles]);
 
   // Drawings.
   useEffect(() => {

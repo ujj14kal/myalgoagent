@@ -73,7 +73,7 @@ export default function StrategyBuilderForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-[2fr_2fr_1fr]">
         <div>
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
             Strategy name
@@ -104,44 +104,45 @@ export default function StrategyBuilderForm({
             ))}
           </select>
         </div>
-      </div>
-
-      <div>
-        <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
-          Build with
-        </label>
-        <div className="flex overflow-hidden rounded-full border border-brand-navy/15 w-fit">
-          {(["NO_CODE", "CODE"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setMode(m)}
-              className={`px-4 py-1.5 text-sm font-medium ${
-                mode === m ? "bg-brand-primary text-white" : "text-brand-navy/60 hover:bg-brand-bg"
-              }`}
-            >
-              {m === "NO_CODE" ? "Build visually" : "Write code"}
-            </button>
-          ))}
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
+            Build with
+          </label>
+          <div className="flex overflow-hidden rounded-full border border-brand-navy/15 w-fit">
+            {(["NO_CODE", "CODE"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMode(m)}
+                className={`px-4 py-1.5 text-sm font-medium ${
+                  mode === m ? "bg-brand-primary text-white" : "text-brand-navy/60 hover:bg-brand-bg"
+                }`}
+              >
+                {m === "NO_CODE" ? "Build visually" : "Write code"}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-black/5 bg-white p-4">
-        <p className="mb-2 text-sm font-semibold text-brand-navy">Entry condition</p>
-        {mode === "NO_CODE" ? (
-          <ConditionGroupEditor node={entryCondition} onChange={setEntryCondition} />
-        ) : (
-          <StrategyCodeEditor label="Entry" value={entrySource} onChange={setEntrySource} />
-        )}
-      </div>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <div className="rounded-2xl border border-black/5 bg-white p-4">
+          <p className="mb-2 text-sm font-semibold text-brand-navy">Entry condition</p>
+          {mode === "NO_CODE" ? (
+            <ConditionGroupEditor node={entryCondition} onChange={setEntryCondition} />
+          ) : (
+            <StrategyCodeEditor label="Entry" value={entrySource} onChange={setEntrySource} />
+          )}
+        </div>
 
-      <div className="rounded-2xl border border-black/5 bg-white p-4">
-        <p className="mb-2 text-sm font-semibold text-brand-navy">Exit condition</p>
-        {mode === "NO_CODE" ? (
-          <ConditionGroupEditor node={exitCondition} onChange={setExitCondition} />
-        ) : (
-          <StrategyCodeEditor label="Exit" value={exitSource} onChange={setExitSource} />
-        )}
+        <div className="rounded-2xl border border-black/5 bg-white p-4">
+          <p className="mb-2 text-sm font-semibold text-brand-navy">Exit condition</p>
+          {mode === "NO_CODE" ? (
+            <ConditionGroupEditor node={exitCondition} onChange={setExitCondition} />
+          ) : (
+            <StrategyCodeEditor label="Exit" value={exitSource} onChange={setExitSource} />
+          )}
+        </div>
       </div>
 
       {error && (

@@ -16,7 +16,7 @@ export default async function NewStrategyPage() {
         Build your entry and exit rules visually, or write them as code —
         both are evaluated identically.
       </p>
-      <div className="mt-6 max-w-3xl">
+      <div className="mt-6">
         <StrategyBuilderForm instruments={instruments} />
       </div>
     </div>

@@ -76,7 +76,7 @@ export default async function InstrumentDetailPage({
       <p className="mt-1 text-xs text-brand-navy/40">
         Data: {marketDataProvider.name}
         {!marketDataProvider.isOfficial && " (interim feed, not an official NSE/BSE source)"}
-        {" · "}Daily bars, not real-time
+        {" · "}Delayed, not real-time · bar size set by the interval selected below
       </p>
 
       <div className="mt-6">

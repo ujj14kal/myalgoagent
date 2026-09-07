@@ -7,8 +7,8 @@ export interface Candle {
   volume: number;
 }
 
-export type CandleRange = "1mo" | "3mo" | "6mo" | "1y" | "5y";
-export type CandleInterval = "1d" | "1wk";
+export type CandleRange = "1d" | "5d" | "1mo" | "3mo" | "6mo" | "ytd" | "1y" | "5y" | "max";
+export type CandleInterval = "1m" | "2m" | "5m" | "15m" | "30m" | "60m" | "1d" | "1wk" | "1mo";
 
 export interface MarketDataProvider {
   readonly name: string;
