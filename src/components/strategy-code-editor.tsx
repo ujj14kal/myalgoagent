@@ -3,16 +3,19 @@
 import { useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
-import { parseDsl, DslSyntaxError } from "@/lib/strategy";
+import { parseDsl, DslSyntaxError, INDICATOR_CATALOG } from "@/lib/strategy";
+
+const INDICATOR_CHEATSHEET = INDICATOR_CATALOG.map((d) => ({
+  syntax: `${d.dslName}(${d.defaults.join(", ")})`,
+  desc: d.paramLabels.length > 0 ? `${d.label} — ${d.paramLabels.join(", ")}` : d.label,
+}));
 
 const CHEATSHEET = [
-  { syntax: "sma(20)", desc: "Simple moving average, 20-period" },
-  { syntax: "ema(50)", desc: "Exponential moving average, 50-period" },
-  { syntax: "rsi(14)", desc: "Relative Strength Index, 14-period" },
   { syntax: "close / open / high / low / volume", desc: "Raw price/volume of the current bar" },
   { syntax: "a > b, a < b, a >= b, a <= b, a == b", desc: "Threshold comparisons" },
   { syntax: "a crossesAbove b, a crossesBelow b", desc: "Crossover detection" },
   { syntax: "and, or, not, ( )", desc: "Combine conditions" },
+  ...INDICATOR_CHEATSHEET,
 ];
 
 export default function StrategyCodeEditor({
@@ -51,7 +54,7 @@ export default function StrategyCodeEditor({
       </div>
 
       {showHelp && (
-        <div className="mb-2 rounded-lg border border-black/5 bg-brand-bg p-3 text-xs">
+        <div className="mb-2 max-h-64 overflow-y-auto rounded-lg border border-black/5 bg-brand-bg p-3 text-xs">
           <table className="w-full">
             <tbody>
               {CHEATSHEET.map((row) => (

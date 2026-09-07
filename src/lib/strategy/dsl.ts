@@ -1,4 +1,5 @@
-import type { ComparisonOperator, ConditionNode, IndicatorKind, Operand, PriceField } from "./types";
+import type { ComparisonOperator, ConditionNode, Operand, PriceField } from "./types";
+import { INDICATOR_BY_DSL_NAME } from "./indicator-catalog";
 
 export class DslSyntaxError extends Error {
   line: number;
@@ -28,7 +29,6 @@ interface Token {
   column: number;
 }
 
-const INDICATOR_NAMES: Record<string, IndicatorKind> = { sma: "SMA", ema: "EMA", rsi: "RSI" };
 const PRICE_NAMES: Record<string, PriceField> = {
   open: "OPEN",
   high: "HIGH",
@@ -234,12 +234,18 @@ class Parser {
     if (tok.type === "IDENT") {
       const lower = tok.value.toLowerCase();
 
-      if (INDICATOR_NAMES[lower]) {
+      const indicatorDef = INDICATOR_BY_DSL_NAME.get(lower);
+      if (indicatorDef) {
         this.next();
         this.expect("LPAREN", '"("');
-        const periodTok = this.expect("NUMBER", "a period number");
+        const params: number[] = [];
+        for (let k = 0; k < indicatorDef.paramLabels.length; k++) {
+          if (k > 0) this.expect("COMMA", '","');
+          const paramTok = this.expect("NUMBER", `a value for "${indicatorDef.paramLabels[k]}"`);
+          params.push(Number(paramTok.value));
+        }
         this.expect("RPAREN", '")"');
-        return { kind: "indicator", type: INDICATOR_NAMES[lower], period: Number(periodTok.value) };
+        return { kind: "indicator", type: indicatorDef.kind, params };
       }
 
       if (PRICE_NAMES[lower]) {
@@ -248,7 +254,7 @@ class Parser {
       }
 
       throw new DslSyntaxError(
-        `Unknown identifier "${tok.value}" — expected sma(), ema(), rsi(), open, high, low, close, volume, or a number`,
+        `Unknown identifier "${tok.value}" — expected an indicator (sma, ema, rsi, macdLine, bollingerUpper, atr, adx, stochK, ...; see the syntax reference), open, high, low, close, volume, or a number`,
         tok.line,
         tok.column,
       );

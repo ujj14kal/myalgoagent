@@ -1,12 +1,7 @@
 "use client";
 
-import type { ComparisonOperator, ConditionNode, IndicatorKind, Operand, PriceField } from "@/lib/strategy";
-
-const INDICATORS: { value: IndicatorKind; label: string }[] = [
-  { value: "SMA", label: "SMA" },
-  { value: "EMA", label: "EMA" },
-  { value: "RSI", label: "RSI" },
-];
+import type { ComparisonOperator, ConditionNode, Operand, PriceField } from "@/lib/strategy";
+import { INDICATOR_CATALOG, INDICATOR_BY_KIND } from "@/lib/strategy/indicator-catalog";
 
 const PRICE_FIELDS: { value: PriceField; label: string }[] = [
   { value: "CLOSE", label: "Close price" },
@@ -38,13 +33,15 @@ function defaultOperand(): Operand {
 function defaultComparison(): ConditionNode {
   return {
     kind: "comparison",
-    left: { kind: "indicator", type: "SMA", period: 20 },
+    left: { kind: "indicator", type: "SMA", params: [20] },
     operator: "CROSSES_ABOVE",
-    right: { kind: "indicator", type: "EMA", period: 50 },
+    right: { kind: "indicator", type: "EMA", params: [50] },
   };
 }
 
 function OperandEditor({ value, onChange }: { value: Operand; onChange: (v: Operand) => void }) {
+  const indicatorDef = value.kind === "indicator" ? INDICATOR_BY_KIND.get(value.type) : undefined;
+
   return (
     <div className="flex flex-wrap items-center gap-1">
       <select
@@ -54,12 +51,15 @@ function OperandEditor({ value, onChange }: { value: Operand; onChange: (v: Oper
           const v = e.target.value;
           if (v === "CONST") onChange({ kind: "constant", value: 0 });
           else if (v.startsWith("PRICE:")) onChange({ kind: "price", field: v.slice(6) as PriceField });
-          else onChange({ kind: "indicator", type: v as IndicatorKind, period: value.kind === "indicator" ? value.period : 14 });
+          else {
+            const def = INDICATOR_BY_KIND.get(v as never);
+            if (def) onChange({ kind: "indicator", type: def.kind, params: [...def.defaults] });
+          }
         }}
       >
         <optgroup label="Indicator">
-          {INDICATORS.map((i) => (
-            <option key={i.value} value={i.value}>
+          {INDICATOR_CATALOG.map((i) => (
+            <option key={i.kind} value={i.kind}>
               {i.label}
             </option>
           ))}
@@ -74,17 +74,25 @@ function OperandEditor({ value, onChange }: { value: Operand; onChange: (v: Oper
         <option value="CONST">Fixed value</option>
       </select>
 
-      {value.kind === "indicator" && (
-        <input
-          type="number"
-          min={1}
-          max={500}
-          value={value.period}
-          onChange={(e) => onChange({ ...value, period: Number(e.target.value) })}
-          className={`${inputClass} w-16`}
-          aria-label="Period"
-        />
-      )}
+      {value.kind === "indicator" &&
+        indicatorDef?.paramLabels.map((paramLabel, i) => (
+          <input
+            key={paramLabel + i}
+            type="number"
+            min={0}
+            max={500}
+            step="any"
+            value={value.params[i]}
+            onChange={(e) => {
+              const params = value.params.slice();
+              params[i] = Number(e.target.value);
+              onChange({ ...value, params });
+            }}
+            className={`${inputClass} w-16`}
+            aria-label={paramLabel}
+            title={paramLabel}
+          />
+        ))}
 
       {value.kind === "constant" && (
         <input

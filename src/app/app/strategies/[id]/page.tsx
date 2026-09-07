@@ -2,8 +2,13 @@ import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { marketDataProvider } from "@/lib/market-data";
-import { sma, ema } from "@/lib/indicators";
-import { evaluateStrategy, collectConditionOperands, type ConditionNode } from "@/lib/strategy";
+import {
+  evaluateStrategy,
+  collectConditionOperands,
+  computeIndicatorSeries,
+  OSCILLATOR_KINDS,
+  type ConditionNode,
+} from "@/lib/strategy";
 import CandlestickChart, { type Overlay } from "@/components/candlestick-chart";
 import StrategyBuilderForm from "@/components/strategy-builder-form";
 import StrategyStatusControls from "@/components/strategy-status-controls";
@@ -51,13 +56,13 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
     const seen = new Set<string>();
     let colorIdx = 0;
     for (const op of operands) {
-      if (op.kind !== "indicator" || op.type === "RSI") continue;
-      const key = `${op.type}:${op.period}`;
+      if (op.kind !== "indicator" || OSCILLATOR_KINDS.has(op.type)) continue;
+      const key = `${op.type}:${op.params.join(",")}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      const points = op.type === "SMA" ? sma(candles, op.period) : ema(candles, op.period);
+      const points = computeIndicatorSeries(candles, op.type, op.params);
       overlays.push({
-        label: `${op.type}(${op.period})`,
+        label: `${op.type}(${op.params.join(",")})`,
         color: OVERLAY_COLORS[colorIdx++ % OVERLAY_COLORS.length],
         points,
       });

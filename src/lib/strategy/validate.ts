@@ -1,6 +1,6 @@
-import type { ComparisonOperator, ConditionNode, IndicatorKind, Operand, PriceField } from "./types";
+import type { ComparisonOperator, ConditionNode, Operand, PriceField } from "./types";
+import { INDICATOR_BY_KIND } from "./indicator-catalog";
 
-const INDICATOR_KINDS: IndicatorKind[] = ["SMA", "EMA", "RSI"];
 const PRICE_FIELDS: PriceField[] = ["OPEN", "HIGH", "LOW", "CLOSE", "VOLUME"];
 const OPERATORS: ComparisonOperator[] = ["GT", "LT", "GTE", "LTE", "EQ", "CROSSES_ABOVE", "CROSSES_BELOW"];
 
@@ -26,11 +26,17 @@ function validateOperand(v: unknown, path: string): asserts v is Operand {
   }
 
   if (v.kind === "indicator") {
-    if (typeof v.type !== "string" || !INDICATOR_KINDS.includes(v.type as IndicatorKind)) {
-      throw new Error(`${path}.type: expected one of ${INDICATOR_KINDS.join(", ")}`);
+    const def = typeof v.type === "string" ? INDICATOR_BY_KIND.get(v.type as never) : undefined;
+    if (!def) {
+      throw new Error(`${path}.type: unrecognized indicator "${String(v.type)}"`);
     }
-    if (typeof v.period !== "number" || !Number.isInteger(v.period) || v.period < 1 || v.period > 500) {
-      throw new Error(`${path}.period: expected an integer between 1 and 500`);
+    if (!Array.isArray(v.params) || v.params.length !== def.paramLabels.length) {
+      throw new Error(`${path}.params: ${def.label} expects ${def.paramLabels.length} value(s) (${def.paramLabels.join(", ") || "none"})`);
+    }
+    for (const p of v.params) {
+      if (typeof p !== "number" || !Number.isFinite(p) || p <= 0 || p > 500) {
+        throw new Error(`${path}.params: expected each value to be a finite number between 0 and 500`);
+      }
     }
     return;
   }

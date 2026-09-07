@@ -1,12 +1,12 @@
 import type { Candle } from "@/lib/market-data";
-import { sma, ema, rsi } from "@/lib/indicators";
+import { computeIndicatorSeries } from "./compute-series";
 import type { ComparisonOperator, ConditionNode, Operand } from "./types";
 import type { Signal } from "./types";
 
 type Series = (number | undefined)[];
 
 function seriesKey(op: Extract<Operand, { kind: "indicator" }>): string {
-  return `${op.type}:${op.period}`;
+  return `${op.type}:${op.params.join(",")}`;
 }
 
 function buildSeries(candles: Candle[], operand: Operand, cache: Map<string, Series>): Series {
@@ -23,7 +23,7 @@ function buildSeries(candles: Candle[], operand: Operand, cache: Map<string, Ser
   const cached = cache.get(key);
   if (cached) return cached;
 
-  const points = operand.type === "SMA" ? sma(candles, operand.period) : operand.type === "EMA" ? ema(candles, operand.period) : rsi(candles, operand.period);
+  const points = computeIndicatorSeries(candles, operand.type, operand.params);
   const byTime = new Map(points.map((p) => [p.time, p.value]));
   const series: Series = candles.map((c) => byTime.get(c.time));
   cache.set(key, series);
