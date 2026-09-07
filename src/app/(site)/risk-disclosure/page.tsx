@@ -19,7 +19,7 @@ export default function RiskDisclosurePage() {
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/risk-disclosure", label: "Risk Disclosure" }]} />
-      <PageHeader eyebrow="Legal" title="Risk Disclosure" description="Last updated: draft — pending legal review." />
+      <PageHeader eyebrow="Legal" title="Risk Disclosure" description="Last updated: September 2026." />
       <Reveal>
       <Prose>
         <h2>Trading involves risk</h2>

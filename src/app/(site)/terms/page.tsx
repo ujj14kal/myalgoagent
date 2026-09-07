@@ -19,7 +19,7 @@ export default function TermsPage() {
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/terms", label: "Terms" }]} />
-      <PageHeader eyebrow="Legal" title="Terms & Conditions" description="Last updated: draft — pending legal review." />
+      <PageHeader eyebrow="Legal" title="Terms & Conditions" description="Last updated: September 2026." />
       <Reveal>
       <Prose>
         <h2>Acceptance</h2>

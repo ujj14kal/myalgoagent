@@ -7,8 +7,11 @@
   --brand-primary: #471898;
   --brand-primary-light: #6a35c2;
   --brand-gold: #bda360;
+  --brand-gold-light: #ddc98c;
   --brand-navy: #0e1b2d;
+  --brand-navy-soft: #4a5a6e;
   --brand-blue: #466fff;
+  --brand-blue-light: #eaf0ff;
   --brand-bg: #f7f9fc;
   --brand-buy: #00a83e;
   --brand-sell: #d60000;
@@ -20,8 +23,11 @@
   --color-brand-primary: var(--brand-primary);
   --color-brand-primary-light: var(--brand-primary-light);
   --color-brand-gold: var(--brand-gold);
+  --color-brand-gold-light: var(--brand-gold-light);
   --color-brand-navy: var(--brand-navy);
+  --color-brand-navy-soft: var(--brand-navy-soft);
   --color-brand-blue: var(--brand-blue);
+  --color-brand-blue-light: var(--brand-blue-light);
   --color-brand-bg: var(--brand-bg);
   --color-brand-buy: var(--brand-buy);
   --color-brand-sell: var(--brand-sell);
@@ -35,11 +41,54 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
+p {
+  color: var(--brand-navy-soft);
+}
+
 .accent-bar {
   height: 3px;
   width: 56px;
   border-radius: 999px;
   background: linear-gradient(90deg, var(--brand-gold), var(--brand-blue));
+}
+
+.hover-lift {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 32px -16px rgba(14, 27, 45, 0.25);
+}
+
+.gradient-mesh {
+  background:
+    radial-gradient(circle at 15% 20%, rgba(70, 111, 255, 0.16), transparent 40%),
+    radial-gradient(circle at 85% 15%, rgba(189, 163, 96, 0.18), transparent 45%),
+    radial-gradient(circle at 50% 90%, rgba(71, 24, 152, 0.14), transparent 50%),
+    var(--brand-bg);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes eye-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  96% { transform: scaleY(0.1); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .animate-fade-in { animation: fade-in 0.5s ease both; }
+  .animate-slide-up { animation: slide-up 0.5s ease both; }
+  .animate-scale-in { animation: scale-in 0.35s ease both; }
+  .robot-eye { animation: eye-blink 4.5s ease-in-out infinite; transform-origin: center; }
 }
 
 /* Hidden-until-revealed state only applies once the `js` class proves

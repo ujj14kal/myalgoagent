@@ -4,7 +4,6 @@ import { siteUrl } from "@/lib/site";
 import Reveal from "@/components/reveal";
 
 export const metadata: Metadata = {
-  title: "MyAlgoAgent — Algo Trading Platform",
   description:
     "Build, backtest, paper trade and run rule-based algo trading strategies with market data, technical indicators and risk controls built in.",
   alternates: { canonical: siteUrl },

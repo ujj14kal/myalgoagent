@@ -3,8 +3,6 @@ import { Inter, Geist_Mono } from "next/font/google";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import Script from "next/script";
 import "./globals.css";
-import Header from "@/components/header";
-import Footer from "@/components/footer";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -110,9 +108,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
           />
         ))}
-        <Header />
-        <main className="flex-1">{children}</main>
-        <Footer />
+        {children}
         {process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID && (
           <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID} />
         )}

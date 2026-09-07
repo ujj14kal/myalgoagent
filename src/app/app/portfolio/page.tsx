@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { marketDataProvider } from "@/lib/market-data";
+import { getPaperSessionRows, summarizePortfolio } from "@/lib/portfolio";
 
 export const metadata = { title: "Portfolio", robots: { index: false } };
 
@@ -9,36 +8,8 @@ export default async function PortfolioPage() {
   const session = await auth();
   if (!session?.user?.id) return null;
 
-  const sessions = await prisma.paperSession.findMany({
-    where: { userId: session.user.id },
-    orderBy: { createdAt: "desc" },
-  });
-
-  const rows = await Promise.all(
-    sessions.map(async (s) => {
-      let positionValue = 0;
-      if (s.positionQuantity !== null) {
-        let latestClose = s.positionEntryPrice ?? 0;
-        try {
-          const candles = await marketDataProvider.getHistoricalCandles(s.instrumentSymbol, "1mo", "1d");
-          if (candles.length > 0) latestClose = candles.at(-1)!.close;
-        } catch {
-          // fall back to entry price if the live quote can't be fetched
-        }
-        positionValue = latestClose * s.positionQuantity;
-      }
-      const equity = s.cash + positionValue;
-      const pnl = equity - s.startingCapital;
-      const pnlPct = (pnl / s.startingCapital) * 100;
-      return { session: s, positionValue, equity, pnl, pnlPct };
-    }),
-  );
-
-  const totalCash = rows.reduce((sum, r) => sum + r.session.cash, 0);
-  const totalPositionValue = rows.reduce((sum, r) => sum + r.positionValue, 0);
-  const totalEquity = rows.reduce((sum, r) => sum + r.equity, 0);
-  const totalStarting = rows.reduce((sum, r) => sum + r.session.startingCapital, 0);
-  const totalPnlPct = totalStarting > 0 ? ((totalEquity - totalStarting) / totalStarting) * 100 : 0;
+  const rows = await getPaperSessionRows(session.user.id);
+  const { totalCash, totalPositionValue, totalEquity, totalPnlPct } = summarizePortfolio(rows);
 
   return (
     <div>

@@ -28,6 +28,9 @@ model User {
   deletionRequestedAt DateTime?
   deletionScheduledFor DateTime?
 
+  agentName           String?
+  tutorialCompletedAt DateTime?
+
   accounts       Account[]
   sessions       Session[]
   watchlistItems WatchlistItem[]

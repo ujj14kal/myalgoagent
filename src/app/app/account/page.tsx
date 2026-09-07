@@ -4,6 +4,8 @@ import ProfileForm from "@/components/profile-form";
 import ChangePasswordForm from "@/components/change-password-form";
 import SignOutOthersButton from "@/components/sign-out-others-button";
 import DangerZone from "@/components/danger-zone";
+import AgentNameForm from "@/components/agent-name-form";
+import { DEFAULT_AGENT_NAME } from "@/lib/agent-constants";
 
 export const metadata = { title: "Account", robots: { index: false } };
 
@@ -27,6 +29,16 @@ export default async function AccountPage() {
             initialUsername={user.username ?? ""}
             initialPhone={user.phone ?? ""}
           />
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-black/5 bg-white p-6">
+        <h2 className="text-sm font-semibold text-brand-navy">Your AlgoAgent</h2>
+        <p className="mt-1 text-xs text-brand-navy/50">
+          Give your agent a name — it&rsquo;ll use it whenever it pops up with a notification.
+        </p>
+        <div className="mt-4">
+          <AgentNameForm initialName={user.agentName ?? DEFAULT_AGENT_NAME} />
         </div>
       </section>
 
