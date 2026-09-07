@@ -141,11 +141,11 @@ export default function RobotMascot({
             mouth or eyebrows by default. A hairline stroke keeps the head
             readable even on a near-white card. */}
         <line x1="80" y1="16" x2="80" y2="1" stroke={HEAD} strokeWidth="11" strokeLinecap="round" />
-        <rect x="20" y="14" width="120" height="92" rx="26" fill={HEAD} stroke={HEAD_STROKE} strokeWidth="1.5" />
+        <rect x="34" y="14" width="92" height="92" rx="24" fill={HEAD} stroke={HEAD_STROKE} strokeWidth="1.5" />
         <line x1="80" y1="104" x2="80" y2="119" stroke={HEAD} strokeWidth="11" strokeLinecap="round" />
 
-        <rect x="6" y="42" width="16" height="34" rx="6" fill={HEAD} stroke={HEAD_STROKE} strokeWidth="1.5" />
-        <rect x="138" y="42" width="16" height="34" rx="6" fill={HEAD} stroke={HEAD_STROKE} strokeWidth="1.5" />
+        <rect x="20" y="42" width="16" height="34" rx="6" fill={HEAD} stroke={HEAD_STROKE} strokeWidth="1.5" />
+        <rect x="124" y="42" width="16" height="34" rx="6" fill={HEAD} stroke={HEAD_STROKE} strokeWidth="1.5" />
 
         {/* eyes */}
         {asleep ? (

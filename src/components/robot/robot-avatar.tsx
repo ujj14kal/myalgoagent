@@ -55,9 +55,9 @@ export default function RobotAvatar({
     >
       <svg viewBox="0 -10 160 116" width={faceSize} height={faceSize} fill="none" xmlns="http://www.w3.org/2000/svg">
         <line x1="80" y1="6" x2="80" y2="-9" stroke={HEAD} strokeWidth="11" strokeLinecap="round" />
-        <rect x="20" y="4" width="120" height="92" rx="26" fill={HEAD} />
-        <rect x="6" y="32" width="16" height="34" rx="6" fill={HEAD} />
-        <rect x="138" y="32" width="16" height="34" rx="6" fill={HEAD} />
+        <rect x="34" y="4" width="92" height="92" rx="24" fill={HEAD} />
+        <rect x="20" y="32" width="16" height="34" rx="6" fill={HEAD} />
+        <rect x="124" y="32" width="16" height="34" rx="6" fill={HEAD} />
         {asleep ? (
           <>
             <line x1="50" y1="50" x2="66" y2="50" stroke={INK} strokeWidth="6" strokeLinecap="round" />
