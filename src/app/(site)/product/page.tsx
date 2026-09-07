@@ -27,7 +27,7 @@ export default function ProductPage() {
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/product", label: "Product Overview" }]} />
       <PageHeader
         eyebrow="Product Overview"
-        title="MyAlgoAgent — Algo Trading Platform"
+        title="What MyAlgoAgent does"
         description="MyAlgoAgent is a software platform that helps traders and developers build, test and run rule-based trading strategies. It is not a financial advisor and does not manage money on a user's behalf without explicit, user-initiated broker connections."
       />
       <Reveal>
