@@ -88,7 +88,7 @@ export async function confirmAccountDeletionAction(
     prisma.session.deleteMany({ where: { userId: session.user.id } }),
   ]);
 
-  await sendDeletionConfirmedEmail(session.user.email, deletionScheduledFor).catch(() => {});
+  await sendDeletionConfirmedEmail(session.user.email, deletionScheduledFor).catch((err) => console.error("sendDeletionConfirmedEmail failed:", err));
 
   await signOut({ redirect: false });
   return { ok: true };

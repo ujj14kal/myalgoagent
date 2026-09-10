@@ -71,7 +71,7 @@ export async function signupAction(input: SignupInput): Promise<{ ok: true } | {
     },
   });
 
-  await sendWelcomeEmail(email, input.fullName.trim()).catch(() => {});
+  await sendWelcomeEmail(email, input.fullName.trim()).catch((err) => console.error("sendWelcomeEmail failed:", err));
 
   await createSessionForUser(user.id);
 
@@ -117,7 +117,7 @@ export async function requestPasswordResetAction(email: string): Promise<{ ok: t
   });
 
   const resetUrl = `${baseUrl}/reset-password/${rawToken}`;
-  await sendPasswordResetEmail(normalized, resetUrl).catch(() => {});
+  await sendPasswordResetEmail(normalized, resetUrl).catch((err) => console.error("sendPasswordResetEmail failed:", err));
   return { ok: true };
 }
 
@@ -174,6 +174,6 @@ export async function requestMagicLinkAction(email: string): Promise<{ ok: true 
   });
 
   const url = `${baseUrl}/api/auth/magic-link?token=${rawToken}&email=${encodeURIComponent(normalized)}`;
-  await sendMagicLinkEmail(normalized, url).catch(() => {});
+  await sendMagicLinkEmail(normalized, url).catch((err) => console.error("sendMagicLinkEmail failed:", err));
   return { ok: true };
 }

@@ -66,6 +66,16 @@ export default function TermsPage() {
           create or authorize to trade.
         </p>
 
+        <h2>Communications</h2>
+        <p>
+          By creating an account, you consent to receive transactional
+          emails necessary to operate it — account verification,
+          sign-in links, password resets, and security notices. We do
+          not send marketing email. See our{" "}
+          <a href="/privacy-policy">Privacy Policy</a> for how we handle
+          bounces, complaints and unsubscribe requests.
+        </p>
+
         <h2>Broker connections</h2>
         <p>
           Connecting a broker account authorizes MyAlgoAgent to place,
@@ -112,6 +122,31 @@ export default function TermsPage() {
           time. We may suspend or terminate access for breach of these
           Terms, suspected fraud or abuse, or as required by law, with
           notice where reasonably practicable.
+        </p>
+
+        <h2>Force majeure</h2>
+        <p>
+          We are not liable for any failure or delay in the Service
+          caused by events outside our reasonable control, including
+          exchange or broker-API outages, internet or cloud-provider
+          disruptions, natural disasters, or government action.
+        </p>
+
+        <h2>Notices</h2>
+        <p>
+          We may give you notice under these Terms by email to the
+          address on your account, or by posting a notice on this page.
+          Notices to us should be sent using the contact details below.
+        </p>
+
+        <h2>Severability &amp; entire agreement</h2>
+        <p>
+          If any provision of these Terms is found unenforceable, the
+          remaining provisions remain in full effect. These Terms,
+          together with our <a href="/privacy-policy">Privacy Policy</a>{" "}
+          and <a href="/risk-disclosure">Risk Disclosure</a>, are the
+          entire agreement between you and MyAlgoAgent regarding the
+          Service, superseding any prior agreements on the same subject.
         </p>
 
         <h2>Governing law &amp; dispute resolution</h2>

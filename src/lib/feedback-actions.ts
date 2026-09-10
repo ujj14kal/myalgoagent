@@ -23,7 +23,7 @@ export async function submitFeedbackAction(
   await prisma.feedback.create({
     data: { userId: session.user.id, page, message: message.trim() },
   });
-  await sendFeedbackNotice(page, message.trim(), session.user.email).catch(() => {});
+  await sendFeedbackNotice(page, message.trim(), session.user.email).catch((err) => console.error("sendFeedbackNotice failed:", err));
 
   return { ok: true };
 }
@@ -58,8 +58,8 @@ export async function submitSupportCaseAction(input: {
 
   const caseId = `MAA-${supportCase.caseNumber + 100000}`;
 
-  await sendSupportCaseNotice(caseId, input.subject.trim(), input.message.trim(), email).catch(() => {});
-  await sendSupportCaseConfirmation(email, caseId).catch(() => {});
+  await sendSupportCaseNotice(caseId, input.subject.trim(), input.message.trim(), email).catch((err) => console.error("sendSupportCaseNotice failed:", err));
+  await sendSupportCaseConfirmation(email, caseId).catch((err) => console.error("sendSupportCaseConfirmation failed:", err));
 
   return { ok: true, caseId };
 }

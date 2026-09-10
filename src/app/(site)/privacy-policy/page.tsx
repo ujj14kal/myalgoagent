@@ -67,6 +67,33 @@ export default function PrivacyPolicyPage() {
           parties for their own marketing purposes.
         </p>
 
+        <h3>Information obtained through GitHub Sign-In</h3>
+        <p>
+          MyAlgoAgent also offers &ldquo;Sign in with GitHub&rdquo; as an
+          authentication method, primarily for users who want to import
+          strategy code from their own GitHub repositories into the
+          code-mode strategy editor. When you choose to sign in with
+          GitHub, we receive:
+        </p>
+        <ul>
+          <li>Your name and username, as registered with GitHub.</li>
+          <li>Your email address, used as your unique account identifier.</li>
+          <li>Your GitHub profile picture, if available, used only to display your avatar in the product.</li>
+          <li>Read access to your repository contents (the <code>repo</code> scope), used only when you explicitly choose to import a file into a strategy — we do not read, scan, or store your repositories in the background.</li>
+        </ul>
+        <p>
+          We do not write to, modify, or post to any GitHub repository on
+          your behalf, and we do not sell or share the data obtained
+          through GitHub Sign-In with third parties for their own
+          marketing purposes. You can unlink your GitHub account at any
+          time from Account settings (subject to always keeping at least
+          one working way to sign in), or revoke MyAlgoAgent&rsquo;s
+          access entirely from{" "}
+          <a href="https://github.com/settings/applications" target="_blank" rel="noopener noreferrer">
+            github.com/settings/applications
+          </a>.
+        </p>
+
         <h3>Usage and device information</h3>
         <ul>
           <li>Pages visited, features used, and general interaction patterns with the Service.</li>
@@ -112,12 +139,30 @@ export default function PrivacyPolicyPage() {
         <h2>How we share information</h2>
         <p>We do not sell your personal data. We share information only:</p>
         <ul>
-          <li>With infrastructure and service providers who process data on our behalf strictly to operate the Service &mdash; for example, our cloud hosting provider (AWS), authentication provider (Google), and analytics provider (Google Analytics).</li>
+          <li>With infrastructure and service providers who process data on our behalf strictly to operate the Service &mdash; for example, our cloud hosting provider (AWS), authentication providers (Google and GitHub), and analytics provider (Google Analytics).</li>
           <li>With your connected broker, strictly to place, modify, cancel or synchronize orders you have configured and authorized.</li>
           <li>Where required to comply with a legal obligation, court order, or governmental request.</li>
           <li>To protect the rights, property or safety of MyAlgoAgent, our users, or the public, where legally permitted.</li>
           <li>In connection with a merger, acquisition, or sale of assets, subject to continued protection under a policy at least as protective as this one.</li>
         </ul>
+        <p>
+          Our sub-processors — companies that process data on our behalf
+          under the categories above — are: Amazon Web Services (hosting,
+          database, and email delivery), Google (OAuth sign-in and
+          analytics), and GitHub (OAuth sign-in and code import).</p>
+
+        <h2>Email communications</h2>
+        <p>
+          We send transactional email only — never marketing or bulk
+          email, and never to a purchased or imported list. Every email
+          we send is triggered directly by an action you take: account
+          verification, a password-reset link, a sign-in (&ldquo;magic
+          link&rdquo;) email, or a confirmation that we received a
+          support request or feedback you submitted. If an email to your
+          address bounces or you mark one as spam, our provider (Amazon
+          SES) automatically suppresses future sends to that address
+          until the issue is resolved.
+        </p>
 
         <h2>Data retention</h2>
         <p>
@@ -151,7 +196,7 @@ export default function PrivacyPolicyPage() {
             myaccount.google.com/permissions
           </a>
           ). To exercise any of these rights, contact us using the details
-          below.
+          below. We aim to respond to any data request within 30 days.
         </p>
 
         <h2>International data transfers</h2>
