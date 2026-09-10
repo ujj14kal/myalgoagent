@@ -7,7 +7,13 @@ export interface LegalSection {
   title: string;
   paragraphs?: string[];
   bullets?: string[];
-  /** Rendered after the paragraphs/bullets, for anything that needs a link, e.g. a mailto or an external URL. */
+  /**
+   * Full custom content for a section — use when a paragraph needs an
+   * inline <Link>, a <Callout>, or anything else plain strings can't
+   * express. When set, paragraphs/bullets are ignored for this section.
+   */
+  body?: React.ReactNode;
+  /** Rendered after the paragraphs/bullets/body, for anything that needs a link, e.g. a mailto or an external URL. */
   extra?: React.ReactNode;
 }
 
@@ -57,20 +63,24 @@ export default function LegalPage({
                 <span className="pt-1 font-mono text-xs font-bold text-brand-gold">{String(i + 1).padStart(2, "0")}</span>
                 <div>
                   <h2 className="text-xl font-bold text-brand-navy">{section.title}</h2>
-                  {section.paragraphs?.map((p, pi) => (
-                    <p key={pi} className="mt-3 text-sm leading-relaxed text-brand-navy/70">
-                      {p}
-                    </p>
-                  ))}
-                  {section.bullets && (
-                    <ul className="mt-4 space-y-2.5">
-                      {section.bullets.map((item) => (
-                        <li key={item} className="relative pl-5 text-sm leading-relaxed text-brand-navy/70">
-                          <span className="absolute left-0 top-2 h-1.5 w-1.5 rounded-sm bg-brand-primary" />
-                          {item}
-                        </li>
+                  {section.body ?? (
+                    <>
+                      {section.paragraphs?.map((p, pi) => (
+                        <p key={pi} className="mt-3 text-sm leading-relaxed text-brand-navy/70">
+                          {p}
+                        </p>
                       ))}
-                    </ul>
+                      {section.bullets && (
+                        <ul className="mt-4 space-y-2.5">
+                          {section.bullets.map((item) => (
+                            <li key={item} className="relative pl-5 text-sm leading-relaxed text-brand-navy/70">
+                              <span className="absolute left-0 top-2 h-1.5 w-1.5 rounded-sm bg-brand-primary" />
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </>
                   )}
                   {section.extra}
                 </div>
@@ -96,7 +106,7 @@ export default function LegalPage({
               </ul>
             </div>
             <div className="mt-4 rounded-xl bg-brand-primary p-5 text-white">
-              <p className="text-sm font-bold">Need clarification?</p>
+              <p className="text-sm font-bold text-white">Need clarification?</p>
               <p className="mt-1.5 text-xs leading-relaxed text-white/70">
                 Contact our team about this document or your account.
               </p>

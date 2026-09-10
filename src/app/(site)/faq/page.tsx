@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
-import PageHeader from "@/components/page-header";
-import { Breadcrumbs } from "@/components/section";
+import LegalPage, { type LegalSection } from "@/components/legal-page";
 import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
-import Reveal from "@/components/reveal";
 
 export const metadata: Metadata = {
   title: "FAQ",
@@ -10,16 +8,18 @@ export const metadata: Metadata = {
   alternates: { canonical: `${siteUrl}/faq` },
 };
 
-const faqs = [
-  { q: "Is MyAlgoAgent a broker?", a: "No. MyAlgoAgent is software that connects to supported broker APIs on your behalf, with your explicit authorization. It does not custody funds or execute trades independently of your broker account." },
-  { q: "Is backtested performance guaranteed?", a: "No. Historical and backtested performance does not guarantee future results. Markets change, and live execution can differ from simulated fills. See our Risk Disclosure." },
-  { q: "What's the difference between paper and live trading?", a: "Paper trading simulates orders against live market data using virtual capital — no real money is at risk. Live trading places real orders through a connected broker account and requires explicit confirmation." },
-  { q: "Can a strategy start live trading automatically?", a: "No. Live trading always requires a connected, tested broker account, configured risk limits, and an explicit manual start from the user." },
-  { q: "How are broker credentials protected?", a: "Broker API credentials are handled through secure secret management and are never exposed to browser-side code or stored in application source code." },
-  { q: "What happens if the broker connection drops?", a: "The platform is designed to stop placing new orders and reconcile state once the connection is restored, rather than guessing at account state." },
-  { q: "Does the AI assistant give financial advice?", a: "No. AI features are informational — helping translate ideas into rules or summarize results — and are never presented as guaranteed returns or personalized financial advice." },
-  { q: "Is MyAlgoAgent affiliated with Amazon or AWS?", a: "No. MyAlgoAgent uses AWS as third-party cloud infrastructure. There is no endorsement, sponsorship or partnership with Amazon or AWS." },
+const faqs: { id: string; q: string; a: string }[] = [
+  { id: "broker", q: "Is MyAlgoAgent a broker?", a: "No. MyAlgoAgent is software that connects to supported broker APIs on your behalf, with your explicit authorization. It does not custody funds or execute trades independently of your broker account." },
+  { id: "backtest-guarantee", q: "Is backtested performance guaranteed?", a: "No. Historical and backtested performance does not guarantee future results. Markets change, and live execution can differ from simulated fills. See our Risk Disclosure." },
+  { id: "paper-vs-live", q: "What's the difference between paper and live trading?", a: "Paper trading simulates orders against live market data using virtual capital — no real money is at risk. Live trading places real orders through a connected broker account and requires explicit confirmation." },
+  { id: "auto-start", q: "Can a strategy start live trading automatically?", a: "No. Live trading always requires a connected, tested broker account, configured risk limits, and an explicit manual start from the user." },
+  { id: "credentials", q: "How are broker credentials protected?", a: "Broker API credentials are handled through secure secret management and are never exposed to browser-side code or stored in application source code." },
+  { id: "disconnect", q: "What happens if the broker connection drops?", a: "The platform is designed to stop placing new orders and reconcile state once the connection is restored, rather than guessing at account state." },
+  { id: "ai-advice", q: "Does the AI assistant give financial advice?", a: "No. AI features are informational — helping translate ideas into rules or summarize results — and are never presented as guaranteed returns or personalized financial advice." },
+  { id: "aws-affiliation", q: "Is MyAlgoAgent affiliated with Amazon or AWS?", a: "No. MyAlgoAgent uses AWS as third-party cloud infrastructure. There is no endorsement, sponsorship or partnership with Amazon or AWS." },
 ];
+
+const sections: LegalSection[] = faqs.map((f) => ({ id: f.id, title: f.q, paragraphs: [f.a] }));
 
 export default function FaqPage() {
   const jsonLd = [
@@ -42,28 +42,15 @@ export default function FaqPage() {
       {jsonLd.map((ld, i) => (
         <script key={i} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }} />
       ))}
-      <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/faq", label: "FAQ" }]} />
-      <PageHeader eyebrow="FAQ" title="Frequently asked questions" />
-      <Reveal>
-        <div className="mx-auto max-w-3xl space-y-4 px-4 py-14">
-          {faqs.map((f) => (
-            <div key={f.q} className="rounded-2xl border border-black/5 bg-white p-6">
-              <div className="flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-primary text-xs font-bold text-white">
-                  Q
-                </span>
-                <p className="font-semibold text-brand-navy">{f.q}</p>
-              </div>
-              <div className="mt-3 flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-gold/20 text-xs font-bold text-brand-gold">
-                  A
-                </span>
-                <p className="text-sm leading-relaxed text-brand-navy/70">{f.a}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Reveal>
+      <LegalPage
+        label="Support / FAQ"
+        title="Frequently asked questions"
+        updated="September 2026"
+        intro="Straight answers to the questions we hear most, about how the platform actually works."
+        sections={sections}
+        breadcrumbLabel="FAQ"
+        breadcrumbHref="/faq"
+      />
     </>
   );
 }
