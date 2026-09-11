@@ -33,6 +33,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       authorization: { params: { scope: "read:user user:email repo" } },
       allowDangerousEmailAccountLinking: true,
       [customFetch]: oauthFetch,
+      // Auth.js defaults every OAuth provider to `checks: ["pkce"]`, but
+      // GitHub's classic OAuth Apps (unlike GitHub Apps) don't support
+      // PKCE — sending code_challenge/code_challenge_method to GitHub's
+      // authorize endpoint works fine while logged out (GitHub just
+      // bounces you to its own /login first) but 404s the moment GitHub
+      // tries to actually resolve the app and show the consent screen for
+      // an authenticated user. Reproduced live: 0 successful
+      // authorizations on the GitHub OAuth App despite a correct
+      // client_id/secret and callback URL. State-only check is standard
+      // and sufficient for a classic OAuth App.
+      checks: ["state"],
     }),
   ],
   pages: {
