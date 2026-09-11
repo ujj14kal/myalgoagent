@@ -5,7 +5,7 @@ import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
-    "MyAlgoAgent's Privacy Policy: what data we collect (including via Google and GitHub sign-in), why we collect it, how it's stored and protected, who we share it with, your rights, and how to contact us.",
+    "MyAlgoAgent's Privacy Policy: what data we collect (including via Google sign-in), why we collect it, how it's stored and protected, who we share it with, your rights, and how to contact us.",
   alternates: { canonical: `${siteUrl}/privacy-policy` },
 };
 
@@ -35,18 +35,10 @@ const sections: LegalSection[] = [
     ],
   },
   {
-    id: "github-sign-in",
-    title: "Information obtained through GitHub Sign-In",
-    paragraphs: [
-      "MyAlgoAgent also offers Sign in with GitHub, primarily for users who want to import strategy code from their own GitHub repositories into the code-mode strategy editor. When you choose to sign in with GitHub, we receive your name and username, your email address (used as your unique account identifier), your GitHub profile picture if available, and read access to your repository contents (the repo scope) — used only when you explicitly choose to import a file into a strategy. We do not read, scan, or store your repositories in the background.",
-      "We do not write to, modify, or post to any GitHub repository on your behalf, and we do not sell or share this data with third parties for their own marketing purposes. You can unlink your GitHub account at any time from Account settings (subject to always keeping at least one working way to sign in), or revoke MyAlgoAgent's access entirely from github.com/settings/applications.",
-    ],
-  },
-  {
     id: "why",
     title: "Why we collect this information",
     bullets: [
-      "To create, authenticate and secure your account, including via Google and GitHub Sign-In.",
+      "To create, authenticate and secure your account, including via Google Sign-In.",
       "To provide, operate and maintain the features of the Service.",
       "To detect, investigate and prevent fraudulent, unauthorized or abusive activity.",
       "To maintain audit logs required for a financial-software product handling trading actions.",
@@ -75,7 +67,7 @@ const sections: LegalSection[] = [
     ],
     extra: (
       <p className="mt-4 text-sm leading-relaxed text-brand-navy/70">
-        Our sub-processors — companies that process data on our behalf under the categories above — are: Amazon Web Services (hosting, database, and email delivery), Google (OAuth sign-in and analytics), and GitHub (OAuth sign-in and code import).
+        Our sub-processors — companies that process data on our behalf under the categories above — are: Amazon Web Services (hosting, database, and email delivery) and Google (OAuth sign-in and analytics).
       </p>
     ),
   },
@@ -104,7 +96,7 @@ const sections: LegalSection[] = [
     id: "rights",
     title: "Your rights",
     paragraphs: [
-      "Depending on your jurisdiction, you may have the right to: access the personal data we hold about you; correct inaccurate data; request deletion of your data; export your data in a portable format; object to or restrict certain processing; and withdraw consent where processing is based on consent (such as disconnecting Google or GitHub sign-in, or revoking access from that provider's own account settings). To exercise any of these rights, contact us using the details below. We aim to respond to any data request within 30 days.",
+      "Depending on your jurisdiction, you may have the right to: access the personal data we hold about you; correct inaccurate data; request deletion of your data; export your data in a portable format; object to or restrict certain processing; and withdraw consent where processing is based on consent (such as disconnecting Google sign-in, or revoking access from your Google account settings). To exercise any of these rights, contact us using the details below. We aim to respond to any data request within 30 days.",
     ],
   },
   {

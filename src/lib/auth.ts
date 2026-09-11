@@ -1,6 +1,5 @@
 import NextAuth, { customFetch } from "next-auth";
 import Google from "next-auth/providers/google";
-import GitHub from "next-auth/providers/github";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import { reactivateIfPending } from "@/lib/account-status";
@@ -18,33 +17,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: { strategy: "database" },
   providers: [
-    // Both providers verify email ownership themselves (Google always;
-    // GitHub returns the account's verified primary email via
-    // user:email scope), so it's safe to auto-link a new OAuth sign-in
-    // to an existing account with the same email — without this, a user
-    // who signed up with a password and later clicks "Continue with
-    // Google"/"GitHub" using the same address hits Auth.js's default
+    // Google verifies email ownership itself, so it's safe to auto-link a
+    // new Google sign-in to an existing account with the same email —
+    // without this, a user who signed up with a password and later clicks
+    // "Continue with Google" using the same address hits Auth.js's default
     // OAuthAccountNotLinked dead end instead of just signing in.
     Google({ allowDangerousEmailAccountLinking: true, [customFetch]: oauthFetch }),
-    // `repo` scope is requested up front (not just read:user/user:email) so
-    // a GitHub sign-in is immediately usable for the strategy-editor's
-    // "import from GitHub" feature too, without a second consent screen.
-    GitHub({
-      authorization: { params: { scope: "read:user user:email repo" } },
-      allowDangerousEmailAccountLinking: true,
-      [customFetch]: oauthFetch,
-      // Auth.js defaults every OAuth provider to `checks: ["pkce"]`, but
-      // GitHub's classic OAuth Apps (unlike GitHub Apps) don't support
-      // PKCE — sending code_challenge/code_challenge_method to GitHub's
-      // authorize endpoint works fine while logged out (GitHub just
-      // bounces you to its own /login first) but 404s the moment GitHub
-      // tries to actually resolve the app and show the consent screen for
-      // an authenticated user. Reproduced live: 0 successful
-      // authorizations on the GitHub OAuth App despite a correct
-      // client_id/secret and callback URL. State-only check is standard
-      // and sufficient for a classic OAuth App.
-      checks: ["state"],
-    }),
   ],
   pages: {
     signIn: "/login",

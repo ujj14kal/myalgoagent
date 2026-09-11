@@ -5,7 +5,6 @@ import { unlinkAccountAction, connectProviderAction } from "@/lib/account-links"
 
 const PROVIDER_LABEL: Record<string, string> = {
   google: "Google",
-  github: "GitHub",
 };
 
 export default function ConnectedAccounts({

@@ -11,7 +11,7 @@ import ReplayTourButton from "@/components/tutorial/replay-tour-button";
 import ConnectedAccounts from "@/components/connected-accounts";
 import { getLinkedProviders } from "@/lib/account-links";
 
-const OAUTH_PROVIDERS = ["google", "github"];
+const OAUTH_PROVIDERS = ["google"];
 
 export const metadata = { title: "Account", robots: { index: false } };
 
