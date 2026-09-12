@@ -6,6 +6,7 @@ import InstrumentChartPanel from "@/components/instrument-chart-panel";
 import type { ChartType } from "@/components/candlestick-chart";
 import type { Drawing } from "@/lib/chart-drawing-primitive";
 import type { CandleInterval } from "@/lib/market-data";
+import { normalizeIndicatorInstances } from "@/lib/chart-indicator-instance";
 
 export async function generateMetadata({ params }: { params: Promise<{ symbol: string }> }) {
   const { symbol } = await params;
@@ -44,16 +45,26 @@ export default async function InstrumentDetailPage({
   }
 
   const latest = candles.at(-1);
-  const savedConfig = savedLayout
+  const rawConfig = savedLayout
     ? (savedLayout.config as unknown as {
         chartType: ChartType;
         interval: CandleInterval;
-        overlays: string[];
-        oscillators: string[];
+        overlays: unknown;
+        oscillators: unknown;
         showVolume: boolean;
         drawings: Drawing[];
         compareSymbol: string | null;
       })
+    : null;
+  // `overlays`/`oscillators` may still be the old bare-string-key format
+  // from a layout saved before the full indicator catalog was wired up —
+  // normalize either shape to the current ActiveIndicatorInstance[] form.
+  const savedConfig = rawConfig
+    ? {
+        ...rawConfig,
+        overlays: normalizeIndicatorInstances(rawConfig.overlays),
+        oscillators: normalizeIndicatorInstances(rawConfig.oscillators),
+      }
     : null;
 
   return (

@@ -4,32 +4,15 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import CandlestickChart, { type Overlay, type ChartType } from "@/components/candlestick-chart";
 import OscillatorPanel, { type OscillatorSeries } from "@/components/oscillator-panel";
 import DrawingToolbar from "@/components/drawing-toolbar";
+import IndicatorPicker from "@/components/indicator-picker";
 import type { Drawing } from "@/lib/chart-drawing-primitive";
-import MultiSelectDropdown from "@/components/multi-select-dropdown";
 import { saveChartLayout } from "@/lib/chart-layout-actions";
 import { RANGES, INTERVALS, isValidCombo, defaultIntervalForRange } from "@/lib/market-data";
 import type { Candle, CandleInterval, CandleRange } from "@/lib/market-data";
-import {
-  sma,
-  ema,
-  rsi,
-  macd,
-  bollingerBands,
-  vwap,
-  atr,
-  adx,
-  stochastic,
-  cci,
-  roc,
-  obv,
-  donchianChannels,
-  pivotPoints,
-  williamsR,
-  mfi,
-  awesomeOscillator,
-  aroon,
-  chaikinMoneyFlow,
-} from "@/lib/indicators";
+import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
+import { INDICATOR_BY_KIND } from "@/lib/strategy/indicator-catalog";
+import type { IndicatorKind } from "@/lib/strategy/types";
+import { instanceFromDefaults, type ActiveIndicatorInstance } from "@/lib/chart-indicator-instance";
 
 interface InstrumentOption {
   id: string;
@@ -37,30 +20,8 @@ interface InstrumentOption {
   name: string;
 }
 
-const OVERLAY_OPTIONS = [
-  { key: "sma20", label: "SMA (20)" },
-  { key: "ema50", label: "EMA (50)" },
-  { key: "bollinger", label: "Bollinger Bands (20, 2)" },
-  { key: "vwap", label: "VWAP" },
-  { key: "donchian", label: "Donchian Channels (20)" },
-  { key: "pivots", label: "Pivot Points" },
-] as const;
-
-const OSCILLATOR_OPTIONS = [
-  { key: "rsi", label: "RSI (14)" },
-  { key: "macd", label: "MACD (12, 26, 9)" },
-  { key: "atr", label: "ATR (14)" },
-  { key: "adx", label: "ADX / DMI (14)" },
-  { key: "stochastic", label: "Stochastic (14, 3)" },
-  { key: "cci", label: "CCI (20)" },
-  { key: "roc", label: "ROC (12)" },
-  { key: "obv", label: "OBV" },
-  { key: "williamsR", label: "Williams %R (14)" },
-  { key: "mfi", label: "MFI (14)" },
-  { key: "awesomeOscillator", label: "Awesome Oscillator" },
-  { key: "aroon", label: "Aroon (25)" },
-  { key: "chaikinMoneyFlow", label: "Chaikin Money Flow (20)" },
-] as const;
+// Kinds whose series is more legible as bars than a line.
+const HISTOGRAM_KINDS = new Set<IndicatorKind>(["MACD_HISTOGRAM", "AWESOME_OSCILLATOR"]);
 
 const OVERLAY_COLORS = ["#bda360", "#466fff", "#6a35c2", "#0e1b2d"];
 
@@ -74,8 +35,8 @@ const CHART_TYPES: { value: ChartType; label: string }[] = [
 interface SavedConfig {
   chartType: ChartType;
   interval: CandleInterval;
-  overlays: string[];
-  oscillators: string[];
+  overlays: ActiveIndicatorInstance[];
+  oscillators: ActiveIndicatorInstance[];
   showVolume: boolean;
   drawings: Drawing[];
   compareSymbol: string | null;
@@ -85,6 +46,43 @@ function pctChangeSeries(candles: Candle[]) {
   const base = candles[0]?.close;
   if (!base) return [];
   return candles.map((c) => ({ time: c.time, value: ((c.close - base) / base) * 100 }));
+}
+
+function IndicatorChip({
+  instance,
+  onChange,
+  onRemove,
+}: {
+  instance: ActiveIndicatorInstance;
+  onChange: (params: number[]) => void;
+  onRemove: () => void;
+}) {
+  const def = INDICATOR_BY_KIND.get(instance.kind);
+  return (
+    <div className="flex items-center gap-1.5 rounded-full border border-brand-navy/15 bg-brand-bg px-2 py-1 text-xs">
+      <span className="font-medium text-brand-navy">{def?.label ?? instance.kind}</span>
+      {def?.paramLabels.map((paramLabel, i) => (
+        <input
+          key={paramLabel + i}
+          type="number"
+          min={0}
+          step="any"
+          value={instance.params[i]}
+          title={paramLabel}
+          aria-label={paramLabel}
+          onChange={(e) => {
+            const params = instance.params.slice();
+            params[i] = Number(e.target.value);
+            onChange(params);
+          }}
+          className="w-12 rounded border border-brand-navy/15 bg-white px-1 py-0.5 text-xs outline-none focus:border-brand-primary"
+        />
+      ))}
+      <button type="button" onClick={onRemove} className="text-brand-navy/40 hover:text-brand-sell" aria-label={`Remove ${def?.label ?? instance.kind}`}>
+        ×
+      </button>
+    </div>
+  );
 }
 
 export default function InstrumentChartPanel({
@@ -122,8 +120,12 @@ export default function InstrumentChartPanel({
   const [candles, setCandles] = useState<Candle[]>(initialCandles);
   const [loading, setLoading] = useState(false);
   const [chartType, setChartType] = useState<ChartType>(savedLayout?.chartType ?? "candlestick");
-  const [overlayKeys, setOverlayKeys] = useState<Set<string>>(new Set(savedLayout?.overlays ?? ["sma20"]));
-  const [oscillatorKeys, setOscillatorKeys] = useState<Set<string>>(new Set(savedLayout?.oscillators ?? []));
+  const [overlayInstances, setOverlayInstances] = useState<ActiveIndicatorInstance[]>(
+    savedLayout?.overlays ?? [instanceFromDefaults("SMA")],
+  );
+  const [oscillatorInstances, setOscillatorInstances] = useState<ActiveIndicatorInstance[]>(
+    savedLayout?.oscillators ?? [],
+  );
   const [showVolume, setShowVolume] = useState(savedLayout?.showVolume ?? false);
   const [drawings, setDrawings] = useState<Drawing[]>(savedLayout?.drawings ?? []);
   const [activeTool, setActiveTool] = useState<Drawing["kind"] | null>(null);
@@ -171,93 +173,35 @@ export default function InstrumentChartPanel({
   }, [compareSymbol, range, interval]);
 
   const overlays: Overlay[] = useMemo(() => {
-    const out: Overlay[] = [];
-    let colorIdx = 0;
-    const nextColor = () => OVERLAY_COLORS[colorIdx++ % OVERLAY_COLORS.length];
-
-    if (overlayKeys.has("sma20")) out.push({ label: "SMA (20)", color: nextColor(), points: sma(candles, 20) });
-    if (overlayKeys.has("ema50")) out.push({ label: "EMA (50)", color: nextColor(), points: ema(candles, 50) });
-    if (overlayKeys.has("bollinger")) {
-      const bb = bollingerBands(candles, 20, 2);
-      const c = nextColor();
-      out.push({ label: "BB Upper", color: c, points: bb.upper });
-      out.push({ label: "BB Middle", color: c, points: bb.middle });
-      out.push({ label: "BB Lower", color: c, points: bb.lower });
-    }
-    if (overlayKeys.has("vwap")) out.push({ label: "VWAP", color: nextColor(), points: vwap(candles) });
-    if (overlayKeys.has("donchian")) {
-      const dc = donchianChannels(candles, 20);
-      const c = nextColor();
-      out.push({ label: "Donchian Upper", color: c, points: dc.upper });
-      out.push({ label: "Donchian Lower", color: c, points: dc.lower });
-    }
-    if (overlayKeys.has("pivots")) {
-      const pv = pivotPoints(candles);
-      const c = nextColor();
-      out.push({ label: "Pivot", color: c, points: pv.pp });
-      out.push({ label: "R1", color: c, points: pv.r1 });
-      out.push({ label: "S1", color: c, points: pv.s1 });
-    }
-    return out;
-  }, [overlayKeys, candles]);
+    return overlayInstances.map((inst, idx) => {
+      const def = INDICATOR_BY_KIND.get(inst.kind);
+      const paramsLabel = inst.params.length > 0 ? ` (${inst.params.join(", ")})` : "";
+      return {
+        label: `${def?.label ?? inst.kind}${paramsLabel}`,
+        color: OVERLAY_COLORS[idx % OVERLAY_COLORS.length],
+        points: computeIndicatorSeries(candles, inst.kind, inst.params),
+      };
+    });
+  }, [overlayInstances, candles]);
 
   const oscillatorPanels = useMemo(() => {
-    const panels: { key: string; label: string; series: OscillatorSeries[]; referenceLines?: number[] }[] = [];
-
-    if (oscillatorKeys.has("rsi")) {
-      panels.push({ key: "rsi", label: "RSI (14) — 70 overbought / 30 oversold", series: [{ label: "RSI", color: "#466fff", points: rsi(candles, 14) }], referenceLines: [70, 30] });
-    }
-    if (oscillatorKeys.has("macd")) {
-      const m = macd(candles);
-      panels.push({
-        key: "macd",
-        label: "MACD (12, 26, 9)",
+    return oscillatorInstances.map((inst): { key: string; label: string; series: OscillatorSeries[]; referenceLines?: number[] } => {
+      const def = INDICATOR_BY_KIND.get(inst.kind);
+      const paramsLabel = inst.params.length > 0 ? ` (${inst.params.join(", ")})` : "";
+      return {
+        key: inst.id,
+        label: `${def?.label ?? inst.kind}${paramsLabel}`,
         series: [
-          { label: "MACD", color: "#471898", points: m.macd },
-          { label: "Signal", color: "#d60000", points: m.signal },
-          { label: "Histogram", color: "#bda360", points: m.histogram, type: "histogram" },
+          {
+            label: def?.label ?? inst.kind,
+            color: "#466fff",
+            points: computeIndicatorSeries(candles, inst.kind, inst.params),
+            type: HISTOGRAM_KINDS.has(inst.kind) ? "histogram" : "line",
+          },
         ],
-      });
-    }
-    if (oscillatorKeys.has("atr")) panels.push({ key: "atr", label: "ATR (14)", series: [{ label: "ATR", color: "#466fff", points: atr(candles, 14) }] });
-    if (oscillatorKeys.has("adx")) {
-      const a = adx(candles, 14);
-      panels.push({
-        key: "adx",
-        label: "ADX / DMI (14)",
-        series: [
-          { label: "ADX", color: "#471898", points: a.adx },
-          { label: "+DI", color: "#00a83e", points: a.plusDI },
-          { label: "-DI", color: "#d60000", points: a.minusDI },
-        ],
-      });
-    }
-    if (oscillatorKeys.has("stochastic")) {
-      const s = stochastic(candles, 14, 3);
-      panels.push({
-        key: "stochastic",
-        label: "Stochastic (14, 3) — 80 overbought / 20 oversold",
-        series: [
-          { label: "%K", color: "#466fff", points: s.k },
-          { label: "%D", color: "#d60000", points: s.d },
-        ],
-        referenceLines: [80, 20],
-      });
-    }
-    if (oscillatorKeys.has("cci")) panels.push({ key: "cci", label: "CCI (20)", series: [{ label: "CCI", color: "#466fff", points: cci(candles, 20) }], referenceLines: [100, -100] });
-    if (oscillatorKeys.has("roc")) panels.push({ key: "roc", label: "ROC (12)", series: [{ label: "ROC", color: "#466fff", points: roc(candles, 12) }] });
-    if (oscillatorKeys.has("obv")) panels.push({ key: "obv", label: "On-Balance Volume", series: [{ label: "OBV", color: "#466fff", points: obv(candles) }] });
-    if (oscillatorKeys.has("williamsR")) panels.push({ key: "williamsR", label: "Williams %R (14)", series: [{ label: "%R", color: "#466fff", points: williamsR(candles, 14) }], referenceLines: [-20, -80] });
-    if (oscillatorKeys.has("mfi")) panels.push({ key: "mfi", label: "MFI (14) — 80 overbought / 20 oversold", series: [{ label: "MFI", color: "#466fff", points: mfi(candles, 14) }], referenceLines: [80, 20] });
-    if (oscillatorKeys.has("awesomeOscillator")) panels.push({ key: "awesomeOscillator", label: "Awesome Oscillator", series: [{ label: "AO", color: "#bda360", points: awesomeOscillator(candles), type: "histogram" }] });
-    if (oscillatorKeys.has("aroon")) {
-      const a = aroon(candles, 25);
-      panels.push({ key: "aroon", label: "Aroon (25)", series: [{ label: "Up", color: "#00a83e", points: a.up }, { label: "Down", color: "#d60000", points: a.down }] });
-    }
-    if (oscillatorKeys.has("chaikinMoneyFlow")) panels.push({ key: "chaikinMoneyFlow", label: "Chaikin Money Flow (20)", series: [{ label: "CMF", color: "#466fff", points: chaikinMoneyFlow(candles, 20) }] });
-
-    return panels;
-  }, [oscillatorKeys, candles]);
+      };
+    });
+  }, [oscillatorInstances, candles]);
 
   const comparePanel: OscillatorSeries[] | null = useMemo(() => {
     if (!compareSymbol || !compareCandles) return null;
@@ -267,22 +211,28 @@ export default function InstrumentChartPanel({
     ];
   }, [compareSymbol, compareCandles, candles, symbol]);
 
-  function toggleOverlay(key: string) {
-    setOverlayKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  function addOverlay(kind: IndicatorKind) {
+    setOverlayInstances((prev) => [...prev, instanceFromDefaults(kind)]);
   }
 
-  function toggleOscillator(key: string) {
-    setOscillatorKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  function updateOverlay(id: string, params: number[]) {
+    setOverlayInstances((prev) => prev.map((inst) => (inst.id === id ? { ...inst, params } : inst)));
+  }
+
+  function removeOverlay(id: string) {
+    setOverlayInstances((prev) => prev.filter((inst) => inst.id !== id));
+  }
+
+  function addOscillator(kind: IndicatorKind) {
+    setOscillatorInstances((prev) => [...prev, instanceFromDefaults(kind)]);
+  }
+
+  function updateOscillator(id: string, params: number[]) {
+    setOscillatorInstances((prev) => prev.map((inst) => (inst.id === id ? { ...inst, params } : inst)));
+  }
+
+  function removeOscillator(id: string) {
+    setOscillatorInstances((prev) => prev.filter((inst) => inst.id !== id));
   }
 
   function handleDrawingComplete(drawing: Drawing) {
@@ -295,8 +245,8 @@ export default function InstrumentChartPanel({
       await saveChartLayout(instrumentId, {
         chartType,
         interval,
-        overlays: Array.from(overlayKeys),
-        oscillators: Array.from(oscillatorKeys),
+        overlays: overlayInstances,
+        oscillators: oscillatorInstances,
         showVolume,
         drawings,
         compareSymbol,
@@ -358,8 +308,8 @@ export default function InstrumentChartPanel({
               Volume
             </button>
             <span className="mx-1 h-4 w-px bg-brand-navy/10" />
-            <MultiSelectDropdown label="Overlays" options={OVERLAY_OPTIONS} selected={overlayKeys} onToggle={toggleOverlay} />
-            <MultiSelectDropdown label="Oscillators" options={OSCILLATOR_OPTIONS} selected={oscillatorKeys} onToggle={toggleOscillator} />
+            <IndicatorPicker label="Overlay" scope="overlay" onAdd={addOverlay} />
+            <IndicatorPicker label="Oscillator" scope="oscillator" onAdd={addOscillator} />
             <select
               value={compareSymbol ?? ""}
               onChange={(e) => setCompareSymbol(e.target.value || null)}
@@ -381,6 +331,17 @@ export default function InstrumentChartPanel({
             </button>
           </div>
         </div>
+
+        {(overlayInstances.length > 0 || oscillatorInstances.length > 0) && (
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-black/5 px-3 py-2">
+            {overlayInstances.map((inst) => (
+              <IndicatorChip key={inst.id} instance={inst} onChange={(params) => updateOverlay(inst.id, params)} onRemove={() => removeOverlay(inst.id)} />
+            ))}
+            {oscillatorInstances.map((inst) => (
+              <IndicatorChip key={inst.id} instance={inst} onChange={(params) => updateOscillator(inst.id, params)} onRemove={() => removeOscillator(inst.id)} />
+            ))}
+          </div>
+        )}
 
         {error && (
           <p className="border-b border-black/5 bg-brand-sell/5 px-3 py-2 text-xs text-brand-sell">{error}</p>
