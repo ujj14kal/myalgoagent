@@ -1,34 +1,82 @@
-import type { Candle } from "@/lib/market-data";
+import type { Candle, CandleInterval } from "@/lib/market-data";
 import { computeIndicatorSeries } from "./compute-series";
 import { computeTimeWindowSeries } from "./time-window";
+import { alignToBase } from "./timeframe-align";
 import { computeCandlePatternSeries } from "@/lib/candle-patterns";
 import { computeChartPatternSeries } from "@/lib/chart-patterns";
+import { computeVolumePatternSeries } from "@/lib/volume-patterns";
 import type { BooleanSignalKind, ComparisonOperator, ConditionNode, Operand } from "./types";
 import type { Signal } from "./types";
 
 type Series = (number | undefined)[];
 
-function seriesKey(op: Extract<Operand, { kind: "indicator" }>): string {
-  return `${op.type}:${op.params.join(",")}`;
+/** An operand can pull from a different instrument and/or a different
+ * timeframe than the strategy's own base chart. Each distinct
+ * (symbol, timeframe) override the strategy actually uses needs its own
+ * pre-fetched candle series, supplied by the caller (run.ts/paper/sync.ts)
+ * and keyed by `auxKey`. */
+export type AuxCandleMap = Map<string, Candle[]>;
+
+export function auxKey(instrumentSymbol: string | undefined, timeframe: CandleInterval | undefined): string {
+  return `${instrumentSymbol ?? ""}::${timeframe ?? ""}`;
 }
 
-function buildSeries(candles: Candle[], operand: Operand, cache: Map<string, Series>): Series {
+function seriesKey(op: Extract<Operand, { kind: "indicator" }>): string {
+  return `${op.type}:${op.params.join(",")}:${auxKey(op.instrumentSymbol, op.timeframe)}`;
+}
+
+/** Aligns a raw series computed on an override candle set back onto the
+ * base bars: `timeframe` set means the override series is on a different
+ * interval, so only fully-closed bars may be carried forward
+ * (`alignToBase`); no `timeframe` (same interval, different instrument)
+ * means the two series already share bar boundaries, so it's a direct
+ * time-value join instead. */
+function alignOverrideSeries(
+  baseCandles: Candle[],
+  overrideCandles: Candle[],
+  timeframe: CandleInterval | undefined,
+  rawSeries: (number | undefined)[],
+): Series {
+  if (timeframe !== undefined) {
+    return alignToBase(baseCandles, overrideCandles, timeframe, rawSeries);
+  }
+  const byTime = new Map(overrideCandles.map((c, idx) => [c.time, rawSeries[idx]]));
+  return baseCandles.map((c) => byTime.get(c.time));
+}
+
+function buildSeries(candles: Candle[], operand: Operand, cache: Map<string, Series>, aux: AuxCandleMap): Series {
   if (operand.kind === "constant") {
     return candles.map(() => operand.value);
   }
 
+  const usesOverride = operand.timeframe !== undefined || operand.instrumentSymbol !== undefined;
+  const overrideCandles = usesOverride ? aux.get(auxKey(operand.instrumentSymbol, operand.timeframe)) : undefined;
+
   if (operand.kind === "price") {
     const field = operand.field.toLowerCase() as "open" | "high" | "low" | "close" | "volume";
-    return candles.map((c) => c[field]);
+    if (!usesOverride) return candles.map((c) => c[field]);
+    if (!overrideCandles) return candles.map(() => undefined);
+    const rawSeries = overrideCandles.map((c) => c[field]);
+    return alignOverrideSeries(candles, overrideCandles, operand.timeframe, rawSeries);
   }
 
   const key = seriesKey(operand);
   const cached = cache.get(key);
   if (cached) return cached;
 
-  const points = computeIndicatorSeries(candles, operand.type, operand.params);
-  const byTime = new Map(points.map((p) => [p.time, p.value]));
-  const series: Series = candles.map((c) => byTime.get(c.time));
+  let series: Series;
+  if (!usesOverride) {
+    const points = computeIndicatorSeries(candles, operand.type, operand.params);
+    const byTime = new Map(points.map((p) => [p.time, p.value]));
+    series = candles.map((c) => byTime.get(c.time));
+  } else if (!overrideCandles) {
+    series = candles.map(() => undefined);
+  } else {
+    const points = computeIndicatorSeries(overrideCandles, operand.type, operand.params);
+    const byTime = new Map(points.map((p) => [p.time, p.value]));
+    const rawSeries = overrideCandles.map((c) => byTime.get(c.time));
+    series = alignOverrideSeries(candles, overrideCandles, operand.timeframe, rawSeries);
+  }
   cache.set(key, series);
   return series;
 }
@@ -43,6 +91,26 @@ function collectOperands(node: ConditionNode, out: Operand[]) {
   }
 }
 
+/** Every distinct (instrumentSymbol, timeframe) override referenced by a
+ * condition tree — what a caller needs to pre-fetch before evaluating. */
+export function collectAuxRequirements(entry: ConditionNode, exit: ConditionNode): { instrumentSymbol?: string; timeframe?: CandleInterval }[] {
+  const operands: Operand[] = [];
+  collectOperands(entry, operands);
+  collectOperands(exit, operands);
+
+  const seen = new Set<string>();
+  const out: { instrumentSymbol?: string; timeframe?: CandleInterval }[] = [];
+  for (const op of operands) {
+    if (op.kind === "constant") continue;
+    if (op.timeframe === undefined && op.instrumentSymbol === undefined) continue;
+    const key = auxKey(op.instrumentSymbol, op.timeframe);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ instrumentSymbol: op.instrumentSymbol, timeframe: op.timeframe });
+  }
+  return out;
+}
+
 function signalKey(signal: BooleanSignalKind): string {
   switch (signal.family) {
     case "TIME_WINDOW":
@@ -51,6 +119,8 @@ function signalKey(signal: BooleanSignalKind): string {
       return `CANDLE_PATTERN:${signal.pattern}`;
     case "CHART_PATTERN":
       return `CHART_PATTERN:${signal.pattern}`;
+    case "VOLUME_PATTERN":
+      return `VOLUME_PATTERN:${signal.pattern}`;
   }
 }
 
@@ -62,6 +132,8 @@ function buildSignalSeries(candles: Candle[], signal: BooleanSignalKind): boolea
       return computeCandlePatternSeries(candles, signal.pattern);
     case "CHART_PATTERN":
       return computeChartPatternSeries(candles, signal.pattern);
+    case "VOLUME_PATTERN":
+      return computeVolumePatternSeries(candles, signal.pattern);
   }
 }
 
@@ -117,6 +189,7 @@ export function evaluateConditionsPerBar(
   candles: Candle[],
   entryCondition: ConditionNode,
   exitCondition: ConditionNode,
+  aux: AuxCandleMap = new Map(),
 ): { entry: boolean[]; exit: boolean[] } {
   const cache = new Map<string, Series>();
   const seriesCacheByOperand = new Map<Operand, Series>();
@@ -125,7 +198,7 @@ export function evaluateConditionsPerBar(
   function seriesOf(operand: Operand): Series {
     const existing = seriesCacheByOperand.get(operand);
     if (existing) return existing;
-    const series = buildSeries(candles, operand, cache);
+    const series = buildSeries(candles, operand, cache, aux);
     seriesCacheByOperand.set(operand, series);
     return series;
   }

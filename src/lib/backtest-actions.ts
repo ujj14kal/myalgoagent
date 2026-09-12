@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { marketDataProvider, type CandleRange } from "@/lib/market-data";
 import { runBacktest } from "@/lib/backtest/run";
+import { fetchAuxCandles } from "@/lib/strategy-aux-data";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { validatePositionSizing, type PositionSizingMode, type RiskLeg, type RiskUnit } from "@/lib/trading-engine/step";
 import type { ConditionNode } from "@/lib/strategy";
@@ -58,19 +59,27 @@ export async function runBacktestAction(input: RunBacktestInput) {
   const entryCondition = strategy.entryCondition as unknown as ConditionNode;
   const exitCondition = strategy.exitCondition as unknown as ConditionNode;
 
+  const aux = await fetchAuxCandles(entryCondition, exitCondition, strategy.instrument.symbol, input.range, "1d");
+
   const riskManagement = {
     stopLoss: toRiskLeg(input.stopLoss),
     target: toRiskLeg(input.target),
     trailingSl: toRiskLeg(input.trailingSl),
   };
 
-  const result = runBacktest(candles, entryCondition, exitCondition, {
-    startingCapital: input.startingCapital,
-    brokeragePercent: input.brokeragePercent,
-    slippagePercent: input.slippagePercent,
-    positionSizing,
-    riskManagement,
-  });
+  const result = runBacktest(
+    candles,
+    entryCondition,
+    exitCondition,
+    {
+      startingCapital: input.startingCapital,
+      brokeragePercent: input.brokeragePercent,
+      slippagePercent: input.slippagePercent,
+      positionSizing,
+      riskManagement,
+    },
+    aux,
+  );
 
   const run = await prisma.backtestRun.create({
     data: {

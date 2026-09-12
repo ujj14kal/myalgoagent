@@ -1,5 +1,7 @@
 import type { CandlePatternKind } from "@/lib/candle-patterns";
 import type { ChartPatternKind } from "@/lib/chart-patterns";
+import type { VolumePatternKind } from "@/lib/volume-patterns";
+import type { CandleInterval } from "@/lib/market-data";
 
 export type IndicatorKind =
   | "SMA"
@@ -50,19 +52,25 @@ export type IndicatorKind =
 export type PriceField = "OPEN" | "HIGH" | "LOW" | "CLOSE" | "VOLUME";
 export type ComparisonOperator = "GT" | "LT" | "GTE" | "LTE" | "EQ" | "CROSSES_ABOVE" | "CROSSES_BELOW";
 
+// `timeframe`/`instrumentSymbol` let an operand pull its series from a
+// different candle interval and/or a different instrument than the
+// strategy's own base chart — omitted means "use the base series," so every
+// existing saved strategy keeps working unchanged.
 export type Operand =
-  | { kind: "indicator"; type: IndicatorKind; params: number[] }
-  | { kind: "price"; field: PriceField }
+  | { kind: "indicator"; type: IndicatorKind; params: number[]; timeframe?: CandleInterval; instrumentSymbol?: string }
+  | { kind: "price"; field: PriceField; timeframe?: CandleInterval; instrumentSymbol?: string }
   | { kind: "constant"; value: number };
 
 // A "signal" is a boolean-native condition — true/false per bar — as opposed
 // to a comparison, which compares two numeric time series. Time windows and
-// pattern detectors (candlestick, chart) are all signals: they don't reduce
-// to "operand vs operand," they're computed directly as a boolean series.
+// pattern detectors (candlestick, chart, volume) are all signals: they don't
+// reduce to "operand vs operand," they're computed directly as a boolean
+// series.
 export type BooleanSignalKind =
   | { family: "TIME_WINDOW"; startMinute: number; endMinute: number }
   | { family: "CANDLE_PATTERN"; pattern: CandlePatternKind }
-  | { family: "CHART_PATTERN"; pattern: ChartPatternKind };
+  | { family: "CHART_PATTERN"; pattern: ChartPatternKind }
+  | { family: "VOLUME_PATTERN"; pattern: VolumePatternKind };
 
 export type ConditionNode =
   | { kind: "group"; op: "AND" | "OR"; children: ConditionNode[] }

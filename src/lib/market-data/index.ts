@@ -8,4 +8,12 @@ import type { MarketDataProvider } from "./types";
 export const marketDataProvider: MarketDataProvider = new YahooFinanceProvider();
 
 export type { Candle, CandleInterval, CandleRange, MarketDataProvider } from "./types";
-export { RANGES, INTERVALS, isValidCombo, defaultIntervalForRange, VALID_RANGES, VALID_INTERVALS } from "./timeframes";
+export {
+  RANGES,
+  INTERVALS,
+  isValidCombo,
+  defaultIntervalForRange,
+  VALID_RANGES,
+  VALID_INTERVALS,
+  intervalDurationSeconds,
+} from "./timeframes";

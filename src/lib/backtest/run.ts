@@ -1,7 +1,7 @@
 import type { Candle } from "@/lib/market-data";
 import { evaluateConditionsPerBar } from "@/lib/strategy";
 import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
-import type { ConditionNode } from "@/lib/strategy";
+import type { ConditionNode, AuxCandleMap } from "@/lib/strategy";
 import {
   stepBar,
   forceClose,
@@ -118,8 +118,9 @@ export function runBacktest(
   entryCondition: ConditionNode,
   exitCondition: ConditionNode,
   config: BacktestConfig,
+  aux?: AuxCandleMap,
 ): BacktestResult {
-  const { entry, exit } = evaluateConditionsPerBar(candles, entryCondition, exitCondition);
+  const { entry, exit } = evaluateConditionsPerBar(candles, entryCondition, exitCondition, aux);
 
   // ATR is only computed when a risk leg actually needs it — it's an
   // indicator series like any other, reused here rather than duplicating

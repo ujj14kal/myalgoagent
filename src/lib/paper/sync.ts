@@ -1,6 +1,7 @@
 import { marketDataProvider } from "@/lib/market-data";
 import { evaluateConditionsPerBar } from "@/lib/strategy";
 import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
+import { fetchAuxCandles } from "@/lib/strategy-aux-data";
 import type { ConditionNode } from "@/lib/strategy";
 import {
   stepBar,
@@ -73,8 +74,9 @@ export interface SyncResult {
  */
 export async function syncPaperSession(session: PaperSessionState, allowNewEntries: boolean): Promise<SyncResult> {
   const candles = await marketDataProvider.getHistoricalCandles(session.instrumentSymbol, "3mo", "1d");
+  const aux = await fetchAuxCandles(session.entryCondition, session.exitCondition, session.instrumentSymbol, "3mo", "1d");
 
-  const { entry, exit } = evaluateConditionsPerBar(candles, session.entryCondition, session.exitCondition);
+  const { entry, exit } = evaluateConditionsPerBar(candles, session.entryCondition, session.exitCondition, aux);
 
   let entryIdx: number | null = null;
   if (session.positionEntryTime !== null) {

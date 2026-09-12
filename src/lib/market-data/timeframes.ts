@@ -81,3 +81,31 @@ export function defaultIntervalForRange(range: CandleRange): CandleInterval {
 
 export const VALID_RANGES: CandleRange[] = RANGES.map((r) => r.value);
 export const VALID_INTERVALS: CandleInterval[] = INTERVALS.map((i) => i.value);
+
+/** How long one bar of this interval actually spans, in seconds — the basis
+ * for multi-timeframe alignment: a higher-timeframe bar is only "closed"
+ * (safe to reference from a lower-timeframe bar) once this much time has
+ * passed since it opened. `1mo` is a 30-day approximation, fine for
+ * alignment purposes since it only needs to be a safe lower bound. */
+export function intervalDurationSeconds(interval: CandleInterval): number {
+  switch (interval) {
+    case "1m":
+      return 60;
+    case "2m":
+      return 120;
+    case "5m":
+      return 300;
+    case "15m":
+      return 900;
+    case "30m":
+      return 1800;
+    case "60m":
+      return 3600;
+    case "1d":
+      return 86400;
+    case "1wk":
+      return 604800;
+    case "1mo":
+      return 30 * 86400;
+  }
+}

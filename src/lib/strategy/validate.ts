@@ -2,6 +2,8 @@ import type { BooleanSignalKind, ComparisonOperator, ConditionNode, Operand, Pri
 import { INDICATOR_BY_KIND } from "./indicator-catalog";
 import { CANDLE_PATTERN_BY_KIND } from "./candle-pattern-catalog";
 import { CHART_PATTERN_BY_KIND } from "./chart-pattern-catalog";
+import { VOLUME_PATTERN_BY_KIND } from "./volume-pattern-catalog";
+import { VALID_INTERVALS } from "@/lib/market-data";
 
 const PRICE_FIELDS: PriceField[] = ["OPEN", "HIGH", "LOW", "CLOSE", "VOLUME"];
 const OPERATORS: ComparisonOperator[] = ["GT", "LT", "GTE", "LTE", "EQ", "CROSSES_ABOVE", "CROSSES_BELOW"];
@@ -42,6 +44,13 @@ function validateSignal(v: unknown, path: string): asserts v is BooleanSignalKin
     return;
   }
 
+  if (v.family === "VOLUME_PATTERN") {
+    if (typeof v.pattern !== "string" || !VOLUME_PATTERN_BY_KIND.has(v.pattern as never)) {
+      throw new Error(`${path}.pattern: unrecognized volume pattern "${String(v.pattern)}"`);
+    }
+    return;
+  }
+
   throw new Error(`${path}.family: unrecognized signal family "${String((v as { family?: unknown }).family)}"`);
 }
 
@@ -63,6 +72,7 @@ function validateOperand(v: unknown, path: string): asserts v is Operand {
     if (typeof v.field !== "string" || !PRICE_FIELDS.includes(v.field as PriceField)) {
       throw new Error(`${path}.field: expected one of ${PRICE_FIELDS.join(", ")}`);
     }
+    validateOverride(v, path);
     return;
   }
 
@@ -79,10 +89,25 @@ function validateOperand(v: unknown, path: string): asserts v is Operand {
         throw new Error(`${path}.params: expected each value to be a finite number between 0 and 500`);
       }
     }
+    validateOverride(v, path);
     return;
   }
 
   throw new Error(`${path}.kind: expected "indicator", "price", or "constant"`);
+}
+
+/** Validates the optional cross-timeframe/cross-instrument override shared
+ * by the "indicator" and "price" operand kinds. Only the *shape* is
+ * checked here — whether `instrumentSymbol` actually names a real
+ * instrument needs a database round-trip, so that check lives in
+ * strategy-actions.ts's compile() instead. */
+function validateOverride(v: Record<string, unknown>, path: string): void {
+  if (v.timeframe !== undefined && (typeof v.timeframe !== "string" || !VALID_INTERVALS.includes(v.timeframe as never))) {
+    throw new Error(`${path}.timeframe: expected one of ${VALID_INTERVALS.join(", ")}`);
+  }
+  if (v.instrumentSymbol !== undefined && (typeof v.instrumentSymbol !== "string" || v.instrumentSymbol.trim() === "")) {
+    throw new Error(`${path}.instrumentSymbol: expected a non-empty string`);
+  }
 }
 
 export function validateConditionNode(v: unknown, path = "condition"): asserts v is ConditionNode {

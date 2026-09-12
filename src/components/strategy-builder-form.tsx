@@ -129,7 +129,7 @@ export default function StrategyBuilderForm({
         <div className="rounded-2xl border border-black/5 bg-white p-4">
           <p className="mb-2 text-sm font-semibold text-brand-navy">Entry condition</p>
           {mode === "NO_CODE" ? (
-            <ConditionGroupEditor node={entryCondition} onChange={setEntryCondition} />
+            <ConditionGroupEditor node={entryCondition} onChange={setEntryCondition} instruments={instruments} />
           ) : (
             <StrategyCodeEditor label="Entry" value={entrySource} onChange={setEntrySource} />
           )}
@@ -138,7 +138,7 @@ export default function StrategyBuilderForm({
         <div className="rounded-2xl border border-black/5 bg-white p-4">
           <p className="mb-2 text-sm font-semibold text-brand-navy">Exit condition</p>
           {mode === "NO_CODE" ? (
-            <ConditionGroupEditor node={exitCondition} onChange={setExitCondition} />
+            <ConditionGroupEditor node={exitCondition} onChange={setExitCondition} instruments={instruments} />
           ) : (
             <StrategyCodeEditor label="Exit" value={exitSource} onChange={setExitSource} />
           )}

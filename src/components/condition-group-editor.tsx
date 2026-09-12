@@ -4,6 +4,15 @@ import type { ComparisonOperator, ConditionNode, Operand, PriceField } from "@/l
 import { INDICATOR_CATALOG, INDICATOR_BY_KIND } from "@/lib/strategy/indicator-catalog";
 import { CANDLE_PATTERN_CATALOG } from "@/lib/strategy/candle-pattern-catalog";
 import { CHART_PATTERN_CATALOG } from "@/lib/strategy/chart-pattern-catalog";
+import { VOLUME_PATTERN_CATALOG } from "@/lib/strategy/volume-pattern-catalog";
+import { INTERVALS } from "@/lib/market-data";
+import type { CandleInterval } from "@/lib/market-data";
+
+export interface InstrumentOption {
+  id: string;
+  symbol: string;
+  name: string;
+}
 
 const PRICE_FIELDS: { value: PriceField; label: string }[] = [
   { value: "CLOSE", label: "Close price" },
@@ -51,6 +60,10 @@ function defaultCandlePattern(): ConditionNode {
 
 function defaultChartPattern(): ConditionNode {
   return { kind: "signal", signal: { family: "CHART_PATTERN", pattern: "DOUBLE_BOTTOM" } };
+}
+
+function defaultVolumePattern(): ConditionNode {
+  return { kind: "signal", signal: { family: "VOLUME_PATTERN", pattern: "VOLUME_SPIKE" } };
 }
 
 function minutesToTimeInput(minutes: number): string {
@@ -168,11 +181,45 @@ function SignalEditor({
     );
   }
 
+  if (signal.family === "VOLUME_PATTERN") {
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-lg bg-brand-bg p-2">
+        <span className="text-xs font-medium text-brand-navy/60">Volume pattern is</span>
+        <select
+          className={inputClass}
+          value={signal.pattern}
+          onChange={(e) =>
+            onChange({ kind: "signal", signal: { family: "VOLUME_PATTERN", pattern: e.target.value as never } })
+          }
+        >
+          {VOLUME_PATTERN_CATALOG.map((def) => (
+            <option key={def.kind} value={def.kind}>
+              {def.label}
+            </option>
+          ))}
+        </select>
+        <button type="button" onClick={onRemove} className="ml-auto text-xs text-brand-navy/40 hover:text-brand-sell">
+          Remove
+        </button>
+      </div>
+    );
+  }
+
   return null;
 }
 
-function OperandEditor({ value, onChange }: { value: Operand; onChange: (v: Operand) => void }) {
+function OperandEditor({
+  value,
+  onChange,
+  instruments,
+}: {
+  value: Operand;
+  onChange: (v: Operand) => void;
+  instruments: InstrumentOption[];
+}) {
   const indicatorDef = value.kind === "indicator" ? INDICATOR_BY_KIND.get(value.type) : undefined;
+  const hasOverrides = value.kind === "indicator" || value.kind === "price";
+  const overridable = hasOverrides ? (value as Extract<Operand, { kind: "indicator" } | { kind: "price" }>) : null;
 
   return (
     <div className="flex flex-wrap items-center gap-1">
@@ -235,6 +282,39 @@ function OperandEditor({ value, onChange }: { value: Operand; onChange: (v: Oper
           aria-label="Value"
         />
       )}
+
+      {overridable && (
+        <>
+          <select
+            className={`${inputClass} text-brand-navy/60`}
+            value={overridable.timeframe ?? ""}
+            title="Timeframe"
+            onChange={(e) =>
+              onChange({ ...overridable, timeframe: (e.target.value || undefined) as CandleInterval | undefined })
+            }
+          >
+            <option value="">Same as chart</option>
+            {INTERVALS.map((iv) => (
+              <option key={iv.value} value={iv.value}>
+                {iv.label} chart
+              </option>
+            ))}
+          </select>
+          <select
+            className={`${inputClass} text-brand-navy/60`}
+            value={overridable.instrumentSymbol ?? ""}
+            title="Instrument"
+            onChange={(e) => onChange({ ...overridable, instrumentSymbol: e.target.value || undefined })}
+          >
+            <option value="">Same instrument</option>
+            {instruments.map((inst) => (
+              <option key={inst.id} value={inst.symbol}>
+                {inst.symbol}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
     </div>
   );
 }
@@ -243,14 +323,16 @@ function ComparisonEditor({
   node,
   onChange,
   onRemove,
+  instruments,
 }: {
   node: Extract<ConditionNode, { kind: "comparison" }>;
   onChange: (n: ConditionNode) => void;
   onRemove: () => void;
+  instruments: InstrumentOption[];
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg bg-brand-bg p-2">
-      <OperandEditor value={node.left} onChange={(left) => onChange({ ...node, left })} />
+      <OperandEditor value={node.left} onChange={(left) => onChange({ ...node, left })} instruments={instruments} />
       <select
         className={inputClass}
         value={node.operator}
@@ -262,7 +344,7 @@ function ComparisonEditor({
           </option>
         ))}
       </select>
-      <OperandEditor value={node.right} onChange={(right) => onChange({ ...node, right })} />
+      <OperandEditor value={node.right} onChange={(right) => onChange({ ...node, right })} instruments={instruments} />
       <button type="button" onClick={onRemove} className="ml-auto text-xs text-brand-navy/40 hover:text-brand-sell">
         Remove
       </button>
@@ -274,13 +356,17 @@ export default function ConditionGroupEditor({
   node,
   onChange,
   depth = 0,
+  instruments = [],
 }: {
   node: ConditionNode;
   onChange: (n: ConditionNode) => void;
   depth?: number;
+  instruments?: InstrumentOption[];
 }) {
   if (node.kind === "comparison") {
-    return <ComparisonEditor node={node} onChange={onChange} onRemove={() => onChange(defaultComparison())} />;
+    return (
+      <ComparisonEditor node={node} onChange={onChange} onRemove={() => onChange(defaultComparison())} instruments={instruments} />
+    );
   }
 
   if (node.kind === "signal") {
@@ -325,6 +411,10 @@ export default function ConditionGroupEditor({
     onChange({ ...group, children: [...group.children, defaultChartPattern()] });
   }
 
+  function addVolumePattern() {
+    onChange({ ...group, children: [...group.children, defaultVolumePattern()] });
+  }
+
   function addGroup() {
     onChange({
       ...group,
@@ -358,7 +448,12 @@ export default function ConditionGroupEditor({
           <div key={idx} className="flex items-start gap-2">
             <div className="flex-1">
               {child.kind === "comparison" ? (
-                <ComparisonEditor node={child} onChange={(n) => updateChild(idx, n)} onRemove={() => removeChild(idx)} />
+                <ComparisonEditor
+                  node={child}
+                  onChange={(n) => updateChild(idx, n)}
+                  onRemove={() => removeChild(idx)}
+                  instruments={instruments}
+                />
               ) : child.kind === "signal" ? (
                 <SignalEditor node={child} onChange={(n) => updateChild(idx, n)} onRemove={() => removeChild(idx)} />
               ) : (
@@ -369,7 +464,7 @@ export default function ConditionGroupEditor({
                       Remove group
                     </button>
                   </div>
-                  <ConditionGroupEditor node={child} onChange={(n) => updateChild(idx, n)} depth={depth + 1} />
+                  <ConditionGroupEditor node={child} onChange={(n) => updateChild(idx, n)} depth={depth + 1} instruments={instruments} />
                 </div>
               )}
             </div>
@@ -390,6 +485,9 @@ export default function ConditionGroupEditor({
         <button type="button" onClick={addChartPattern} className={pillButtonClass}>
           + Chart pattern
         </button>
+        <button type="button" onClick={addVolumePattern} className={pillButtonClass}>
+          + Volume pattern
+        </button>
         {depth < 2 && (
           <button type="button" onClick={addGroup} className={pillButtonClass}>
             + Group
@@ -400,4 +498,4 @@ export default function ConditionGroupEditor({
   );
 }
 
-export { defaultComparison, defaultOperand, defaultTimeWindow, defaultCandlePattern, defaultChartPattern };
+export { defaultComparison, defaultOperand, defaultTimeWindow, defaultCandlePattern, defaultChartPattern, defaultVolumePattern };
