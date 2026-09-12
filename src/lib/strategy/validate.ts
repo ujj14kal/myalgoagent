@@ -1,6 +1,7 @@
 import type { BooleanSignalKind, ComparisonOperator, ConditionNode, Operand, PriceField } from "./types";
 import { INDICATOR_BY_KIND } from "./indicator-catalog";
 import { CANDLE_PATTERN_BY_KIND } from "./candle-pattern-catalog";
+import { CHART_PATTERN_BY_KIND } from "./chart-pattern-catalog";
 
 const PRICE_FIELDS: PriceField[] = ["OPEN", "HIGH", "LOW", "CLOSE", "VOLUME"];
 const OPERATORS: ComparisonOperator[] = ["GT", "LT", "GTE", "LTE", "EQ", "CROSSES_ABOVE", "CROSSES_BELOW"];
@@ -30,6 +31,13 @@ function validateSignal(v: unknown, path: string): asserts v is BooleanSignalKin
   if (v.family === "CANDLE_PATTERN") {
     if (typeof v.pattern !== "string" || !CANDLE_PATTERN_BY_KIND.has(v.pattern as never)) {
       throw new Error(`${path}.pattern: unrecognized candle pattern "${String(v.pattern)}"`);
+    }
+    return;
+  }
+
+  if (v.family === "CHART_PATTERN") {
+    if (typeof v.pattern !== "string" || !CHART_PATTERN_BY_KIND.has(v.pattern as never)) {
+      throw new Error(`${path}.pattern: unrecognized chart pattern "${String(v.pattern)}"`);
     }
     return;
   }

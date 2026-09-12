@@ -1,4 +1,5 @@
 import type { CandlePatternKind } from "@/lib/candle-patterns";
+import type { ChartPatternKind } from "@/lib/chart-patterns";
 
 export type IndicatorKind =
   | "SMA"
@@ -60,7 +61,8 @@ export type Operand =
 // to "operand vs operand," they're computed directly as a boolean series.
 export type BooleanSignalKind =
   | { family: "TIME_WINDOW"; startMinute: number; endMinute: number }
-  | { family: "CANDLE_PATTERN"; pattern: CandlePatternKind };
+  | { family: "CANDLE_PATTERN"; pattern: CandlePatternKind }
+  | { family: "CHART_PATTERN"; pattern: ChartPatternKind };
 
 export type ConditionNode =
   | { kind: "group"; op: "AND" | "OR"; children: ConditionNode[] }

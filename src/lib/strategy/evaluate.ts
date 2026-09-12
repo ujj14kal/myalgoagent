@@ -2,6 +2,7 @@ import type { Candle } from "@/lib/market-data";
 import { computeIndicatorSeries } from "./compute-series";
 import { computeTimeWindowSeries } from "./time-window";
 import { computeCandlePatternSeries } from "@/lib/candle-patterns";
+import { computeChartPatternSeries } from "@/lib/chart-patterns";
 import type { BooleanSignalKind, ComparisonOperator, ConditionNode, Operand } from "./types";
 import type { Signal } from "./types";
 
@@ -48,6 +49,8 @@ function signalKey(signal: BooleanSignalKind): string {
       return `TIME_WINDOW:${signal.startMinute}-${signal.endMinute}`;
     case "CANDLE_PATTERN":
       return `CANDLE_PATTERN:${signal.pattern}`;
+    case "CHART_PATTERN":
+      return `CHART_PATTERN:${signal.pattern}`;
   }
 }
 
@@ -57,6 +60,8 @@ function buildSignalSeries(candles: Candle[], signal: BooleanSignalKind): boolea
       return computeTimeWindowSeries(candles, signal.startMinute, signal.endMinute);
     case "CANDLE_PATTERN":
       return computeCandlePatternSeries(candles, signal.pattern);
+    case "CHART_PATTERN":
+      return computeChartPatternSeries(candles, signal.pattern);
   }
 }
 

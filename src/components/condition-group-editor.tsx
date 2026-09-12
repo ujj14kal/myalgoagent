@@ -3,6 +3,7 @@
 import type { ComparisonOperator, ConditionNode, Operand, PriceField } from "@/lib/strategy";
 import { INDICATOR_CATALOG, INDICATOR_BY_KIND } from "@/lib/strategy/indicator-catalog";
 import { CANDLE_PATTERN_CATALOG } from "@/lib/strategy/candle-pattern-catalog";
+import { CHART_PATTERN_CATALOG } from "@/lib/strategy/chart-pattern-catalog";
 
 const PRICE_FIELDS: { value: PriceField; label: string }[] = [
   { value: "CLOSE", label: "Close price" },
@@ -46,6 +47,10 @@ function defaultTimeWindow(): ConditionNode {
 
 function defaultCandlePattern(): ConditionNode {
   return { kind: "signal", signal: { family: "CANDLE_PATTERN", pattern: "BULLISH_ENGULFING" } };
+}
+
+function defaultChartPattern(): ConditionNode {
+  return { kind: "signal", signal: { family: "CHART_PATTERN", pattern: "DOUBLE_BOTTOM" } };
 }
 
 function minutesToTimeInput(minutes: number): string {
@@ -130,6 +135,30 @@ function SignalEditor({
                 </option>
               ))}
             </optgroup>
+          ))}
+        </select>
+        <button type="button" onClick={onRemove} className="ml-auto text-xs text-brand-navy/40 hover:text-brand-sell">
+          Remove
+        </button>
+      </div>
+    );
+  }
+
+  if (signal.family === "CHART_PATTERN") {
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-lg bg-brand-bg p-2">
+        <span className="text-xs font-medium text-brand-navy/60">Chart pattern is</span>
+        <select
+          className={inputClass}
+          value={signal.pattern}
+          onChange={(e) =>
+            onChange({ kind: "signal", signal: { family: "CHART_PATTERN", pattern: e.target.value as never } })
+          }
+        >
+          {CHART_PATTERN_CATALOG.map((def) => (
+            <option key={def.kind} value={def.kind}>
+              {def.label}
+            </option>
           ))}
         </select>
         <button type="button" onClick={onRemove} className="ml-auto text-xs text-brand-navy/40 hover:text-brand-sell">
@@ -292,6 +321,10 @@ export default function ConditionGroupEditor({
     onChange({ ...group, children: [...group.children, defaultCandlePattern()] });
   }
 
+  function addChartPattern() {
+    onChange({ ...group, children: [...group.children, defaultChartPattern()] });
+  }
+
   function addGroup() {
     onChange({
       ...group,
@@ -354,6 +387,9 @@ export default function ConditionGroupEditor({
         <button type="button" onClick={addCandlePattern} className={pillButtonClass}>
           + Candle pattern
         </button>
+        <button type="button" onClick={addChartPattern} className={pillButtonClass}>
+          + Chart pattern
+        </button>
         {depth < 2 && (
           <button type="button" onClick={addGroup} className={pillButtonClass}>
             + Group
@@ -364,4 +400,4 @@ export default function ConditionGroupEditor({
   );
 }
 
-export { defaultComparison, defaultOperand, defaultTimeWindow, defaultCandlePattern };
+export { defaultComparison, defaultOperand, defaultTimeWindow, defaultCandlePattern, defaultChartPattern };
