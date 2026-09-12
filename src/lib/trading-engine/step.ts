@@ -10,6 +10,10 @@ export interface EnginePosition {
   favorableExtreme: number;
   stopLossPrice: number | null;
   targetPrice: number | null;
+  // How many entries have stacked into this position so far (1 = a plain,
+  // non-pyramided position). Risk levels are always recomputed off the
+  // blended average entryPrice after each add, not tracked per-leg.
+  pyramidCount: number;
 }
 
 export interface EngineState {
@@ -48,6 +52,10 @@ export interface EngineConfig {
   // ATR value at the bar a position was entered on — required to resolve
   // an ATR_MULTIPLE leg. Only needed when a risk leg uses that unit.
   atrAtEntry?: (entryIdx: number) => number | undefined;
+  // 1 (default) = today's behavior, a second entry signal while a position
+  // is open is ignored. N > 1 allows up to N total entries to stack into
+  // one blended position (pyramiding).
+  maxPyramidEntries?: number;
 }
 
 /** Converts a risk leg into an absolute price distance from the entry price. */
@@ -60,6 +68,22 @@ function resolveRiskDistance(leg: RiskLeg, entryPrice: number, atrAtEntry: numbe
     case "ATR_MULTIPLE":
       return atrAtEntry !== undefined ? leg.value * atrAtEntry : null;
   }
+}
+
+/** Resolves stop-loss/target prices from an entry price — shared by a fresh
+ * entry and by a pyramid add, since a pyramid add recomputes both off the
+ * new blended entry price rather than tracking per-leg levels. */
+function resolveRiskLevels(
+  rm: RiskManagementConfig | undefined,
+  entryPrice: number,
+  atr: number | undefined,
+): { stopLossPrice: number | null; targetPrice: number | null } {
+  const stopLossDist = rm?.stopLoss?.enabled ? resolveRiskDistance(rm.stopLoss, entryPrice, atr) : null;
+  const targetDist = rm?.target?.enabled ? resolveRiskDistance(rm.target, entryPrice, atr) : null;
+  return {
+    stopLossPrice: stopLossDist !== null ? entryPrice - stopLossDist : null,
+    targetPrice: targetDist !== null ? entryPrice + targetDist : null,
+  };
 }
 
 /**
@@ -187,6 +211,32 @@ export function stepBar(
       return { state: { cash: state.cash + trade.netPnl, position: null }, trade };
     }
 
+    const maxPyramidEntries = config.maxPyramidEntries ?? 1;
+    if (entrySignal && nextBar && pos.pyramidCount < maxPyramidEntries) {
+      const fillPrice = nextBar.open * (1 + config.slippagePercent / 100);
+      const addQuantity = computeQuantity(state.cash, fillPrice, config.positionSizing);
+      if (addQuantity > 0) {
+        const totalQuantity = pos.quantity + addQuantity;
+        const blendedEntryPrice = (pos.entryPrice * pos.quantity + fillPrice * addQuantity) / totalQuantity;
+        const atr = config.atrAtEntry?.(i + 1);
+        const { stopLossPrice, targetPrice } = resolveRiskLevels(config.riskManagement, blendedEntryPrice, atr);
+        return {
+          state: {
+            ...state,
+            position: {
+              entryIdx: pos.entryIdx,
+              entryPrice: blendedEntryPrice,
+              quantity: totalQuantity,
+              favorableExtreme,
+              stopLossPrice,
+              targetPrice,
+              pyramidCount: pos.pyramidCount + 1,
+            },
+          },
+        };
+      }
+    }
+
     return { state: { ...state, position: { ...pos, favorableExtreme } } };
   }
 
@@ -194,10 +244,8 @@ export function stepBar(
     const fillPrice = nextBar.open * (1 + config.slippagePercent / 100);
     const quantity = computeQuantity(state.cash, fillPrice, config.positionSizing);
     if (quantity > 0) {
-      const rm = config.riskManagement;
       const atr = config.atrAtEntry?.(i + 1);
-      const stopLossDist = rm?.stopLoss?.enabled ? resolveRiskDistance(rm.stopLoss, fillPrice, atr) : null;
-      const targetDist = rm?.target?.enabled ? resolveRiskDistance(rm.target, fillPrice, atr) : null;
+      const { stopLossPrice, targetPrice } = resolveRiskLevels(config.riskManagement, fillPrice, atr);
       return {
         state: {
           ...state,
@@ -206,8 +254,9 @@ export function stepBar(
             entryPrice: fillPrice,
             quantity,
             favorableExtreme: fillPrice,
-            stopLossPrice: stopLossDist !== null ? fillPrice - stopLossDist : null,
-            targetPrice: targetDist !== null ? fillPrice + targetDist : null,
+            stopLossPrice,
+            targetPrice,
+            pyramidCount: 1,
           },
         },
       };

@@ -11,6 +11,8 @@ import {
   type RiskManagementConfig,
 } from "@/lib/trading-engine/step";
 
+const DEFAULT_MAX_PYRAMID_ENTRIES = 1;
+
 const DEFAULT_ATR_PERIOD = 14;
 
 export interface PaperSessionState {
@@ -21,6 +23,11 @@ export interface PaperSessionState {
   slippagePercent: number;
   positionSizing: PositionSizing;
   riskManagement?: RiskManagementConfig;
+  maxPyramidEntries?: number;
+  // When true, entry/exit signals are detected and reported but never
+  // acted on — no order is placed, cash/position never change. Lets a
+  // user watch a strategy's signals fire before trusting it with money.
+  alertOnly?: boolean;
   cash: number;
   positionEntryTime: number | null;
   positionEntryPrice: number | null;
@@ -29,6 +36,7 @@ export interface PaperSessionState {
   positionFavorableExtreme: number | null;
   positionStopLossPrice: number | null;
   positionTargetPrice: number | null;
+  positionPyramidCount: number | null;
   lastSyncedTime: number | null;
 }
 
@@ -46,8 +54,15 @@ export interface NewPaperOrder {
   netPnl: number | null;
 }
 
+export interface SignalAlert {
+  type: "entry" | "exit";
+  time: number;
+  price: number;
+}
+
 export interface SyncResult {
   newOrders: NewPaperOrder[];
+  signalAlerts: SignalAlert[];
   cash: number;
   position: {
     entryTime: number;
@@ -56,6 +71,7 @@ export interface SyncResult {
     favorableExtreme: number;
     stopLossPrice: number | null;
     targetPrice: number | null;
+    pyramidCount: number;
   } | null;
   lastSyncedTime: number | null;
   suppressedEntrySignal: boolean;
@@ -78,6 +94,27 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
 
   const { entry, exit } = evaluateConditionsPerBar(candles, session.entryCondition, session.exitCondition, aux);
 
+  if (session.alertOnly) {
+    const signalAlerts: SignalAlert[] = [];
+    let lastSyncedTime = session.lastSyncedTime;
+    for (let i = 0; i < candles.length; i++) {
+      if (session.lastSyncedTime !== null && candles[i].time <= session.lastSyncedTime) continue;
+      if (entry[i]) signalAlerts.push({ type: "entry", time: candles[i].time, price: candles[i].close });
+      if (exit[i]) signalAlerts.push({ type: "exit", time: candles[i].time, price: candles[i].close });
+      lastSyncedTime = candles[i].time;
+    }
+    return {
+      newOrders: [],
+      signalAlerts,
+      cash: session.cash,
+      position: null,
+      lastSyncedTime,
+      suppressedEntrySignal: false,
+      sizeTooSmall: false,
+      equity: session.cash,
+    };
+  }
+
   let entryIdx: number | null = null;
   if (session.positionEntryTime !== null) {
     entryIdx = candles.findIndex((c) => c.time === session.positionEntryTime);
@@ -99,6 +136,7 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
             favorableExtreme: session.positionFavorableExtreme ?? session.positionEntryPrice,
             stopLossPrice: session.positionStopLossPrice,
             targetPrice: session.positionTargetPrice,
+            pyramidCount: session.positionPyramidCount ?? 1,
           }
         : null,
   };
@@ -116,6 +154,7 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
     positionSizing: session.positionSizing,
     riskManagement: session.riskManagement,
     atrAtEntry: atrByTimeFinal ? (idx: number) => atrByTimeFinal.get(candles[idx]?.time) : undefined,
+    maxPyramidEntries: session.maxPyramidEntries ?? DEFAULT_MAX_PYRAMID_ENTRIES,
   };
   const newOrders: NewPaperOrder[] = [];
   let lastSyncedTime = session.lastSyncedTime;
@@ -130,6 +169,8 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
     }
 
     const wasFlat = !state.position;
+    const prevQuantity = state.position?.quantity ?? 0;
+    const prevEntryPrice = state.position?.entryPrice ?? 0;
     const stepped = stepBar(candles, i, allowNewEntries && entry[i], exit[i], state, engineConfig);
     state = stepped.state;
     if (stepped.sizeTooSmall) sizeTooSmall = true;
@@ -152,6 +193,20 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
         fees: 0,
         netPnl: null,
       });
+    } else if (!wasFlat && state.position && state.position.quantity > prevQuantity) {
+      // A pyramid add — reconstruct this leg's own fill price from the
+      // blend (blendedPrice*totalQty = prevPrice*prevQty + legPrice*legQty)
+      // since EnginePosition only tracks the blended average, not each leg.
+      const addedQuantity = state.position.quantity - prevQuantity;
+      const addedNotional = state.position.entryPrice * state.position.quantity - prevEntryPrice * prevQuantity;
+      newOrders.push({
+        side: "BUY",
+        time: candles[i + 1]?.time ?? candles[i].time,
+        price: addedNotional / addedQuantity,
+        quantity: addedQuantity,
+        fees: 0,
+        netPnl: null,
+      });
     }
 
     lastSyncedTime = candles[i].time;
@@ -159,6 +214,7 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
 
   return {
     newOrders,
+    signalAlerts: [],
     cash: state.cash,
     position: state.position
       ? {
@@ -168,6 +224,7 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
           favorableExtreme: state.position.favorableExtreme,
           stopLossPrice: state.position.stopLossPrice,
           targetPrice: state.position.targetPrice,
+          pyramidCount: state.position.pyramidCount,
         }
       : null,
     lastSyncedTime,

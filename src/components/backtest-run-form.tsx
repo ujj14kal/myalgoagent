@@ -32,6 +32,7 @@ export default function BacktestRunForm({ strategies }: { strategies: StrategyOp
   const [stopLoss, setStopLoss] = useState<RiskLegState>(defaultRiskLeg(2));
   const [target, setTarget] = useState<RiskLegState>(defaultRiskLeg(4));
   const [trailingSl, setTrailingSl] = useState<RiskLegState>(defaultRiskLeg(1.5));
+  const [maxPyramidEntries, setMaxPyramidEntries] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -50,6 +51,7 @@ export default function BacktestRunForm({ strategies }: { strategies: StrategyOp
           stopLoss,
           target,
           trailingSl,
+          maxPyramidEntries,
           range,
         });
       } catch (err) {
@@ -130,6 +132,19 @@ export default function BacktestRunForm({ strategies }: { strategies: StrategyOp
           onModeChange={setPositionSizingMode}
           onValueChange={setPositionSizingValue}
         />
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
+            Max entries per position
+          </label>
+          <input
+            type="number"
+            min={1}
+            step={1}
+            value={maxPyramidEntries}
+            onChange={(e) => setMaxPyramidEntries(Math.max(1, Number(e.target.value)))}
+            className="w-full rounded-lg border border-brand-navy/15 px-3 py-2 text-sm outline-none focus:border-brand-primary"
+          />
+        </div>
       </div>
 
       <div className="mt-4">

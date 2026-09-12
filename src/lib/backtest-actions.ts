@@ -28,6 +28,7 @@ export interface RunBacktestInput {
   stopLoss: RiskLegInput;
   target: RiskLegInput;
   trailingSl: RiskLegInput;
+  maxPyramidEntries: number;
   range: CandleRange;
 }
 
@@ -77,6 +78,7 @@ export async function runBacktestAction(input: RunBacktestInput) {
       slippagePercent: input.slippagePercent,
       positionSizing,
       riskManagement,
+      maxPyramidEntries: input.maxPyramidEntries,
     },
     aux,
   );
@@ -101,6 +103,7 @@ export async function runBacktestAction(input: RunBacktestInput) {
       trailingSlEnabled: input.trailingSl.enabled,
       trailingSlUnit: input.trailingSl.enabled ? input.trailingSl.unit : null,
       trailingSlValue: input.trailingSl.enabled ? input.trailingSl.value : null,
+      maxPyramidEntries: input.maxPyramidEntries,
       range: input.range,
       entryCondition: entryCondition as unknown as Prisma.InputJsonValue,
       exitCondition: exitCondition as unknown as Prisma.InputJsonValue,

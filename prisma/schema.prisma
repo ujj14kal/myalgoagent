@@ -222,6 +222,7 @@ model BacktestRun {
   trailingSlEnabled   Boolean            @default(false)
   trailingSlUnit      RiskUnit?
   trailingSlValue     Float?
+  maxPyramidEntries   Int                @default(1)
   range               String
   entryCondition      Json
   exitCondition       Json
@@ -291,6 +292,10 @@ model PaperSession {
   trailingSlEnabled        Boolean            @default(false)
   trailingSlUnit           RiskUnit?
   trailingSlValue          Float?
+  maxPyramidEntries        Int                @default(1)
+  // Alert-only sessions detect and notify on entry/exit signals without
+  // ever placing an order or touching cash/position state.
+  alertOnly                Boolean            @default(false)
   cash                     Float
   positionEntryTime        Int?
   positionEntryPrice       Float?
@@ -298,10 +303,13 @@ model PaperSession {
   // Persisted so a resumed session's trailing-stop/target math survives
   // across syncs instead of resetting each time (favorableExtreme in
   // particular must carry forward — resetting it to entryPrice every sync
-  // would silently defeat the trailing stop).
+  // would silently defeat the trailing stop). pyramidCount carries forward
+  // for the same reason — how many entries have already stacked into the
+  // current position.
   positionFavorableExtreme Float?
   positionStopLossPrice    Float?
   positionTargetPrice      Float?
+  positionPyramidCount     Int                @default(1)
   lastSyncedTime           Int?
   status                   PaperSessionStatus @default(ACTIVE)
   createdAt                DateTime           @default(now())
@@ -371,6 +379,7 @@ enum NotificationType {
   ORDER_FILLED
   RISK_EVENT
   SESSION_STOPPED
+  SIGNAL_ALERT
 }
 
 model Notification {

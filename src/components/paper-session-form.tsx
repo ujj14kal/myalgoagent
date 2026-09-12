@@ -23,6 +23,8 @@ export default function PaperSessionForm({ strategies }: { strategies: StrategyO
   const [stopLoss, setStopLoss] = useState<RiskLegState>(defaultRiskLeg(2));
   const [target, setTarget] = useState<RiskLegState>(defaultRiskLeg(4));
   const [trailingSl, setTrailingSl] = useState<RiskLegState>(defaultRiskLeg(1.5));
+  const [maxPyramidEntries, setMaxPyramidEntries] = useState(1);
+  const [alertOnly, setAlertOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -41,6 +43,8 @@ export default function PaperSessionForm({ strategies }: { strategies: StrategyO
           stopLoss,
           target,
           trailingSl,
+          maxPyramidEntries,
+          alertOnly,
         });
       } catch (err) {
         if (err && typeof err === "object" && "digest" in err && String(err.digest).startsWith("NEXT_REDIRECT")) {
@@ -113,16 +117,45 @@ export default function PaperSessionForm({ strategies }: { strategies: StrategyO
         </div>
       </div>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-4 rounded-lg border border-brand-navy/15 bg-brand-bg p-3">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={alertOnly}
+            onChange={(e) => setAlertOnly(e.target.checked)}
+            className="h-4 w-4 rounded border-brand-navy/30"
+          />
+          <span className="text-sm font-medium text-brand-navy">Alert only (no auto-trading)</span>
+        </label>
+        <p className="mt-0.5 pl-6 text-xs text-brand-navy/50">
+          Get notified whenever the strategy&rsquo;s entry/exit condition fires — no orders are ever placed, cash
+          and positions never change.
+        </p>
+      </div>
+
+      <div className={`mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 ${alertOnly ? "pointer-events-none opacity-40" : ""}`}>
         <PositionSizingFields
           mode={positionSizingMode}
           value={positionSizingValue}
           onModeChange={setPositionSizingMode}
           onValueChange={setPositionSizingValue}
         />
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
+            Max entries per position
+          </label>
+          <input
+            type="number"
+            min={1}
+            step={1}
+            value={maxPyramidEntries}
+            onChange={(e) => setMaxPyramidEntries(Math.max(1, Number(e.target.value)))}
+            className="w-full rounded-lg border border-brand-navy/15 px-3 py-2 text-sm outline-none focus:border-brand-primary"
+          />
+        </div>
       </div>
 
-      <div className="mt-4">
+      <div className={`mt-4 ${alertOnly ? "pointer-events-none opacity-40" : ""}`}>
         <RiskManagementFields
           stopLoss={stopLoss}
           target={target}

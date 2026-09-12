@@ -20,6 +20,7 @@ export interface BacktestConfig {
   slippagePercent: number;
   positionSizing: PositionSizing;
   riskManagement?: RiskManagementConfig;
+  maxPyramidEntries?: number;
 }
 
 function usesAtr(rm: RiskManagementConfig | undefined): boolean {
@@ -138,6 +139,7 @@ export function runBacktest(
     positionSizing: config.positionSizing,
     riskManagement: config.riskManagement,
     atrAtEntry: atrByTimeFinal ? (entryIdx: number) => atrByTimeFinal.get(candles[entryIdx]?.time) : undefined,
+    maxPyramidEntries: config.maxPyramidEntries,
   };
 
   const trades: BacktestTradeResult[] = [];

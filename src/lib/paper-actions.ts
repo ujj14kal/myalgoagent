@@ -28,6 +28,8 @@ export interface StartPaperSessionInput {
   stopLoss: RiskLegInput;
   target: RiskLegInput;
   trailingSl: RiskLegInput;
+  maxPyramidEntries: number;
+  alertOnly: boolean;
 }
 
 function revalidatePaperPaths(id?: string) {
@@ -83,6 +85,8 @@ export async function startPaperSession(input: StartPaperSessionInput) {
       trailingSlEnabled: input.trailingSl.enabled,
       trailingSlUnit: input.trailingSl.enabled ? input.trailingSl.unit : null,
       trailingSlValue: input.trailingSl.enabled ? input.trailingSl.value : null,
+      maxPyramidEntries: input.maxPyramidEntries,
+      alertOnly: input.alertOnly,
       cash: input.startingCapital,
       lastSyncedTime: latestTime,
     },
@@ -145,6 +149,8 @@ export async function syncPaperSessionAction(id: string) {
           ? { enabled: true, unit: paperSession.trailingSlUnit!, value: paperSession.trailingSlValue! }
           : null,
       },
+      maxPyramidEntries: paperSession.maxPyramidEntries,
+      alertOnly: paperSession.alertOnly,
       cash: paperSession.cash,
       positionEntryTime: paperSession.positionEntryTime,
       positionEntryPrice: paperSession.positionEntryPrice,
@@ -152,6 +158,7 @@ export async function syncPaperSessionAction(id: string) {
       positionFavorableExtreme: paperSession.positionFavorableExtreme,
       positionStopLossPrice: paperSession.positionStopLossPrice,
       positionTargetPrice: paperSession.positionTargetPrice,
+      positionPyramidCount: paperSession.positionPyramidCount,
       lastSyncedTime: paperSession.lastSyncedTime,
     },
     preCheck.allowNewEntries,
@@ -180,6 +187,7 @@ export async function syncPaperSessionAction(id: string) {
         positionFavorableExtreme: result.position ? result.position.favorableExtreme : null,
         positionStopLossPrice: result.position ? result.position.stopLossPrice : null,
         positionTargetPrice: result.position ? result.position.targetPrice : null,
+        positionPyramidCount: result.position ? result.position.pyramidCount : 1,
         lastSyncedTime: result.lastSyncedTime,
         status: postCheck.breach ? "STOPPED" : undefined,
       },
@@ -204,6 +212,16 @@ export async function syncPaperSessionAction(id: string) {
           paperSessionId: id,
           type: "ORDER_FILLED",
           message: `${o.side === "BUY" ? "Bought" : "Sold"} ${o.quantity} ${paperSession.instrumentSymbol} at ₹${o.price.toFixed(2)} (${paperSession.strategyName})`,
+        },
+      }),
+    ),
+    ...result.signalAlerts.map((a) =>
+      prisma.notification.create({
+        data: {
+          userId,
+          paperSessionId: id,
+          type: "SIGNAL_ALERT",
+          message: `${paperSession.strategyName} (${paperSession.instrumentSymbol}): ${a.type} signal fired at ₹${a.price.toFixed(2)} — alert-only, no order placed.`,
         },
       }),
     ),
