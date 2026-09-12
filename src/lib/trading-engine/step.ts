@@ -4,6 +4,12 @@ export interface EnginePosition {
   entryIdx: number;
   entryPrice: number;
   quantity: number;
+  // Running highest high (long) / lowest low (short) since entry — the
+  // basis for a trailing stop, which can only be computed bar-by-bar and
+  // never precomputed like an entry/exit condition series.
+  favorableExtreme: number;
+  stopLossPrice: number | null;
+  targetPrice: number | null;
 }
 
 export interface EngineState {
@@ -18,10 +24,42 @@ export interface PositionSizing {
   value: number | null;
 }
 
+export type RiskUnit = "PERCENT" | "POINTS" | "ATR_MULTIPLE";
+
+export interface RiskLeg {
+  enabled: boolean;
+  unit: RiskUnit;
+  value: number;
+}
+
+export interface RiskManagementConfig {
+  stopLoss: RiskLeg | null;
+  target: RiskLeg | null;
+  trailingSl: RiskLeg | null;
+}
+
 export interface EngineConfig {
   brokeragePercent: number;
   slippagePercent: number;
   positionSizing: PositionSizing;
+  // Omitted or all-null legs = no risk management, exits are driven purely
+  // by the strategy's own exit condition (pre-existing behavior).
+  riskManagement?: RiskManagementConfig;
+  // ATR value at the bar a position was entered on — required to resolve
+  // an ATR_MULTIPLE leg. Only needed when a risk leg uses that unit.
+  atrAtEntry?: (entryIdx: number) => number | undefined;
+}
+
+/** Converts a risk leg into an absolute price distance from the entry price. */
+function resolveRiskDistance(leg: RiskLeg, entryPrice: number, atrAtEntry: number | undefined): number | null {
+  switch (leg.unit) {
+    case "PERCENT":
+      return entryPrice * (leg.value / 100);
+    case "POINTS":
+      return leg.value;
+    case "ATR_MULTIPLE":
+      return atrAtEntry !== undefined ? leg.value * atrAtEntry : null;
+  }
 }
 
 /**
@@ -91,6 +129,20 @@ function closeTrade(
  * `i + 1`'s open. This is the single source of truth for how a simulated
  * fill happens — both backtesting and paper trading call this so the two
  * can never silently disagree on execution rules.
+ *
+ * Stop-loss/target/trailing-stop are the one deliberate exception: they
+ * model a resting order sitting at a known price, so they can fill
+ * intrabar — on bar `i` itself, using that bar's own (already-closed) high
+ * and low — rather than waiting for bar `i + 1`'s open like a
+ * condition-driven exit. This is still no-look-ahead: it only ever uses
+ * data from a bar that has already completed. When both a stop and a
+ * target could plausibly have been hit within the same bar (a gap-through),
+ * the trailing stop is checked first, then the fixed stop-loss, then the
+ * target — a conservative, deterministic tie-break. Within one bar, the
+ * running favorable extreme is updated from that bar's high *before* the
+ * stop check, i.e. it assumes the favorable move happened before any
+ * reversal — a standard OHLC-only backtesting convention, since the true
+ * intrabar order of price movement isn't knowable from candle data.
  */
 export function stepBar(
   candles: Candle[],
@@ -102,17 +154,65 @@ export function stepBar(
 ): { state: EngineState; trade?: EngineTrade; sizeTooSmall?: boolean } {
   const nextBar = candles[i + 1];
 
-  if (!state.position && entrySignal && nextBar) {
+  if (state.position) {
+    const bar = candles[i];
+    const pos = state.position;
+    const rm = config.riskManagement;
+    const favorableExtreme = Math.max(pos.favorableExtreme, bar.high);
+
+    let trailingStopPrice: number | null = null;
+    if (rm?.trailingSl?.enabled) {
+      const atr = config.atrAtEntry?.(pos.entryIdx);
+      const dist = resolveRiskDistance(rm.trailingSl, pos.entryPrice, atr);
+      if (dist !== null) trailingStopPrice = favorableExtreme - dist;
+    }
+
+    let exitPrice: number | null = null;
+    if (trailingStopPrice !== null && bar.low <= trailingStopPrice) {
+      exitPrice = trailingStopPrice;
+    } else if (pos.stopLossPrice !== null && bar.low <= pos.stopLossPrice) {
+      exitPrice = pos.stopLossPrice;
+    } else if (pos.targetPrice !== null && bar.high >= pos.targetPrice) {
+      exitPrice = pos.targetPrice;
+    }
+
+    if (exitPrice !== null) {
+      const trade = closeTrade(candles, pos, i, exitPrice, config.brokeragePercent);
+      return { state: { cash: state.cash + trade.netPnl, position: null }, trade };
+    }
+
+    if (exitSignal && nextBar) {
+      const fillPrice = nextBar.open * (1 - config.slippagePercent / 100);
+      const trade = closeTrade(candles, pos, i + 1, fillPrice, config.brokeragePercent);
+      return { state: { cash: state.cash + trade.netPnl, position: null }, trade };
+    }
+
+    return { state: { ...state, position: { ...pos, favorableExtreme } } };
+  }
+
+  if (entrySignal && nextBar) {
     const fillPrice = nextBar.open * (1 + config.slippagePercent / 100);
     const quantity = computeQuantity(state.cash, fillPrice, config.positionSizing);
     if (quantity > 0) {
-      return { state: { ...state, position: { entryIdx: i + 1, entryPrice: fillPrice, quantity } } };
+      const rm = config.riskManagement;
+      const atr = config.atrAtEntry?.(i + 1);
+      const stopLossDist = rm?.stopLoss?.enabled ? resolveRiskDistance(rm.stopLoss, fillPrice, atr) : null;
+      const targetDist = rm?.target?.enabled ? resolveRiskDistance(rm.target, fillPrice, atr) : null;
+      return {
+        state: {
+          ...state,
+          position: {
+            entryIdx: i + 1,
+            entryPrice: fillPrice,
+            quantity,
+            favorableExtreme: fillPrice,
+            stopLossPrice: stopLossDist !== null ? fillPrice - stopLossDist : null,
+            targetPrice: targetDist !== null ? fillPrice + targetDist : null,
+          },
+        },
+      };
     }
     return { state, sizeTooSmall: true };
-  } else if (state.position && exitSignal && nextBar) {
-    const fillPrice = nextBar.open * (1 - config.slippagePercent / 100);
-    const trade = closeTrade(candles, state.position, i + 1, fillPrice, config.brokeragePercent);
-    return { state: { cash: state.cash + trade.netPnl, position: null }, trade };
   }
 
   return { state };

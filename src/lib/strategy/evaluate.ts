@@ -1,6 +1,7 @@
 import type { Candle } from "@/lib/market-data";
 import { computeIndicatorSeries } from "./compute-series";
-import type { ComparisonOperator, ConditionNode, Operand } from "./types";
+import { computeTimeWindowSeries } from "./time-window";
+import type { BooleanSignalKind, ComparisonOperator, ConditionNode, Operand } from "./types";
 import type { Signal } from "./types";
 
 type Series = (number | undefined)[];
@@ -35,8 +36,22 @@ function collectOperands(node: ConditionNode, out: Operand[]) {
     for (const child of node.children) collectOperands(child, out);
   } else if (node.kind === "not") {
     collectOperands(node.child, out);
-  } else {
+  } else if (node.kind === "comparison") {
     out.push(node.left, node.right);
+  }
+}
+
+function signalKey(signal: BooleanSignalKind): string {
+  switch (signal.family) {
+    case "TIME_WINDOW":
+      return `TIME_WINDOW:${signal.startMinute}-${signal.endMinute}`;
+  }
+}
+
+function buildSignalSeries(candles: Candle[], signal: BooleanSignalKind): boolean[] {
+  switch (signal.family) {
+    case "TIME_WINDOW":
+      return computeTimeWindowSeries(candles, signal.startMinute, signal.endMinute);
   }
 }
 
@@ -63,16 +78,21 @@ function evaluateNode(
   node: ConditionNode,
   i: number,
   seriesOf: (operand: Operand) => Series,
+  signalSeriesOf: (signal: BooleanSignalKind) => boolean[],
 ): boolean | undefined {
   if (node.kind === "group") {
-    const results = node.children.map((c) => evaluateNode(c, i, seriesOf));
+    const results = node.children.map((c) => evaluateNode(c, i, seriesOf, signalSeriesOf));
     if (results.some((r) => r === undefined)) return undefined;
     return node.op === "AND" ? results.every(Boolean) : results.some(Boolean);
   }
 
   if (node.kind === "not") {
-    const inner = evaluateNode(node.child, i, seriesOf);
+    const inner = evaluateNode(node.child, i, seriesOf, signalSeriesOf);
     return inner === undefined ? undefined : !inner;
+  }
+
+  if (node.kind === "signal") {
+    return signalSeriesOf(node.signal)[i];
   }
 
   const left = seriesOf(node.left);
@@ -90,6 +110,7 @@ export function evaluateConditionsPerBar(
 ): { entry: boolean[]; exit: boolean[] } {
   const cache = new Map<string, Series>();
   const seriesCacheByOperand = new Map<Operand, Series>();
+  const signalCache = new Map<string, boolean[]>();
 
   function seriesOf(operand: Operand): Series {
     const existing = seriesCacheByOperand.get(operand);
@@ -99,14 +120,23 @@ export function evaluateConditionsPerBar(
     return series;
   }
 
+  function signalSeriesOf(signal: BooleanSignalKind): boolean[] {
+    const key = signalKey(signal);
+    const existing = signalCache.get(key);
+    if (existing) return existing;
+    const series = buildSignalSeries(candles, signal);
+    signalCache.set(key, series);
+    return series;
+  }
+
   const entry: boolean[] = [];
   const exit: boolean[] = [];
   let prevEntry = false;
   let prevExit = false;
 
   for (let i = 0; i < candles.length; i++) {
-    const entryNow = evaluateNode(entryCondition, i, seriesOf) ?? false;
-    const exitNow = evaluateNode(exitCondition, i, seriesOf) ?? false;
+    const entryNow = evaluateNode(entryCondition, i, seriesOf, signalSeriesOf) ?? false;
+    const exitNow = evaluateNode(exitCondition, i, seriesOf, signalSeriesOf) ?? false;
 
     entry.push(entryNow && !prevEntry);
     exit.push(exitNow && !prevExit);

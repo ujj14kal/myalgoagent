@@ -8,9 +8,15 @@ import { marketDataProvider } from "@/lib/market-data";
 import { syncPaperSession } from "@/lib/paper/sync";
 import { evaluateRisk } from "@/lib/risk/evaluate";
 import { enforceRateLimit } from "@/lib/rate-limit";
-import { validatePositionSizing, type PositionSizingMode } from "@/lib/trading-engine/step";
+import { validatePositionSizing, type PositionSizingMode, type RiskUnit } from "@/lib/trading-engine/step";
 import type { ConditionNode } from "@/lib/strategy";
 import type { Prisma } from "@prisma/client";
+
+export interface RiskLegInput {
+  enabled: boolean;
+  unit: RiskUnit;
+  value: number;
+}
 
 export interface StartPaperSessionInput {
   strategyId: string;
@@ -19,6 +25,9 @@ export interface StartPaperSessionInput {
   slippagePercent: number;
   positionSizingMode: PositionSizingMode;
   positionSizingValue: number | null;
+  stopLoss: RiskLegInput;
+  target: RiskLegInput;
+  trailingSl: RiskLegInput;
 }
 
 function revalidatePaperPaths(id?: string) {
@@ -65,6 +74,15 @@ export async function startPaperSession(input: StartPaperSessionInput) {
       slippagePercent: input.slippagePercent,
       positionSizingMode: input.positionSizingMode,
       positionSizingValue: input.positionSizingValue,
+      stopLossEnabled: input.stopLoss.enabled,
+      stopLossUnit: input.stopLoss.enabled ? input.stopLoss.unit : null,
+      stopLossValue: input.stopLoss.enabled ? input.stopLoss.value : null,
+      targetEnabled: input.target.enabled,
+      targetUnit: input.target.enabled ? input.target.unit : null,
+      targetValue: input.target.enabled ? input.target.value : null,
+      trailingSlEnabled: input.trailingSl.enabled,
+      trailingSlUnit: input.trailingSl.enabled ? input.trailingSl.unit : null,
+      trailingSlValue: input.trailingSl.enabled ? input.trailingSl.value : null,
       cash: input.startingCapital,
       lastSyncedTime: latestTime,
     },
@@ -116,10 +134,24 @@ export async function syncPaperSessionAction(id: string) {
       brokeragePercent: paperSession.brokeragePercent,
       slippagePercent: paperSession.slippagePercent,
       positionSizing: { mode: paperSession.positionSizingMode, value: paperSession.positionSizingValue },
+      riskManagement: {
+        stopLoss: paperSession.stopLossEnabled
+          ? { enabled: true, unit: paperSession.stopLossUnit!, value: paperSession.stopLossValue! }
+          : null,
+        target: paperSession.targetEnabled
+          ? { enabled: true, unit: paperSession.targetUnit!, value: paperSession.targetValue! }
+          : null,
+        trailingSl: paperSession.trailingSlEnabled
+          ? { enabled: true, unit: paperSession.trailingSlUnit!, value: paperSession.trailingSlValue! }
+          : null,
+      },
       cash: paperSession.cash,
       positionEntryTime: paperSession.positionEntryTime,
       positionEntryPrice: paperSession.positionEntryPrice,
       positionQuantity: paperSession.positionQuantity,
+      positionFavorableExtreme: paperSession.positionFavorableExtreme,
+      positionStopLossPrice: paperSession.positionStopLossPrice,
+      positionTargetPrice: paperSession.positionTargetPrice,
       lastSyncedTime: paperSession.lastSyncedTime,
     },
     preCheck.allowNewEntries,
@@ -145,6 +177,9 @@ export async function syncPaperSessionAction(id: string) {
         positionEntryTime: result.position ? result.position.entryTime : null,
         positionEntryPrice: result.position ? result.position.entryPrice : null,
         positionQuantity: result.position ? result.position.quantity : null,
+        positionFavorableExtreme: result.position ? result.position.favorableExtreme : null,
+        positionStopLossPrice: result.position ? result.position.stopLossPrice : null,
+        positionTargetPrice: result.position ? result.position.targetPrice : null,
         lastSyncedTime: result.lastSyncedTime,
         status: postCheck.breach ? "STOPPED" : undefined,
       },

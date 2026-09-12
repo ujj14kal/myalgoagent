@@ -7,9 +7,15 @@ import { prisma } from "@/lib/prisma";
 import { marketDataProvider, type CandleRange } from "@/lib/market-data";
 import { runBacktest } from "@/lib/backtest/run";
 import { enforceRateLimit } from "@/lib/rate-limit";
-import { validatePositionSizing, type PositionSizingMode } from "@/lib/trading-engine/step";
+import { validatePositionSizing, type PositionSizingMode, type RiskLeg, type RiskUnit } from "@/lib/trading-engine/step";
 import type { ConditionNode } from "@/lib/strategy";
 import type { Prisma } from "@prisma/client";
+
+export interface RiskLegInput {
+  enabled: boolean;
+  unit: RiskUnit;
+  value: number;
+}
 
 export interface RunBacktestInput {
   strategyId: string;
@@ -18,7 +24,14 @@ export interface RunBacktestInput {
   slippagePercent: number;
   positionSizingMode: PositionSizingMode;
   positionSizingValue: number | null;
+  stopLoss: RiskLegInput;
+  target: RiskLegInput;
+  trailingSl: RiskLegInput;
   range: CandleRange;
+}
+
+function toRiskLeg(leg: RiskLegInput): RiskLeg {
+  return { enabled: leg.enabled, unit: leg.unit, value: leg.value };
 }
 
 export async function runBacktestAction(input: RunBacktestInput) {
@@ -45,11 +58,18 @@ export async function runBacktestAction(input: RunBacktestInput) {
   const entryCondition = strategy.entryCondition as unknown as ConditionNode;
   const exitCondition = strategy.exitCondition as unknown as ConditionNode;
 
+  const riskManagement = {
+    stopLoss: toRiskLeg(input.stopLoss),
+    target: toRiskLeg(input.target),
+    trailingSl: toRiskLeg(input.trailingSl),
+  };
+
   const result = runBacktest(candles, entryCondition, exitCondition, {
     startingCapital: input.startingCapital,
     brokeragePercent: input.brokeragePercent,
     slippagePercent: input.slippagePercent,
     positionSizing,
+    riskManagement,
   });
 
   const run = await prisma.backtestRun.create({
@@ -63,6 +83,15 @@ export async function runBacktestAction(input: RunBacktestInput) {
       slippagePercent: input.slippagePercent,
       positionSizingMode: input.positionSizingMode,
       positionSizingValue: input.positionSizingValue,
+      stopLossEnabled: input.stopLoss.enabled,
+      stopLossUnit: input.stopLoss.enabled ? input.stopLoss.unit : null,
+      stopLossValue: input.stopLoss.enabled ? input.stopLoss.value : null,
+      targetEnabled: input.target.enabled,
+      targetUnit: input.target.enabled ? input.target.unit : null,
+      targetValue: input.target.enabled ? input.target.value : null,
+      trailingSlEnabled: input.trailingSl.enabled,
+      trailingSlUnit: input.trailingSl.enabled ? input.trailingSl.unit : null,
+      trailingSlValue: input.trailingSl.enabled ? input.trailingSl.value : null,
       range: input.range,
       entryCondition: entryCondition as unknown as Prisma.InputJsonValue,
       exitCondition: exitCondition as unknown as Prisma.InputJsonValue,

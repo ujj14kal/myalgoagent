@@ -1,7 +1,16 @@
 import { marketDataProvider } from "@/lib/market-data";
 import { evaluateConditionsPerBar } from "@/lib/strategy";
+import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
 import type { ConditionNode } from "@/lib/strategy";
-import { stepBar, markToMarket, type EngineState, type PositionSizing } from "@/lib/trading-engine/step";
+import {
+  stepBar,
+  markToMarket,
+  type EngineState,
+  type PositionSizing,
+  type RiskManagementConfig,
+} from "@/lib/trading-engine/step";
+
+const DEFAULT_ATR_PERIOD = 14;
 
 export interface PaperSessionState {
   instrumentSymbol: string;
@@ -10,11 +19,21 @@ export interface PaperSessionState {
   brokeragePercent: number;
   slippagePercent: number;
   positionSizing: PositionSizing;
+  riskManagement?: RiskManagementConfig;
   cash: number;
   positionEntryTime: number | null;
   positionEntryPrice: number | null;
   positionQuantity: number | null;
+  // Carried forward across syncs so the trailing-stop math doesn't reset.
+  positionFavorableExtreme: number | null;
+  positionStopLossPrice: number | null;
+  positionTargetPrice: number | null;
   lastSyncedTime: number | null;
+}
+
+function usesAtr(rm: RiskManagementConfig | undefined): boolean {
+  if (!rm) return false;
+  return [rm.stopLoss, rm.target, rm.trailingSl].some((leg) => leg?.enabled && leg.unit === "ATR_MULTIPLE");
 }
 
 export interface NewPaperOrder {
@@ -29,7 +48,14 @@ export interface NewPaperOrder {
 export interface SyncResult {
   newOrders: NewPaperOrder[];
   cash: number;
-  position: { entryTime: number; entryPrice: number; quantity: number } | null;
+  position: {
+    entryTime: number;
+    entryPrice: number;
+    quantity: number;
+    favorableExtreme: number;
+    stopLossPrice: number | null;
+    targetPrice: number | null;
+  } | null;
   lastSyncedTime: number | null;
   suppressedEntrySignal: boolean;
   sizeTooSmall: boolean;
@@ -64,14 +90,30 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
     cash: session.cash,
     position:
       entryIdx !== null && session.positionEntryPrice !== null && session.positionQuantity !== null
-        ? { entryIdx, entryPrice: session.positionEntryPrice, quantity: session.positionQuantity }
+        ? {
+            entryIdx,
+            entryPrice: session.positionEntryPrice,
+            quantity: session.positionQuantity,
+            favorableExtreme: session.positionFavorableExtreme ?? session.positionEntryPrice,
+            stopLossPrice: session.positionStopLossPrice,
+            targetPrice: session.positionTargetPrice,
+          }
         : null,
   };
+
+  let atrByTime: Map<number, number> | null = null;
+  if (usesAtr(session.riskManagement)) {
+    const atrPoints = computeIndicatorSeries(candles, "ATR", [DEFAULT_ATR_PERIOD]);
+    atrByTime = new Map(atrPoints.map((p) => [p.time, p.value]));
+  }
+  const atrByTimeFinal = atrByTime;
 
   const engineConfig = {
     brokeragePercent: session.brokeragePercent,
     slippagePercent: session.slippagePercent,
     positionSizing: session.positionSizing,
+    riskManagement: session.riskManagement,
+    atrAtEntry: atrByTimeFinal ? (idx: number) => atrByTimeFinal.get(candles[idx]?.time) : undefined,
   };
   const newOrders: NewPaperOrder[] = [];
   let lastSyncedTime = session.lastSyncedTime;
@@ -121,6 +163,9 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
           entryTime: candles[state.position.entryIdx].time,
           entryPrice: state.position.entryPrice,
           quantity: state.position.quantity,
+          favorableExtreme: state.position.favorableExtreme,
+          stopLossPrice: state.position.stopLossPrice,
+          targetPrice: state.position.targetPrice,
         }
       : null,
     lastSyncedTime,

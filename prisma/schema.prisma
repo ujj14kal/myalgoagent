@@ -25,26 +25,26 @@ model User {
   passwordHash String?
   status       UserStatus @default(ACTIVE)
 
-  deletionRequestedAt DateTime?
+  deletionRequestedAt  DateTime?
   deletionScheduledFor DateTime?
 
   agentName           String?
   tutorialCompletedAt DateTime?
 
-  accounts       Account[]
-  sessions       Session[]
-  watchlistItems WatchlistItem[]
-  strategies     Strategy[]
-  backtestRuns   BacktestRun[]
-  paperSessions  PaperSession[]
-  riskSettings   RiskSettings?
-  riskEvents     RiskEvent[]
-  chartLayouts   ChartLayout[]
-  notifications  Notification[]
-  otpCodes       OtpCode[]
+  accounts            Account[]
+  sessions            Session[]
+  watchlistItems      WatchlistItem[]
+  strategies          Strategy[]
+  backtestRuns        BacktestRun[]
+  paperSessions       PaperSession[]
+  riskSettings        RiskSettings?
+  riskEvents          RiskEvent[]
+  chartLayouts        ChartLayout[]
+  notifications       Notification[]
+  otpCodes            OtpCode[]
   passwordResetTokens PasswordResetToken[]
-  feedback       Feedback[]
-  supportCases   SupportCase[]
+  feedback            Feedback[]
+  supportCases        SupportCase[]
 }
 
 enum OtpPurpose {
@@ -183,8 +183,8 @@ model Strategy {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  instrument Instrument @relation(fields: [instrumentId], references: [id])
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instrument    Instrument     @relation(fields: [instrumentId], references: [id])
   backtestRuns  BacktestRun[]
   paperSessions PaperSession[]
 }
@@ -194,6 +194,12 @@ enum PositionSizingMode {
   FIXED_QUANTITY
   FIXED_CAPITAL
   PERCENT_OF_CAPITAL
+}
+
+enum RiskUnit {
+  PERCENT
+  POINTS
+  ATR_MULTIPLE
 }
 
 model BacktestRun {
@@ -207,19 +213,28 @@ model BacktestRun {
   slippagePercent     Float
   positionSizingMode  PositionSizingMode @default(FULL_CAPITAL)
   positionSizingValue Float?
-  range            String
-  entryCondition   Json
-  exitCondition    Json
-  totalReturnPct   Float
-  cagrPct          Float
-  winRatePct       Float
-  profitFactor     Float
-  maxDrawdownPct   Float
-  sharpeRatio      Float
-  expectancy       Float
-  tradeCount       Int
-  equityCurve      Json
-  createdAt        DateTime @default(now())
+  stopLossEnabled     Boolean            @default(false)
+  stopLossUnit        RiskUnit?
+  stopLossValue       Float?
+  targetEnabled       Boolean            @default(false)
+  targetUnit          RiskUnit?
+  targetValue         Float?
+  trailingSlEnabled   Boolean            @default(false)
+  trailingSlUnit      RiskUnit?
+  trailingSlValue     Float?
+  range               String
+  entryCondition      Json
+  exitCondition       Json
+  totalReturnPct      Float
+  cagrPct             Float
+  winRatePct          Float
+  profitFactor        Float
+  maxDrawdownPct      Float
+  sharpeRatio         Float
+  expectancy          Float
+  tradeCount          Int
+  equityCurve         Json
+  createdAt           DateTime           @default(now())
 
   user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   strategy Strategy?       @relation(fields: [strategyId], references: [id], onDelete: SetNull)
@@ -255,29 +270,45 @@ enum PaperOrderSide {
 }
 
 model PaperSession {
-  id                 String             @id @default(cuid())
-  userId             String
-  strategyId         String?
-  strategyName       String
-  instrumentSymbol   String
-  entryCondition     Json
-  exitCondition      Json
-  startingCapital    Float
-  brokeragePercent   Float
-  slippagePercent    Float
-  positionSizingMode  PositionSizingMode @default(FULL_CAPITAL)
-  positionSizingValue Float?
-  cash               Float
-  positionEntryTime  Int?
-  positionEntryPrice Float?
-  positionQuantity   Float?
-  lastSyncedTime     Int?
-  status             PaperSessionStatus @default(ACTIVE)
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  id                       String             @id @default(cuid())
+  userId                   String
+  strategyId               String?
+  strategyName             String
+  instrumentSymbol         String
+  entryCondition           Json
+  exitCondition            Json
+  startingCapital          Float
+  brokeragePercent         Float
+  slippagePercent          Float
+  positionSizingMode       PositionSizingMode @default(FULL_CAPITAL)
+  positionSizingValue      Float?
+  stopLossEnabled          Boolean            @default(false)
+  stopLossUnit             RiskUnit?
+  stopLossValue            Float?
+  targetEnabled            Boolean            @default(false)
+  targetUnit               RiskUnit?
+  targetValue              Float?
+  trailingSlEnabled        Boolean            @default(false)
+  trailingSlUnit           RiskUnit?
+  trailingSlValue          Float?
+  cash                     Float
+  positionEntryTime        Int?
+  positionEntryPrice       Float?
+  positionQuantity         Float?
+  // Persisted so a resumed session's trailing-stop/target math survives
+  // across syncs instead of resetting each time (favorableExtreme in
+  // particular must carry forward — resetting it to entryPrice every sync
+  // would silently defeat the trailing stop).
+  positionFavorableExtreme Float?
+  positionStopLossPrice    Float?
+  positionTargetPrice      Float?
+  lastSyncedTime           Int?
+  status                   PaperSessionStatus @default(ACTIVE)
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
 
-  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  strategy Strategy?   @relation(fields: [strategyId], references: [id], onDelete: SetNull)
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategy Strategy?    @relation(fields: [strategyId], references: [id], onDelete: SetNull)
   orders   PaperOrder[]
 }
 

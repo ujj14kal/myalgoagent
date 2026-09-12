@@ -39,6 +39,64 @@ function defaultComparison(): ConditionNode {
   };
 }
 
+function defaultTimeWindow(): ConditionNode {
+  return { kind: "signal", signal: { family: "TIME_WINDOW", startMinute: 9 * 60 + 15, endMinute: 9 * 60 + 30 } };
+}
+
+function minutesToTimeInput(minutes: number): string {
+  const h = Math.floor(minutes / 60)
+    .toString()
+    .padStart(2, "0");
+  const m = (minutes % 60).toString().padStart(2, "0");
+  return `${h}:${m}`;
+}
+
+function timeInputToMinutes(value: string): number {
+  const [h, m] = value.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function SignalEditor({
+  node,
+  onChange,
+  onRemove,
+}: {
+  node: Extract<ConditionNode, { kind: "signal" }>;
+  onChange: (n: ConditionNode) => void;
+  onRemove: () => void;
+}) {
+  if (node.signal.family === "TIME_WINDOW") {
+    const { startMinute, endMinute } = node.signal;
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-lg bg-brand-bg p-2">
+        <span className="text-xs font-medium text-brand-navy/60">Time is between</span>
+        <input
+          type="time"
+          className={inputClass}
+          value={minutesToTimeInput(startMinute)}
+          onChange={(e) =>
+            onChange({ ...node, signal: { ...node.signal, startMinute: timeInputToMinutes(e.target.value) } })
+          }
+        />
+        <span className="text-xs font-medium text-brand-navy/60">and</span>
+        <input
+          type="time"
+          className={inputClass}
+          value={minutesToTimeInput(endMinute)}
+          onChange={(e) =>
+            onChange({ ...node, signal: { ...node.signal, endMinute: timeInputToMinutes(e.target.value) } })
+          }
+        />
+        <span className="text-xs text-brand-navy/40">(IST)</span>
+        <button type="button" onClick={onRemove} className="ml-auto text-xs text-brand-navy/40 hover:text-brand-sell">
+          Remove
+        </button>
+      </div>
+    );
+  }
+  return null;
+}
+
 function OperandEditor({ value, onChange }: { value: Operand; onChange: (v: Operand) => void }) {
   const indicatorDef = value.kind === "indicator" ? INDICATOR_BY_KIND.get(value.type) : undefined;
 
@@ -151,6 +209,10 @@ export default function ConditionGroupEditor({
     return <ComparisonEditor node={node} onChange={onChange} onRemove={() => onChange(defaultComparison())} />;
   }
 
+  if (node.kind === "signal") {
+    return <SignalEditor node={node} onChange={onChange} onRemove={() => onChange(defaultComparison())} />;
+  }
+
   if (node.kind === "not") {
     return (
       <div className="rounded-lg border border-dashed border-brand-navy/20 p-2">
@@ -175,6 +237,10 @@ export default function ConditionGroupEditor({
 
   function addCondition() {
     onChange({ ...group, children: [...group.children, defaultComparison()] });
+  }
+
+  function addTimeWindow() {
+    onChange({ ...group, children: [...group.children, defaultTimeWindow()] });
   }
 
   function addGroup() {
@@ -211,6 +277,8 @@ export default function ConditionGroupEditor({
             <div className="flex-1">
               {child.kind === "comparison" ? (
                 <ComparisonEditor node={child} onChange={(n) => updateChild(idx, n)} onRemove={() => removeChild(idx)} />
+              ) : child.kind === "signal" ? (
+                <SignalEditor node={child} onChange={(n) => updateChild(idx, n)} onRemove={() => removeChild(idx)} />
               ) : (
                 <div className="rounded-lg border border-dashed border-brand-navy/20 p-2">
                   <div className="mb-1 flex items-center justify-between">
@@ -231,6 +299,9 @@ export default function ConditionGroupEditor({
         <button type="button" onClick={addCondition} className={pillButtonClass}>
           + Condition
         </button>
+        <button type="button" onClick={addTimeWindow} className={pillButtonClass}>
+          + Time window
+        </button>
         {depth < 2 && (
           <button type="button" onClick={addGroup} className={pillButtonClass}>
             + Group
@@ -241,4 +312,4 @@ export default function ConditionGroupEditor({
   );
 }
 
-export { defaultComparison, defaultOperand };
+export { defaultComparison, defaultOperand, defaultTimeWindow };

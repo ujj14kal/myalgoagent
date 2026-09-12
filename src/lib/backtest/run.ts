@@ -1,13 +1,30 @@
 import type { Candle } from "@/lib/market-data";
 import { evaluateConditionsPerBar } from "@/lib/strategy";
+import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
 import type { ConditionNode } from "@/lib/strategy";
-import { stepBar, forceClose, markToMarket, type EngineState, type EngineTrade, type PositionSizing } from "@/lib/trading-engine/step";
+import {
+  stepBar,
+  forceClose,
+  markToMarket,
+  type EngineState,
+  type EngineTrade,
+  type PositionSizing,
+  type RiskManagementConfig,
+} from "@/lib/trading-engine/step";
+
+const DEFAULT_ATR_PERIOD = 14;
 
 export interface BacktestConfig {
   startingCapital: number;
   brokeragePercent: number;
   slippagePercent: number;
   positionSizing: PositionSizing;
+  riskManagement?: RiskManagementConfig;
+}
+
+function usesAtr(rm: RiskManagementConfig | undefined): boolean {
+  if (!rm) return false;
+  return [rm.stopLoss, rm.target, rm.trailingSl].some((leg) => leg?.enabled && leg.unit === "ATR_MULTIPLE");
 }
 
 export type BacktestTradeResult = EngineTrade;
@@ -103,10 +120,23 @@ export function runBacktest(
   config: BacktestConfig,
 ): BacktestResult {
   const { entry, exit } = evaluateConditionsPerBar(candles, entryCondition, exitCondition);
+
+  // ATR is only computed when a risk leg actually needs it — it's an
+  // indicator series like any other, reused here rather than duplicating
+  // the ATR math.
+  let atrByTime: Map<number, number> | null = null;
+  if (usesAtr(config.riskManagement)) {
+    const atrPoints = computeIndicatorSeries(candles, "ATR", [DEFAULT_ATR_PERIOD]);
+    atrByTime = new Map(atrPoints.map((p) => [p.time, p.value]));
+  }
+  const atrByTimeFinal = atrByTime;
+
   const engineConfig = {
     brokeragePercent: config.brokeragePercent,
     slippagePercent: config.slippagePercent,
     positionSizing: config.positionSizing,
+    riskManagement: config.riskManagement,
+    atrAtEntry: atrByTimeFinal ? (entryIdx: number) => atrByTimeFinal.get(candles[entryIdx]?.time) : undefined,
   };
 
   const trades: BacktestTradeResult[] = [];

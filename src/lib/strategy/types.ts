@@ -52,10 +52,17 @@ export type Operand =
   | { kind: "price"; field: PriceField }
   | { kind: "constant"; value: number };
 
+// A "signal" is a boolean-native condition — true/false per bar — as opposed
+// to a comparison, which compares two numeric time series. Time windows and
+// pattern detectors (candlestick, chart) are all signals: they don't reduce
+// to "operand vs operand," they're computed directly as a boolean series.
+export type BooleanSignalKind = { family: "TIME_WINDOW"; startMinute: number; endMinute: number };
+
 export type ConditionNode =
   | { kind: "group"; op: "AND" | "OR"; children: ConditionNode[] }
   | { kind: "not"; child: ConditionNode }
-  | { kind: "comparison"; left: Operand; operator: ComparisonOperator; right: Operand };
+  | { kind: "comparison"; left: Operand; operator: ComparisonOperator; right: Operand }
+  | { kind: "signal"; signal: BooleanSignalKind };
 
 export interface Signal {
   time: number;

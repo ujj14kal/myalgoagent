@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { startPaperSession } from "@/lib/paper-actions";
 import PositionSizingFields from "@/components/position-sizing-fields";
+import RiskManagementFields, { defaultRiskLeg, type RiskLegState } from "@/components/risk-management-fields";
 import type { PositionSizingMode } from "@/lib/trading-engine/step";
 
 interface StrategyOption {
@@ -19,6 +20,9 @@ export default function PaperSessionForm({ strategies }: { strategies: StrategyO
   const [slippagePercent, setSlippagePercent] = useState(0.05);
   const [positionSizingMode, setPositionSizingMode] = useState<PositionSizingMode>("FULL_CAPITAL");
   const [positionSizingValue, setPositionSizingValue] = useState<number | null>(null);
+  const [stopLoss, setStopLoss] = useState<RiskLegState>(defaultRiskLeg(2));
+  const [target, setTarget] = useState<RiskLegState>(defaultRiskLeg(4));
+  const [trailingSl, setTrailingSl] = useState<RiskLegState>(defaultRiskLeg(1.5));
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -34,6 +38,9 @@ export default function PaperSessionForm({ strategies }: { strategies: StrategyO
           slippagePercent,
           positionSizingMode,
           positionSizingValue,
+          stopLoss,
+          target,
+          trailingSl,
         });
       } catch (err) {
         if (err && typeof err === "object" && "digest" in err && String(err.digest).startsWith("NEXT_REDIRECT")) {
@@ -112,6 +119,17 @@ export default function PaperSessionForm({ strategies }: { strategies: StrategyO
           value={positionSizingValue}
           onModeChange={setPositionSizingMode}
           onValueChange={setPositionSizingValue}
+        />
+      </div>
+
+      <div className="mt-4">
+        <RiskManagementFields
+          stopLoss={stopLoss}
+          target={target}
+          trailingSl={trailingSl}
+          onStopLossChange={setStopLoss}
+          onTargetChange={setTarget}
+          onTrailingSlChange={setTrailingSl}
         />
       </div>
 

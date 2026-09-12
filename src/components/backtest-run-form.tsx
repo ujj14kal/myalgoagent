@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { runBacktestAction } from "@/lib/backtest-actions";
 import PositionSizingFields from "@/components/position-sizing-fields";
+import RiskManagementFields, { defaultRiskLeg, type RiskLegState } from "@/components/risk-management-fields";
 import type { CandleRange } from "@/lib/market-data";
 import type { PositionSizingMode } from "@/lib/trading-engine/step";
 
@@ -28,6 +29,9 @@ export default function BacktestRunForm({ strategies }: { strategies: StrategyOp
   const [range, setRange] = useState<CandleRange>("1y");
   const [positionSizingMode, setPositionSizingMode] = useState<PositionSizingMode>("FULL_CAPITAL");
   const [positionSizingValue, setPositionSizingValue] = useState<number | null>(null);
+  const [stopLoss, setStopLoss] = useState<RiskLegState>(defaultRiskLeg(2));
+  const [target, setTarget] = useState<RiskLegState>(defaultRiskLeg(4));
+  const [trailingSl, setTrailingSl] = useState<RiskLegState>(defaultRiskLeg(1.5));
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -43,6 +47,9 @@ export default function BacktestRunForm({ strategies }: { strategies: StrategyOp
           slippagePercent,
           positionSizingMode,
           positionSizingValue,
+          stopLoss,
+          target,
+          trailingSl,
           range,
         });
       } catch (err) {
@@ -122,6 +129,17 @@ export default function BacktestRunForm({ strategies }: { strategies: StrategyOp
           value={positionSizingValue}
           onModeChange={setPositionSizingMode}
           onValueChange={setPositionSizingValue}
+        />
+      </div>
+
+      <div className="mt-4">
+        <RiskManagementFields
+          stopLoss={stopLoss}
+          target={target}
+          trailingSl={trailingSl}
+          onStopLossChange={setStopLoss}
+          onTargetChange={setTarget}
+          onTrailingSlChange={setTrailingSl}
         />
       </div>
 

@@ -1,8 +1,33 @@
-import type { ComparisonOperator, ConditionNode, Operand, PriceField } from "./types";
+import type { BooleanSignalKind, ComparisonOperator, ConditionNode, Operand, PriceField } from "./types";
 import { INDICATOR_BY_KIND } from "./indicator-catalog";
 
 const PRICE_FIELDS: PriceField[] = ["OPEN", "HIGH", "LOW", "CLOSE", "VOLUME"];
 const OPERATORS: ComparisonOperator[] = ["GT", "LT", "GTE", "LTE", "EQ", "CROSSES_ABOVE", "CROSSES_BELOW"];
+const MINUTES_PER_DAY = 24 * 60;
+
+function validateSignal(v: unknown, path: string): asserts v is BooleanSignalKind {
+  if (!isPlainObject(v)) throw new Error(`${path}: expected an object`);
+
+  if (v.family === "TIME_WINDOW") {
+    const { startMinute, endMinute } = v;
+    if (
+      typeof startMinute !== "number" ||
+      typeof endMinute !== "number" ||
+      !Number.isInteger(startMinute) ||
+      !Number.isInteger(endMinute) ||
+      startMinute < 0 ||
+      endMinute < 0 ||
+      startMinute >= MINUTES_PER_DAY ||
+      endMinute > MINUTES_PER_DAY ||
+      startMinute >= endMinute
+    ) {
+      throw new Error(`${path}: startMinute/endMinute must be a valid same-day time range`);
+    }
+    return;
+  }
+
+  throw new Error(`${path}.family: unrecognized signal family "${String((v as { family?: unknown }).family)}"`);
+}
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -70,5 +95,10 @@ export function validateConditionNode(v: unknown, path = "condition"): asserts v
     return;
   }
 
-  throw new Error(`${path}.kind: expected "group", "not", or "comparison"`);
+  if (v.kind === "signal") {
+    validateSignal(v.signal, `${path}.signal`);
+    return;
+  }
+
+  throw new Error(`${path}.kind: expected "group", "not", "comparison", or "signal"`);
 }
