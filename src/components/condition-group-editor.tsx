@@ -2,6 +2,7 @@
 
 import type { ComparisonOperator, ConditionNode, Operand, PriceField } from "@/lib/strategy";
 import { INDICATOR_CATALOG, INDICATOR_BY_KIND } from "@/lib/strategy/indicator-catalog";
+import { CANDLE_PATTERN_CATALOG } from "@/lib/strategy/candle-pattern-catalog";
 
 const PRICE_FIELDS: { value: PriceField; label: string }[] = [
   { value: "CLOSE", label: "Close price" },
@@ -43,6 +44,10 @@ function defaultTimeWindow(): ConditionNode {
   return { kind: "signal", signal: { family: "TIME_WINDOW", startMinute: 9 * 60 + 15, endMinute: 9 * 60 + 30 } };
 }
 
+function defaultCandlePattern(): ConditionNode {
+  return { kind: "signal", signal: { family: "CANDLE_PATTERN", pattern: "BULLISH_ENGULFING" } };
+}
+
 function minutesToTimeInput(minutes: number): string {
   const h = Math.floor(minutes / 60)
     .toString()
@@ -65,26 +70,33 @@ function SignalEditor({
   onChange: (n: ConditionNode) => void;
   onRemove: () => void;
 }) {
-  if (node.signal.family === "TIME_WINDOW") {
-    const { startMinute, endMinute } = node.signal;
+  const signal = node.signal;
+
+  if (signal.family === "TIME_WINDOW") {
     return (
       <div className="flex flex-wrap items-center gap-2 rounded-lg bg-brand-bg p-2">
         <span className="text-xs font-medium text-brand-navy/60">Time is between</span>
         <input
           type="time"
           className={inputClass}
-          value={minutesToTimeInput(startMinute)}
+          value={minutesToTimeInput(signal.startMinute)}
           onChange={(e) =>
-            onChange({ ...node, signal: { ...node.signal, startMinute: timeInputToMinutes(e.target.value) } })
+            onChange({
+              kind: "signal",
+              signal: { family: "TIME_WINDOW", startMinute: timeInputToMinutes(e.target.value), endMinute: signal.endMinute },
+            })
           }
         />
         <span className="text-xs font-medium text-brand-navy/60">and</span>
         <input
           type="time"
           className={inputClass}
-          value={minutesToTimeInput(endMinute)}
+          value={minutesToTimeInput(signal.endMinute)}
           onChange={(e) =>
-            onChange({ ...node, signal: { ...node.signal, endMinute: timeInputToMinutes(e.target.value) } })
+            onChange({
+              kind: "signal",
+              signal: { family: "TIME_WINDOW", startMinute: signal.startMinute, endMinute: timeInputToMinutes(e.target.value) },
+            })
           }
         />
         <span className="text-xs text-brand-navy/40">(IST)</span>
@@ -94,6 +106,39 @@ function SignalEditor({
       </div>
     );
   }
+
+  if (signal.family === "CANDLE_PATTERN") {
+    const grouped: Record<1 | 2 | 3, typeof CANDLE_PATTERN_CATALOG> = { 1: [], 2: [], 3: [] };
+    for (const def of CANDLE_PATTERN_CATALOG) grouped[def.candleCount].push(def);
+    const groupLabel = { 1: "Single candle", 2: "Double candle", 3: "Triple candle" } as const;
+
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-lg bg-brand-bg p-2">
+        <span className="text-xs font-medium text-brand-navy/60">Candle pattern is</span>
+        <select
+          className={inputClass}
+          value={signal.pattern}
+          onChange={(e) =>
+            onChange({ kind: "signal", signal: { family: "CANDLE_PATTERN", pattern: e.target.value as never } })
+          }
+        >
+          {([1, 2, 3] as const).map((count) => (
+            <optgroup key={count} label={groupLabel[count]}>
+              {grouped[count].map((def) => (
+                <option key={def.kind} value={def.kind}>
+                  {def.label}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+        <button type="button" onClick={onRemove} className="ml-auto text-xs text-brand-navy/40 hover:text-brand-sell">
+          Remove
+        </button>
+      </div>
+    );
+  }
+
   return null;
 }
 
@@ -243,6 +288,10 @@ export default function ConditionGroupEditor({
     onChange({ ...group, children: [...group.children, defaultTimeWindow()] });
   }
 
+  function addCandlePattern() {
+    onChange({ ...group, children: [...group.children, defaultCandlePattern()] });
+  }
+
   function addGroup() {
     onChange({
       ...group,
@@ -302,6 +351,9 @@ export default function ConditionGroupEditor({
         <button type="button" onClick={addTimeWindow} className={pillButtonClass}>
           + Time window
         </button>
+        <button type="button" onClick={addCandlePattern} className={pillButtonClass}>
+          + Candle pattern
+        </button>
         {depth < 2 && (
           <button type="button" onClick={addGroup} className={pillButtonClass}>
             + Group
@@ -312,4 +364,4 @@ export default function ConditionGroupEditor({
   );
 }
 
-export { defaultComparison, defaultOperand, defaultTimeWindow };
+export { defaultComparison, defaultOperand, defaultTimeWindow, defaultCandlePattern };

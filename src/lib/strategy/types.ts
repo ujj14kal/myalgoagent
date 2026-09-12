@@ -1,3 +1,5 @@
+import type { CandlePatternKind } from "@/lib/candle-patterns";
+
 export type IndicatorKind =
   | "SMA"
   | "EMA"
@@ -56,7 +58,9 @@ export type Operand =
 // to a comparison, which compares two numeric time series. Time windows and
 // pattern detectors (candlestick, chart) are all signals: they don't reduce
 // to "operand vs operand," they're computed directly as a boolean series.
-export type BooleanSignalKind = { family: "TIME_WINDOW"; startMinute: number; endMinute: number };
+export type BooleanSignalKind =
+  | { family: "TIME_WINDOW"; startMinute: number; endMinute: number }
+  | { family: "CANDLE_PATTERN"; pattern: CandlePatternKind };
 
 export type ConditionNode =
   | { kind: "group"; op: "AND" | "OR"; children: ConditionNode[] }
