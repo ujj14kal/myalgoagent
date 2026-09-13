@@ -27,13 +27,14 @@ export default function PaperSessionForm({ strategies }: { strategies: StrategyO
     setError(null);
     startTransition(async () => {
       try {
-        await startPaperSession({
+        const result = await startPaperSession({
           strategyId,
           startingCapital,
           brokeragePercent,
           slippagePercent,
           alertOnly,
         });
+        if (result?.error) setError(result.error);
       } catch (err) {
         if (err && typeof err === "object" && "digest" in err && String(err.digest).startsWith("NEXT_REDIRECT")) {
           throw err;

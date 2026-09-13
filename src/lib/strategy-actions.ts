@@ -124,56 +124,84 @@ function riskFields(input: StrategyInput) {
   };
 }
 
-export async function createStrategy(input: StrategyInput) {
-  const session = await auth();
-  if (!session?.user?.id) throw new Error("Unauthorized");
-  await enforceRateLimit(`strategy-write:${session.user.id}`, 30, 60_000);
-
-  await checkDuplicateName(session.user.id, input.name.trim(), undefined, input.confirmDuplicateName);
-  const compiled = await compile(input);
-
-  const strategy = await prisma.strategy.create({
-    data: {
-      userId: session.user.id,
-      instrumentId: input.instrumentId,
-      name: input.name.trim(),
-      mode: input.mode,
-      entryCondition: compiled.entryCondition as unknown as Prisma.InputJsonValue,
-      exitCondition: compiled.exitCondition as unknown as Prisma.InputJsonValue,
-      entrySource: compiled.entrySource,
-      exitSource: compiled.exitSource,
-      ...riskFields(input),
-    },
-  });
-
-  revalidatePath("/app/strategies");
-  redirect(`/app/strategies/${strategy.id}`);
+export interface StrategyActionResult {
+  error?: string;
 }
 
-export async function updateStrategy(id: string, input: StrategyInput) {
+/**
+ * Next.js redacts any custom Error thrown across a Server Action boundary
+ * in production builds — the client only ever sees a generic "Minified
+ * React error #441" placeholder, never the real message (confirmed against
+ * Next.js's own documented behavior; this is a deliberate security
+ * mitigation, not a bug in Next.js itself). That silently broke every
+ * validation message this action can produce (DUPLICATE_NAME, the
+ * AND-group sanity check, "Instrument is required," etc.) the moment this
+ * ran in production, even though it worked fine in dev. The fix: validation
+ * failures are returned as plain data (`{ error }`), never thrown — only
+ * `redirect()`'s own internal mechanism is allowed to throw, since Next.js
+ * handles that one specially regardless of this redaction.
+ */
+export async function createStrategy(input: StrategyInput): Promise<StrategyActionResult> {
   const session = await auth();
-  if (!session?.user?.id) throw new Error("Unauthorized");
-  await enforceRateLimit(`strategy-write:${session.user.id}`, 30, 60_000);
+  if (!session?.user?.id) return { error: "Unauthorized" };
 
-  await checkDuplicateName(session.user.id, input.name.trim(), id, input.confirmDuplicateName);
-  const compiled = await compile(input);
+  let strategyId: string;
+  try {
+    await enforceRateLimit(`strategy-write:${session.user.id}`, 30, 60_000);
+    await checkDuplicateName(session.user.id, input.name.trim(), undefined, input.confirmDuplicateName);
+    const compiled = await compile(input);
 
-  await prisma.strategy.updateMany({
-    where: { id, userId: session.user.id },
-    data: {
-      instrumentId: input.instrumentId,
-      name: input.name.trim(),
-      mode: input.mode,
-      entryCondition: compiled.entryCondition as unknown as Prisma.InputJsonValue,
-      exitCondition: compiled.exitCondition as unknown as Prisma.InputJsonValue,
-      entrySource: compiled.entrySource,
-      exitSource: compiled.exitSource,
-      ...riskFields(input),
-    },
-  });
+    const strategy = await prisma.strategy.create({
+      data: {
+        userId: session.user.id,
+        instrumentId: input.instrumentId,
+        name: input.name.trim(),
+        mode: input.mode,
+        entryCondition: compiled.entryCondition as unknown as Prisma.InputJsonValue,
+        exitCondition: compiled.exitCondition as unknown as Prisma.InputJsonValue,
+        entrySource: compiled.entrySource,
+        exitSource: compiled.exitSource,
+        ...riskFields(input),
+      },
+    });
+    strategyId = strategy.id;
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Something went wrong" };
+  }
+
+  revalidatePath("/app/strategies");
+  redirect(`/app/strategies/${strategyId}`);
+}
+
+export async function updateStrategy(id: string, input: StrategyInput): Promise<StrategyActionResult> {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Unauthorized" };
+
+  try {
+    await enforceRateLimit(`strategy-write:${session.user.id}`, 30, 60_000);
+    await checkDuplicateName(session.user.id, input.name.trim(), id, input.confirmDuplicateName);
+    const compiled = await compile(input);
+
+    await prisma.strategy.updateMany({
+      where: { id, userId: session.user.id },
+      data: {
+        instrumentId: input.instrumentId,
+        name: input.name.trim(),
+        mode: input.mode,
+        entryCondition: compiled.entryCondition as unknown as Prisma.InputJsonValue,
+        exitCondition: compiled.exitCondition as unknown as Prisma.InputJsonValue,
+        entrySource: compiled.entrySource,
+        exitSource: compiled.exitSource,
+        ...riskFields(input),
+      },
+    });
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Something went wrong" };
+  }
 
   revalidatePath("/app/strategies");
   revalidatePath(`/app/strategies/${id}`);
+  return {};
 }
 
 export async function setStrategyStatus(id: string, status: "DRAFT" | "ACTIVE" | "ARCHIVED") {

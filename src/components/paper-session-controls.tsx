@@ -18,11 +18,16 @@ export default function PaperSessionControls({
   function handleSync() {
     setError(null);
     startTransition(async () => {
-      try {
-        await syncPaperSessionAction(sessionId);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Sync failed");
-      }
+      const result = await syncPaperSessionAction(sessionId);
+      if (result?.error) setError(result.error);
+    });
+  }
+
+  function handleStatusChange(next: typeof status) {
+    setError(null);
+    startTransition(async () => {
+      const result = await setPaperSessionStatus(sessionId, next);
+      if (result?.error) setError(result.error);
     });
   }
 
@@ -40,7 +45,7 @@ export default function PaperSessionControls({
         <select
           value={status}
           disabled={isPending}
-          onChange={(e) => startTransition(() => setPaperSessionStatus(sessionId, e.target.value as typeof status))}
+          onChange={(e) => handleStatusChange(e.target.value as typeof status)}
           className="rounded-lg border border-brand-navy/15 px-3 py-1.5 text-sm outline-none focus:border-brand-primary"
         >
           {STATUSES.map((s) => (

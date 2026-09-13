@@ -35,13 +35,14 @@ export default function BacktestRunForm({ strategies }: { strategies: StrategyOp
     setError(null);
     startTransition(async () => {
       try {
-        await runBacktestAction({
+        const result = await runBacktestAction({
           strategyId,
           startingCapital,
           brokeragePercent,
           slippagePercent,
           range,
         });
+        if (result?.error) setError(result.error);
       } catch (err) {
         if (err && typeof err === "object" && "digest" in err && String(err.digest).startsWith("NEXT_REDIRECT")) {
           throw err;

@@ -29,65 +29,93 @@ function revalidatePaperPaths(id?: string) {
   revalidatePath("/app/dashboard");
 }
 
-export async function startPaperSession(input: StartPaperSessionInput) {
-  const session = await auth();
-  if (!session?.user?.id) throw new Error("Unauthorized");
-  await enforceRateLimit(`paper-start:${session.user.id}`, 10, 60_000);
-
-  if (input.startingCapital <= 0) throw new Error("Starting capital must be positive");
-  if (input.brokeragePercent < 0 || input.slippagePercent < 0) {
-    throw new Error("Brokerage and slippage must be zero or positive");
-  }
-
-  const strategy = await prisma.strategy.findFirst({
-    where: { id: input.strategyId, userId: session.user.id },
-    include: { instrument: true },
-  });
-  if (!strategy) throw new Error("Strategy not found");
-
-  const candles = await marketDataProvider.getHistoricalCandles(strategy.instrument.symbol, "1mo", "1d");
-  if (candles.length === 0) throw new Error("No historical data available for this instrument");
-  const latestTime = candles.at(-1)!.time;
-
-  const paperSession = await prisma.paperSession.create({
-    data: {
-      userId: session.user.id,
-      strategyId: strategy.id,
-      strategyName: strategy.name,
-      instrumentSymbol: strategy.instrument.symbol,
-      entryCondition: strategy.entryCondition as unknown as Prisma.InputJsonValue,
-      exitCondition: strategy.exitCondition as unknown as Prisma.InputJsonValue,
-      startingCapital: input.startingCapital,
-      brokeragePercent: input.brokeragePercent,
-      slippagePercent: input.slippagePercent,
-      // Execution/risk config comes straight from the strategy — see
-      // runBacktestAction for the same pattern and its rationale.
-      positionSizingMode: strategy.positionSizingMode,
-      positionSizingValue: strategy.positionSizingValue,
-      stopLossEnabled: strategy.stopLossEnabled,
-      stopLossUnit: strategy.stopLossUnit,
-      stopLossValue: strategy.stopLossValue,
-      targetEnabled: strategy.targetEnabled,
-      targetUnit: strategy.targetUnit,
-      targetValue: strategy.targetValue,
-      trailingSlEnabled: strategy.trailingSlEnabled,
-      trailingSlUnit: strategy.trailingSlUnit,
-      trailingSlValue: strategy.trailingSlValue,
-      maxPyramidEntries: strategy.maxPyramidEntries,
-      alertOnly: input.alertOnly,
-      cash: input.startingCapital,
-      lastSyncedTime: latestTime,
-    },
-  });
-
-  revalidatePaperPaths();
-  redirect(`/app/paper-trading/${paperSession.id}`);
+export interface PaperActionResult {
+  error?: string;
 }
 
-export async function syncPaperSessionAction(id: string) {
+/**
+ * Validation failures are returned as plain data (`{ error }`), never
+ * thrown — Next.js redacts custom Error messages thrown across a Server
+ * Action boundary in production builds, replacing them with a generic,
+ * unhelpful placeholder. Only `redirect()`'s own internal throw (on
+ * success) is exempt, which is why it stays outside the try block. See
+ * strategy-actions.ts for the same fix and fuller explanation.
+ */
+export async function startPaperSession(input: StartPaperSessionInput): Promise<PaperActionResult> {
   const session = await auth();
-  if (!session?.user?.id) throw new Error("Unauthorized");
+  if (!session?.user?.id) return { error: "Unauthorized" };
+
+  let sessionId: string;
+  try {
+    await enforceRateLimit(`paper-start:${session.user.id}`, 10, 60_000);
+
+    if (input.startingCapital <= 0) throw new Error("Starting capital must be positive");
+    if (input.brokeragePercent < 0 || input.slippagePercent < 0) {
+      throw new Error("Brokerage and slippage must be zero or positive");
+    }
+
+    const strategy = await prisma.strategy.findFirst({
+      where: { id: input.strategyId, userId: session.user.id },
+      include: { instrument: true },
+    });
+    if (!strategy) throw new Error("Strategy not found");
+
+    const candles = await marketDataProvider.getHistoricalCandles(strategy.instrument.symbol, "1mo", "1d");
+    if (candles.length === 0) throw new Error("No historical data available for this instrument");
+    const latestTime = candles.at(-1)!.time;
+
+    const paperSession = await prisma.paperSession.create({
+      data: {
+        userId: session.user.id,
+        strategyId: strategy.id,
+        strategyName: strategy.name,
+        instrumentSymbol: strategy.instrument.symbol,
+        entryCondition: strategy.entryCondition as unknown as Prisma.InputJsonValue,
+        exitCondition: strategy.exitCondition as unknown as Prisma.InputJsonValue,
+        startingCapital: input.startingCapital,
+        brokeragePercent: input.brokeragePercent,
+        slippagePercent: input.slippagePercent,
+        // Execution/risk config comes straight from the strategy — see
+        // runBacktestAction for the same pattern and its rationale.
+        positionSizingMode: strategy.positionSizingMode,
+        positionSizingValue: strategy.positionSizingValue,
+        stopLossEnabled: strategy.stopLossEnabled,
+        stopLossUnit: strategy.stopLossUnit,
+        stopLossValue: strategy.stopLossValue,
+        targetEnabled: strategy.targetEnabled,
+        targetUnit: strategy.targetUnit,
+        targetValue: strategy.targetValue,
+        trailingSlEnabled: strategy.trailingSlEnabled,
+        trailingSlUnit: strategy.trailingSlUnit,
+        trailingSlValue: strategy.trailingSlValue,
+        maxPyramidEntries: strategy.maxPyramidEntries,
+        alertOnly: input.alertOnly,
+        cash: input.startingCapital,
+        lastSyncedTime: latestTime,
+      },
+    });
+    sessionId = paperSession.id;
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Something went wrong" };
+  }
+
+  revalidatePaperPaths();
+  redirect(`/app/paper-trading/${sessionId}`);
+}
+
+export async function syncPaperSessionAction(id: string): Promise<PaperActionResult> {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Unauthorized" };
   const userId = session.user.id;
+
+  try {
+    return await syncPaperSessionInner(id, userId);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Something went wrong" };
+  }
+}
+
+async function syncPaperSessionInner(id: string, userId: string): Promise<PaperActionResult> {
   await enforceRateLimit(`paper-sync:${userId}`, 20, 60_000);
 
   const paperSession = await prisma.paperSession.findFirst({ where: { id, userId } });
@@ -253,11 +281,12 @@ export async function syncPaperSessionAction(id: string) {
   await prisma.$transaction(writes);
 
   revalidatePaperPaths(id);
+  return {};
 }
 
-export async function setPaperSessionStatus(id: string, status: "ACTIVE" | "PAUSED" | "STOPPED") {
+export async function setPaperSessionStatus(id: string, status: "ACTIVE" | "PAUSED" | "STOPPED"): Promise<PaperActionResult> {
   const session = await auth();
-  if (!session?.user?.id) throw new Error("Unauthorized");
+  if (!session?.user?.id) return { error: "Unauthorized" };
 
   await prisma.paperSession.updateMany({
     where: { id, userId: session.user.id },
@@ -265,4 +294,5 @@ export async function setPaperSessionStatus(id: string, status: "ACTIVE" | "PAUS
   });
 
   revalidatePaperPaths(id);
+  return {};
 }

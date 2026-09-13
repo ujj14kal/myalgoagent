@@ -138,21 +138,24 @@ export default function StrategyBuilderForm({
   function submit(input: StrategyInput) {
     startTransition(async () => {
       try {
-        if (strategyId) {
-          await updateStrategy(strategyId, input);
-        } else {
-          await createStrategy(input);
-        }
-      } catch (err) {
-        // `createStrategy` redirects on success, which Next.js implements by
-        // throwing a special error — let that propagate instead of treating
-        // it as a form-validation failure.
-        if (err && typeof err === "object" && "digest" in err && String(err.digest).startsWith("NEXT_REDIRECT")) {
-          throw err;
-        }
-        if (err instanceof Error && err.message === "DUPLICATE_NAME") {
+        // Validation failures come back as a plain `{ error }` return value,
+        // not a thrown error — Next.js redacts custom error messages thrown
+        // across a Server Action boundary in production builds (the client
+        // only ever sees a generic, unhelpful placeholder), so any message
+        // we actually want the user to see has to travel as data, not as an
+        // exception. Only `redirect()`'s own internal throw (on success) is
+        // exempt from that redaction, which is why it's still handled below.
+        const result = strategyId ? await updateStrategy(strategyId, input) : await createStrategy(input);
+        if (result?.error === "DUPLICATE_NAME") {
           setDuplicateName(input);
           return;
+        }
+        if (result?.error) {
+          setError(result.error);
+        }
+      } catch (err) {
+        if (err && typeof err === "object" && "digest" in err && String(err.digest).startsWith("NEXT_REDIRECT")) {
+          throw err;
         }
         setError(err instanceof Error ? err.message : "Something went wrong");
       }
