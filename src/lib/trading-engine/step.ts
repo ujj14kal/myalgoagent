@@ -73,7 +73,7 @@ export interface EngineConfig {
 }
 
 /** Converts a risk leg into an absolute price distance from the entry price. */
-function resolveRiskDistance(leg: RiskLeg, entryPrice: number, atrAtEntry: number | undefined): number | null {
+export function resolveRiskDistance(leg: RiskLeg, entryPrice: number, atrAtEntry: number | undefined): number | null {
   switch (leg.unit) {
     case "PERCENT":
       return entryPrice * (leg.value / 100);
@@ -87,7 +87,7 @@ function resolveRiskDistance(leg: RiskLeg, entryPrice: number, atrAtEntry: numbe
 /** Resolves stop-loss/target prices from an entry price — shared by a fresh
  * entry and by a pyramid add, since a pyramid add recomputes both off the
  * new blended entry price rather than tracking per-leg levels. */
-function resolveRiskLevels(
+export function resolveRiskLevels(
   rm: RiskManagementConfig | undefined,
   entryPrice: number,
   atr: number | undefined,

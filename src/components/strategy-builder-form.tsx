@@ -46,7 +46,7 @@ function collapseToSimple(node: ConditionNode): ConditionNode {
 interface StrategyInitial {
   name: string;
   instrumentId: string;
-  mode: "NO_CODE" | "CODE";
+  mode: "NO_CODE" | "CODE" | "WEBHOOK";
   entryCondition: ConditionNode;
   exitCondition: ConditionNode;
   entrySource: string | null;
@@ -76,7 +76,7 @@ export default function StrategyBuilderForm({
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [instrumentId, setInstrumentId] = useState(initial?.instrumentId ?? instruments[0]?.id ?? "");
-  const [mode, setMode] = useState<"NO_CODE" | "CODE">(initial?.mode ?? "NO_CODE");
+  const [mode, setMode] = useState<"NO_CODE" | "CODE" | "WEBHOOK">(initial?.mode ?? "NO_CODE");
 
   const initialEntryFitsSimple = initial ? fitsSimpleMode(initial.entryCondition) : true;
   const [entryMode, setEntryMode] = useState<"SIMPLE" | "ADVANCED">(initialEntryFitsSimple ? "SIMPLE" : "ADVANCED");
@@ -122,9 +122,11 @@ export default function StrategyBuilderForm({
       name,
       instrumentId,
       mode,
-      ...(mode === "CODE"
-        ? { entrySource, exitSource }
-        : { entryCondition, exitCondition: finalExitCondition }),
+      ...(mode === "WEBHOOK"
+        ? {}
+        : mode === "CODE"
+          ? { entrySource, exitSource }
+          : { entryCondition, exitCondition: finalExitCondition }),
       positionSizingMode,
       positionSizingValue,
       stopLoss,
@@ -227,7 +229,7 @@ export default function StrategyBuilderForm({
               Build with
             </label>
             <div className="flex overflow-hidden rounded-full border border-brand-navy/15 w-fit">
-              {(["NO_CODE", "CODE"] as const).map((m) => (
+              {(["NO_CODE", "CODE", "WEBHOOK"] as const).map((m) => (
                 <button
                   key={m}
                   type="button"
@@ -236,7 +238,7 @@ export default function StrategyBuilderForm({
                     mode === m ? "bg-brand-primary text-white" : "text-brand-navy/60 hover:bg-brand-bg"
                   }`}
                 >
-                  {m === "NO_CODE" ? "Build visually" : "Write code"}
+                  {m === "NO_CODE" ? "Build visually" : m === "CODE" ? "Write code" : "Webhook"}
                 </button>
               ))}
             </div>
@@ -268,31 +270,15 @@ export default function StrategyBuilderForm({
           </div>
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-2">
+        {mode === "WEBHOOK" ? (
           <div className="rounded-2xl border border-black/5 bg-white p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-sm font-semibold text-brand-navy">Entry condition</p>
-              {mode === "NO_CODE" && (
-                <button type="button" onClick={toggleEntryMode} className="text-xs font-medium text-brand-primary hover:underline">
-                  {entryMode === "SIMPLE" ? "Switch to Advanced" : "Switch to Simple"}
-                </button>
-              )}
-            </div>
-            {mode === "NO_CODE" ? (
-              entryMode === "SIMPLE" ? (
-                <SimpleConditionPicker node={entryCondition} onChange={setEntryCondition} instruments={instruments} categories={ALL_CATEGORIES} />
-              ) : (
-                <ConditionGroupEditor node={entryCondition} onChange={setEntryCondition} instruments={instruments} />
-              )
-            ) : (
-              <StrategyCodeEditor label="Entry" value={entrySource} onChange={setEntrySource} />
-            )}
-          </div>
-
-          <div className="rounded-2xl border border-black/5 bg-white p-4">
-            <p className="mb-2 text-sm font-semibold text-brand-navy">Exit condition</p>
-
-            <div className="rounded-xl border border-brand-primary/20 bg-brand-primary/5 p-3">
+            <p className="text-sm font-semibold text-brand-navy">Webhook-triggered strategy</p>
+            <p className="mt-1 text-sm text-brand-navy/60">
+              Trades are triggered by an external TradingView alert, not by conditions you build here — there&apos;s
+              no entry/exit condition tree to configure. Stop-loss, target, and trailing stop below still apply to
+              every position this strategy opens.
+            </p>
+            <div className="mt-3 rounded-xl border border-brand-primary/20 bg-brand-primary/5 p-3">
               <RiskManagementFields
                 stopLoss={stopLoss}
                 target={target}
@@ -302,42 +288,88 @@ export default function StrategyBuilderForm({
                 onTrailingSlChange={setTrailingSl}
               />
             </div>
-
-            {mode === "NO_CODE" ? (
-              <div className="mt-3">
-                <button
-                  type="button"
-                  onClick={() => setExitConditionOpen((v) => !v)}
-                  className="text-xs font-medium text-brand-navy/60 hover:text-brand-primary"
-                >
-                  {exitConditionOpen ? "− Remove condition-based exit" : "+ Add a condition-based exit"}
-                </button>
-                {exitConditionOpen && (
-                  <div className="mt-2">
-                    <div className="mb-2 flex items-center justify-end">
-                      <button type="button" onClick={toggleExitMode} className="text-xs font-medium text-brand-primary hover:underline">
-                        {exitMode === "SIMPLE" ? "Switch to Advanced" : "Switch to Simple"}
-                      </button>
-                    </div>
-                    {exitMode === "SIMPLE" ? (
-                      <SimpleConditionPicker node={exitCondition} onChange={setExitCondition} instruments={instruments} categories={ALL_CATEGORIES} />
-                    ) : (
-                      <ConditionGroupEditor node={exitCondition} onChange={setExitCondition} instruments={instruments} />
-                    )}
-                  </div>
-                )}
-                <p className="mt-2 text-xs text-brand-navy/40">
-                  A stop-loss/target/trailing stop above and a condition-based exit here both stay active if
-                  configured — whichever triggers first closes the position.
-                </p>
-              </div>
+            {strategyId ? (
+              <p className="mt-3 text-xs text-brand-navy/40">
+                Save your changes, then set up the webhook URL below.
+              </p>
             ) : (
-              <div className="mt-3">
-                <StrategyCodeEditor label="Exit" value={exitSource} onChange={setExitSource} />
-              </div>
+              <p className="mt-3 text-xs text-brand-navy/40">
+                Create the strategy first — the webhook URL is generated on its detail page.
+              </p>
             )}
           </div>
-        </div>
+        ) : (
+          <div className="grid gap-6 xl:grid-cols-2">
+            <div className="rounded-2xl border border-black/5 bg-white p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-sm font-semibold text-brand-navy">Entry condition</p>
+                {mode === "NO_CODE" && (
+                  <button type="button" onClick={toggleEntryMode} className="text-xs font-medium text-brand-primary hover:underline">
+                    {entryMode === "SIMPLE" ? "Switch to Advanced" : "Switch to Simple"}
+                  </button>
+                )}
+              </div>
+              {mode === "NO_CODE" ? (
+                entryMode === "SIMPLE" ? (
+                  <SimpleConditionPicker node={entryCondition} onChange={setEntryCondition} instruments={instruments} categories={ALL_CATEGORIES} />
+                ) : (
+                  <ConditionGroupEditor node={entryCondition} onChange={setEntryCondition} instruments={instruments} />
+                )
+              ) : (
+                <StrategyCodeEditor label="Entry" value={entrySource} onChange={setEntrySource} />
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-black/5 bg-white p-4">
+              <p className="mb-2 text-sm font-semibold text-brand-navy">Exit condition</p>
+
+              <div className="rounded-xl border border-brand-primary/20 bg-brand-primary/5 p-3">
+                <RiskManagementFields
+                  stopLoss={stopLoss}
+                  target={target}
+                  trailingSl={trailingSl}
+                  onStopLossChange={setStopLoss}
+                  onTargetChange={setTarget}
+                  onTrailingSlChange={setTrailingSl}
+                />
+              </div>
+
+              {mode === "NO_CODE" ? (
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={() => setExitConditionOpen((v) => !v)}
+                    className="text-xs font-medium text-brand-navy/60 hover:text-brand-primary"
+                  >
+                    {exitConditionOpen ? "− Remove condition-based exit" : "+ Add a condition-based exit"}
+                  </button>
+                  {exitConditionOpen && (
+                    <div className="mt-2">
+                      <div className="mb-2 flex items-center justify-end">
+                        <button type="button" onClick={toggleExitMode} className="text-xs font-medium text-brand-primary hover:underline">
+                          {exitMode === "SIMPLE" ? "Switch to Advanced" : "Switch to Simple"}
+                        </button>
+                      </div>
+                      {exitMode === "SIMPLE" ? (
+                        <SimpleConditionPicker node={exitCondition} onChange={setExitCondition} instruments={instruments} categories={ALL_CATEGORIES} />
+                      ) : (
+                        <ConditionGroupEditor node={exitCondition} onChange={setExitCondition} instruments={instruments} />
+                      )}
+                    </div>
+                  )}
+                  <p className="mt-2 text-xs text-brand-navy/40">
+                    A stop-loss/target/trailing stop above and a condition-based exit here both stay active if
+                    configured — whichever triggers first closes the position.
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-3">
+                  <StrategyCodeEditor label="Exit" value={exitSource} onChange={setExitSource} />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <button
           type="submit"

@@ -167,6 +167,7 @@ enum StrategyStatus {
 enum StrategyMode {
   NO_CODE
   CODE
+  WEBHOOK
 }
 
 model Strategy {
@@ -179,6 +180,12 @@ model Strategy {
   exitCondition       Json
   entrySource         String?            @db.Text
   exitSource          String?            @db.Text
+  // Only set when mode is WEBHOOK. Only the sha256 hash is ever stored — the
+  // raw token is shown to the user once, embedded in their webhook URL, the
+  // same one-way-hash pattern already used for password-reset/email-change
+  // tokens (src/lib/account-actions.ts) and the magic-link route.
+  webhookTokenHash    String?            @unique
+  webhookEnabled      Boolean            @default(false)
   // Execution/risk configuration, fixed at strategy-creation time rather
   // than re-specified per backtest run or paper session — so whatever gets
   // backtested is identical to what would run live. BacktestRun/PaperSession
@@ -204,6 +211,7 @@ model Strategy {
   instrument    Instrument     @relation(fields: [instrumentId], references: [id])
   backtestRuns  BacktestRun[]
   paperSessions PaperSession[]
+  webhookAlerts WebhookAlert[]
 }
 
 enum PositionSizingMode {
@@ -348,7 +356,28 @@ model PaperOrder {
   netPnl         Float?
   createdAt      DateTime       @default(now())
 
-  paperSession PaperSession @relation(fields: [paperSessionId], references: [id], onDelete: Cascade)
+  paperSession PaperSession  @relation(fields: [paperSessionId], references: [id], onDelete: Cascade)
+  webhookAlert WebhookAlert?
+}
+
+// Append-only log of every call received at a strategy's webhook URL —
+// written even when parsing fails, so the "Recent Signals" panel can always
+// answer "why did/didn't this fire," the single most common support question
+// this kind of feature generates.
+model WebhookAlert {
+  id           String          @id @default(cuid())
+  strategyId   String
+  receivedAt   DateTime        @default(now())
+  rawPayload   String          @db.Text
+  parsedAction PaperOrderSide?
+  parseError   String?
+  executed     Boolean         @default(false)
+  paperOrderId String?         @unique
+
+  strategy   Strategy    @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  paperOrder PaperOrder? @relation(fields: [paperOrderId], references: [id], onDelete: SetNull)
+
+  @@index([strategyId, receivedAt])
 }
 
 model RiskSettings {

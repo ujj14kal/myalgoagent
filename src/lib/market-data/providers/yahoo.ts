@@ -39,7 +39,15 @@ export class YahooFinanceProvider implements MarketDataProvider {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`;
 
     const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; MyAlgoAgent/1.0)" },
+      // Explicitly declining compression, rather than trusting the runtime
+      // to transparently gzip-decode the response: under Next's dev-server
+      // fetch instrumentation (the `next: { revalidate }` cache layer,
+      // Turbopack), a gzip-encoded response has been observed reaching
+      // `res.json()` still compressed — its raw magic bytes (`1f 8b 08 00`)
+      // parsed as JSON and surfaced as a bafflingly generic SyntaxError.
+      // Asking Yahoo not to compress at all sidesteps that ambiguity
+      // everywhere, at the cost of a slightly larger response body.
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; MyAlgoAgent/1.0)", "Accept-Encoding": "identity" },
       next: { revalidate: 60 },
     });
 

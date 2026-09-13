@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseDsl, validateConditionNode, checkConditionFeasibility, collectAuxRequirements } from "@/lib/strategy";
-import { FEASIBILITY_ISSUE_SEPARATOR } from "@/lib/strategy/types";
+import { FEASIBILITY_ISSUE_SEPARATOR, NEVER_EXIT_CONDITION } from "@/lib/strategy/types";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { validatePositionSizing, toRiskLeg, type PositionSizingMode, type RiskLegInput } from "@/lib/trading-engine/step";
 import type { ConditionNode } from "@/lib/strategy";
@@ -14,7 +14,7 @@ import type { Prisma } from "@prisma/client";
 export interface StrategyInput {
   name: string;
   instrumentId: string;
-  mode: "NO_CODE" | "CODE";
+  mode: "NO_CODE" | "CODE" | "WEBHOOK";
   entryCondition?: ConditionNode;
   exitCondition?: ConditionNode;
   entrySource?: string;
@@ -105,6 +105,19 @@ async function compile(input: StrategyInput): Promise<{
   if (!input.instrumentId) throw new Error("Instrument is required");
   validatePositionSizing({ mode: input.positionSizingMode, value: input.positionSizingValue });
   throwIfInfeasible(checkRiskFeasibility(input));
+
+  if (input.mode === "WEBHOOK") {
+    // No condition tree at all — entries/exits come from an external
+    // TradingView alert, not from anything evaluated here. These two
+    // placeholders are simply unused for this mode (the columns aren't
+    // nullable); see NEVER_EXIT_CONDITION's own doc comment.
+    return {
+      entryCondition: NEVER_EXIT_CONDITION,
+      exitCondition: NEVER_EXIT_CONDITION,
+      entrySource: null,
+      exitSource: null,
+    };
+  }
 
   if (input.mode === "CODE") {
     if (!input.entrySource?.trim() || !input.exitSource?.trim()) {

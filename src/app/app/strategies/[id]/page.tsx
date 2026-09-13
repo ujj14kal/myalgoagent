@@ -12,6 +12,7 @@ import {
 import CandlestickChart, { type Overlay } from "@/components/candlestick-chart";
 import StrategyBuilderForm from "@/components/strategy-builder-form";
 import StrategyStatusControls from "@/components/strategy-status-controls";
+import WebhookPanel from "@/components/webhook-panel";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -37,21 +38,35 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
   ]);
   if (!strategy) notFound();
 
+  const isWebhook = strategy.mode === "WEBHOOK";
   const entryCondition = strategy.entryCondition as unknown as ConditionNode;
   const exitCondition = strategy.exitCondition as unknown as ConditionNode;
 
+  const webhookAlerts = isWebhook
+    ? await prisma.webhookAlert.findMany({
+        where: { strategyId: strategy.id },
+        orderBy: { receivedAt: "desc" },
+        take: 20,
+      })
+    : [];
+
   let candles: Awaited<ReturnType<typeof marketDataProvider.getHistoricalCandles>> = [];
   let fetchError: string | null = null;
-  try {
-    candles = await marketDataProvider.getHistoricalCandles(strategy.instrument.symbol, "6mo", "1d");
-  } catch (err) {
-    fetchError = err instanceof Error ? err.message : "Failed to load market data";
+  if (!isWebhook) {
+    try {
+      candles = await marketDataProvider.getHistoricalCandles(strategy.instrument.symbol, "6mo", "1d");
+    } catch (err) {
+      fetchError = err instanceof Error ? err.message : "Failed to load market data";
+    }
   }
 
-  const signals = candles.length > 0 ? evaluateStrategy(candles, entryCondition, exitCondition) : [];
+  // A webhook-mode strategy has no real condition tree (see
+  // NEVER_EXIT_CONDITION usage in strategy-actions.ts) — evaluating it would
+  // just show a misleadingly empty "signals preview," so skip it entirely.
+  const signals = !isWebhook && candles.length > 0 ? evaluateStrategy(candles, entryCondition, exitCondition) : [];
 
   const overlays: Overlay[] = [];
-  if (candles.length > 0) {
+  if (!isWebhook && candles.length > 0) {
     const operands = collectConditionOperands(entryCondition, exitCondition);
     const seen = new Set<string>();
     let colorIdx = 0;
@@ -81,15 +96,31 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
         <StrategyStatusControls strategyId={strategy.id} status={strategy.status} />
       </div>
 
-      <p className="mt-1 text-xs text-brand-navy/40">
-        Data: {marketDataProvider.name}
-        {!marketDataProvider.isOfficial && " (interim feed, not an official NSE/BSE source)"}
-        {" · "}Daily bars, not real-time · signals shown are a preview of where this
-        strategy would have triggered, not a backtest of P&amp;L.
-      </p>
+      {!isWebhook && (
+        <p className="mt-1 text-xs text-brand-navy/40">
+          Data: {marketDataProvider.name}
+          {!marketDataProvider.isOfficial && " (interim feed, not an official NSE/BSE source)"}
+          {" · "}Daily bars, not real-time · signals shown are a preview of where this
+          strategy would have triggered, not a backtest of P&amp;L.
+        </p>
+      )}
 
       <div className="mt-6">
-        {fetchError ? (
+        {isWebhook ? (
+          <WebhookPanel
+            strategyId={strategy.id}
+            initialEnabled={strategy.webhookEnabled}
+            hasToken={strategy.webhookTokenHash !== null}
+            alerts={webhookAlerts.map((a) => ({
+              id: a.id,
+              receivedAt: a.receivedAt.toISOString(),
+              rawPayload: a.rawPayload,
+              parsedAction: a.parsedAction,
+              parseError: a.parseError,
+              executed: a.executed,
+            }))}
+          />
+        ) : fetchError ? (
           <div className="rounded-2xl border border-black/5 bg-white p-4">
             <p className="py-16 text-center text-sm text-brand-sell">{fetchError}</p>
           </div>
