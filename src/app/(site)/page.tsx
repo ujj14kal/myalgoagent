@@ -196,7 +196,77 @@ export default function Home() {
       </Reveal>
 
       <Reveal>
-        <section id="risk" className="border-y border-black/5 bg-white">
+        <section id="ai-assistant" className="border-y border-black/5 bg-white">
+          <div className="mx-auto grid max-w-6xl items-center gap-14 px-4 py-20 lg:grid-cols-[0.85fr_1.15fr]">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <p className="text-xs font-bold uppercase tracking-widest text-brand-primary">AI Strategy Assistant</p>
+                <span className="rounded-full bg-brand-gold/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-gold">
+                  Coming soon
+                </span>
+              </div>
+              <h2 className="mt-2 text-3xl font-bold text-brand-navy">
+                Describe your strategy in plain English. Let AI build it — and check it.
+              </h2>
+              <p className="mt-4 text-brand-navy/70">
+                Type what you want to trade on, and the assistant translates it
+                into a real strategy — indicators, entry/exit conditions and
+                risk rules — using the exact same building blocks as the
+                visual builder.
+              </p>
+              <p className="mt-3 text-brand-navy/70">
+                Every AI-generated strategy runs through the same feasibility
+                checks as one you build by hand, so it can never suggest a
+                contradiction, an impossible time window, or a rule that
+                could never fire against real market data.
+              </p>
+              <Link href="/contact" className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-brand-navy hover:text-brand-primary">
+                Get notified when it launches <Icon name="arrow" size={14} />
+              </Link>
+            </div>
+            <div className="hover-lift overflow-hidden rounded-2xl bg-brand-navy text-white shadow-xl shadow-brand-navy/15">
+              <div className="flex items-center justify-between border-b border-white/10 px-6 py-4 text-sm font-semibold">
+                <span className="flex items-center gap-2">
+                  <Icon name="braces" size={16} />
+                  AI Strategy Assistant
+                </span>
+                <span className="rounded-full bg-brand-gold/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-gold">
+                  Preview
+                </span>
+              </div>
+              <div className="space-y-4 px-6 py-6">
+                <div className="ml-auto max-w-[85%] rounded-2xl rounded-tr-sm bg-white/10 px-4 py-3 text-sm text-white/90">
+                  Buy when RSI drops below 30 and price is above the 50-day
+                  SMA. Exit at 5% profit or a 2% stop loss.
+                </div>
+                <div className="max-w-[90%] space-y-2.5 rounded-2xl rounded-tl-sm bg-brand-primary/20 px-4 py-3 text-sm">
+                  <p className="text-white/90">Built your strategy:</p>
+                  <div className="space-y-1.5 text-xs text-white/70">
+                    <div className="flex items-center gap-2">
+                      <span className="text-brand-buy"><Icon name="check" size={13} /></span>
+                      Entry: RSI(14) crosses below 30 AND Close &gt; SMA(50)
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-brand-buy"><Icon name="check" size={13} /></span>
+                      Target 5% · Stop loss 2%
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-brand-buy"><Icon name="check" size={13} /></span>
+                      Feasibility check passed
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-between border-t border-white/10 px-6 py-3 text-[11px] text-white/40">
+                <span>Illustrative preview — feature in development</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      </Reveal>
+
+      <Reveal>
+        <section id="risk" className="bg-white">
           <div className="mx-auto grid max-w-6xl items-center gap-14 px-4 py-20 lg:grid-cols-[0.85fr_1.15fr]">
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-brand-primary">Risk-first by design</p>

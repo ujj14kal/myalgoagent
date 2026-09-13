@@ -72,6 +72,33 @@ export default async function DashboardPage() {
         {agentName} is keeping an eye on your portfolio. Here&rsquo;s where things stand.
       </p>
 
+      <div className="mt-6 flex flex-col gap-4 rounded-2xl bg-brand-navy px-5 py-4 text-white sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-gold/20 text-brand-gold">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 4c-2 0-3 1-3 3v3c0 1-1 2-2 2 1 0 2 1 2 2v3c0 2 1 3 3 3M16 4c2 0 3 1 3 3v3c0 1 1 2 2 2-1 0-2 1-2 2v3c0 2-1 3-3 3" />
+            </svg>
+          </span>
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold">AI Strategy Assistant</p>
+              <span className="rounded-full bg-brand-gold/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-gold">
+                Coming soon
+              </span>
+            </div>
+            <p className="mt-0.5 text-xs text-white/60">
+              Describe a strategy in plain English and get a built, feasibility-checked strategy back — no manual condition-tree editing.
+            </p>
+          </div>
+        </div>
+        <Link
+          href="/#ai-assistant"
+          className="shrink-0 rounded-full border border-white/20 px-4 py-1.5 text-xs font-semibold whitespace-nowrap text-white hover:border-brand-gold hover:text-brand-gold"
+        >
+          Learn more
+        </Link>
+      </div>
+
       {isNewAccount && (
         <div className="mt-8">
           <DashboardEmptyState agentName={agentName} />

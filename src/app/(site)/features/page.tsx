@@ -69,6 +69,16 @@ const groups = [
       "CSV export of trades and backtest results",
     ],
   },
+  {
+    title: "AI Strategy Assistant",
+    comingSoon: true,
+    items: [
+      "Describe a strategy in plain English and get a built, validated strategy back",
+      "Uses the same indicators, conditions and risk rules as the visual builder — nothing exclusive to AI-built strategies",
+      "Every AI-generated strategy passes the same feasibility checks as one built by hand",
+      "Refine a strategy conversationally instead of re-editing the condition tree by hand",
+    ],
+  },
 ];
 
 export default function FeaturesPage() {
@@ -86,7 +96,14 @@ export default function FeaturesPage() {
           {groups.map((g, i) => (
             <div key={g.title} className="rounded-2xl border border-black/5 bg-white p-6 transition-shadow hover:shadow-lg">
               <span className={`inline-block h-2 w-2 rounded-full ${i % 2 === 0 ? "bg-brand-gold" : "bg-brand-blue"}`} />
-              <h2 className="mt-3 text-lg font-semibold text-brand-navy">{g.title}</h2>
+              <div className="mt-3 flex items-center gap-2.5">
+                <h2 className="text-lg font-semibold text-brand-navy">{g.title}</h2>
+                {g.comingSoon && (
+                  <span className="rounded-full bg-brand-gold/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-gold">
+                    Coming soon
+                  </span>
+                )}
+              </div>
               <ul className="mt-3 space-y-2 text-sm leading-relaxed text-brand-navy/70">
                 {g.items.map((i2) => (
                   <li key={i2} className="flex gap-2">
