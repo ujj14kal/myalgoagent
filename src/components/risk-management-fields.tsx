@@ -30,17 +30,17 @@ function RiskLegRow({
   onChange: (leg: RiskLegState) => void;
 }) {
   return (
-    <div className="rounded-xl border border-brand-navy/10 p-3">
+    <div className="flex h-full flex-col rounded-xl border border-brand-navy/10 p-3">
       <label className="flex items-center gap-2">
         <input
           type="checkbox"
           checked={leg.enabled}
           onChange={(e) => onChange({ ...leg, enabled: e.target.checked })}
-          className="h-4 w-4 rounded border-brand-navy/30"
+          className="h-4 w-4 shrink-0 rounded border-brand-navy/30"
         />
         <span className="text-sm font-medium text-brand-navy">{label}</span>
       </label>
-      <p className="mt-0.5 text-xs text-brand-navy/40">{hint}</p>
+      <p className="mt-0.5 flex-1 text-xs text-brand-navy/40">{hint}</p>
       {leg.enabled && (
         <div className="mt-2 flex items-center gap-2">
           <input
@@ -49,12 +49,12 @@ function RiskLegRow({
             step="any"
             value={leg.value}
             onChange={(e) => onChange({ ...leg, value: Number(e.target.value) })}
-            className="w-24 rounded-lg border border-brand-navy/15 px-2 py-1.5 text-sm outline-none focus:border-brand-primary"
+            className="w-16 min-w-0 rounded-lg border border-brand-navy/15 px-2 py-1.5 text-sm outline-none [appearance:textfield] focus:border-brand-primary [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
           <select
             value={leg.unit}
             onChange={(e) => onChange({ ...leg, unit: e.target.value as RiskUnit })}
-            className="rounded-lg border border-brand-navy/15 px-2 py-1.5 text-sm outline-none focus:border-brand-primary"
+            className="min-w-0 flex-1 rounded-lg border border-brand-navy/15 px-2 py-1.5 text-sm outline-none focus:border-brand-primary"
           >
             {UNIT_OPTIONS.map((u) => (
               <option key={u.value} value={u.value}>
