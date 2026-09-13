@@ -36,7 +36,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <AppSidebar />
           <div className="flex flex-1 flex-col">
             <AppTopbar user={session.user} unreadCount={unreadCount} />
-            <main className="flex-1 p-6">{children}</main>
+            <main className="flex-1 p-4 md:p-6">{children}</main>
             <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-black/5 px-6 py-3 text-xs text-brand-navy/40">
               <span>© {new Date().getFullYear()} MyAlgoAgent™, a product of Shagoon Softech Pvt. Ltd.</span>
               <span className="flex items-center gap-3">

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { signOut } from "@/lib/auth";
 import ReplayTourButton from "@/components/tutorial/replay-tour-button";
+import MobileNavDrawer from "@/components/mobile-nav-drawer";
 
 export default function AppTopbar({
   user,
@@ -10,10 +11,10 @@ export default function AppTopbar({
   unreadCount?: number;
 }) {
   return (
-    <header className="flex h-16 items-center justify-between border-b border-black/5 bg-white px-6">
-      <div />
-      <div className="flex items-center gap-4">
-        <ReplayTourButton />
+    <header className="flex h-16 items-center justify-between border-b border-black/5 bg-white px-4 md:px-6">
+      <MobileNavDrawer />
+      <div className="flex items-center gap-2 sm:gap-4">
+        <ReplayTourButton className="hidden sm:inline-flex" />
         <Link
           href="/app/notifications"
           data-tour="notifications-bell"
@@ -29,7 +30,7 @@ export default function AppTopbar({
             </span>
           )}
         </Link>
-        <span className="text-sm text-brand-navy/70">
+        <span className="hidden text-sm text-brand-navy/70 sm:inline">
           {user.name ?? user.email}
         </span>
         <form
