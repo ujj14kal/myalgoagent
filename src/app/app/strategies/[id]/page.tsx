@@ -114,6 +114,18 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
               exitCondition,
               entrySource: strategy.entrySource,
               exitSource: strategy.exitSource,
+              positionSizingMode: strategy.positionSizingMode,
+              positionSizingValue: strategy.positionSizingValue,
+              stopLossEnabled: strategy.stopLossEnabled,
+              stopLossUnit: strategy.stopLossUnit,
+              stopLossValue: strategy.stopLossValue,
+              targetEnabled: strategy.targetEnabled,
+              targetUnit: strategy.targetUnit,
+              targetValue: strategy.targetValue,
+              trailingSlEnabled: strategy.trailingSlEnabled,
+              trailingSlUnit: strategy.trailingSlUnit,
+              trailingSlValue: strategy.trailingSlValue,
+              maxPyramidEntries: strategy.maxPyramidEntries,
             }}
           />
         </div>

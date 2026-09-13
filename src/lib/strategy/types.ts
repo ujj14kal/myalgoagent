@@ -66,11 +66,16 @@ export type Operand =
 // pattern detectors (candlestick, chart, volume) are all signals: they don't
 // reduce to "operand vs operand," they're computed directly as a boolean
 // series.
+// Pattern signals (not TIME_WINDOW, which has no meaningful "different chart"
+// reading) can also opt into a different timeframe than the strategy's base
+// chart — e.g. detect a bullish engulfing on the 15-minute chart while the
+// strategy otherwise trades 5-minute bars. Omitted = base chart, matching the
+// same convention as the operand-level timeframe override.
 export type BooleanSignalKind =
   | { family: "TIME_WINDOW"; startMinute: number; endMinute: number }
-  | { family: "CANDLE_PATTERN"; pattern: CandlePatternKind }
-  | { family: "CHART_PATTERN"; pattern: ChartPatternKind }
-  | { family: "VOLUME_PATTERN"; pattern: VolumePatternKind };
+  | { family: "CANDLE_PATTERN"; pattern: CandlePatternKind; timeframe?: CandleInterval }
+  | { family: "CHART_PATTERN"; pattern: ChartPatternKind; timeframe?: CandleInterval }
+  | { family: "VOLUME_PATTERN"; pattern: VolumePatternKind; timeframe?: CandleInterval };
 
 export type ConditionNode =
   | { kind: "group"; op: "AND" | "OR"; children: ConditionNode[] }
@@ -82,3 +87,13 @@ export interface Signal {
   time: number;
   type: "entry" | "exit";
 }
+
+/** A condition that can never be true — the default exit when a strategy
+ * relies purely on stop-loss/target/trailing to close a position, with no
+ * condition-based exit configured at all. */
+export const NEVER_EXIT_CONDITION: ConditionNode = {
+  kind: "comparison",
+  left: { kind: "constant", value: 0 },
+  operator: "GT",
+  right: { kind: "constant", value: 1 },
+};

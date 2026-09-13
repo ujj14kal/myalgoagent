@@ -8,27 +8,14 @@ import { marketDataProvider } from "@/lib/market-data";
 import { syncPaperSession } from "@/lib/paper/sync";
 import { evaluateRisk } from "@/lib/risk/evaluate";
 import { enforceRateLimit } from "@/lib/rate-limit";
-import { validatePositionSizing, type PositionSizingMode, type RiskUnit } from "@/lib/trading-engine/step";
 import type { ConditionNode } from "@/lib/strategy";
 import type { Prisma } from "@prisma/client";
-
-export interface RiskLegInput {
-  enabled: boolean;
-  unit: RiskUnit;
-  value: number;
-}
 
 export interface StartPaperSessionInput {
   strategyId: string;
   startingCapital: number;
   brokeragePercent: number;
   slippagePercent: number;
-  positionSizingMode: PositionSizingMode;
-  positionSizingValue: number | null;
-  stopLoss: RiskLegInput;
-  target: RiskLegInput;
-  trailingSl: RiskLegInput;
-  maxPyramidEntries: number;
   alertOnly: boolean;
 }
 
@@ -51,7 +38,6 @@ export async function startPaperSession(input: StartPaperSessionInput) {
   if (input.brokeragePercent < 0 || input.slippagePercent < 0) {
     throw new Error("Brokerage and slippage must be zero or positive");
   }
-  validatePositionSizing({ mode: input.positionSizingMode, value: input.positionSizingValue });
 
   const strategy = await prisma.strategy.findFirst({
     where: { id: input.strategyId, userId: session.user.id },
@@ -74,18 +60,20 @@ export async function startPaperSession(input: StartPaperSessionInput) {
       startingCapital: input.startingCapital,
       brokeragePercent: input.brokeragePercent,
       slippagePercent: input.slippagePercent,
-      positionSizingMode: input.positionSizingMode,
-      positionSizingValue: input.positionSizingValue,
-      stopLossEnabled: input.stopLoss.enabled,
-      stopLossUnit: input.stopLoss.enabled ? input.stopLoss.unit : null,
-      stopLossValue: input.stopLoss.enabled ? input.stopLoss.value : null,
-      targetEnabled: input.target.enabled,
-      targetUnit: input.target.enabled ? input.target.unit : null,
-      targetValue: input.target.enabled ? input.target.value : null,
-      trailingSlEnabled: input.trailingSl.enabled,
-      trailingSlUnit: input.trailingSl.enabled ? input.trailingSl.unit : null,
-      trailingSlValue: input.trailingSl.enabled ? input.trailingSl.value : null,
-      maxPyramidEntries: input.maxPyramidEntries,
+      // Execution/risk config comes straight from the strategy — see
+      // runBacktestAction for the same pattern and its rationale.
+      positionSizingMode: strategy.positionSizingMode,
+      positionSizingValue: strategy.positionSizingValue,
+      stopLossEnabled: strategy.stopLossEnabled,
+      stopLossUnit: strategy.stopLossUnit,
+      stopLossValue: strategy.stopLossValue,
+      targetEnabled: strategy.targetEnabled,
+      targetUnit: strategy.targetUnit,
+      targetValue: strategy.targetValue,
+      trailingSlEnabled: strategy.trailingSlEnabled,
+      trailingSlUnit: strategy.trailingSlUnit,
+      trailingSlValue: strategy.trailingSlValue,
+      maxPyramidEntries: strategy.maxPyramidEntries,
       alertOnly: input.alertOnly,
       cash: input.startingCapital,
       lastSyncedTime: latestTime,

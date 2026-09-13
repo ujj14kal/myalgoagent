@@ -39,7 +39,23 @@ export default async function PaperTradingPage() {
 
       <div className="mt-6">
         <PaperSessionForm
-          strategies={strategies.map((s) => ({ id: s.id, name: s.name, instrumentSymbol: s.instrument.symbol }))}
+          strategies={strategies.map((s) => ({
+            id: s.id,
+            name: s.name,
+            instrumentSymbol: s.instrument.symbol,
+            positionSizingMode: s.positionSizingMode,
+            positionSizingValue: s.positionSizingValue,
+            stopLossEnabled: s.stopLossEnabled,
+            stopLossUnit: s.stopLossUnit,
+            stopLossValue: s.stopLossValue,
+            targetEnabled: s.targetEnabled,
+            targetUnit: s.targetUnit,
+            targetValue: s.targetValue,
+            trailingSlEnabled: s.trailingSlEnabled,
+            trailingSlUnit: s.trailingSlUnit,
+            trailingSlValue: s.trailingSlValue,
+            maxPyramidEntries: s.maxPyramidEntries,
+          }))}
         />
       </div>
 

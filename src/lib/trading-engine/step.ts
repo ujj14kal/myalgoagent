@@ -42,6 +42,20 @@ export interface RiskManagementConfig {
   trailingSl: RiskLeg | null;
 }
 
+/** The shape a risk leg takes as raw form/action input, before being
+ * resolved into a `RiskLeg` (disabled legs still carry a unit/value so the
+ * form can remember them if re-enabled). Shared by strategy creation and
+ * (historically) the backtest/paper-session forms. */
+export interface RiskLegInput {
+  enabled: boolean;
+  unit: RiskUnit;
+  value: number;
+}
+
+export function toRiskLeg(leg: RiskLegInput): RiskLeg {
+  return { enabled: leg.enabled, unit: leg.unit, value: leg.value };
+}
+
 export interface EngineConfig {
   brokeragePercent: number;
   slippagePercent: number;

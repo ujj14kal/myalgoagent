@@ -79,6 +79,24 @@ function timeInputToMinutes(value: string): number {
   return h * 60 + m;
 }
 
+function TimeframeSelect({ value, onChange }: { value: CandleInterval | undefined; onChange: (v: CandleInterval | undefined) => void }) {
+  return (
+    <select
+      className={`${inputClass} text-brand-navy/60`}
+      value={value ?? ""}
+      title="Detect on this timeframe"
+      onChange={(e) => onChange((e.target.value || undefined) as CandleInterval | undefined)}
+    >
+      <option value="">Same as chart</option>
+      {INTERVALS.map((iv) => (
+        <option key={iv.value} value={iv.value}>
+          {iv.label} chart
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function SignalEditor({
   node,
   onChange,
@@ -137,7 +155,7 @@ function SignalEditor({
           className={inputClass}
           value={signal.pattern}
           onChange={(e) =>
-            onChange({ kind: "signal", signal: { family: "CANDLE_PATTERN", pattern: e.target.value as never } })
+            onChange({ kind: "signal", signal: { family: "CANDLE_PATTERN", pattern: e.target.value as never, timeframe: signal.timeframe } })
           }
         >
           {([1, 2, 3] as const).map((count) => (
@@ -150,6 +168,10 @@ function SignalEditor({
             </optgroup>
           ))}
         </select>
+        <TimeframeSelect
+          value={signal.timeframe}
+          onChange={(timeframe) => onChange({ kind: "signal", signal: { ...signal, timeframe } })}
+        />
         <button type="button" onClick={onRemove} className="ml-auto text-xs text-brand-navy/40 hover:text-brand-sell">
           Remove
         </button>
@@ -165,7 +187,7 @@ function SignalEditor({
           className={inputClass}
           value={signal.pattern}
           onChange={(e) =>
-            onChange({ kind: "signal", signal: { family: "CHART_PATTERN", pattern: e.target.value as never } })
+            onChange({ kind: "signal", signal: { family: "CHART_PATTERN", pattern: e.target.value as never, timeframe: signal.timeframe } })
           }
         >
           {CHART_PATTERN_CATALOG.map((def) => (
@@ -174,6 +196,10 @@ function SignalEditor({
             </option>
           ))}
         </select>
+        <TimeframeSelect
+          value={signal.timeframe}
+          onChange={(timeframe) => onChange({ kind: "signal", signal: { ...signal, timeframe } })}
+        />
         <button type="button" onClick={onRemove} className="ml-auto text-xs text-brand-navy/40 hover:text-brand-sell">
           Remove
         </button>
@@ -189,7 +215,7 @@ function SignalEditor({
           className={inputClass}
           value={signal.pattern}
           onChange={(e) =>
-            onChange({ kind: "signal", signal: { family: "VOLUME_PATTERN", pattern: e.target.value as never } })
+            onChange({ kind: "signal", signal: { family: "VOLUME_PATTERN", pattern: e.target.value as never, timeframe: signal.timeframe } })
           }
         >
           {VOLUME_PATTERN_CATALOG.map((def) => (
@@ -198,6 +224,10 @@ function SignalEditor({
             </option>
           ))}
         </select>
+        <TimeframeSelect
+          value={signal.timeframe}
+          onChange={(timeframe) => onChange({ kind: "signal", signal: { ...signal, timeframe } })}
+        />
         <button type="button" onClick={onRemove} className="ml-auto text-xs text-brand-navy/40 hover:text-brand-sell">
           Remove
         </button>
@@ -498,4 +528,13 @@ export default function ConditionGroupEditor({
   );
 }
 
-export { defaultComparison, defaultOperand, defaultTimeWindow, defaultCandlePattern, defaultChartPattern, defaultVolumePattern };
+export {
+  defaultComparison,
+  defaultOperand,
+  defaultTimeWindow,
+  defaultCandlePattern,
+  defaultChartPattern,
+  defaultVolumePattern,
+  SignalEditor,
+  ComparisonEditor,
+};

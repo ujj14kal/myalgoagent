@@ -3,12 +3,10 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { runBacktestAction } from "@/lib/backtest-actions";
-import PositionSizingFields from "@/components/position-sizing-fields";
-import RiskManagementFields, { defaultRiskLeg, type RiskLegState } from "@/components/risk-management-fields";
+import { describeExecutionConfig, type StrategyExecutionConfig } from "@/lib/describe-strategy-config";
 import type { CandleRange } from "@/lib/market-data";
-import type { PositionSizingMode } from "@/lib/trading-engine/step";
 
-interface StrategyOption {
+interface StrategyOption extends StrategyExecutionConfig {
   id: string;
   name: string;
   instrumentSymbol: string;
@@ -27,14 +25,10 @@ export default function BacktestRunForm({ strategies }: { strategies: StrategyOp
   const [brokeragePercent, setBrokeragePercent] = useState(0.03);
   const [slippagePercent, setSlippagePercent] = useState(0.05);
   const [range, setRange] = useState<CandleRange>("1y");
-  const [positionSizingMode, setPositionSizingMode] = useState<PositionSizingMode>("FULL_CAPITAL");
-  const [positionSizingValue, setPositionSizingValue] = useState<number | null>(null);
-  const [stopLoss, setStopLoss] = useState<RiskLegState>(defaultRiskLeg(2));
-  const [target, setTarget] = useState<RiskLegState>(defaultRiskLeg(4));
-  const [trailingSl, setTrailingSl] = useState<RiskLegState>(defaultRiskLeg(1.5));
-  const [maxPyramidEntries, setMaxPyramidEntries] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const selectedStrategy = strategies.find((s) => s.id === strategyId);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -46,12 +40,6 @@ export default function BacktestRunForm({ strategies }: { strategies: StrategyOp
           startingCapital,
           brokeragePercent,
           slippagePercent,
-          positionSizingMode,
-          positionSizingValue,
-          stopLoss,
-          target,
-          trailingSl,
-          maxPyramidEntries,
           range,
         });
       } catch (err) {
@@ -125,38 +113,16 @@ export default function BacktestRunForm({ strategies }: { strategies: StrategyOp
         </div>
       </div>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <PositionSizingFields
-          mode={positionSizingMode}
-          value={positionSizingValue}
-          onModeChange={setPositionSizingMode}
-          onValueChange={setPositionSizingValue}
-        />
-        <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
-            Max entries per position
-          </label>
-          <input
-            type="number"
-            min={1}
-            step={1}
-            value={maxPyramidEntries}
-            onChange={(e) => setMaxPyramidEntries(Math.max(1, Number(e.target.value)))}
-            className="w-full rounded-lg border border-brand-navy/15 px-3 py-2 text-sm outline-none focus:border-brand-primary"
-          />
+      {selectedStrategy && (
+        <div className="mt-4 rounded-xl border border-brand-navy/10 bg-brand-bg p-3 text-xs text-brand-navy/60">
+          <span className="font-semibold text-brand-navy/70">Using this strategy&rsquo;s configured execution settings:</span>{" "}
+          {describeExecutionConfig(selectedStrategy)}.{" "}
+          <Link href={`/app/strategies/${selectedStrategy.id}`} className="font-medium text-brand-primary hover:underline">
+            Edit the strategy
+          </Link>{" "}
+          to change position sizing, stop-loss, target, trailing stop or pyramiding.
         </div>
-      </div>
-
-      <div className="mt-4">
-        <RiskManagementFields
-          stopLoss={stopLoss}
-          target={target}
-          trailingSl={trailingSl}
-          onStopLossChange={setStopLoss}
-          onTargetChange={setTarget}
-          onTrailingSlChange={setTrailingSl}
-        />
-      </div>
+      )}
 
       <div className="mt-4 flex items-end gap-4">
         <div>

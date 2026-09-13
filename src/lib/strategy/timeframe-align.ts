@@ -10,17 +10,17 @@ import { intervalDurationSeconds } from "@/lib/market-data";
  * the base bar's time, and carries its value forward until a newer closed
  * bar supersedes it.
  */
-export function alignToBase(
+export function alignToBase<T>(
   baseCandles: Candle[],
   higherCandles: Candle[],
   higherInterval: CandleInterval,
-  higherSeries: (number | undefined)[],
-): (number | undefined)[] {
+  higherSeries: T[],
+): (T | undefined)[] {
   const duration = intervalDurationSeconds(higherInterval);
-  const out: (number | undefined)[] = new Array(baseCandles.length);
+  const out: (T | undefined)[] = new Array(baseCandles.length);
 
   let higherIdx = 0;
-  let lastValue: number | undefined;
+  let lastValue: T | undefined;
 
   for (let i = 0; i < baseCandles.length; i++) {
     const baseTime = baseCandles[i].time;

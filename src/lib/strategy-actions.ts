@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { parseDsl, validateConditionNode, collectAuxRequirements } from "@/lib/strategy";
+import { parseDsl, validateConditionNode, validateConditionSanity, collectAuxRequirements } from "@/lib/strategy";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { validatePositionSizing, toRiskLeg, type PositionSizingMode, type RiskLegInput } from "@/lib/trading-engine/step";
 import type { ConditionNode } from "@/lib/strategy";
 import type { Prisma } from "@prisma/client";
 
@@ -17,6 +18,14 @@ export interface StrategyInput {
   exitCondition?: ConditionNode;
   entrySource?: string;
   exitSource?: string;
+  positionSizingMode: PositionSizingMode;
+  positionSizingValue: number | null;
+  stopLoss: RiskLegInput;
+  target: RiskLegInput;
+  trailingSl: RiskLegInput;
+  maxPyramidEntries: number;
+  /** Set to true to bypass the duplicate-name warning and save anyway. */
+  confirmDuplicateName?: boolean;
 }
 
 /** Cross-instrument operands (added for multi-instrument conditions) name a
@@ -37,6 +46,21 @@ async function validateReferencedInstruments(entry: ConditionNode, exit: Conditi
   }
 }
 
+/** Throws the sentinel "DUPLICATE_NAME" error the client watches for, unless
+ * the user has already confirmed they want to proceed with a reused name. */
+async function checkDuplicateName(userId: string, name: string, excludeId: string | undefined, confirmed: boolean | undefined): Promise<void> {
+  if (confirmed) return;
+  const existing = await prisma.strategy.findFirst({
+    where: {
+      userId,
+      name: { equals: name, mode: "insensitive" },
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+    },
+    select: { id: true },
+  });
+  if (existing) throw new Error("DUPLICATE_NAME");
+}
+
 async function compile(input: StrategyInput): Promise<{
   entryCondition: ConditionNode;
   exitCondition: ConditionNode;
@@ -45,6 +69,7 @@ async function compile(input: StrategyInput): Promise<{
 }> {
   if (!input.name.trim()) throw new Error("Strategy name is required");
   if (!input.instrumentId) throw new Error("Instrument is required");
+  validatePositionSizing({ mode: input.positionSizingMode, value: input.positionSizingValue });
 
   if (input.mode === "CODE") {
     if (!input.entrySource?.trim() || !input.exitSource?.trim()) {
@@ -52,6 +77,8 @@ async function compile(input: StrategyInput): Promise<{
     }
     const entryCondition = parseDsl(input.entrySource);
     const exitCondition = parseDsl(input.exitSource);
+    validateConditionSanity(entryCondition, "entryCondition");
+    validateConditionSanity(exitCondition, "exitCondition");
     await validateReferencedInstruments(entryCondition, exitCondition);
     return {
       entryCondition,
@@ -66,6 +93,8 @@ async function compile(input: StrategyInput): Promise<{
   }
   validateConditionNode(input.entryCondition, "entryCondition");
   validateConditionNode(input.exitCondition, "exitCondition");
+  validateConditionSanity(input.entryCondition, "entryCondition");
+  validateConditionSanity(input.exitCondition, "exitCondition");
   await validateReferencedInstruments(input.entryCondition, input.exitCondition);
   return {
     entryCondition: input.entryCondition,
@@ -75,11 +104,32 @@ async function compile(input: StrategyInput): Promise<{
   };
 }
 
+function riskFields(input: StrategyInput) {
+  const stopLoss = toRiskLeg(input.stopLoss);
+  const target = toRiskLeg(input.target);
+  const trailingSl = toRiskLeg(input.trailingSl);
+  return {
+    positionSizingMode: input.positionSizingMode,
+    positionSizingValue: input.positionSizingValue,
+    stopLossEnabled: stopLoss.enabled,
+    stopLossUnit: stopLoss.enabled ? stopLoss.unit : null,
+    stopLossValue: stopLoss.enabled ? stopLoss.value : null,
+    targetEnabled: target.enabled,
+    targetUnit: target.enabled ? target.unit : null,
+    targetValue: target.enabled ? target.value : null,
+    trailingSlEnabled: trailingSl.enabled,
+    trailingSlUnit: trailingSl.enabled ? trailingSl.unit : null,
+    trailingSlValue: trailingSl.enabled ? trailingSl.value : null,
+    maxPyramidEntries: input.maxPyramidEntries,
+  };
+}
+
 export async function createStrategy(input: StrategyInput) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
   await enforceRateLimit(`strategy-write:${session.user.id}`, 30, 60_000);
 
+  await checkDuplicateName(session.user.id, input.name.trim(), undefined, input.confirmDuplicateName);
   const compiled = await compile(input);
 
   const strategy = await prisma.strategy.create({
@@ -92,6 +142,7 @@ export async function createStrategy(input: StrategyInput) {
       exitCondition: compiled.exitCondition as unknown as Prisma.InputJsonValue,
       entrySource: compiled.entrySource,
       exitSource: compiled.exitSource,
+      ...riskFields(input),
     },
   });
 
@@ -104,6 +155,7 @@ export async function updateStrategy(id: string, input: StrategyInput) {
   if (!session?.user?.id) throw new Error("Unauthorized");
   await enforceRateLimit(`strategy-write:${session.user.id}`, 30, 60_000);
 
+  await checkDuplicateName(session.user.id, input.name.trim(), id, input.confirmDuplicateName);
   const compiled = await compile(input);
 
   await prisma.strategy.updateMany({
@@ -116,6 +168,7 @@ export async function updateStrategy(id: string, input: StrategyInput) {
       exitCondition: compiled.exitCondition as unknown as Prisma.InputJsonValue,
       entrySource: compiled.entrySource,
       exitSource: compiled.exitSource,
+      ...riskFields(input),
     },
   });
 

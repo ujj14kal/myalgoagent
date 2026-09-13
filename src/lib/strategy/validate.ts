@@ -34,6 +34,7 @@ function validateSignal(v: unknown, path: string): asserts v is BooleanSignalKin
     if (typeof v.pattern !== "string" || !CANDLE_PATTERN_BY_KIND.has(v.pattern as never)) {
       throw new Error(`${path}.pattern: unrecognized candle pattern "${String(v.pattern)}"`);
     }
+    validateTimeframe(v.timeframe, path);
     return;
   }
 
@@ -41,6 +42,7 @@ function validateSignal(v: unknown, path: string): asserts v is BooleanSignalKin
     if (typeof v.pattern !== "string" || !CHART_PATTERN_BY_KIND.has(v.pattern as never)) {
       throw new Error(`${path}.pattern: unrecognized chart pattern "${String(v.pattern)}"`);
     }
+    validateTimeframe(v.timeframe, path);
     return;
   }
 
@@ -48,6 +50,7 @@ function validateSignal(v: unknown, path: string): asserts v is BooleanSignalKin
     if (typeof v.pattern !== "string" || !VOLUME_PATTERN_BY_KIND.has(v.pattern as never)) {
       throw new Error(`${path}.pattern: unrecognized volume pattern "${String(v.pattern)}"`);
     }
+    validateTimeframe(v.timeframe, path);
     return;
   }
 
@@ -96,15 +99,19 @@ function validateOperand(v: unknown, path: string): asserts v is Operand {
   throw new Error(`${path}.kind: expected "indicator", "price", or "constant"`);
 }
 
+function validateTimeframe(timeframe: unknown, path: string): void {
+  if (timeframe !== undefined && (typeof timeframe !== "string" || !VALID_INTERVALS.includes(timeframe as never))) {
+    throw new Error(`${path}.timeframe: expected one of ${VALID_INTERVALS.join(", ")}`);
+  }
+}
+
 /** Validates the optional cross-timeframe/cross-instrument override shared
  * by the "indicator" and "price" operand kinds. Only the *shape* is
  * checked here — whether `instrumentSymbol` actually names a real
  * instrument needs a database round-trip, so that check lives in
  * strategy-actions.ts's compile() instead. */
 function validateOverride(v: Record<string, unknown>, path: string): void {
-  if (v.timeframe !== undefined && (typeof v.timeframe !== "string" || !VALID_INTERVALS.includes(v.timeframe as never))) {
-    throw new Error(`${path}.timeframe: expected one of ${VALID_INTERVALS.join(", ")}`);
-  }
+  validateTimeframe(v.timeframe, path);
   if (v.instrumentSymbol !== undefined && (typeof v.instrumentSymbol !== "string" || v.instrumentSymbol.trim() === "")) {
     throw new Error(`${path}.instrumentSymbol: expected a non-empty string`);
   }

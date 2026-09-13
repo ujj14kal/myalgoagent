@@ -91,15 +91,36 @@ function collectOperands(node: ConditionNode, out: Operand[]) {
   }
 }
 
+function collectSignals(node: ConditionNode, out: BooleanSignalKind[]) {
+  if (node.kind === "group") {
+    for (const child of node.children) collectSignals(child, out);
+  } else if (node.kind === "not") {
+    collectSignals(node.child, out);
+  } else if (node.kind === "signal") {
+    out.push(node.signal);
+  }
+}
+
+function signalTimeframe(signal: BooleanSignalKind): CandleInterval | undefined {
+  return signal.family === "TIME_WINDOW" ? undefined : signal.timeframe;
+}
+
 /** Every distinct (instrumentSymbol, timeframe) override referenced by a
- * condition tree — what a caller needs to pre-fetch before evaluating. */
+ * condition tree — what a caller needs to pre-fetch before evaluating.
+ * Covers both operand-level overrides (indicator/price) and pattern-signal
+ * timeframe overrides — patterns don't support a cross-instrument override,
+ * only cross-timeframe. */
 export function collectAuxRequirements(entry: ConditionNode, exit: ConditionNode): { instrumentSymbol?: string; timeframe?: CandleInterval }[] {
   const operands: Operand[] = [];
   collectOperands(entry, operands);
   collectOperands(exit, operands);
+  const signals: BooleanSignalKind[] = [];
+  collectSignals(entry, signals);
+  collectSignals(exit, signals);
 
   const seen = new Set<string>();
   const out: { instrumentSymbol?: string; timeframe?: CandleInterval }[] = [];
+
   for (const op of operands) {
     if (op.kind === "constant") continue;
     if (op.timeframe === undefined && op.instrumentSymbol === undefined) continue;
@@ -108,23 +129,34 @@ export function collectAuxRequirements(entry: ConditionNode, exit: ConditionNode
     seen.add(key);
     out.push({ instrumentSymbol: op.instrumentSymbol, timeframe: op.timeframe });
   }
+
+  for (const signal of signals) {
+    const timeframe = signalTimeframe(signal);
+    if (timeframe === undefined) continue;
+    const key = auxKey(undefined, timeframe);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ instrumentSymbol: undefined, timeframe });
+  }
+
   return out;
 }
 
 function signalKey(signal: BooleanSignalKind): string {
+  const timeframe = signalTimeframe(signal);
   switch (signal.family) {
     case "TIME_WINDOW":
       return `TIME_WINDOW:${signal.startMinute}-${signal.endMinute}`;
     case "CANDLE_PATTERN":
-      return `CANDLE_PATTERN:${signal.pattern}`;
+      return `CANDLE_PATTERN:${signal.pattern}:${timeframe ?? ""}`;
     case "CHART_PATTERN":
-      return `CHART_PATTERN:${signal.pattern}`;
+      return `CHART_PATTERN:${signal.pattern}:${timeframe ?? ""}`;
     case "VOLUME_PATTERN":
-      return `VOLUME_PATTERN:${signal.pattern}`;
+      return `VOLUME_PATTERN:${signal.pattern}:${timeframe ?? ""}`;
   }
 }
 
-function buildSignalSeries(candles: Candle[], signal: BooleanSignalKind): boolean[] {
+function detectPattern(candles: Candle[], signal: BooleanSignalKind): boolean[] {
   switch (signal.family) {
     case "TIME_WINDOW":
       return computeTimeWindowSeries(candles, signal.startMinute, signal.endMinute);
@@ -135,6 +167,19 @@ function buildSignalSeries(candles: Candle[], signal: BooleanSignalKind): boolea
     case "VOLUME_PATTERN":
       return computeVolumePatternSeries(candles, signal.pattern);
   }
+}
+
+function buildSignalSeries(candles: Candle[], signal: BooleanSignalKind, aux: AuxCandleMap): (boolean | undefined)[] {
+  const timeframe = signalTimeframe(signal);
+  if (timeframe === undefined) {
+    return detectPattern(candles, signal);
+  }
+
+  const overrideCandles = aux.get(auxKey(undefined, timeframe));
+  if (!overrideCandles) return candles.map(() => undefined);
+
+  const rawSeries = detectPattern(overrideCandles, signal);
+  return alignToBase(candles, overrideCandles, timeframe, rawSeries);
 }
 
 function compare(operator: ComparisonOperator, leftPrev: number | undefined, leftCur: number, rightPrev: number | undefined, rightCur: number): boolean {
@@ -160,7 +205,7 @@ function evaluateNode(
   node: ConditionNode,
   i: number,
   seriesOf: (operand: Operand) => Series,
-  signalSeriesOf: (signal: BooleanSignalKind) => boolean[],
+  signalSeriesOf: (signal: BooleanSignalKind) => (boolean | undefined)[],
 ): boolean | undefined {
   if (node.kind === "group") {
     const results = node.children.map((c) => evaluateNode(c, i, seriesOf, signalSeriesOf));
@@ -193,7 +238,7 @@ export function evaluateConditionsPerBar(
 ): { entry: boolean[]; exit: boolean[] } {
   const cache = new Map<string, Series>();
   const seriesCacheByOperand = new Map<Operand, Series>();
-  const signalCache = new Map<string, boolean[]>();
+  const signalCache = new Map<string, (boolean | undefined)[]>();
 
   function seriesOf(operand: Operand): Series {
     const existing = seriesCacheByOperand.get(operand);
@@ -203,11 +248,11 @@ export function evaluateConditionsPerBar(
     return series;
   }
 
-  function signalSeriesOf(signal: BooleanSignalKind): boolean[] {
+  function signalSeriesOf(signal: BooleanSignalKind): (boolean | undefined)[] {
     const key = signalKey(signal);
     const existing = signalCache.get(key);
     if (existing) return existing;
-    const series = buildSignalSeries(candles, signal);
+    const series = buildSignalSeries(candles, signal, aux);
     signalCache.set(key, series);
     return series;
   }
