@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseDsl, validateConditionNode, checkConditionFeasibility, collectAuxRequirements } from "@/lib/strategy";
-import { FEASIBILITY_ISSUE_SEPARATOR, NEVER_EXIT_CONDITION } from "@/lib/strategy/types";
+import { NEVER_EXIT_CONDITION, type FeasibilityIssue } from "@/lib/strategy/types";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { validatePositionSizing, toRiskLeg, type PositionSizingMode, type RiskLegInput } from "@/lib/trading-engine/step";
 import type { ConditionNode } from "@/lib/strategy";
@@ -65,8 +65,8 @@ async function checkDuplicateName(userId: string, name: string, excludeId: strin
 /** Rules about the strategy's risk configuration that no condition-tree
  * walk can catch, since they're plain numeric fields on the input, not
  * part of a ConditionNode. */
-function checkRiskFeasibility(input: StrategyInput): string[] {
-  const issues: string[] = [];
+function checkRiskFeasibility(input: StrategyInput): FeasibilityIssue[] {
+  const issues: FeasibilityIssue[] = [];
   const legs: { label: string; leg: RiskLegInput }[] = [
     { label: "Stop loss", leg: input.stopLoss },
     { label: "Target", leg: input.target },
@@ -75,24 +75,43 @@ function checkRiskFeasibility(input: StrategyInput): string[] {
   for (const { label, leg } of legs) {
     if (!leg.enabled) continue;
     if (leg.value <= 0) {
-      issues.push(`${label} is enabled but set to ${leg.value} — it needs a positive value to mean anything.`);
+      issues.push({ section: "risk", message: `${label} is turned on but set to ${leg.value} — enter a number greater than 0.` });
     } else if (leg.unit === "PERCENT" && leg.value >= 100 && label !== "Target") {
       // A stop-loss/trailing-stop of 100%+ means "only exit once the
       // position is worth zero" — for a long-only position, price can't go
       // negative, so this can never realistically trigger as a loss limit.
       // Target has no equivalent cap: a 100%+ profit target is completely
       // normal (the position can gain any amount).
-      issues.push(`${label} is set to ${leg.value}% — a long position can't lose 100% or more, so this could never trigger as a real stop.`);
+      issues.push({
+        section: "risk",
+        message: `${label} of ${leg.value}% can never trigger — a position can't lose 100% or more. Use a smaller percentage.`,
+      });
     }
   }
   if (input.maxPyramidEntries < 1) {
-    issues.push(`Max entries per position is ${input.maxPyramidEntries} — a strategy needs at least 1 entry to ever open a position.`);
+    issues.push({
+      section: "positionSizing",
+      message: `Max entries per position is set to ${input.maxPyramidEntries} — it needs to be at least 1, or the strategy could never open a position.`,
+    });
   }
   return issues;
 }
 
-function throwIfInfeasible(issues: string[]): void {
-  if (issues.length > 0) throw new Error(issues.join(FEASIBILITY_ISSUE_SEPARATOR));
+/** `validatePositionSizing` throws a single plain Error (it's shared with
+ * other, non-strategy-builder callers); this adapts that into the same
+ * collected-issues shape everything else here uses, tagged so the "fix it"
+ * link in the popup can jump straight to the position-sizing fields. */
+function checkPositionSizingFeasibility(input: StrategyInput): FeasibilityIssue[] {
+  try {
+    validatePositionSizing({ mode: input.positionSizingMode, value: input.positionSizingValue });
+    return [];
+  } catch (err) {
+    return [{ section: "positionSizing", message: err instanceof Error ? err.message : "Invalid position sizing" }];
+  }
+}
+
+function throwIfInfeasible(issues: FeasibilityIssue[]): void {
+  if (issues.length > 0) throw new Error(JSON.stringify(issues));
 }
 
 async function compile(input: StrategyInput): Promise<{
@@ -103,8 +122,7 @@ async function compile(input: StrategyInput): Promise<{
 }> {
   if (!input.name.trim()) throw new Error("Strategy name is required");
   if (!input.instrumentId) throw new Error("Instrument is required");
-  validatePositionSizing({ mode: input.positionSizingMode, value: input.positionSizingValue });
-  throwIfInfeasible(checkRiskFeasibility(input));
+  throwIfInfeasible([...checkPositionSizingFeasibility(input), ...checkRiskFeasibility(input)]);
 
   if (input.mode === "WEBHOOK") {
     // No condition tree at all — entries/exits come from an external
@@ -125,10 +143,7 @@ async function compile(input: StrategyInput): Promise<{
     }
     const entryCondition = parseDsl(input.entrySource);
     const exitCondition = parseDsl(input.exitSource);
-    throwIfInfeasible([
-      ...checkConditionFeasibility(entryCondition, "entryCondition"),
-      ...checkConditionFeasibility(exitCondition, "exitCondition"),
-    ]);
+    throwIfInfeasible([...checkConditionFeasibility(entryCondition, "entry"), ...checkConditionFeasibility(exitCondition, "exit")]);
     await validateReferencedInstruments(entryCondition, exitCondition);
     return {
       entryCondition,
@@ -144,8 +159,8 @@ async function compile(input: StrategyInput): Promise<{
   validateConditionNode(input.entryCondition, "entryCondition");
   validateConditionNode(input.exitCondition, "exitCondition");
   throwIfInfeasible([
-    ...checkConditionFeasibility(input.entryCondition, "entryCondition"),
-    ...checkConditionFeasibility(input.exitCondition, "exitCondition"),
+    ...checkConditionFeasibility(input.entryCondition, "entry"),
+    ...checkConditionFeasibility(input.exitCondition, "exit"),
   ]);
   await validateReferencedInstruments(input.entryCondition, input.exitCondition);
   return {

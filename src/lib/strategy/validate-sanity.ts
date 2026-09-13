@@ -1,4 +1,4 @@
-import type { BooleanSignalKind, ComparisonOperator, ConditionNode, Operand } from "./types";
+import { isNeverExitCondition, type BooleanSignalKind, type ComparisonOperator, type ConditionNode, type FeasibilityIssue, type FeasibilitySection, type Operand } from "./types";
 
 const FAMILY_LABEL: Record<BooleanSignalKind["family"], string> = {
   TIME_WINDOW: "time window",
@@ -87,7 +87,7 @@ function boundsAreDisjoint(a: Bound, b: Bound): boolean {
   return false;
 }
 
-function checkComparisonNode(node: Extract<ConditionNode, { kind: "comparison" }>, path: string, issues: string[]): void {
+function checkComparisonNode(node: Extract<ConditionNode, { kind: "comparison" }>, section: FeasibilitySection, issues: FeasibilityIssue[]): void {
   const { left, right, operator } = node;
 
   // Two fixed numbers don't reference any market data at all — the
@@ -95,9 +95,10 @@ function checkComparisonNode(node: Extract<ConditionNode, { kind: "comparison" }
   // real trading condition (it's either permanently true or permanently
   // false the moment the strategy is created).
   if (left.kind === "constant" && right.kind === "constant") {
-    issues.push(
-      `${path}: comparing two fixed numbers (${left.value} ${operator} ${right.value}) doesn't reference any market data — this isn't a trading condition, it's just a fixed true/false value.`,
-    );
+    issues.push({
+      section,
+      message: `This condition just compares two plain numbers (${left.value} vs ${right.value}) — it never looks at real market data, so it can't work as a trading rule.`,
+    });
     return;
   }
 
@@ -105,9 +106,10 @@ function checkComparisonNode(node: Extract<ConditionNode, { kind: "comparison" }
   const rightId = operandIdentity(right);
   if (leftId !== null && leftId === rightId) {
     const always = ALWAYS_FALSE_SELF_COMPARE.includes(operator) ? "false" : "true";
-    issues.push(
-      `${path}: comparing "${describeOperand(left)}" to itself is always ${always} — this condition can never distinguish anything, so it's not a usable trigger.`,
-    );
+    issues.push({
+      section,
+      message: `This compares "${describeOperand(left)}" to itself, so the result is always ${always} — it can never actually decide anything.`,
+    });
     return;
   }
 
@@ -122,17 +124,19 @@ function checkComparisonNode(node: Extract<ConditionNode, { kind: "comparison" }
   // astronomically unlikely, even though it's not mathematically
   // impossible the way the cases above are.
   if (operator === "EQ" && left.kind !== "constant" && right.kind !== "constant") {
-    issues.push(
-      `${path}: "${describeOperand(left)} equals ${describeOperand(right)}" compares two independently computed values for exact equality — with real market data this will essentially never be true, even though it's not technically impossible.`,
-    );
+    issues.push({
+      section,
+      message: `"${describeOperand(left)}" and "${describeOperand(right)}" are unlikely to ever match exactly on real market data, so this will almost never trigger. Try "crosses above/below" instead of "equals."`,
+    });
   }
 }
 
-function checkTimeWindowFeasibility(signal: Extract<BooleanSignalKind, { family: "TIME_WINDOW" }>, path: string, issues: string[]): void {
+function checkTimeWindowFeasibility(signal: Extract<BooleanSignalKind, { family: "TIME_WINDOW" }>, section: FeasibilitySection, issues: FeasibilityIssue[]): void {
   if (signal.endMinute <= MARKET_OPEN_MINUTE || signal.startMinute >= MARKET_CLOSE_MINUTE) {
-    issues.push(
-      `${path}: the time window ${minutesToClock(signal.startMinute)}–${minutesToClock(signal.endMinute)} falls entirely outside NSE's trading session (09:15 AM–3:30 PM IST) — this condition could never fire against real market data.`,
-    );
+    issues.push({
+      section,
+      message: `${minutesToClock(signal.startMinute)}–${minutesToClock(signal.endMinute)} is outside NSE's trading hours (9:15 AM–3:30 PM), so this condition could never fire.`,
+    });
   }
 }
 
@@ -140,7 +144,7 @@ function checkTimeWindowFeasibility(signal: Extract<BooleanSignalKind, { family:
  * constant on the other side can jointly rule out every possible value
  * (e.g. `RSI(14) > 70` AND `RSI(14) < 30`) — no single reading of that
  * series could ever satisfy both at once. */
-function checkNumericContradictions(children: ConditionNode[], path: string, issues: string[]): void {
+function checkNumericContradictions(children: ConditionNode[], section: FeasibilitySection, issues: FeasibilityIssue[]): void {
   const boundsBySeries = new Map<string, { label: string; bound: Bound; operator: ComparisonOperator }[]>();
 
   for (const child of children) {
@@ -164,9 +168,10 @@ function checkNumericContradictions(children: ConditionNode[], path: string, iss
     for (let i = 0; i < entries.length; i++) {
       for (let j = i + 1; j < entries.length; j++) {
         if (boundsAreDisjoint(entries[i].bound, entries[j].bound)) {
-          issues.push(
-            `${path}: no value of "${entries[i].label}" can satisfy both of these at once — they rule each other out entirely.`,
-          );
+          issues.push({
+            section,
+            message: `These two conditions on "${entries[i].label}" can never both be true at once — one already rules out the other.`,
+          });
         }
       }
     }
@@ -179,26 +184,33 @@ function checkNumericContradictions(children: ConditionNode[], path: string, iss
  * mathematically self-contradictory, so a broken strategy is caught before
  * it's saved rather than silently doing nothing forever. Returns every
  * issue found (not just the first), so a user can fix them all in one pass.
+ *
+ * `section` tags every issue found so the UI can link straight back to the
+ * entry/exit card that needs fixing, rather than making the user hunt for
+ * it. `NEVER_EXIT_CONDITION` — the deliberate "no condition-based exit
+ * configured" placeholder — is exempted entirely: it's a real, intentional
+ * always-false condition by design, not a mistake the user made.
  */
-export function checkConditionFeasibility(node: ConditionNode, path = "condition"): string[] {
-  const issues: string[] = [];
-  walk(node, path, issues);
+export function checkConditionFeasibility(node: ConditionNode, section: FeasibilitySection): FeasibilityIssue[] {
+  if (isNeverExitCondition(node)) return [];
+  const issues: FeasibilityIssue[] = [];
+  walk(node, section, issues);
   return issues;
 }
 
-function walk(node: ConditionNode, path: string, issues: string[]): void {
+function walk(node: ConditionNode, section: FeasibilitySection, issues: FeasibilityIssue[]): void {
   if (node.kind === "comparison") {
-    checkComparisonNode(node, path, issues);
+    checkComparisonNode(node, section, issues);
     return;
   }
 
   if (node.kind === "signal") {
-    if (node.signal.family === "TIME_WINDOW") checkTimeWindowFeasibility(node.signal, path, issues);
+    if (node.signal.family === "TIME_WINDOW") checkTimeWindowFeasibility(node.signal, section, issues);
     return;
   }
 
   if (node.kind === "not") {
-    walk(node.child, `${path}.child`, issues);
+    walk(node.child, section, issues);
     return;
   }
 
@@ -209,13 +221,14 @@ function walk(node: ConditionNode, path: string, issues: string[]): void {
       if (child.kind !== "signal") continue;
       const family = child.signal.family;
       if (seen.has(family)) {
-        issues.push(
-          `${path}: a strategy can't require two different ${FAMILY_LABEL[family]} conditions to both be true on the same bar — did you mean OR instead of AND?`,
-        );
+        issues.push({
+          section,
+          message: `You've combined two ${FAMILY_LABEL[family]} conditions with AND, but only one can be true on a given bar — did you mean OR?`,
+        });
       }
       seen.set(family, family);
     }
-    checkNumericContradictions(node.children, path, issues);
+    checkNumericContradictions(node.children, section, issues);
   }
-  node.children.forEach((c, idx) => walk(c, `${path}.children[${idx}]`, issues));
+  node.children.forEach((c) => walk(c, section, issues));
 }

@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import ConditionGroupEditor, { defaultComparison } from "@/components/condition-group-editor";
 import SimpleConditionPicker, { ALL_CATEGORIES, fitsSimpleMode, unwrapForSimpleMode } from "@/components/simple-condition-picker";
 import StrategyCodeEditor from "@/components/strategy-code-editor";
 import PositionSizingFields from "@/components/position-sizing-fields";
 import RiskManagementFields, { type RiskLegState } from "@/components/risk-management-fields";
 import { createStrategy, updateStrategy, type StrategyInput } from "@/lib/strategy-actions";
-import { NEVER_EXIT_CONDITION, FEASIBILITY_ISSUE_SEPARATOR } from "@/lib/strategy/types";
+import { NEVER_EXIT_CONDITION, isNeverExitCondition, type FeasibilitySection } from "@/lib/strategy/types";
 import type { ConditionNode } from "@/lib/strategy";
 import type { PositionSizingMode, RiskUnit } from "@/lib/trading-engine/step";
 
@@ -17,15 +17,30 @@ interface InstrumentOption {
   name: string;
 }
 
-function isNeverExitCondition(node: ConditionNode): boolean {
-  return (
-    node.kind === "comparison" &&
-    node.operator === "GT" &&
-    node.left.kind === "constant" &&
-    node.left.value === 0 &&
-    node.right.kind === "constant" &&
-    node.right.value === 1
-  );
+/** A feasibility issue as shown in the popup — `section` is present when it
+ * came from the structured feasibility checks (and so can be linked to a
+ * spot on the form); absent for a generic/unexpected error string, which is
+ * shown with no "Fix it" link. */
+interface DisplayIssue {
+  section?: FeasibilitySection;
+  message: string;
+}
+
+/** The server returns feasibility failures as a JSON-encoded FeasibilityIssue[]
+ * (see throwIfInfeasible in strategy-actions.ts) so the popup can link each
+ * one back to the form section that needs fixing. Anything that isn't valid
+ * JSON in that shape is an unrelated error string (auth failure, a thrown
+ * exception's plain message, etc.) and is shown as a single sectionless issue. */
+function parseIssues(raw: string): DisplayIssue[] {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.every((p) => p && typeof p === "object" && "message" in p)) {
+      return parsed as DisplayIssue[];
+    }
+  } catch {
+    // Not JSON — fall through to the plain-string case below.
+  }
+  return [{ message: raw }];
 }
 
 function toRiskLegState(enabled: boolean, unit: RiskUnit | null, value: number | null, fallback: number): RiskLegState {
@@ -112,9 +127,31 @@ export default function StrategyBuilderForm({
     toRiskLegState(initial?.trailingSlEnabled ?? false, initial?.trailingSlUnit ?? null, initial?.trailingSlValue ?? null, 1.5),
   );
 
-  const [feasibilityIssues, setFeasibilityIssues] = useState<string[] | null>(null);
+  const [feasibilityIssues, setFeasibilityIssues] = useState<DisplayIssue[] | null>(null);
   const [duplicateName, setDuplicateName] = useState<StrategyInput | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const entryRef = useRef<HTMLDivElement>(null);
+  const exitRef = useRef<HTMLDivElement>(null);
+  // Risk fields render in one of two places depending on mode (inside the
+  // Exit card for NO_CODE/CODE, inside the Webhook card for WEBHOOK) — only
+  // one is ever mounted at a time, so both wrappers can safely share this
+  // one ref.
+  const riskRef = useRef<HTMLDivElement>(null);
+  const positionSizingRef = useRef<HTMLDivElement>(null);
+
+  const sectionRefs: Record<FeasibilitySection, React.RefObject<HTMLDivElement | null>> = {
+    entry: entryRef,
+    exit: exitRef,
+    risk: riskRef,
+    positionSizing: positionSizingRef,
+  };
+
+  function goToSection(section?: FeasibilitySection) {
+    setFeasibilityIssues(null);
+    if (!section) return;
+    sectionRefs[section].current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
 
   function buildInput(confirmDuplicateName?: boolean): StrategyInput {
     const finalExitCondition = exitConditionOpen ? exitCondition : NEVER_EXIT_CONDITION;
@@ -153,13 +190,13 @@ export default function StrategyBuilderForm({
           return;
         }
         if (result?.error) {
-          setFeasibilityIssues(result.error.split(FEASIBILITY_ISSUE_SEPARATOR).filter(Boolean));
+          setFeasibilityIssues(parseIssues(result.error));
         }
       } catch (err) {
         if (err && typeof err === "object" && "digest" in err && String(err.digest).startsWith("NEXT_REDIRECT")) {
           throw err;
         }
-        setFeasibilityIssues([err instanceof Error ? err.message : "Something went wrong"]);
+        setFeasibilityIssues([{ message: err instanceof Error ? err.message : "Something went wrong" }]);
       }
     });
   }
@@ -245,7 +282,7 @@ export default function StrategyBuilderForm({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-black/5 bg-white p-4">
+        <div ref={positionSizingRef} className="rounded-2xl border border-black/5 bg-white p-4">
           <p className="mb-2 text-sm font-semibold text-brand-navy">Position sizing &amp; pyramiding</p>
           <div className="grid gap-4 sm:grid-cols-3">
             <PositionSizingFields
@@ -278,7 +315,7 @@ export default function StrategyBuilderForm({
               no entry/exit condition tree to configure. Stop-loss, target, and trailing stop below still apply to
               every position this strategy opens.
             </p>
-            <div className="mt-3 rounded-xl border border-brand-primary/20 bg-brand-primary/5 p-3">
+            <div ref={riskRef} className="mt-3 rounded-xl border border-brand-primary/20 bg-brand-primary/5 p-3">
               <RiskManagementFields
                 stopLoss={stopLoss}
                 target={target}
@@ -300,7 +337,7 @@ export default function StrategyBuilderForm({
           </div>
         ) : (
           <div className="grid gap-6 xl:grid-cols-2">
-            <div className="rounded-2xl border border-black/5 bg-white p-4">
+            <div ref={entryRef} className="rounded-2xl border border-black/5 bg-white p-4">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-sm font-semibold text-brand-navy">Entry condition</p>
                 {mode === "NO_CODE" && (
@@ -320,10 +357,10 @@ export default function StrategyBuilderForm({
               )}
             </div>
 
-            <div className="rounded-2xl border border-black/5 bg-white p-4">
+            <div ref={exitRef} className="rounded-2xl border border-black/5 bg-white p-4">
               <p className="mb-2 text-sm font-semibold text-brand-navy">Exit condition</p>
 
-              <div className="rounded-xl border border-brand-primary/20 bg-brand-primary/5 p-3">
+              <div ref={riskRef} className="rounded-xl border border-brand-primary/20 bg-brand-primary/5 p-3">
                 <RiskManagementFields
                   stopLoss={stopLoss}
                   target={target}
@@ -446,9 +483,20 @@ export default function StrategyBuilderForm({
             </div>
             <ul className="mt-4 space-y-2.5">
               {feasibilityIssues.map((issue, idx) => (
-                <li key={idx} className="flex gap-2 rounded-lg bg-brand-sell/5 p-3 text-sm text-brand-navy/80">
-                  <span className="mt-0.5 text-brand-sell">•</span>
-                  <span>{issue}</span>
+                <li key={idx} className="flex items-start justify-between gap-3 rounded-lg bg-brand-sell/5 p-3 text-sm text-brand-navy/80">
+                  <span className="flex gap-2">
+                    <span className="mt-0.5 text-brand-sell">•</span>
+                    <span>{issue.message}</span>
+                  </span>
+                  {issue.section && (
+                    <button
+                      type="button"
+                      onClick={() => goToSection(issue.section)}
+                      className="shrink-0 whitespace-nowrap text-xs font-semibold text-brand-primary underline hover:text-brand-primary-light"
+                    >
+                      Fix it →
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -458,7 +506,7 @@ export default function StrategyBuilderForm({
                 onClick={() => setFeasibilityIssues(null)}
                 className="rounded-full bg-brand-primary px-5 py-1.5 text-sm font-semibold text-white hover:bg-brand-primary-light"
               >
-                Got it, let me fix it
+                Close
               </button>
             </div>
           </div>

@@ -98,9 +98,27 @@ export const NEVER_EXIT_CONDITION: ConditionNode = {
   right: { kind: "constant", value: 1 },
 };
 
-/** Separates individual feasibility issues within one thrown Error's
- * message, so the client can split them back apart and show each as its
- * own bullet in the feasibility popup. Lives here (a plain module) rather
- * than in strategy-actions.ts, since a "use server" file may only export
- * async functions — a plain constant export from it fails the build. */
-export const FEASIBILITY_ISSUE_SEPARATOR = "\n";
+/** True for exactly the NEVER_EXIT_CONDITION sentinel — used to recognize
+ * "no condition-based exit configured" (as opposed to a real, user-authored
+ * always-false condition, which shouldn't be able to happen but is a
+ * different situation than this deliberate placeholder). */
+export function isNeverExitCondition(node: ConditionNode): boolean {
+  return (
+    node.kind === "comparison" &&
+    node.operator === "GT" &&
+    node.left.kind === "constant" &&
+    node.left.value === 0 &&
+    node.right.kind === "constant" &&
+    node.right.value === 1
+  );
+}
+
+/** Which part of the strategy-builder form a feasibility issue belongs to —
+ * lets the UI link straight to the relevant section instead of leaving the
+ * user to hunt for it. */
+export type FeasibilitySection = "entry" | "exit" | "risk" | "positionSizing";
+
+export interface FeasibilityIssue {
+  section: FeasibilitySection;
+  message: string;
+}
