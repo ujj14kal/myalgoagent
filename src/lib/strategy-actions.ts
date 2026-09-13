@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { parseDsl, validateConditionNode, validateConditionSanity, collectAuxRequirements } from "@/lib/strategy";
+import { parseDsl, validateConditionNode, checkConditionFeasibility, collectAuxRequirements } from "@/lib/strategy";
+import { FEASIBILITY_ISSUE_SEPARATOR } from "@/lib/strategy/types";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { validatePositionSizing, toRiskLeg, type PositionSizingMode, type RiskLegInput } from "@/lib/trading-engine/step";
 import type { ConditionNode } from "@/lib/strategy";
@@ -61,6 +62,39 @@ async function checkDuplicateName(userId: string, name: string, excludeId: strin
   if (existing) throw new Error("DUPLICATE_NAME");
 }
 
+/** Rules about the strategy's risk configuration that no condition-tree
+ * walk can catch, since they're plain numeric fields on the input, not
+ * part of a ConditionNode. */
+function checkRiskFeasibility(input: StrategyInput): string[] {
+  const issues: string[] = [];
+  const legs: { label: string; leg: RiskLegInput }[] = [
+    { label: "Stop loss", leg: input.stopLoss },
+    { label: "Target", leg: input.target },
+    { label: "Trailing stop loss", leg: input.trailingSl },
+  ];
+  for (const { label, leg } of legs) {
+    if (!leg.enabled) continue;
+    if (leg.value <= 0) {
+      issues.push(`${label} is enabled but set to ${leg.value} — it needs a positive value to mean anything.`);
+    } else if (leg.unit === "PERCENT" && leg.value >= 100 && label !== "Target") {
+      // A stop-loss/trailing-stop of 100%+ means "only exit once the
+      // position is worth zero" — for a long-only position, price can't go
+      // negative, so this can never realistically trigger as a loss limit.
+      // Target has no equivalent cap: a 100%+ profit target is completely
+      // normal (the position can gain any amount).
+      issues.push(`${label} is set to ${leg.value}% — a long position can't lose 100% or more, so this could never trigger as a real stop.`);
+    }
+  }
+  if (input.maxPyramidEntries < 1) {
+    issues.push(`Max entries per position is ${input.maxPyramidEntries} — a strategy needs at least 1 entry to ever open a position.`);
+  }
+  return issues;
+}
+
+function throwIfInfeasible(issues: string[]): void {
+  if (issues.length > 0) throw new Error(issues.join(FEASIBILITY_ISSUE_SEPARATOR));
+}
+
 async function compile(input: StrategyInput): Promise<{
   entryCondition: ConditionNode;
   exitCondition: ConditionNode;
@@ -70,6 +104,7 @@ async function compile(input: StrategyInput): Promise<{
   if (!input.name.trim()) throw new Error("Strategy name is required");
   if (!input.instrumentId) throw new Error("Instrument is required");
   validatePositionSizing({ mode: input.positionSizingMode, value: input.positionSizingValue });
+  throwIfInfeasible(checkRiskFeasibility(input));
 
   if (input.mode === "CODE") {
     if (!input.entrySource?.trim() || !input.exitSource?.trim()) {
@@ -77,8 +112,10 @@ async function compile(input: StrategyInput): Promise<{
     }
     const entryCondition = parseDsl(input.entrySource);
     const exitCondition = parseDsl(input.exitSource);
-    validateConditionSanity(entryCondition, "entryCondition");
-    validateConditionSanity(exitCondition, "exitCondition");
+    throwIfInfeasible([
+      ...checkConditionFeasibility(entryCondition, "entryCondition"),
+      ...checkConditionFeasibility(exitCondition, "exitCondition"),
+    ]);
     await validateReferencedInstruments(entryCondition, exitCondition);
     return {
       entryCondition,
@@ -93,8 +130,10 @@ async function compile(input: StrategyInput): Promise<{
   }
   validateConditionNode(input.entryCondition, "entryCondition");
   validateConditionNode(input.exitCondition, "exitCondition");
-  validateConditionSanity(input.entryCondition, "entryCondition");
-  validateConditionSanity(input.exitCondition, "exitCondition");
+  throwIfInfeasible([
+    ...checkConditionFeasibility(input.entryCondition, "entryCondition"),
+    ...checkConditionFeasibility(input.exitCondition, "exitCondition"),
+  ]);
   await validateReferencedInstruments(input.entryCondition, input.exitCondition);
   return {
     entryCondition: input.entryCondition,

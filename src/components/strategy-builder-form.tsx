@@ -7,7 +7,7 @@ import StrategyCodeEditor from "@/components/strategy-code-editor";
 import PositionSizingFields from "@/components/position-sizing-fields";
 import RiskManagementFields, { type RiskLegState } from "@/components/risk-management-fields";
 import { createStrategy, updateStrategy, type StrategyInput } from "@/lib/strategy-actions";
-import { NEVER_EXIT_CONDITION } from "@/lib/strategy/types";
+import { NEVER_EXIT_CONDITION, FEASIBILITY_ISSUE_SEPARATOR } from "@/lib/strategy/types";
 import type { ConditionNode } from "@/lib/strategy";
 import type { PositionSizingMode, RiskUnit } from "@/lib/trading-engine/step";
 
@@ -112,7 +112,7 @@ export default function StrategyBuilderForm({
     toRiskLegState(initial?.trailingSlEnabled ?? false, initial?.trailingSlUnit ?? null, initial?.trailingSlValue ?? null, 1.5),
   );
 
-  const [error, setError] = useState<string | null>(null);
+  const [feasibilityIssues, setFeasibilityIssues] = useState<string[] | null>(null);
   const [duplicateName, setDuplicateName] = useState<StrategyInput | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -151,20 +151,20 @@ export default function StrategyBuilderForm({
           return;
         }
         if (result?.error) {
-          setError(result.error);
+          setFeasibilityIssues(result.error.split(FEASIBILITY_ISSUE_SEPARATOR).filter(Boolean));
         }
       } catch (err) {
         if (err && typeof err === "object" && "digest" in err && String(err.digest).startsWith("NEXT_REDIRECT")) {
           throw err;
         }
-        setError(err instanceof Error ? err.message : "Something went wrong");
+        setFeasibilityIssues([err instanceof Error ? err.message : "Something went wrong"]);
       }
     });
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
+    setFeasibilityIssues(null);
     submit(buildInput());
   }
 
@@ -339,12 +339,6 @@ export default function StrategyBuilderForm({
           </div>
         </div>
 
-        {error && (
-          <div className="rounded-lg border border-brand-sell/30 bg-brand-sell/5 p-3 text-sm text-brand-sell">
-            {error}
-          </div>
-        )}
-
         <button
           type="submit"
           disabled={isPending}
@@ -386,6 +380,53 @@ export default function StrategyBuilderForm({
                 className="rounded-full bg-brand-primary px-4 py-1.5 text-sm font-semibold text-white hover:bg-brand-primary-light"
               >
                 Use this name anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {feasibilityIssues && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="Close"
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setFeasibilityIssues(null)}
+          />
+          <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-sell/10 text-brand-sell">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a1 1 0 0 0 .86 1.5h18.64a1 1 0 0 0 .86-1.5L13.71 3.86a1 1 0 0 0-1.72 0Z" />
+                </svg>
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-brand-navy">
+                  {feasibilityIssues.length > 1 ? "This strategy isn't feasible yet" : "This strategy can't be saved yet"}
+                </p>
+                <p className="mt-1 text-xs text-brand-navy/50">
+                  {feasibilityIssues.length > 1
+                    ? "A few things about this strategy can't actually work in real trading — fix these and try again:"
+                    : "Here's what's stopping it:"}
+                </p>
+              </div>
+            </div>
+            <ul className="mt-4 space-y-2.5">
+              {feasibilityIssues.map((issue, idx) => (
+                <li key={idx} className="flex gap-2 rounded-lg bg-brand-sell/5 p-3 text-sm text-brand-navy/80">
+                  <span className="mt-0.5 text-brand-sell">•</span>
+                  <span>{issue}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setFeasibilityIssues(null)}
+                className="rounded-full bg-brand-primary px-5 py-1.5 text-sm font-semibold text-white hover:bg-brand-primary-light"
+              >
+                Got it, let me fix it
               </button>
             </div>
           </div>

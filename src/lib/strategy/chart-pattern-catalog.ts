@@ -20,6 +20,10 @@ export const CHART_PATTERN_CATALOG: ChartPatternDef[] = [
   { kind: "BULL_FLAG", label: "Bull Flag" },
   { kind: "BEAR_FLAG", label: "Bear Flag" },
   { kind: "PENNANT", label: "Pennant" },
+  { kind: "RECTANGLE", label: "Rectangle (Channel)" },
+  { kind: "CUP_AND_HANDLE", label: "Cup and Handle" },
+  { kind: "ROUNDING_BOTTOM", label: "Rounding Bottom" },
+  { kind: "ROUNDING_TOP", label: "Rounding Top" },
 ];
 
 export const CHART_PATTERN_BY_KIND: Map<ChartPatternKind, ChartPatternDef> = new Map(

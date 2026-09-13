@@ -14,7 +14,11 @@ export type ChartPatternKind =
   | "FALLING_WEDGE"
   | "BULL_FLAG"
   | "BEAR_FLAG"
-  | "PENNANT";
+  | "PENNANT"
+  | "RECTANGLE"
+  | "CUP_AND_HANDLE"
+  | "ROUNDING_BOTTOM"
+  | "ROUNDING_TOP";
 
 // Tunable thresholds — a single spot to retune if backtesting shows a
 // pattern firing too often/rarely, without touching detector logic.
@@ -26,6 +30,12 @@ const FLAT_SLOPE_PCT = 0.003; // per-bar slope below this counts as "flat" for t
 const POLE_MIN_MOVE_PCT = 0.05; // a flag/pennant's pole must move at least 5% over its window
 const POLE_WINDOW = 10; // bars examined for a pole move
 const CONSOLIDATION_WINDOW = 8; // bars examined for the post-pole consolidation
+const ROUNDING_WINDOW = 30; // bars spanning a rounding bottom/top's whole bowl shape
+const ROUNDING_MIN_DEPTH_PCT = 0.03; // the bowl must dip at least 3% below its starting level
+const CUP_WINDOW = 30; // bars spanning the cup portion of a cup-and-handle
+const HANDLE_WINDOW = 8; // bars spanning the handle portion
+const CUP_RIM_TOLERANCE_PCT = 0.03; // the cup must recover to within 3% of its starting level
+const HANDLE_MAX_DEPTH_RATIO = 0.5; // the handle's pullback must be shallower than half the cup's depth
 
 interface SwingPoint {
   index: number;
@@ -247,6 +257,78 @@ function detectFlagOrPennant(candles: Candle[], index: number, bullish: boolean)
   return bullish ? breakoutCandle.close > consolidationHigh : breakoutCandle.close < consolidationLow;
 }
 
+/** A flat top and a flat bottom (unlike a triangle, where at least one side
+ * slopes) with price oscillating between them — confirmed by a breakout
+ * above resistance or below support. */
+function detectRectangle(swings: SwingPoint[], candle: Candle, index: number): boolean {
+  const sides = recentTriangleSides(swings);
+  if (!sides) return false;
+  const highSlope = slopePctPerBar(...sides.highs);
+  const lowSlope = slopePctPerBar(...sides.lows);
+  if (Math.abs(highSlope) > FLAT_SLOPE_PCT || Math.abs(lowSlope) > FLAT_SLOPE_PCT) return false;
+  const resistance = interpolateAt(...sides.highs, index);
+  const support = interpolateAt(...sides.lows, index);
+  return candle.close > resistance || candle.close < support;
+}
+
+/** A wide, gradual U-shaped recovery, distinct from a Double Bottom's two
+ * sharp, similar-depth lows: the window's low point sits roughly in the
+ * middle, price genuinely declines into it and recovers out of it (not a
+ * V-shaped snap-back), and closes back above where the decline started. */
+function detectRoundingBottom(candles: Candle[], index: number): boolean {
+  if (index < ROUNDING_WINDOW) return false;
+  const window = candles.slice(index - ROUNDING_WINDOW, index + 1);
+  const closes = window.map((c) => c.close);
+  const startLevel = closes[0];
+  const overallMin = Math.min(...closes);
+  const minIdx = closes.indexOf(overallMin);
+  const isRoughlyMiddle = minIdx > window.length * 0.25 && minIdx < window.length * 0.75;
+  const depthPct = (startLevel - overallMin) / startLevel;
+  const breakout = closes[closes.length - 1] > startLevel;
+  return isRoughlyMiddle && depthPct >= ROUNDING_MIN_DEPTH_PCT && breakout;
+}
+
+/** Bearish mirror of Rounding Bottom: a wide, gradual dome-shaped top. */
+function detectRoundingTop(candles: Candle[], index: number): boolean {
+  if (index < ROUNDING_WINDOW) return false;
+  const window = candles.slice(index - ROUNDING_WINDOW, index + 1);
+  const closes = window.map((c) => c.close);
+  const startLevel = closes[0];
+  const overallMax = Math.max(...closes);
+  const maxIdx = closes.indexOf(overallMax);
+  const isRoughlyMiddle = maxIdx > window.length * 0.25 && maxIdx < window.length * 0.75;
+  const heightPct = (overallMax - startLevel) / startLevel;
+  const breakdown = closes[closes.length - 1] < startLevel;
+  return isRoughlyMiddle && heightPct >= ROUNDING_MIN_DEPTH_PCT && breakdown;
+}
+
+/** A rounding-bottom-shaped "cup" followed by a short, noticeably shallower
+ * pullback (the "handle") right below the cup's rim, confirmed by a
+ * breakout above the handle's high. */
+function detectCupAndHandle(candles: Candle[], index: number): boolean {
+  const handleStart = index - HANDLE_WINDOW;
+  if (handleStart - CUP_WINDOW < 0) return false;
+
+  const cupWindow = candles.slice(handleStart - CUP_WINDOW, handleStart);
+  const handleWindow = candles.slice(handleStart, index);
+  if (cupWindow.length === 0 || handleWindow.length === 0) return false;
+
+  const cupStart = cupWindow[0].close;
+  const cupLow = Math.min(...cupWindow.map((c) => c.low));
+  const cupDepthPct = (cupStart - cupLow) / cupStart;
+  const cupEnd = cupWindow[cupWindow.length - 1].close;
+  const cupRecovered = cupEnd >= cupStart * (1 - CUP_RIM_TOLERANCE_PCT);
+  if (cupDepthPct < ROUNDING_MIN_DEPTH_PCT || !cupRecovered) return false;
+
+  const handleHigh = Math.max(...handleWindow.map((c) => c.high));
+  const handleLow = Math.min(...handleWindow.map((c) => c.low));
+  const handleDepthPct = (handleHigh - handleLow) / handleHigh;
+  const handleShallow = handleDepthPct < cupDepthPct * HANDLE_MAX_DEPTH_RATIO;
+  if (!handleShallow) return false;
+
+  return candles[index].close > handleHigh;
+}
+
 function detectAt(candles: Candle[], swings: SwingPoint[], i: number, pattern: ChartPatternKind): boolean {
   const candle = candles[i];
   const known = knownSwingsAt(swings, i, SWING_LOOKBACK);
@@ -279,6 +361,14 @@ function detectAt(candles: Candle[], swings: SwingPoint[], i: number, pattern: C
       return detectFlagOrPennant(candles, i, true);
     case "BEAR_FLAG":
       return detectFlagOrPennant(candles, i, false);
+    case "RECTANGLE":
+      return detectRectangle(known, candle, i);
+    case "CUP_AND_HANDLE":
+      return detectCupAndHandle(candles, i);
+    case "ROUNDING_BOTTOM":
+      return detectRoundingBottom(candles, i);
+    case "ROUNDING_TOP":
+      return detectRoundingTop(candles, i);
   }
 }
 

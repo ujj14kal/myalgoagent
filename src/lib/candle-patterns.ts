@@ -17,7 +17,10 @@ export type CandlePatternKind =
   | "MORNING_STAR"
   | "EVENING_STAR"
   | "THREE_WHITE_SOLDIERS"
-  | "THREE_BLACK_CROWS";
+  | "THREE_BLACK_CROWS"
+  | "SPINNING_TOP"
+  | "PIERCING_LINE"
+  | "DARK_CLOUD_COVER";
 
 // Tunable shape thresholds — a single spot to adjust if backtesting shows a
 // pattern firing too often/rarely, without hunting through detector logic.
@@ -28,6 +31,10 @@ const MARUBOZU_MAX_WICK_RATIO = 0.05; // each wick <= 5% of range
 const TWEEZER_TOLERANCE_RATIO = 0.1; // matching highs/lows within 10% of the bar's average range
 const STAR_MIDDLE_MAX_BODY_RATIO = 0.3; // middle candle's body <= 30% of the first candle's body
 const SOLDIERS_MIN_BODY_RATIO = 0.3; // each soldier/crow body >= 30% of its own range, filters out tiny same-direction dojis
+const SPINNING_TOP_MIN_BODY_RATIO = 0.1; // body > doji's threshold...
+const SPINNING_TOP_MAX_BODY_RATIO = 0.3; // ...but still modest, <= 30% of range
+const SPINNING_TOP_MIN_WICK_RATIO = 1; // each wick >= 1x the body
+const SPINNING_TOP_WICK_BALANCE_RATIO = 0.5; // wicks within 50% of each other (roughly symmetric)
 
 interface Anatomy {
   body: number;
@@ -138,6 +145,44 @@ function isThreeWhiteSoldiers(a: Candle, b: Candle, c: Candle): boolean {
   return sizeOk && progression;
 }
 
+/** A modest body with wicks on both sides that are each notably bigger than
+ * the body and roughly equal to each other — distinct from a Doji (near-
+ * zero body) and from Hammer/Shooting Star (one wick dominates). Signals
+ * indecision: neither buyers nor sellers controlled the bar. */
+function isSpinningTop(c: Candle): boolean {
+  const { body, range, upperWick, lowerWick } = anatomy(c);
+  if (range === 0 || body === 0) return false;
+  const bodyOk = body > SPINNING_TOP_MIN_BODY_RATIO * range && body <= SPINNING_TOP_MAX_BODY_RATIO * range;
+  const wicksLongEnough = upperWick >= SPINNING_TOP_MIN_WICK_RATIO * body && lowerWick >= SPINNING_TOP_MIN_WICK_RATIO * body;
+  const largerWick = Math.max(upperWick, lowerWick);
+  const wicksBalanced = largerWick === 0 || Math.abs(upperWick - lowerWick) <= SPINNING_TOP_WICK_BALANCE_RATIO * largerWick;
+  return bodyOk && wicksLongEnough && wicksBalanced;
+}
+
+/** Bullish 2-candle reversal: a sizable bearish bar followed by a bullish
+ * bar that opens below the prior close and closes back above the prior
+ * bar's midpoint — but *not* above the prior open (that would make it a
+ * Bullish Engulfing instead, a different, stronger pattern). */
+function isPiercingLine(prev: Candle, cur: Candle): boolean {
+  const p = anatomy(prev);
+  const c = anatomy(cur);
+  if (p.isBullish || !c.isBullish || p.body === 0) return false;
+  const midpoint = (prev.open + prev.close) / 2;
+  return cur.open <= prev.close && cur.close > midpoint && cur.close < prev.open;
+}
+
+/** Bearish mirror of Piercing Line: a sizable bullish bar followed by a
+ * bearish bar opening above the prior close, closing back below the prior
+ * bar's midpoint but not below the prior open (which would be Bearish
+ * Engulfing instead). */
+function isDarkCloudCover(prev: Candle, cur: Candle): boolean {
+  const p = anatomy(prev);
+  const c = anatomy(cur);
+  if (!p.isBullish || c.isBullish || p.body === 0) return false;
+  const midpoint = (prev.open + prev.close) / 2;
+  return cur.open >= prev.close && cur.close < midpoint && cur.close > prev.open;
+}
+
 function isThreeBlackCrows(a: Candle, b: Candle, c: Candle): boolean {
   const anatA = anatomy(a);
   const anatB = anatomy(b);
@@ -190,6 +235,12 @@ function detectAt(candles: Candle[], i: number, pattern: CandlePatternKind): boo
       return i >= 2 && isThreeWhiteSoldiers(candles[i - 2], candles[i - 1], cur);
     case "THREE_BLACK_CROWS":
       return i >= 2 && isThreeBlackCrows(candles[i - 2], candles[i - 1], cur);
+    case "SPINNING_TOP":
+      return isSpinningTop(cur);
+    case "PIERCING_LINE":
+      return i >= 1 && isPiercingLine(candles[i - 1], cur);
+    case "DARK_CLOUD_COVER":
+      return i >= 1 && isDarkCloudCover(candles[i - 1], cur);
   }
 }
 

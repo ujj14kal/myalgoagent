@@ -24,6 +24,9 @@ export const CANDLE_PATTERN_CATALOG: CandlePatternDef[] = [
   { kind: "EVENING_STAR", label: "Evening Star", candleCount: 3 },
   { kind: "THREE_WHITE_SOLDIERS", label: "Three White Soldiers", candleCount: 3 },
   { kind: "THREE_BLACK_CROWS", label: "Three Black Crows", candleCount: 3 },
+  { kind: "SPINNING_TOP", label: "Spinning Top", candleCount: 1 },
+  { kind: "PIERCING_LINE", label: "Piercing Line", candleCount: 2 },
+  { kind: "DARK_CLOUD_COVER", label: "Dark Cloud Cover", candleCount: 2 },
 ];
 
 export const CANDLE_PATTERN_BY_KIND: Map<CandlePatternKind, CandlePatternDef> = new Map(

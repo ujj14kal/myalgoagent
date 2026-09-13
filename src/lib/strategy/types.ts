@@ -97,3 +97,10 @@ export const NEVER_EXIT_CONDITION: ConditionNode = {
   operator: "GT",
   right: { kind: "constant", value: 1 },
 };
+
+/** Separates individual feasibility issues within one thrown Error's
+ * message, so the client can split them back apart and show each as its
+ * own bullet in the feasibility popup. Lives here (a plain module) rather
+ * than in strategy-actions.ts, since a "use server" file may only export
+ * async functions — a plain constant export from it fails the build. */
+export const FEASIBILITY_ISSUE_SEPARATOR = "\n";

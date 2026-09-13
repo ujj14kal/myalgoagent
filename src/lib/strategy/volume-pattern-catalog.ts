@@ -10,6 +10,8 @@ export const VOLUME_PATTERN_CATALOG: VolumePatternDef[] = [
   { kind: "VOLUME_DRY_UP", label: "Volume Dry-Up (0.5x average)" },
   { kind: "BULLISH_VOLUME_BREAKOUT", label: "Bullish Volume Breakout" },
   { kind: "BEARISH_VOLUME_BREAKDOWN", label: "Bearish Volume Breakdown" },
+  { kind: "OBV_BULLISH_DIVERGENCE", label: "OBV Bullish Divergence" },
+  { kind: "OBV_BEARISH_DIVERGENCE", label: "OBV Bearish Divergence" },
 ];
 
 export const VOLUME_PATTERN_BY_KIND: Map<VolumePatternKind, VolumePatternDef> = new Map(
