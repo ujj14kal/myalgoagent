@@ -62,6 +62,7 @@ interface StrategyInitial {
   name: string;
   instrumentId: string;
   mode: "NO_CODE" | "CODE" | "WEBHOOK";
+  direction: "LONG" | "SHORT";
   entryCondition: ConditionNode;
   exitCondition: ConditionNode;
   entrySource: string | null;
@@ -92,6 +93,7 @@ export default function StrategyBuilderForm({
   const [name, setName] = useState(initial?.name ?? "");
   const [instrumentId, setInstrumentId] = useState(initial?.instrumentId ?? instruments[0]?.id ?? "");
   const [mode, setMode] = useState<"NO_CODE" | "CODE" | "WEBHOOK">(initial?.mode ?? "NO_CODE");
+  const [direction, setDirection] = useState<"LONG" | "SHORT">(initial?.direction ?? "LONG");
 
   const initialEntryFitsSimple = initial ? fitsSimpleMode(initial.entryCondition) : true;
   const [entryMode, setEntryMode] = useState<"SIMPLE" | "ADVANCED">(initialEntryFitsSimple ? "SIMPLE" : "ADVANCED");
@@ -159,6 +161,7 @@ export default function StrategyBuilderForm({
       name,
       instrumentId,
       mode,
+      direction,
       ...(mode === "WEBHOOK"
         ? {}
         : mode === "CODE"
@@ -283,8 +286,36 @@ export default function StrategyBuilderForm({
         </div>
 
         <div ref={positionSizingRef} className="rounded-2xl border border-black/5 bg-white p-4">
-          <p className="mb-2 text-sm font-semibold text-brand-navy">Position sizing &amp; pyramiding</p>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <p className="mb-2 text-sm font-semibold text-brand-navy">Direction, position sizing &amp; pyramiding</p>
+          <div className="grid gap-4 sm:grid-cols-4">
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
+                Direction
+              </label>
+              <div className="flex overflow-hidden rounded-full border border-brand-navy/15 w-fit">
+                {(["LONG", "SHORT"] as const).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setDirection(d)}
+                    className={`px-4 py-1.5 text-sm font-medium ${
+                      direction === d
+                        ? d === "LONG"
+                          ? "bg-brand-buy text-white"
+                          : "bg-brand-sell text-white"
+                        : "text-brand-navy/60 hover:bg-brand-bg"
+                    }`}
+                  >
+                    {d === "LONG" ? "Buy (Long)" : "Sell (Short)"}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-xs text-brand-navy/40">
+                {direction === "LONG"
+                  ? "Entry buys to open; exit sells to close."
+                  : "Entry sells to open (short); exit buys to cover."}
+              </p>
+            </div>
             <PositionSizingFields
               mode={positionSizingMode}
               value={positionSizingValue}

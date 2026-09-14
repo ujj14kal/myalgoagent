@@ -170,12 +170,20 @@ enum StrategyMode {
   WEBHOOK
 }
 
+enum StrategyDirection {
+  LONG
+  SHORT
+}
+
 model Strategy {
   id                  String             @id @default(cuid())
   userId              String
   instrumentId        String
   name                String
   mode                StrategyMode
+  // Whether the entry condition opens a long (buy first) or short (sell
+  // first) position — fixed per strategy, same as risk/sizing config below.
+  direction           StrategyDirection  @default(LONG)
   entryCondition      Json
   exitCondition       Json
   entrySource         String?            @db.Text
@@ -233,6 +241,7 @@ model BacktestRun {
   strategyId          String?
   strategyName        String
   instrumentSymbol    String
+  direction           StrategyDirection  @default(LONG)
   startingCapital     Float
   brokeragePercent    Float
   slippagePercent     Float
@@ -301,6 +310,7 @@ model PaperSession {
   strategyId               String?
   strategyName             String
   instrumentSymbol         String
+  direction                StrategyDirection  @default(LONG)
   entryCondition           Json
   exitCondition            Json
   startingCapital          Float

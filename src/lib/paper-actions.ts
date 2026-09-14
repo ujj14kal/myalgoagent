@@ -70,6 +70,7 @@ export async function startPaperSession(input: StartPaperSessionInput): Promise<
         strategyId: strategy.id,
         strategyName: strategy.name,
         instrumentSymbol: strategy.instrument.symbol,
+        direction: strategy.direction,
         entryCondition: strategy.entryCondition as unknown as Prisma.InputJsonValue,
         exitCondition: strategy.exitCondition as unknown as Prisma.InputJsonValue,
         startingCapital: input.startingCapital,
@@ -149,6 +150,7 @@ async function syncPaperSessionInner(id: string, userId: string): Promise<PaperA
   const result = await syncPaperSession(
     {
       instrumentSymbol: paperSession.instrumentSymbol,
+      direction: paperSession.direction,
       entryCondition: paperSession.entryCondition as unknown as ConditionNode,
       exitCondition: paperSession.exitCondition as unknown as ConditionNode,
       brokeragePercent: paperSession.brokeragePercent,

@@ -26,7 +26,8 @@ export default async function PositionsPage() {
       }
       const quantity = s.positionQuantity ?? 0;
       const entryPrice = s.positionEntryPrice ?? 0;
-      const unrealizedPnl = (latestClose - entryPrice) * quantity;
+      const priceDiff = s.direction === "SHORT" ? entryPrice - latestClose : latestClose - entryPrice;
+      const unrealizedPnl = priceDiff * quantity;
       const unrealizedPnlPct = entryPrice > 0 ? (unrealizedPnl / (entryPrice * quantity)) * 100 : 0;
       return { session: s, latestClose, quantity, entryPrice, unrealizedPnl, unrealizedPnlPct };
     }),
@@ -50,6 +51,7 @@ export default async function PositionsPage() {
               <tr className="border-b border-black/5 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
                 <th className="px-4 py-3">Session</th>
                 <th className="px-4 py-3">Instrument</th>
+                <th className="px-4 py-3">Side</th>
                 <th className="px-4 py-3">Qty</th>
                 <th className="px-4 py-3">Entry price</th>
                 <th className="px-4 py-3">LTP</th>
@@ -66,6 +68,9 @@ export default async function PositionsPage() {
                     </Link>
                   </td>
                   <td className="px-4 py-2">{p.session.instrumentSymbol}</td>
+                  <td className={`px-4 py-2 font-medium ${p.session.direction === "SHORT" ? "text-brand-sell" : "text-brand-buy"}`}>
+                    {p.session.direction === "SHORT" ? "Short" : "Long"}
+                  </td>
                   <td className="px-4 py-2">{p.quantity}</td>
                   <td className="px-4 py-2">₹{p.entryPrice.toFixed(2)}</td>
                   <td className="px-4 py-2">₹{p.latestClose.toFixed(2)}</td>

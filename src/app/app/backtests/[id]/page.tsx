@@ -60,7 +60,11 @@ export default async function BacktestDetailPage({ params }: { params: Promise<{
     <div>
       <h1 className="text-2xl font-bold text-brand-navy">{run.strategyName}</h1>
       <p className="mt-1 text-sm text-brand-navy/60">
-        {run.instrumentSymbol} · {run.range} · started with ₹{run.startingCapital.toLocaleString("en-IN")} ·
+        {run.instrumentSymbol} ·{" "}
+        <span className={run.direction === "SHORT" ? "font-medium text-brand-sell" : "font-medium text-brand-buy"}>
+          {run.direction === "SHORT" ? "Short" : "Long"}
+        </span>{" "}
+        · {run.range} · started with ₹{run.startingCapital.toLocaleString("en-IN")} ·
         Sizing: {describePositionSizing(run.positionSizingMode, run.positionSizingValue)}
       </p>
       <p className="mt-1 text-xs text-brand-navy/40">

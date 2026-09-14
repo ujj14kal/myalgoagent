@@ -10,6 +10,7 @@ import {
   type EngineTrade,
   type PositionSizing,
   type RiskManagementConfig,
+  type StrategyDirection,
 } from "@/lib/trading-engine/step";
 
 const DEFAULT_ATR_PERIOD = 14;
@@ -21,6 +22,7 @@ export interface BacktestConfig {
   positionSizing: PositionSizing;
   riskManagement?: RiskManagementConfig;
   maxPyramidEntries?: number;
+  direction?: StrategyDirection;
 }
 
 function usesAtr(rm: RiskManagementConfig | undefined): boolean {
@@ -140,6 +142,7 @@ export function runBacktest(
     riskManagement: config.riskManagement,
     atrAtEntry: atrByTimeFinal ? (entryIdx: number) => atrByTimeFinal.get(candles[entryIdx]?.time) : undefined,
     maxPyramidEntries: config.maxPyramidEntries,
+    direction: config.direction,
   };
 
   const trades: BacktestTradeResult[] = [];
@@ -151,7 +154,7 @@ export function runBacktest(
     state = stepped.state;
     if (stepped.trade) trades.push(stepped.trade);
 
-    equityCurve.push({ time: candles[i].time, equity: markToMarket(candles, i, state) });
+    equityCurve.push({ time: candles[i].time, equity: markToMarket(candles, i, state, config.direction) });
   }
 
   if (state.position) {

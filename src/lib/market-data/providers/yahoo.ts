@@ -68,6 +68,11 @@ export class YahooFinanceProvider implements MarketDataProvider {
 
     const { timestamp, indicators } = result;
     const quote = indicators.quote[0];
+    // Yahoo can return a `result` object with no `timestamp` array at all —
+    // e.g. requesting today's intraday 1-minute bars when there's no
+    // trading session today (a weekend/holiday) — rather than an error or
+    // an empty array. Treat that the same as "no data" instead of crashing.
+    if (!timestamp || !quote) return [];
 
     const candles: Candle[] = [];
     for (let i = 0; i < timestamp.length; i++) {

@@ -35,6 +35,7 @@ export async function getOrCreateActivePaperSession(
       strategyId: strategy.id,
       strategyName: strategy.name,
       instrumentSymbol: strategy.instrument.symbol,
+      direction: strategy.direction,
       entryCondition: strategy.entryCondition as object,
       exitCondition: strategy.exitCondition as object,
       startingCapital: DEFAULT_STARTING_CAPITAL,

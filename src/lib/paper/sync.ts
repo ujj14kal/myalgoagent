@@ -9,6 +9,7 @@ import {
   type EngineState,
   type PositionSizing,
   type RiskManagementConfig,
+  type StrategyDirection,
 } from "@/lib/trading-engine/step";
 
 const DEFAULT_MAX_PYRAMID_ENTRIES = 1;
@@ -17,6 +18,7 @@ const DEFAULT_ATR_PERIOD = 14;
 
 export interface PaperSessionState {
   instrumentSymbol: string;
+  direction: StrategyDirection;
   entryCondition: ConditionNode;
   exitCondition: ConditionNode;
   brokeragePercent: number;
@@ -155,7 +157,11 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
     riskManagement: session.riskManagement,
     atrAtEntry: atrByTimeFinal ? (idx: number) => atrByTimeFinal.get(candles[idx]?.time) : undefined,
     maxPyramidEntries: session.maxPyramidEntries ?? DEFAULT_MAX_PYRAMID_ENTRIES,
+    direction: session.direction,
   };
+  // A long opens with a BUY and closes with a SELL; a short is the mirror.
+  const openSide = session.direction === "SHORT" ? "SELL" : "BUY";
+  const closeSide = session.direction === "SHORT" ? "BUY" : "SELL";
   const newOrders: NewPaperOrder[] = [];
   let lastSyncedTime = session.lastSyncedTime;
   let suppressedEntrySignal = false;
@@ -177,7 +183,7 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
 
     if (stepped.trade) {
       newOrders.push({
-        side: "SELL",
+        side: closeSide,
         time: stepped.trade.exitTime,
         price: stepped.trade.exitPrice,
         quantity: stepped.trade.quantity,
@@ -186,7 +192,7 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
       });
     } else if (wasFlat && state.position) {
       newOrders.push({
-        side: "BUY",
+        side: openSide,
         time: candles[state.position.entryIdx].time,
         price: state.position.entryPrice,
         quantity: state.position.quantity,
@@ -200,7 +206,7 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
       const addedQuantity = state.position.quantity - prevQuantity;
       const addedNotional = state.position.entryPrice * state.position.quantity - prevEntryPrice * prevQuantity;
       newOrders.push({
-        side: "BUY",
+        side: openSide,
         time: candles[i + 1]?.time ?? candles[i].time,
         price: addedNotional / addedQuantity,
         quantity: addedQuantity,
@@ -230,6 +236,6 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
     lastSyncedTime,
     suppressedEntrySignal,
     sizeTooSmall,
-    equity: candles.length > 0 ? markToMarket(candles, candles.length - 1, state) : state.cash,
+    equity: candles.length > 0 ? markToMarket(candles, candles.length - 1, state, session.direction) : state.cash,
   };
 }

@@ -1,5 +1,10 @@
 import type { Candle } from "@/lib/market-data";
 
+// Whether the entry condition opens a long (buy first, sell to close) or
+// short (sell first, buy to cover) position. Fixed per strategy — see
+// Strategy.direction in the schema — not something that varies bar to bar.
+export type StrategyDirection = "LONG" | "SHORT";
+
 export interface EnginePosition {
   entryIdx: number;
   entryPrice: number;
@@ -60,6 +65,9 @@ export interface EngineConfig {
   brokeragePercent: number;
   slippagePercent: number;
   positionSizing: PositionSizing;
+  // Defaults to "LONG" so every existing caller (built before shorting
+  // existed) keeps behaving exactly as before without passing this.
+  direction?: StrategyDirection;
   // Omitted or all-null legs = no risk management, exits are driven purely
   // by the strategy's own exit condition (pre-existing behavior).
   riskManagement?: RiskManagementConfig;
@@ -86,17 +94,21 @@ export function resolveRiskDistance(leg: RiskLeg, entryPrice: number, atrAtEntry
 
 /** Resolves stop-loss/target prices from an entry price — shared by a fresh
  * entry and by a pyramid add, since a pyramid add recomputes both off the
- * new blended entry price rather than tracking per-leg levels. */
+ * new blended entry price rather than tracking per-leg levels. A long's
+ * stop sits below entry and target above; a short is the mirror image
+ * (losses happen when price rises, so its stop sits above, target below). */
 export function resolveRiskLevels(
   rm: RiskManagementConfig | undefined,
   entryPrice: number,
   atr: number | undefined,
+  direction: StrategyDirection = "LONG",
 ): { stopLossPrice: number | null; targetPrice: number | null } {
   const stopLossDist = rm?.stopLoss?.enabled ? resolveRiskDistance(rm.stopLoss, entryPrice, atr) : null;
   const targetDist = rm?.target?.enabled ? resolveRiskDistance(rm.target, entryPrice, atr) : null;
+  const sign = direction === "SHORT" ? -1 : 1;
   return {
-    stopLossPrice: stopLossDist !== null ? entryPrice - stopLossDist : null,
-    targetPrice: targetDist !== null ? entryPrice + targetDist : null,
+    stopLossPrice: stopLossDist !== null ? entryPrice - sign * stopLossDist : null,
+    targetPrice: targetDist !== null ? entryPrice + sign * targetDist : null,
   };
 }
 
@@ -141,10 +153,11 @@ function closeTrade(
   exitIdx: number,
   exitPrice: number,
   brokeragePercent: number,
+  direction: StrategyDirection,
 ): EngineTrade {
   const entryValue = pos.entryPrice * pos.quantity;
   const exitValue = exitPrice * pos.quantity;
-  const grossPnl = exitValue - entryValue;
+  const grossPnl = direction === "SHORT" ? entryValue - exitValue : exitValue - entryValue;
   const fees = (entryValue + exitValue) * (brokeragePercent / 100);
   const netPnl = grossPnl - fees;
   return {
@@ -191,49 +204,55 @@ export function stepBar(
   config: EngineConfig,
 ): { state: EngineState; trade?: EngineTrade; sizeTooSmall?: boolean } {
   const nextBar = candles[i + 1];
+  const direction = config.direction ?? "LONG";
+  const isShort = direction === "SHORT";
+  // A long buys to open (slippage costs you more) and sells to close
+  // (slippage gets you less); a short is the mirror image on both sides.
+  const openFillPrice = (open: number) => open * (1 + (isShort ? -1 : 1) * (config.slippagePercent / 100));
+  const closeFillPrice = (open: number) => open * (1 + (isShort ? 1 : -1) * (config.slippagePercent / 100));
 
   if (state.position) {
     const bar = candles[i];
     const pos = state.position;
     const rm = config.riskManagement;
-    const favorableExtreme = Math.max(pos.favorableExtreme, bar.high);
+    const favorableExtreme = isShort ? Math.min(pos.favorableExtreme, bar.low) : Math.max(pos.favorableExtreme, bar.high);
 
     let trailingStopPrice: number | null = null;
     if (rm?.trailingSl?.enabled) {
       const atr = config.atrAtEntry?.(pos.entryIdx);
       const dist = resolveRiskDistance(rm.trailingSl, pos.entryPrice, atr);
-      if (dist !== null) trailingStopPrice = favorableExtreme - dist;
+      if (dist !== null) trailingStopPrice = isShort ? favorableExtreme + dist : favorableExtreme - dist;
     }
 
     let exitPrice: number | null = null;
-    if (trailingStopPrice !== null && bar.low <= trailingStopPrice) {
+    if (trailingStopPrice !== null && (isShort ? bar.high >= trailingStopPrice : bar.low <= trailingStopPrice)) {
       exitPrice = trailingStopPrice;
-    } else if (pos.stopLossPrice !== null && bar.low <= pos.stopLossPrice) {
+    } else if (pos.stopLossPrice !== null && (isShort ? bar.high >= pos.stopLossPrice : bar.low <= pos.stopLossPrice)) {
       exitPrice = pos.stopLossPrice;
-    } else if (pos.targetPrice !== null && bar.high >= pos.targetPrice) {
+    } else if (pos.targetPrice !== null && (isShort ? bar.low <= pos.targetPrice : bar.high >= pos.targetPrice)) {
       exitPrice = pos.targetPrice;
     }
 
     if (exitPrice !== null) {
-      const trade = closeTrade(candles, pos, i, exitPrice, config.brokeragePercent);
+      const trade = closeTrade(candles, pos, i, exitPrice, config.brokeragePercent, direction);
       return { state: { cash: state.cash + trade.netPnl, position: null }, trade };
     }
 
     if (exitSignal && nextBar) {
-      const fillPrice = nextBar.open * (1 - config.slippagePercent / 100);
-      const trade = closeTrade(candles, pos, i + 1, fillPrice, config.brokeragePercent);
+      const fillPrice = closeFillPrice(nextBar.open);
+      const trade = closeTrade(candles, pos, i + 1, fillPrice, config.brokeragePercent, direction);
       return { state: { cash: state.cash + trade.netPnl, position: null }, trade };
     }
 
     const maxPyramidEntries = config.maxPyramidEntries ?? 1;
     if (entrySignal && nextBar && pos.pyramidCount < maxPyramidEntries) {
-      const fillPrice = nextBar.open * (1 + config.slippagePercent / 100);
+      const fillPrice = openFillPrice(nextBar.open);
       const addQuantity = computeQuantity(state.cash, fillPrice, config.positionSizing);
       if (addQuantity > 0) {
         const totalQuantity = pos.quantity + addQuantity;
         const blendedEntryPrice = (pos.entryPrice * pos.quantity + fillPrice * addQuantity) / totalQuantity;
         const atr = config.atrAtEntry?.(i + 1);
-        const { stopLossPrice, targetPrice } = resolveRiskLevels(config.riskManagement, blendedEntryPrice, atr);
+        const { stopLossPrice, targetPrice } = resolveRiskLevels(config.riskManagement, blendedEntryPrice, atr, direction);
         return {
           state: {
             ...state,
@@ -255,11 +274,11 @@ export function stepBar(
   }
 
   if (entrySignal && nextBar) {
-    const fillPrice = nextBar.open * (1 + config.slippagePercent / 100);
+    const fillPrice = openFillPrice(nextBar.open);
     const quantity = computeQuantity(state.cash, fillPrice, config.positionSizing);
     if (quantity > 0) {
       const atr = config.atrAtEntry?.(i + 1);
-      const { stopLossPrice, targetPrice } = resolveRiskLevels(config.riskManagement, fillPrice, atr);
+      const { stopLossPrice, targetPrice } = resolveRiskLevels(config.riskManagement, fillPrice, atr, direction);
       return {
         state: {
           ...state,
@@ -291,7 +310,7 @@ export function forceClose(
   config: EngineConfig,
 ): { state: EngineState; trade?: EngineTrade } {
   if (!state.position) return { state };
-  const trade = closeTrade(candles, state.position, idx, candles[idx].close, config.brokeragePercent);
+  const trade = closeTrade(candles, state.position, idx, candles[idx].close, config.brokeragePercent, config.direction ?? "LONG");
   return { state: { cash: state.cash + trade.netPnl, position: null }, trade };
 }
 
@@ -308,7 +327,9 @@ export function validatePositionSizing(sizing: PositionSizing): void {
   }
 }
 
-export function markToMarket(candles: Candle[], idx: number, state: EngineState): number {
-  const unrealized = state.position ? (candles[idx].close - state.position.entryPrice) * state.position.quantity : 0;
+export function markToMarket(candles: Candle[], idx: number, state: EngineState, direction: StrategyDirection = "LONG"): number {
+  if (!state.position) return state.cash;
+  const diff = candles[idx].close - state.position.entryPrice;
+  const unrealized = (direction === "SHORT" ? -diff : diff) * state.position.quantity;
   return state.cash + unrealized;
 }

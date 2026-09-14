@@ -51,22 +51,28 @@ async function fetchFillPriceAndDayTime(symbol: string): Promise<{ price: number
  * Opens or closes a paper position immediately, in response to a webhook
  * signal, bypassing the entry/exit condition tree entirely (a webhook-mode
  * strategy has no condition tree — see NEVER_EXIT_CONDITION usage in
- * strategy-actions.ts). A BUY while already in a position, or a SELL while
- * flat, is a deliberate no-op — pyramiding into a webhook-opened position
- * isn't supported in this first version, kept simple rather than
- * re-implementing stepBar's blended-entry math here.
+ * strategy-actions.ts). Which literal action *opens* a position depends on
+ * the strategy's direction: a long opens on BUY and closes on SELL; a short
+ * is the mirror — sending SELL first to open the short, BUY to cover it, is
+ * the intuitive mapping for a real TradingView alert. An action that would
+ * open an already-open position, or close a flat one, is a deliberate
+ * no-op — pyramiding into a webhook-opened position isn't supported in this
+ * first version, kept simple rather than re-implementing stepBar's
+ * blended-entry math here.
  */
 export async function applyWebhookSignal(session: PaperSession, action: WebhookAction): Promise<ApplySignalResult> {
   if (session.status !== "ACTIVE") {
     return { executed: false, error: "Paper session is not active" };
   }
 
+  const isShort = session.direction === "SHORT";
+  const opensPosition = isShort ? action === "SELL" : action === "BUY";
   const hasPosition = session.positionEntryPrice !== null && session.positionQuantity !== null;
-  if (action === "BUY" && hasPosition) {
-    return { executed: false, error: "Already in a position — BUY signal ignored" };
+  if (opensPosition && hasPosition) {
+    return { executed: false, error: `Already in a position — ${action} signal ignored` };
   }
-  if (action === "SELL" && !hasPosition) {
-    return { executed: false, error: "No open position — SELL signal ignored" };
+  if (!opensPosition && !hasPosition) {
+    return { executed: false, error: `No open position — ${action} signal ignored` };
   }
 
   const riskSettings = await prisma.riskSettings.findUnique({ where: { userId: session.userId } });
@@ -85,23 +91,23 @@ export async function applyWebhookSignal(session: PaperSession, action: WebhookA
     },
   );
 
-  if (action === "BUY" && !riskCheck.allowNewEntries) {
+  if (opensPosition && !riskCheck.allowNewEntries) {
     return { executed: false, error: "Blocked by risk kill switch / limit" };
   }
 
   const { price, dayTime } = await fetchFillPriceAndDayTime(session.instrumentSymbol);
   const positionSizing: PositionSizing = { mode: session.positionSizingMode, value: session.positionSizingValue };
 
-  if (action === "BUY") {
+  if (opensPosition) {
     const quantity = computeQuantity(session.cash, price, positionSizing);
     if (quantity <= 0) {
       return { executed: false, error: "Configured position size rounds to 0 shares at the current price" };
     }
-    const { stopLossPrice, targetPrice } = resolveRiskLevels(riskManagementFromSession(session), price, undefined);
+    const { stopLossPrice, targetPrice } = resolveRiskLevels(riskManagementFromSession(session), price, undefined, session.direction);
 
     const order = await prisma.$transaction(async (tx) => {
       const created = await tx.paperOrder.create({
-        data: { paperSessionId: session.id, side: "BUY", time: dayTime, price, quantity, fees: 0, netPnl: null },
+        data: { paperSessionId: session.id, side: action, time: dayTime, price, quantity, fees: 0, netPnl: null },
       });
       await tx.paperSession.update({
         where: { id: session.id },
@@ -120,7 +126,7 @@ export async function applyWebhookSignal(session: PaperSession, action: WebhookA
           userId: session.userId,
           paperSessionId: session.id,
           type: "ORDER_FILLED",
-          message: `Bought ${quantity} ${session.instrumentSymbol} at ₹${price.toFixed(2)} (${session.strategyName}) — via webhook signal.`,
+          message: `${action === "BUY" ? "Bought" : "Sold"} ${quantity} ${session.instrumentSymbol} at ₹${price.toFixed(2)} (${session.strategyName}) — via webhook signal.`,
         },
       });
       return created;
@@ -128,18 +134,19 @@ export async function applyWebhookSignal(session: PaperSession, action: WebhookA
     return { executed: true, paperOrderId: order.id };
   }
 
-  // SELL — close the open position at the fetched price.
+  // Closing the open position at the fetched price — a SELL closes a long,
+  // a BUY covers a short, so PnL flips sign accordingly.
   const entryPrice = session.positionEntryPrice!;
   const quantity = session.positionQuantity!;
   const entryValue = entryPrice * quantity;
   const exitValue = price * quantity;
-  const grossPnl = exitValue - entryValue;
+  const grossPnl = isShort ? entryValue - exitValue : exitValue - entryValue;
   const fees = (entryValue + exitValue) * (session.brokeragePercent / 100);
   const netPnl = grossPnl - fees;
 
   const order = await prisma.$transaction(async (tx) => {
     const created = await tx.paperOrder.create({
-      data: { paperSessionId: session.id, side: "SELL", time: dayTime, price, quantity, fees, netPnl },
+      data: { paperSessionId: session.id, side: action, time: dayTime, price, quantity, fees, netPnl },
     });
     await tx.paperSession.update({
       where: { id: session.id },
@@ -159,7 +166,7 @@ export async function applyWebhookSignal(session: PaperSession, action: WebhookA
         userId: session.userId,
         paperSessionId: session.id,
         type: "ORDER_FILLED",
-        message: `Sold ${quantity} ${session.instrumentSymbol} at ₹${price.toFixed(2)} (${session.strategyName}) — via webhook signal.`,
+        message: `${action === "BUY" ? "Bought" : "Sold"} ${quantity} ${session.instrumentSymbol} at ₹${price.toFixed(2)} (${session.strategyName}) — via webhook signal.`,
       },
     });
     return created;

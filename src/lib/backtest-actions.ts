@@ -86,6 +86,7 @@ export async function runBacktestAction(input: RunBacktestInput): Promise<Backte
         positionSizing,
         riskManagement,
         maxPyramidEntries: strategy.maxPyramidEntries,
+        direction: strategy.direction,
       },
       aux,
     );
@@ -96,6 +97,7 @@ export async function runBacktestAction(input: RunBacktestInput): Promise<Backte
         strategyId: strategy.id,
         strategyName: strategy.name,
         instrumentSymbol: strategy.instrument.symbol,
+        direction: strategy.direction,
         startingCapital: input.startingCapital,
         brokeragePercent: input.brokeragePercent,
         slippagePercent: input.slippagePercent,

@@ -91,6 +91,10 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
           <h1 className="text-2xl font-bold text-brand-navy">{strategy.name}</h1>
           <p className="mt-1 text-sm text-brand-navy/60">
             {strategy.instrument.symbol} — {strategy.instrument.name}
+            {" · "}
+            <span className={strategy.direction === "SHORT" ? "font-medium text-brand-sell" : "font-medium text-brand-buy"}>
+              {strategy.direction === "SHORT" ? "Short" : "Long"}
+            </span>
           </p>
         </div>
         <StrategyStatusControls strategyId={strategy.id} status={strategy.status} />
@@ -141,6 +145,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
               name: strategy.name,
               instrumentId: strategy.instrumentId,
               mode: strategy.mode,
+              direction: strategy.direction,
               entryCondition,
               exitCondition,
               entrySource: strategy.entrySource,

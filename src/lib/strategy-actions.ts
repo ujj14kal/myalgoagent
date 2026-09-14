@@ -15,6 +15,7 @@ export interface StrategyInput {
   name: string;
   instrumentId: string;
   mode: "NO_CODE" | "CODE" | "WEBHOOK";
+  direction: "LONG" | "SHORT";
   entryCondition?: ConditionNode;
   exitCondition?: ConditionNode;
   entrySource?: string;
@@ -176,6 +177,7 @@ function riskFields(input: StrategyInput) {
   const target = toRiskLeg(input.target);
   const trailingSl = toRiskLeg(input.trailingSl);
   return {
+    direction: input.direction,
     positionSizingMode: input.positionSizingMode,
     positionSizingValue: input.positionSizingValue,
     stopLossEnabled: stopLoss.enabled,

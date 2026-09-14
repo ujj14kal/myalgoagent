@@ -31,15 +31,27 @@ export default async function PaperSessionDetailPage({ params }: { params: Promi
     fetchError = err instanceof Error ? err.message : "Failed to load market data";
   }
 
+  // A long opens with a BUY and closes with a SELL; a short is the mirror —
+  // its opening fill is a SELL (sold to open) and its closing fill a BUY
+  // (bought to cover), so which literal side counts as "entry" flips.
+  const opensPosition = (side: "BUY" | "SELL") => (paperSession.direction === "SHORT" ? side === "SELL" : side === "BUY");
   const markers: Signal[] = paperSession.orders.map((o) => ({
     time: o.time,
-    type: o.side === "BUY" ? ("entry" as const) : ("exit" as const),
+    type: opensPosition(o.side) ? ("entry" as const) : ("exit" as const),
   }));
 
   const inPosition = paperSession.positionQuantity !== null;
   const latestClose = candles.at(-1)?.close ?? paperSession.positionEntryPrice ?? 0;
-  const positionValue = inPosition ? latestClose * (paperSession.positionQuantity ?? 0) : 0;
-  const equity = paperSession.cash + positionValue;
+  const quantity = paperSession.positionQuantity ?? 0;
+  const entryPrice = paperSession.positionEntryPrice ?? 0;
+  const positionValue = inPosition ? latestClose * quantity : 0;
+  // Cash is never debited/credited at entry (see EngineState in
+  // trading-engine/step.ts) — it only ever reflects realized gains from
+  // closed trades — so equity must add the *unrealized gain* of an open
+  // position, not its full notional value, or this would double-count the
+  // entry cost as profit. Direction flips which way price moving helps.
+  const unrealizedGain = inPosition ? (paperSession.direction === "SHORT" ? entryPrice - latestClose : latestClose - entryPrice) * quantity : 0;
+  const equity = paperSession.cash + unrealizedGain;
   const pnl = equity - paperSession.startingCapital;
   const pnlPct = (pnl / paperSession.startingCapital) * 100;
 
@@ -53,7 +65,11 @@ export default async function PaperSessionDetailPage({ params }: { params: Promi
         <div>
           <h1 className="text-2xl font-bold text-brand-navy">{paperSession.strategyName}</h1>
           <p className="mt-1 text-sm text-brand-navy/60">
-            {paperSession.instrumentSymbol} · Sizing: {describePositionSizing(paperSession.positionSizingMode, paperSession.positionSizingValue)}
+            {paperSession.instrumentSymbol} ·{" "}
+            <span className={paperSession.direction === "SHORT" ? "font-medium text-brand-sell" : "font-medium text-brand-buy"}>
+              {paperSession.direction === "SHORT" ? "Short" : "Long"}
+            </span>{" "}
+            · Sizing: {describePositionSizing(paperSession.positionSizingMode, paperSession.positionSizingValue)}
           </p>
         </div>
         <PaperSessionControls sessionId={paperSession.id} status={paperSession.status} />
