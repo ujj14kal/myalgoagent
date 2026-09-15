@@ -197,6 +197,26 @@ function isThreeBlackCrows(a: Candle, b: Candle, c: Candle): boolean {
   return sizeOk && progression;
 }
 
+const TREND_LOOKBACK = 5;
+
+/** Hammer/Hanging Man and Inverted Hammer/Shooting Star share an identical
+ * candle *shape* (isHammerShape / isShootingStarShape) — the only thing
+ * that distinguishes them in real technical analysis is what came before:
+ * a hammer-shaped bar is bullish (Hammer) after a decline and bearish
+ * (Hanging Man) after an advance, and the mirror image for shooting-star
+ * shapes. Compares the close just before bar `i` against the close
+ * TREND_LOOKBACK bars earlier to classify that preceding move. Returns
+ * null (no signal either way) when there isn't enough history yet. */
+function precedingTrend(candles: Candle[], i: number): "up" | "down" | null {
+  const start = i - TREND_LOOKBACK;
+  if (start < 0) return null;
+  const first = candles[start].close;
+  const last = candles[i - 1].close;
+  if (last > first) return "up";
+  if (last < first) return "down";
+  return null;
+}
+
 /** Detects `pattern` on bar `i`, given enough preceding bars exist. */
 function detectAt(candles: Candle[], i: number, pattern: CandlePatternKind): boolean {
   const cur = candles[i];
@@ -204,13 +224,13 @@ function detectAt(candles: Candle[], i: number, pattern: CandlePatternKind): boo
     case "DOJI":
       return isDoji(cur);
     case "HAMMER":
-      return isHammerShape(cur) && cur.close >= (cur.high + cur.low) / 2;
+      return isHammerShape(cur) && precedingTrend(candles, i) === "down";
     case "HANGING_MAN":
-      return isHammerShape(cur) && cur.close < (cur.high + cur.low) / 2;
+      return isHammerShape(cur) && precedingTrend(candles, i) === "up";
     case "INVERTED_HAMMER":
-      return isShootingStarShape(cur) && cur.close >= (cur.high + cur.low) / 2;
+      return isShootingStarShape(cur) && precedingTrend(candles, i) === "down";
     case "SHOOTING_STAR":
-      return isShootingStarShape(cur) && cur.close < (cur.high + cur.low) / 2;
+      return isShootingStarShape(cur) && precedingTrend(candles, i) === "up";
     case "MARUBOZU_BULLISH":
       return isMarubozu(cur, true);
     case "MARUBOZU_BEARISH":
