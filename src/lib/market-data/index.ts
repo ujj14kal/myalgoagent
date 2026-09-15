@@ -13,6 +13,8 @@ export {
   INTERVALS,
   isValidCombo,
   defaultIntervalForRange,
+  maxRangeForInterval,
+  clampRangeForInterval,
   VALID_RANGES,
   VALID_INTERVALS,
   intervalDurationSeconds,

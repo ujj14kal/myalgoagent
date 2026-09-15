@@ -9,6 +9,7 @@ import {
   OSCILLATOR_KINDS,
   type ConditionNode,
 } from "@/lib/strategy";
+import { fetchAuxCandles } from "@/lib/strategy-aux-data";
 import CandlestickChart, { type Overlay } from "@/components/candlestick-chart";
 import StrategyBuilderForm from "@/components/strategy-builder-form";
 import StrategyStatusControls from "@/components/strategy-status-controls";
@@ -60,10 +61,20 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
     }
   }
 
+  // A candle/chart/volume-pattern or indicator condition can reference a
+  // different timeframe than this base 6mo/1d chart (e.g. a 5-minute candle
+  // pattern) — that override series has to be fetched separately, or the
+  // condition silently never fires on this preview (it would every bar
+  // evaluate to "unknown data" and be treated as false).
+  const aux =
+    !isWebhook && candles.length > 0
+      ? await fetchAuxCandles(entryCondition, exitCondition, strategy.instrument.symbol, "6mo", "1d")
+      : new Map();
+
   // A webhook-mode strategy has no real condition tree (see
   // NEVER_EXIT_CONDITION usage in strategy-actions.ts) — evaluating it would
   // just show a misleadingly empty "signals preview," so skip it entirely.
-  const signals = !isWebhook && candles.length > 0 ? evaluateStrategy(candles, entryCondition, exitCondition) : [];
+  const signals = !isWebhook && candles.length > 0 ? evaluateStrategy(candles, entryCondition, exitCondition, aux) : [];
 
   const overlays: Overlay[] = [];
   if (!isWebhook && candles.length > 0) {

@@ -1,7 +1,7 @@
 import type { Candle, CandleInterval } from "@/lib/market-data";
 import { computeIndicatorSeries } from "./compute-series";
 import { computeTimeWindowSeries } from "./time-window";
-import { alignToBase } from "./timeframe-align";
+import { alignToBase, alignSignalToBase } from "./timeframe-align";
 import { computeCandlePatternSeries } from "@/lib/candle-patterns";
 import { computeChartPatternSeries } from "@/lib/chart-patterns";
 import { computeVolumePatternSeries } from "@/lib/volume-patterns";
@@ -179,7 +179,7 @@ function buildSignalSeries(candles: Candle[], signal: BooleanSignalKind, aux: Au
   if (!overrideCandles) return candles.map(() => undefined);
 
   const rawSeries = detectPattern(overrideCandles, signal);
-  return alignToBase(candles, overrideCandles, timeframe, rawSeries);
+  return alignSignalToBase(candles, overrideCandles, timeframe, rawSeries);
 }
 
 function compare(operator: ComparisonOperator, leftPrev: number | undefined, leftCur: number, rightPrev: number | undefined, rightCur: number): boolean {
@@ -276,8 +276,13 @@ export function evaluateConditionsPerBar(
   return { entry, exit };
 }
 
-export function evaluateStrategy(candles: Candle[], entryCondition: ConditionNode, exitCondition: ConditionNode): Signal[] {
-  const { entry, exit } = evaluateConditionsPerBar(candles, entryCondition, exitCondition);
+export function evaluateStrategy(
+  candles: Candle[],
+  entryCondition: ConditionNode,
+  exitCondition: ConditionNode,
+  aux: AuxCandleMap = new Map(),
+): Signal[] {
+  const { entry, exit } = evaluateConditionsPerBar(candles, entryCondition, exitCondition, aux);
   const signals: Signal[] = [];
 
   for (let i = 0; i < candles.length; i++) {

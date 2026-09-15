@@ -1,4 +1,4 @@
-import { marketDataProvider } from "@/lib/market-data";
+import { marketDataProvider, clampRangeForInterval } from "@/lib/market-data";
 import type { CandleRange, CandleInterval } from "@/lib/market-data";
 import { collectAuxRequirements, auxKey } from "@/lib/strategy";
 import type { ConditionNode, AuxCandleMap } from "@/lib/strategy";
@@ -24,8 +24,14 @@ export async function fetchAuxCandles(
     requirements.map(async (req) => {
       const symbol = req.instrumentSymbol ?? baseSymbol;
       const interval = req.timeframe ?? baseInterval;
+      // An intraday override interval (e.g. a 5m candle-pattern condition on
+      // a strategy backtested over 6 months) can't be requested over the
+      // base range as-is — Yahoo rejects it outright past its own window for
+      // that interval. Clamp to what's actually servable rather than losing
+      // the whole condition to a fetch error.
+      const range = clampRangeForInterval(baseRange, interval);
       try {
-        const candles = await marketDataProvider.getHistoricalCandles(symbol, baseRange, interval);
+        const candles = await marketDataProvider.getHistoricalCandles(symbol, range, interval);
         aux.set(auxKey(req.instrumentSymbol, req.timeframe), candles);
       } catch {
         // Leave this override unset — buildSeries treats a missing aux

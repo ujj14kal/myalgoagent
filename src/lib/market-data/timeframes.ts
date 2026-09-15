@@ -79,6 +79,34 @@ export function defaultIntervalForRange(range: CandleRange): CandleInterval {
   }
 }
 
+/** The widest range each interval can actually be served for, most
+ * restrictive first — mirrors `isValidCombo`'s groupings. Used to clamp a
+ * requested range down to what's servable rather than sending an
+ * out-of-window request that Yahoo rejects outright (a 422 for intraday
+ * intervals past their window, confirmed empirically) or silently
+ * truncates. */
+export function maxRangeForInterval(interval: CandleInterval): CandleRange {
+  if (INTRADAY_1M.includes(interval)) return "5d";
+  if (INTRADAY_SHORT.includes(interval)) return "1mo";
+  if (INTRADAY_HOUR.includes(interval)) return "1y";
+  return "max";
+}
+
+const RANGE_ORDER: CandleRange[] = ["1d", "5d", "1mo", "3mo", "6mo", "ytd", "1y", "5y", "max"];
+
+/** Clamps `range` down to the widest range `interval` can actually serve,
+ * leaving it unchanged when it's already within bounds. `ytd` is treated as
+ * unbounded (its actual span varies through the year, so it's never clamped
+ * down further than the interval's own cap). */
+export function clampRangeForInterval(range: CandleRange, interval: CandleInterval): CandleRange {
+  if (isValidCombo(range, interval)) return range;
+  const max = maxRangeForInterval(interval);
+  if (range === "ytd") return max;
+  const rangeIdx = RANGE_ORDER.indexOf(range);
+  const maxIdx = RANGE_ORDER.indexOf(max);
+  return rangeIdx > maxIdx ? max : range;
+}
+
 export const VALID_RANGES: CandleRange[] = RANGES.map((r) => r.value);
 export const VALID_INTERVALS: CandleInterval[] = INTERVALS.map((i) => i.value);
 
