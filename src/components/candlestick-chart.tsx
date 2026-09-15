@@ -46,6 +46,42 @@ const EMPTY_DRAWINGS: Drawing[] = [];
 
 type PriceSeries = ISeriesApi<"Candlestick"> | ISeriesApi<"Line"> | ISeriesApi<"Area"> | ISeriesApi<"Bar">;
 
+/** Creates the main price series for `type`, plus the drawing primitive and
+ * markers plugin attached to it — the one place that does this, called both
+ * on mount/chart-type change and whenever the series has to be torn down
+ * and rebuilt after a bar-spacing change (see the granularity guard in the
+ * sync effect below). */
+function createPriceSeries(
+  chart: IChartApi,
+  type: ChartType,
+  currentDrawings: Drawing[],
+): { series: PriceSeries; drawingPrimitive: DrawingsPrimitive; markersPlugin: ISeriesMarkersPluginApi<Time> } {
+  let series: PriceSeries;
+  if (type === "line") {
+    series = chart.addSeries(LineSeries, { color: "#471898", lineWidth: 2 });
+  } else if (type === "area") {
+    series = chart.addSeries(AreaSeries, { lineColor: "#471898", topColor: "rgba(71,24,152,0.3)", bottomColor: "rgba(71,24,152,0)" });
+  } else if (type === "bar") {
+    series = chart.addSeries(BarSeries, { upColor: "#00a83e", downColor: "#d60000" });
+  } else {
+    series = chart.addSeries(CandlestickSeries, {
+      upColor: "#00a83e",
+      downColor: "#d60000",
+      borderVisible: false,
+      wickUpColor: "#00a83e",
+      wickDownColor: "#d60000",
+    });
+  }
+
+  const drawingPrimitive = new DrawingsPrimitive();
+  drawingPrimitive.setDrawings(currentDrawings);
+  series.attachPrimitive(drawingPrimitive);
+
+  const markersPlugin = createSeriesMarkers(series as ISeriesApi<"Candlestick">, []);
+
+  return { series, drawingPrimitive, markersPlugin };
+}
+
 interface HoverInfo {
   time: number;
   open: number;
@@ -82,6 +118,9 @@ export default function CandlestickChart({
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const drawingsPrimitiveRef = useRef<DrawingsPrimitive | null>(null);
   const candlesRef = useRef<Candle[]>(candles);
+  // Bar spacing (seconds between consecutive candles) of the data last
+  // rendered — see the granularity-change guard in the sync effect below.
+  const lastSpacingRef = useRef<number | null>(null);
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const activeToolRef = useRef(activeTool);
   const onDrawingCompleteRef = useRef(onDrawingComplete);
@@ -169,30 +208,10 @@ export default function CandlestickChart({
       seriesRef.current = null;
     }
 
-    let series: PriceSeries;
-    if (chartType === "line") {
-      series = chart.addSeries(LineSeries, { color: "#471898", lineWidth: 2 });
-    } else if (chartType === "area") {
-      series = chart.addSeries(AreaSeries, { lineColor: "#471898", topColor: "rgba(71,24,152,0.3)", bottomColor: "rgba(71,24,152,0)" });
-    } else if (chartType === "bar") {
-      series = chart.addSeries(BarSeries, { upColor: "#00a83e", downColor: "#d60000" });
-    } else {
-      series = chart.addSeries(CandlestickSeries, {
-        upColor: "#00a83e",
-        downColor: "#d60000",
-        borderVisible: false,
-        wickUpColor: "#00a83e",
-        wickDownColor: "#d60000",
-      });
-    }
+    const { series, drawingPrimitive, markersPlugin } = createPriceSeries(chart, chartType, drawings);
     seriesRef.current = series;
-
-    const drawingPrimitive = new DrawingsPrimitive();
-    drawingPrimitive.setDrawings(drawings);
-    series.attachPrimitive(drawingPrimitive);
     drawingsPrimitiveRef.current = drawingPrimitive;
-
-    markersPluginRef.current = createSeriesMarkers(series as ISeriesApi<"Candlestick">, []);
+    markersPluginRef.current = markersPlugin;
 
     const data =
       chartType === "line" || chartType === "area"
@@ -201,6 +220,7 @@ export default function CandlestickChart({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (series as any).setData(data);
     chart.timeScale().fitContent();
+    lastSpacingRef.current = candles.length >= 2 ? candles[1].time - candles[0].time : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chartType]);
 
@@ -222,8 +242,45 @@ export default function CandlestickChart({
   // live while building the timeframe picker.
   useEffect(() => {
     const chart = chartRef.current;
-    const series = seriesRef.current;
+    let series = seriesRef.current;
     if (!chart || !series) return;
+
+    // Bar spacing (seconds between consecutive candles) changing — e.g. the
+    // range/interval pickers switching from daily bars to 5-minute ones —
+    // means the incoming data isn't just a bigger/smaller version of what
+    // the series already holds, it's a different granularity entirely.
+    // lightweight-charts' internal bar-lookup cache has been reproducibly
+    // observed to corrupt permanently ("Value is null" deep in its
+    // Candlestick pane renderer, every repaint after) when a series that's
+    // already rendering one spacing receives setData() for a materially
+    // different one — the same failure class already documented above for a
+    // pure candle-count jump at a *fixed* spacing (6-month to 5-year daily
+    // bars), just triggered by a different kind of change. Tearing the
+    // series down and recreating it (same as a chartType change already
+    // does) starts that internal cache clean instead of trying to diff
+    // across an incompatible dataset. Overlay/volume series get the same
+    // treatment — clearing their refs lets the code below recreate them
+    // fresh rather than diffing them against data at the old spacing too.
+    const spacing = candles.length >= 2 ? candles[1].time - candles[0].time : null;
+    const granularityChanged = lastSpacingRef.current !== null && spacing !== null && spacing !== lastSpacingRef.current;
+    lastSpacingRef.current = spacing;
+
+    if (granularityChanged) {
+      chart.removeSeries(series);
+      const recreated = createPriceSeries(chart, chartType, drawings);
+      series = recreated.series;
+      seriesRef.current = series;
+      drawingsPrimitiveRef.current = recreated.drawingPrimitive;
+      markersPluginRef.current = recreated.markersPlugin;
+
+      for (const s of overlaySeriesRef.current.values()) chart.removeSeries(s);
+      overlaySeriesRef.current.clear();
+
+      if (volumeSeriesRef.current) {
+        chart.removeSeries(volumeSeriesRef.current);
+        volumeSeriesRef.current = null;
+      }
+    }
 
     // Show time-of-day on the axis for intraday candles (1m-1H) — without
     // this every bar on the same day shows an identical date-only label
@@ -282,6 +339,7 @@ export default function CandlestickChart({
     }
 
     chart.timeScale().fitContent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `drawings` is only read on the rare granularity-change path above; the dedicated Drawings effect below keeps it in sync on every other render
   }, [candles, overlays, showVolume, chartType]);
 
   // Markers.
