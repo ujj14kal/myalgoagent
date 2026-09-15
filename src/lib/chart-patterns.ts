@@ -30,6 +30,7 @@ const FLAT_SLOPE_PCT = 0.003; // per-bar slope below this counts as "flat" for t
 const POLE_MIN_MOVE_PCT = 0.05; // a flag/pennant's pole must move at least 5% over its window
 const POLE_WINDOW = 10; // bars examined for a pole move
 const CONSOLIDATION_WINDOW = 8; // bars examined for the post-pole consolidation
+const PENNANT_NARROWING_RATIO = 0.7; // pennant's second-half range must be tighter than this fraction of its first-half range
 const ROUNDING_WINDOW = 30; // bars spanning a rounding bottom/top's whole bowl shape
 const ROUNDING_MIN_DEPTH_PCT = 0.03; // the bowl must dip at least 3% below its starting level
 const CUP_WINDOW = 30; // bars spanning the cup portion of a cup-and-handle
@@ -234,7 +235,12 @@ function detectWedge(swings: SwingPoint[], candle: Candle, index: number, rising
   return rising ? candle.close < lowerNow : candle.close > upperNow;
 }
 
-function detectFlagOrPennant(candles: Candle[], index: number, bullish: boolean): boolean {
+/** Flag and Pennant share a pole-then-pause structure but differ in the
+ * *shape* of the pause: a flag consolidates in a roughly parallel channel,
+ * while a pennant's range visibly narrows into a small triangle (converging
+ * trendlines) before the breakout. `shape` enforces that distinction rather
+ * than treating them as the same detector. */
+function detectFlagOrPennant(candles: Candle[], index: number, bullish: boolean, shape: "flag" | "pennant"): boolean {
   const poleStart = index - POLE_WINDOW - CONSOLIDATION_WINDOW;
   if (poleStart < 0) return false;
 
@@ -245,13 +251,22 @@ function detectFlagOrPennant(candles: Candle[], index: number, bullish: boolean)
   if (!hasPole) return false;
 
   const consolidation = candles.slice(poleStart + POLE_WINDOW, index);
-  if (consolidation.length === 0) return false;
+  if (consolidation.length < 2) return false;
   const consolidationHigh = Math.max(...consolidation.map((c) => c.high));
   const consolidationLow = Math.min(...consolidation.map((c) => c.low));
   const consolidationRangePct = (consolidationHigh - consolidationLow) / poleTo;
   // The pole should dwarf the consolidation range, or this is just a
   // continuation of the same trend rather than pole-then-pause.
   if (consolidationRangePct > Math.abs(poleMovePct) * 0.6) return false;
+
+  const mid = Math.max(1, Math.floor(consolidation.length / 2));
+  const firstHalf = consolidation.slice(0, mid);
+  const secondHalf = consolidation.slice(mid);
+  const firstRange = Math.max(...firstHalf.map((c) => c.high)) - Math.min(...firstHalf.map((c) => c.low));
+  const secondRange = Math.max(...secondHalf.map((c) => c.high)) - Math.min(...secondHalf.map((c) => c.low));
+  const narrows = firstRange > 0 && secondRange < firstRange * PENNANT_NARROWING_RATIO;
+  if (shape === "pennant" && !narrows) return false;
+  if (shape === "flag" && narrows) return false;
 
   const breakoutCandle = candles[index];
   return bullish ? breakoutCandle.close > consolidationHigh : breakoutCandle.close < consolidationLow;
@@ -357,10 +372,11 @@ function detectAt(candles: Candle[], swings: SwingPoint[], i: number, pattern: C
     case "FALLING_WEDGE":
       return detectWedge(known, candle, i, false);
     case "BULL_FLAG":
+      return detectFlagOrPennant(candles, i, true, "flag");
     case "PENNANT":
-      return detectFlagOrPennant(candles, i, true);
+      return detectFlagOrPennant(candles, i, true, "pennant");
     case "BEAR_FLAG":
-      return detectFlagOrPennant(candles, i, false);
+      return detectFlagOrPennant(candles, i, false, "flag");
     case "RECTANGLE":
       return detectRectangle(known, candle, i);
     case "CUP_AND_HANDLE":
