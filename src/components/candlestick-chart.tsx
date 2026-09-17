@@ -29,6 +29,8 @@ export interface Overlay {
 
 export type ChartType = "candlestick" | "line" | "area" | "bar";
 
+type EditableField = "from" | "to" | "price" | "at" | "anchor" | "entry" | "stop" | "target";
+
 // Stable empty defaults — a `= []` default parameter creates a NEW array
 // every call, so a caller that never passes overlays/markers/drawings (the
 // instrument chart page never passes markers, for instance) was giving each
@@ -101,6 +103,8 @@ export default function CandlestickChart({
   activeTool = null,
   onDrawingComplete,
   magnetEnabled = false,
+  showVisibleRangeVolumeProfile = false,
+  onDrawingsReplace,
 }: {
   candles: Candle[];
   overlays?: Overlay[];
@@ -111,6 +115,9 @@ export default function CandlestickChart({
   activeTool?: Drawing["kind"] | null;
   onDrawingComplete?: (drawing: Drawing) => void;
   magnetEnabled?: boolean;
+  showVisibleRangeVolumeProfile?: boolean;
+  /** Commits an edited copy of the whole drawings array — used by drag-to-move, as opposed to onDrawingComplete which only ever appends a new one. */
+  onDrawingsReplace?: (drawings: Drawing[]) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -138,13 +145,87 @@ export default function CandlestickChart({
   const pendingPointRef = useRef<{ time: number; price: number } | null>(null);
   const positionPendingRef = useRef<{ entryTime: number; entryPrice: number; stopPrice: number | null } | null>(null);
   const hadPreviewRef = useRef(false);
+  const drawingsRef = useRef<Drawing[]>(drawings);
+  const onDrawingsReplaceRef = useRef(onDrawingsReplace);
+  // Drag-to-move state for an already-placed drawing's endpoint. Only
+  // engages in "pointer mode" (no drawing tool selected) so it never
+  // competes with placing a new drawing.
+  const dragRef = useRef<{ index: number; field: EditableField } | null>(null);
+  const dragWorkingRef = useRef<Drawing[] | null>(null);
 
   useEffect(() => {
     candlesRef.current = candles;
+    drawingsRef.current = drawings;
     activeToolRef.current = activeTool;
     onDrawingCompleteRef.current = onDrawingComplete;
+    onDrawingsReplaceRef.current = onDrawingsReplace;
     magnetEnabledRef.current = magnetEnabled;
   });
+
+  // Editable points per drawing kind, for drag-to-move (pointer mode, no
+  // tool selected). volumeProfile is intentionally excluded — its "points"
+  // are a time range with no single price, which doesn't map onto a
+  // draggable handle the same natural way the others do.
+  function editablePoints(d: Drawing): { field: EditableField; time: number; price: number }[] {
+    switch (d.kind) {
+      case "trendline":
+      case "rectangle":
+      case "fibonacci":
+      case "ray":
+      case "arrow":
+      case "circle":
+      case "measure":
+        return [
+          { field: "from", time: d.from.time, price: d.from.price },
+          { field: "to", time: d.to.time, price: d.to.price },
+        ];
+      case "horizontal":
+        // No meaningful x for a horizontal line — anchor the hit-test to
+        // whatever bar is currently under the cursor at drag time.
+        return [{ field: "price", time: candlesRef.current.at(-1)?.time ?? 0, price: d.price }];
+      case "text":
+        return [{ field: "at", time: d.at.time, price: d.at.price }];
+      case "anchoredVwap": {
+        const c = candlesRef.current.find((x) => x.time === d.anchorTime) ?? candlesRef.current[0];
+        return c ? [{ field: "anchor", time: c.time, price: c.close }] : [];
+      }
+      case "longPosition":
+      case "shortPosition":
+        return [
+          { field: "entry", time: d.entryTime, price: d.entryPrice },
+          { field: "stop", time: d.entryTime, price: d.stopPrice },
+          { field: "target", time: d.entryTime, price: d.targetPrice },
+        ];
+      default:
+        return [];
+    }
+  }
+
+  function withUpdatedField(d: Drawing, field: EditableField, time: number, price: number): Drawing {
+    switch (d.kind) {
+      case "trendline":
+      case "rectangle":
+      case "fibonacci":
+      case "ray":
+      case "arrow":
+      case "circle":
+      case "measure":
+        return field === "from" ? { ...d, from: { time, price } } : { ...d, to: { time, price } };
+      case "horizontal":
+        return { ...d, price };
+      case "text":
+        return { ...d, at: { time, price } };
+      case "anchoredVwap":
+        return { ...d, anchorTime: time };
+      case "longPosition":
+      case "shortPosition":
+        if (field === "entry") return { ...d, entryTime: time, entryPrice: price };
+        if (field === "stop") return { ...d, stopPrice: price };
+        return { ...d, targetPrice: price };
+      default:
+        return d;
+    }
+  }
 
   // Two-point tools whose in-progress shape can be usefully previewed
   // between the first and second click, reusing the same Drawing shape the
@@ -170,12 +251,13 @@ export default function CandlestickChart({
 
   // Chart instance — created once.
   useEffect(() => {
-    if (!containerRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
 
-    const chart = createChart(containerRef.current, {
+    const chart = createChart(container, {
       layout: { background: { color: "#ffffff" }, textColor: "#0e1b2d" },
       grid: { vertLines: { color: "#f0f1f5" }, horzLines: { color: "#f0f1f5" } },
-      width: containerRef.current.clientWidth,
+      width: container.clientWidth,
       height: 420,
       timeScale: { timeVisible: false, borderColor: "#e2e5ee" },
       rightPriceScale: { borderColor: "#e2e5ee" },
@@ -294,13 +376,112 @@ export default function CandlestickChart({
         onDrawingCompleteRef.current?.({ kind: "volumeProfile", fromTime: from.time, toTime: point.time });
     });
 
+    // Drag-to-move for an already-placed drawing's endpoint, active only in
+    // pointer mode (no drawing tool selected) so it never fights placing a
+    // new one. lightweight-charts only exposes a click event, not drag, so
+    // this uses the container's native mouse events directly and disables
+    // the chart's own pan/zoom for the duration of a drag.
+    const HIT_RADIUS_PX = 10;
+    function pixelFor(time: number, price: number): { x: number; y: number } | null {
+      const x = chart.timeScale().timeToCoordinate(time as UTCTimestamp);
+      const y = seriesRef.current?.priceToCoordinate(price) ?? null;
+      if (x === null || y === null) return null;
+      return { x, y };
+    }
+    function findHit(mouseX: number, mouseY: number): { index: number; field: EditableField } | null {
+      let bestIndex = -1;
+      let bestField: EditableField | null = null;
+      let bestDist = Infinity;
+      for (let index = 0; index < drawingsRef.current.length; index++) {
+        const d = drawingsRef.current[index];
+        if (d.kind === "horizontal") {
+          // A horizontal line spans the whole pane — grabbable anywhere
+          // along its length, not just near one fixed x like every other
+          // shape's endpoints.
+          const y = seriesRef.current?.priceToCoordinate(d.price) ?? null;
+          if (y === null) continue;
+          const dist = Math.abs(y - mouseY);
+          if (dist <= HIT_RADIUS_PX && dist < bestDist) {
+            bestDist = dist;
+            bestIndex = index;
+            bestField = "price";
+          }
+          continue;
+        }
+        for (const p of editablePoints(d)) {
+          const px = pixelFor(p.time, p.price);
+          if (!px) continue;
+          const dist = Math.hypot(px.x - mouseX, px.y - mouseY);
+          if (dist <= HIT_RADIUS_PX && dist < bestDist) {
+            bestDist = dist;
+            bestIndex = index;
+            bestField = p.field;
+          }
+        }
+      }
+      return bestField ? { index: bestIndex, field: bestField } : null;
+    }
+
+    function onMouseDown(e: MouseEvent) {
+      if (activeToolRef.current !== null) return;
+      // Non-null: `container` was already checked once above, before this
+      // closure was created — TS just can't carry that narrowing across a
+      // nested function declaration's boundary, but the ref itself never
+      // becomes null again for the life of this mount-once effect.
+      const rect = container!.getBoundingClientRect();
+      const hit = findHit(e.clientX - rect.left, e.clientY - rect.top);
+      if (!hit) return;
+      dragRef.current = hit;
+      dragWorkingRef.current = drawingsRef.current;
+      chart.applyOptions({ handleScroll: false, handleScale: false });
+    }
+
+    function onMouseMove(e: MouseEvent) {
+      const drag = dragRef.current;
+      if (!drag || !seriesRef.current) return;
+      const rect = container!.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const time = chart.timeScale().coordinateToTime(x);
+      const rawPrice = seriesRef.current.coordinateToPrice(y);
+      if (time === null || rawPrice === null) return;
+      let price: number = rawPrice;
+      if (magnetEnabledRef.current) {
+        const c = candlesRef.current.find((cc) => cc.time === (time as number));
+        if (c) {
+          const candidates = [c.open, c.high, c.low, c.close];
+          price = candidates.reduce((b, v) => (Math.abs(v - price) < Math.abs(b - price) ? v : b), candidates[0]);
+        }
+      }
+      const base = dragWorkingRef.current ?? drawingsRef.current;
+      const updated = base.map((d, i) => (i === drag.index ? withUpdatedField(d, drag.field, time as number, price) : d));
+      dragWorkingRef.current = updated;
+      drawingsPrimitiveRef.current?.setDrawings(updated);
+    }
+
+    function onMouseUp() {
+      if (!dragRef.current) return;
+      dragRef.current = null;
+      chart.applyOptions({ handleScroll: true, handleScale: true });
+      const final = dragWorkingRef.current;
+      dragWorkingRef.current = null;
+      if (final) onDrawingsReplaceRef.current?.(final);
+    }
+
+    container.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+
     const handleResize = () => {
-      if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth });
+      chart.applyOptions({ width: container.clientWidth });
     };
     window.addEventListener("resize", handleResize);
 
     return () => {
       window.removeEventListener("resize", handleResize);
+      container.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
@@ -480,6 +661,15 @@ export default function CandlestickChart({
   useEffect(() => {
     drawingsPrimitiveRef.current?.setCandles(candles);
   }, [candles, chartType]);
+
+  useEffect(() => {
+    drawingsPrimitiveRef.current?.setVisibleRangeProfileEnabled(showVisibleRangeVolumeProfile);
+    // chartType is included because a chartType change tears down and
+    // recreates the primitive (see createPriceSeries below), which resets
+    // this flag to its default — re-applying it here keeps the toggle
+    // correct across that recreation, same reasoning as the Drawings and
+    // candles sync effects right above.
+  }, [showVisibleRangeVolumeProfile, chartType]);
 
   // Reset any in-progress two-click drawing when the active tool changes.
   useEffect(() => {

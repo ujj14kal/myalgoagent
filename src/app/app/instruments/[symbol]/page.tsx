@@ -55,6 +55,7 @@ export default async function InstrumentDetailPage({
         showVolume: boolean;
         drawings: Drawing[];
         compareSymbol: string | null;
+        showVisibleRangeVolumeProfile?: boolean;
       })
     : null;
   // `overlays`/`oscillators` may still be the old bare-string-key format

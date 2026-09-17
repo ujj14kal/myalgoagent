@@ -45,6 +45,7 @@ interface SavedConfig {
   showVolume: boolean;
   drawings: Drawing[];
   compareSymbol: string | null;
+  showVisibleRangeVolumeProfile?: boolean;
 }
 
 function pctChangeSeries(candles: Candle[]) {
@@ -135,6 +136,9 @@ export default function InstrumentChartPanel({
   // fresh, never-saved layout — a saved layout's own explicit choice
   // (including a deliberate "off") is always respected.
   const [showVolume, setShowVolume] = useState(savedLayout?.showVolume ?? true);
+  const [showVisibleRangeVolumeProfile, setShowVisibleRangeVolumeProfile] = useState(
+    savedLayout?.showVisibleRangeVolumeProfile ?? false,
+  );
   const [drawings, setDrawings] = useState<Drawing[]>(savedLayout?.drawings ?? []);
   // Undo/redo history for drawings only — every mutation (adding a new
   // drawing or clearing them all) pushes the *previous* state here first,
@@ -319,6 +323,15 @@ export default function InstrumentChartPanel({
     setActiveTool(null);
   }
 
+  // Commits a drag-to-move edit of an existing drawing's endpoint (the
+  // whole array, already updated) — same undo/redo bookkeeping as adding a
+  // new drawing, since moving one is just as much a real edit.
+  function handleDrawingsReplace(next: Drawing[]) {
+    setUndoStack((prev) => [...prev, drawings]);
+    setRedoStack([]);
+    setDrawings(next);
+  }
+
   function handleClearDrawings() {
     if (drawings.length === 0) return;
     setUndoStack((prev) => [...prev, drawings]);
@@ -356,6 +369,7 @@ export default function InstrumentChartPanel({
         showVolume,
         drawings,
         compareSymbol,
+        showVisibleRangeVolumeProfile,
       });
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("idle"), 2000);
@@ -412,6 +426,17 @@ export default function InstrumentChartPanel({
               }`}
             >
               Volume
+            </button>
+            <button
+              onClick={() => setShowVisibleRangeVolumeProfile((v) => !v)}
+              title="Volume profile for the currently visible range — updates live as you pan or zoom"
+              className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                showVisibleRangeVolumeProfile
+                  ? "border-transparent bg-brand-blue text-white"
+                  : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
+              }`}
+            >
+              Vol Profile
             </button>
             <span className="mx-1 h-4 w-px bg-brand-navy/10" />
             <IndicatorPicker label="Overlay" scope="overlay" onAdd={addOverlay} />
@@ -522,7 +547,9 @@ export default function InstrumentChartPanel({
               drawings={drawings}
               activeTool={activeTool}
               onDrawingComplete={handleDrawingComplete}
+              onDrawingsReplace={handleDrawingsReplace}
               magnetEnabled={magnetEnabled}
+              showVisibleRangeVolumeProfile={showVisibleRangeVolumeProfile}
             />
           </div>
         </div>

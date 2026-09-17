@@ -25,6 +25,33 @@ export type Drawing =
   | { kind: "longPosition" | "shortPosition"; entryTime: number; entryPrice: number; stopPrice: number; targetPrice: number };
 
 const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+const VOLUME_PROFILE_BIN_COUNT = 24;
+
+// Shared by the Fixed Range Volume Profile drawing and the always-on
+// Session (visible-range) Volume Profile — both bucket a set of candles'
+// volume into price bins the same way, they just differ in which candles
+// they bucket (a user-picked range vs. whatever's currently on screen).
+function computeVolumeBins(candles: Candle[], priceLow: number, priceHigh: number, binCount: number) {
+  const binHeight = (priceHigh - priceLow) / binCount;
+  const bins = new Array(binCount).fill(0);
+  for (const c of candles) {
+    const span = c.high - c.low;
+    if (span <= 0) {
+      const idx = Math.min(binCount - 1, Math.max(0, Math.floor((c.close - priceLow) / binHeight)));
+      bins[idx] += c.volume;
+      continue;
+    }
+    for (let i = 0; i < binCount; i++) {
+      const binLow = priceLow + i * binHeight;
+      const binHigh = binLow + binHeight;
+      const overlap = Math.min(c.high, binHigh) - Math.max(c.low, binLow);
+      if (overlap > 0) bins[i] += c.volume * (overlap / span);
+    }
+  }
+  const maxBinVolume = Math.max(...bins, 1);
+  const pocIdx = bins.indexOf(maxBinVolume);
+  return { bins, binHeight, maxBinVolume, pocIdx };
+}
 
 class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
   constructor(private primitive: DrawingsPrimitive) {}
@@ -195,32 +222,8 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
           const priceHigh = Math.max(...rangeCandles.map((c) => c.high));
           if (priceHigh <= priceLow) return;
 
-          const BIN_COUNT = 24;
-          const binHeight = (priceHigh - priceLow) / BIN_COUNT;
-          const bins = new Array(BIN_COUNT).fill(0);
-          for (const c of rangeCandles) {
-            const span = c.high - c.low;
-            if (span <= 0) {
-              // Zero-range bar (e.g. a doji with high === low): all its
-              // volume belongs to the single bin containing that price.
-              const idx = Math.min(BIN_COUNT - 1, Math.max(0, Math.floor((c.close - priceLow) / binHeight)));
-              bins[idx] += c.volume;
-              continue;
-            }
-            // Distribute each candle's volume across every bin its high-low
-            // range overlaps, weighted by the fraction of the candle's own
-            // range inside that bin — the standard way a volume profile
-            // approximates intrabar volume without tick-level data.
-            for (let i = 0; i < BIN_COUNT; i++) {
-              const binLow = priceLow + i * binHeight;
-              const binHigh = binLow + binHeight;
-              const overlap = Math.min(c.high, binHigh) - Math.max(c.low, binLow);
-              if (overlap > 0) bins[i] += c.volume * (overlap / span);
-            }
-          }
-
-          const maxBinVolume = Math.max(...bins, 1);
-          const pocIdx = bins.indexOf(maxBinVolume);
+          const BIN_COUNT = VOLUME_PROFILE_BIN_COUNT;
+          const { bins, binHeight, maxBinVolume, pocIdx } = computeVolumeBins(rangeCandles, priceLow, priceHigh, BIN_COUNT);
           const xLeft = toX(lo);
           const xRight = toX(hi);
           if (xLeft === null || xRight === null) return;
@@ -298,6 +301,42 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
         }
       };
 
+      // Session (visible-range) Volume Profile — unlike the Fixed Range
+      // one, this isn't a drawing the user placed; it's a live readout of
+      // whatever's currently on screen, recomputed every repaint (which
+      // already happens on every pan/zoom) rather than stored. Rendered
+      // FIRST so it sits under every real drawing — it's meant to read as
+      // ambient context, not compete with what the user actually placed.
+      if (this.primitive.visibleRangeProfileEnabled) {
+        const visible = chart.timeScale().getVisibleRange();
+        if (visible) {
+          const lo = Number(visible.from);
+          const hi = Number(visible.to);
+          const rangeCandles = this.primitive.candles.filter((c) => c.time >= lo && c.time <= hi);
+          if (rangeCandles.length > 0) {
+            const priceLow = Math.min(...rangeCandles.map((c) => c.low));
+            const priceHigh = Math.max(...rangeCandles.map((c) => c.high));
+            if (priceHigh > priceLow) {
+              const { bins, binHeight, maxBinVolume, pocIdx } = computeVolumeBins(rangeCandles, priceLow, priceHigh, VOLUME_PROFILE_BIN_COUNT);
+              // Anchored to the right edge of the pane itself (not the data
+              // range), matching TradingView's own "Session Volume" style.
+              const maxBarWidth = mediaSize.width * 0.15;
+              for (let i = 0; i < VOLUME_PROFILE_BIN_COUNT; i++) {
+                if (bins[i] <= 0) continue;
+                const binLow = priceLow + i * binHeight;
+                const binHigh = binLow + binHeight;
+                const yTop = toY(binHigh);
+                const yBottom = toY(binLow);
+                if (yTop === null || yBottom === null) continue;
+                const w = (bins[i] / maxBinVolume) * maxBarWidth;
+                ctx.fillStyle = i === pocIdx ? "rgba(214, 0, 0, 0.25)" : "rgba(70, 111, 255, 0.18)";
+                ctx.fillRect(mediaSize.width - w, Math.min(yTop, yBottom), w, Math.max(1, Math.abs(yBottom - yTop) - 1));
+              }
+            }
+          }
+        }
+      }
+
       for (const d of this.primitive.drawings) renderOne(d);
 
       // The in-progress drawing (between the first and second click) gets
@@ -364,6 +403,10 @@ export class DrawingsPrimitive implements ISeriesPrimitive<Time> {
   // while a point is pending, cleared once the drawing commits or the tool
   // changes. Kept separate from `drawings` so it never gets persisted.
   previewDrawing: Drawing | null = null;
+  // Session (visible-range) Volume Profile toggle — see the render comment
+  // above for why this is computed live from the pane rather than stored
+  // as a drawing.
+  visibleRangeProfileEnabled = false;
   private paneView = new DrawingsPaneView(this);
   private requestUpdateFn: (() => void) | null = null;
 
@@ -390,6 +433,11 @@ export class DrawingsPrimitive implements ISeriesPrimitive<Time> {
 
   setPreview(preview: Drawing | null) {
     this.previewDrawing = preview;
+    this.requestUpdateFn?.();
+  }
+
+  setVisibleRangeProfileEnabled(enabled: boolean) {
+    this.visibleRangeProfileEnabled = enabled;
     this.requestUpdateFn?.();
   }
 
