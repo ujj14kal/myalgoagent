@@ -394,11 +394,18 @@ export default function CandlestickChart({
     return null;
   }
 
+  // z-10 below: lightweight-charts' own internal canvases are absolutely
+  // positioned with explicit z-index (1/2) inside this same positioning
+  // context — an element with no z-index of its own paints *below* any
+  // explicitly z-indexed sibling regardless of DOM order, which silently
+  // hid this legend entirely behind the chart. Reproduced live: the
+  // element existed in the DOM with a correct, non-zero bounding rect and
+  // the right text, but nothing was ever actually painted on screen.
   return (
     <div className="relative">
       <div ref={containerRef} className="w-full" />
       {shown && (
-        <div className="pointer-events-none absolute left-2 top-2 flex flex-col gap-0.5 rounded-md bg-white/90 px-2 py-1.5 text-xs text-brand-navy shadow-sm">
+        <div className="pointer-events-none absolute left-2 top-2 z-10 flex flex-col gap-0.5 rounded-md bg-white/90 px-2 py-1.5 text-xs text-brand-navy shadow-sm">
           <div>
             O <span className="font-medium">{shown.open.toFixed(2)}</span> H{" "}
             <span className="font-medium">{shown.high.toFixed(2)}</span> L{" "}
