@@ -4,10 +4,6 @@ import ProfileForm from "@/components/profile-form";
 import ChangePasswordForm from "@/components/change-password-form";
 import SignOutOthersButton from "@/components/sign-out-others-button";
 import DangerZone from "@/components/danger-zone";
-import AgentNameForm from "@/components/agent-name-form";
-import { DEFAULT_AGENT_NAME } from "@/lib/agent-constants";
-import RobotAvatar from "@/components/robot/robot-avatar";
-import ReplayTourButton from "@/components/tutorial/replay-tour-button";
 import ConnectedAccounts from "@/components/connected-accounts";
 import { getLinkedProviders } from "@/lib/account-links";
 
@@ -32,7 +28,7 @@ export default async function AccountPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-brand-navy">Account</h1>
-      <p className="mt-1 text-sm text-brand-navy/50">Manage your profile, your agent, and account security.</p>
+      <p className="mt-1 text-sm text-brand-navy/50">Manage your profile and account security.</p>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
@@ -50,18 +46,6 @@ export default async function AccountPage() {
             </section>
 
             <section className="rounded-2xl border border-black/5 bg-white p-6">
-              <h2 className="text-sm font-semibold text-brand-navy">Your AlgoAgent</h2>
-              <p className="mt-1 text-xs text-brand-navy/50">
-                Give your agent a name — it&rsquo;ll use it whenever it pops up with a notification.
-              </p>
-              <div className="mt-4">
-                <AgentNameForm initialName={user.agentName ?? DEFAULT_AGENT_NAME} />
-              </div>
-            </section>
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-2">
-            <section className="rounded-2xl border border-black/5 bg-white p-6">
               <h2 className="text-sm font-semibold text-brand-navy">
                 {user.passwordHash ? "Change password" : "Set a password"}
               </h2>
@@ -74,7 +58,9 @@ export default async function AccountPage() {
                 <ChangePasswordForm hasPassword={!!user.passwordHash} />
               </div>
             </section>
+          </div>
 
+          <div className="grid gap-6 md:grid-cols-2">
             <section className="rounded-2xl border border-black/5 bg-white p-6">
               <h2 className="text-sm font-semibold text-brand-navy">Sessions</h2>
               <p className="mt-1 text-xs text-brand-navy/50">
@@ -97,9 +83,7 @@ export default async function AccountPage() {
                 </form>
               </div>
             </section>
-          </div>
 
-          <div className="grid gap-6 md:grid-cols-2">
             <section className="rounded-2xl border border-black/5 bg-white p-6">
               <h2 className="text-sm font-semibold text-brand-navy">Connected accounts</h2>
               <p className="mt-1 text-xs text-brand-navy/50">
@@ -109,40 +93,28 @@ export default async function AccountPage() {
                 <ConnectedAccounts providers={OAUTH_PROVIDERS} linked={linkedProviders} />
               </div>
             </section>
-
-            <section className="rounded-2xl border border-black/5 bg-white p-6">
-              <h2 className="text-sm font-semibold text-brand-navy">Your data</h2>
-              <p className="mt-1 text-xs text-brand-navy/50">
-                Download everything associated with your account — profile, strategies, backtests,
-                paper sessions, watchlist, and activity — as a single JSON file.
-              </p>
-              <div className="mt-4">
-                <a
-                  href="/api/account/export"
-                  className="inline-block rounded-full border border-brand-navy/15 px-5 py-2 text-sm font-semibold text-brand-navy hover:border-brand-primary hover:text-brand-primary"
-                >
-                  Export my data
-                </a>
-              </div>
-            </section>
           </div>
+
+          <section className="rounded-2xl border border-black/5 bg-white p-6">
+            <h2 className="text-sm font-semibold text-brand-navy">Your data</h2>
+            <p className="mt-1 text-xs text-brand-navy/50">
+              Download everything associated with your account — profile, strategies, backtests, paper sessions,
+              watchlist, and activity — as a single JSON file.
+            </p>
+            <div className="mt-4">
+              <a
+                href="/api/account/export"
+                className="inline-block rounded-full border border-brand-navy/15 px-5 py-2 text-sm font-semibold text-brand-navy hover:border-brand-primary hover:text-brand-primary"
+              >
+                Export my data
+              </a>
+            </div>
+          </section>
 
           <DangerZone />
         </div>
 
-        <div className="sticky top-6 h-fit space-y-6">
-          <section className="hover-lift rounded-2xl border border-black/5 bg-white p-6 text-center">
-            <RobotAvatar size={64} className="mx-auto" />
-            <p className="mt-3 text-sm font-semibold text-brand-navy">
-              {user.agentName ?? DEFAULT_AGENT_NAME}
-            </p>
-            <p className="text-xs text-brand-navy/50">is watching over your account.</p>
-            <div className="mt-4 flex items-center justify-center gap-1.5 text-sm text-brand-primary">
-              <ReplayTourButton />
-              <span>Replay the tour</span>
-            </div>
-          </section>
-
+        <div className="sticky top-6 h-fit">
           <section className="rounded-2xl border border-black/5 bg-white p-6">
             <h2 className="text-sm font-semibold text-brand-navy">Account summary</h2>
             <dl className="mt-4 space-y-3 text-sm">

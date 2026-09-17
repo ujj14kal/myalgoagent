@@ -37,6 +37,7 @@ export const navGroups = [
     items: [
       { href: "/app/broker-connections", label: "Broker Connections" },
       { href: "/app/account", label: "Account / Settings" },
+      { href: "/app/agent-settings", label: "Agent Settings" },
       { href: "/app/notifications", label: "Notifications" },
     ],
   },
@@ -46,7 +47,15 @@ export default function AppSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden w-64 shrink-0 border-r border-black/5 bg-white md:block">
+    // sticky + h-screen (not the static-flow default) keeps the nav pinned
+    // in the viewport as the user scrolls a long page — without this, the
+    // aside stretches to match the full page height (correct flex
+    // behavior) but its own nav content doesn't fill that height, leaving
+    // a large blank white column below the last nav item, and the nav
+    // itself scrolls out of view with the rest of the page instead of
+    // staying reachable. overflow-y-auto is a defensive addition in case
+    // the nav list itself ever grows taller than the viewport.
+    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 overflow-y-auto border-r border-black/5 bg-white md:block">
       <div className="flex h-16 items-center gap-2 border-b border-black/5 px-5">
         <Link href="/" className="flex items-center gap-2">
           <Image src="/brand/icon-mark.png" alt="MyAlgoAgent" width={28} height={28} />

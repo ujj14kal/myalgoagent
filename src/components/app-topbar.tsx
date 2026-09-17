@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { signOut } from "@/lib/auth";
-import ReplayTourButton from "@/components/tutorial/replay-tour-button";
 import MobileNavDrawer from "@/components/mobile-nav-drawer";
 
 export default function AppTopbar({
@@ -14,7 +13,6 @@ export default function AppTopbar({
     <header className="flex h-16 items-center justify-between border-b border-black/5 bg-white px-4 md:px-6">
       <MobileNavDrawer />
       <div className="flex items-center gap-2 sm:gap-4">
-        <ReplayTourButton className="hidden sm:inline-flex" />
         <Link
           href="/app/notifications"
           data-tour="notifications-bell"
