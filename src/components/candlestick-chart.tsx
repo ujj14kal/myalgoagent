@@ -124,6 +124,14 @@ export default function CandlestickChart({
   // rendered — see the granularity-change guard in the sync effect below.
   const lastSpacingRef = useRef<number | null>(null);
   const [hover, setHover] = useState<HoverInfo | null>(null);
+  // Text tool uses an inline input positioned over the click point instead
+  // of window.prompt() — a native prompt() blocks the whole page's JS
+  // thread until dismissed, which froze the tab entirely during live
+  // testing (confirmed: even a Chrome-extension automated click couldn't
+  // reach the dialog, and only a full page navigation recovered it). A
+  // blocking dialog on a live trading chart is a real, user-facing bug,
+  // not just a testing inconvenience.
+  const [pendingText, setPendingText] = useState<{ x: number; y: number; time: number; price: number; value: string } | null>(null);
   const activeToolRef = useRef(activeTool);
   const onDrawingCompleteRef = useRef(onDrawingComplete);
   const magnetEnabledRef = useRef(magnetEnabled);
@@ -182,10 +190,7 @@ export default function CandlestickChart({
       }
 
       if (tool === "text") {
-        const text = window.prompt("Text for this label:");
-        if (text && text.trim()) {
-          onDrawingCompleteRef.current?.({ kind: "text", at: point, text: text.trim().slice(0, 60) });
-        }
+        setPendingText({ x: param.point.x, y: param.point.y, time: point.time, price: point.price, value: "" });
         return;
       }
 
@@ -426,9 +431,33 @@ export default function CandlestickChart({
   // hid this legend entirely behind the chart. Reproduced live: the
   // element existed in the DOM with a correct, non-zero bounding rect and
   // the right text, but nothing was ever actually painted on screen.
+  function commitPendingText() {
+    if (!pendingText) return;
+    const text = pendingText.value.trim();
+    if (text) {
+      onDrawingCompleteRef.current?.({ kind: "text", at: { time: pendingText.time, price: pendingText.price }, text: text.slice(0, 60) });
+    }
+    setPendingText(null);
+  }
+
   return (
     <div className="relative">
       <div ref={containerRef} className="w-full" />
+      {pendingText && (
+        <input
+          autoFocus
+          value={pendingText.value}
+          placeholder="Label…"
+          onChange={(e) => setPendingText({ ...pendingText, value: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commitPendingText();
+            else if (e.key === "Escape") setPendingText(null);
+          }}
+          onBlur={commitPendingText}
+          style={{ left: pendingText.x, top: pendingText.y }}
+          className="absolute z-20 w-40 -translate-y-1/2 rounded-md border border-brand-primary bg-white px-2 py-1 text-xs text-brand-navy shadow-md outline-none"
+        />
+      )}
       {shown && (
         <div className="pointer-events-none absolute left-2 top-2 z-10 flex flex-col gap-0.5 rounded-md bg-white/90 px-2 py-1.5 text-xs text-brand-navy shadow-sm">
           <div>
