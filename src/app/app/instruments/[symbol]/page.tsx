@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { marketDataProvider } from "@/lib/market-data";
 import InstrumentChartPanel from "@/components/instrument-chart-panel";
+import SymbolSwitcher from "@/components/symbol-switcher";
 import type { ChartType } from "@/components/candlestick-chart";
 import type { Drawing } from "@/lib/chart-drawing-primitive";
 import type { CandleInterval } from "@/lib/market-data";
@@ -71,7 +72,10 @@ export default async function InstrumentDetailPage({
     <div>
       <div className="flex items-baseline justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-brand-navy">{instrument.symbol}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-brand-navy">{instrument.symbol}</h1>
+            <SymbolSwitcher currentSymbol={instrument.symbol} allInstruments={allInstruments} />
+          </div>
           <p className="mt-1 text-sm text-brand-navy/60">{instrument.name}</p>
         </div>
         {latest && (

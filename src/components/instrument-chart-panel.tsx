@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import CandlestickChart, { type Overlay, type ChartType } from "@/components/candlestick-chart";
 import OscillatorPanel, { type OscillatorSeries } from "@/components/oscillator-panel";
 import DrawingToolbar from "@/components/drawing-toolbar";
@@ -137,6 +137,24 @@ export default function InstrumentChartPanel({
   const [compareCandles, setCompareCandles] = useState<Candle[] | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saved">("idle");
   const [isPending, startTransition] = useTransition();
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onFullscreenChange() {
+      setIsFullscreen(document.fullscreenElement === cardRef.current);
+    }
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      cardRef.current?.requestFullscreen();
+    }
+  }
 
   useEffect(() => {
     if (range === "6mo" && interval === "1d" && candles === initialCandles) return;
@@ -265,7 +283,7 @@ export default function InstrumentChartPanel({
       {/* Everything lives in one card, wrapped tightly around the chart —
           interval + chart-type + tool controls above, drawing tools as a
           vertical rail beside the plot, the range strip directly under it. */}
-      <div className="overflow-hidden rounded-2xl border border-black/5 bg-white">
+      <div ref={cardRef} className="overflow-hidden rounded-2xl border border-black/5 bg-white [&:fullscreen]:flex [&:fullscreen]:flex-col [&:fullscreen]:bg-white">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/5 p-3">
           <div className="flex flex-wrap items-center gap-2">
             {INTERVALS.map((iv) => {
@@ -333,6 +351,22 @@ export default function InstrumentChartPanel({
               className="rounded-full bg-brand-primary px-4 py-1 text-xs font-medium text-white hover:bg-brand-primary-light disabled:opacity-50"
             >
               {isPending ? "Saving…" : saveStatus === "saved" ? "Saved ✓" : "Save layout"}
+            </button>
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+              className="flex h-7 w-7 items-center justify-center rounded-full border border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary hover:text-brand-primary"
+            >
+              {isFullscreen ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 3v4a1 1 0 0 1-1 1H4M15 3v4a1 1 0 0 0 1 1h4M9 21v-4a1 1 0 0 0-1-1H4M15 21v-4a1 1 0 0 1 1-1h4" />
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M8 3H4v4M16 3h4v4M8 21H4v-4M16 21h4v-4" />
+                </svg>
+              )}
             </button>
           </div>
         </div>

@@ -365,16 +365,62 @@ export default function CandlestickChart({
     pendingPointRef.current = null;
   }, [activeTool]);
 
+  // A persistent top-left legend — like TradingView's — rather than one
+  // that only appears while actively hovering: falls back to the latest
+  // bar's OHLCV (and each overlay's latest value) when there's no
+  // crosshair position, and tracks the hovered bar when there is one.
+  const latest = candles.at(-1);
+  const shown: HoverInfo | null =
+    hover ??
+    (latest
+      ? { time: latest.time, open: latest.open, high: latest.high, low: latest.low, close: latest.close, volume: latest.volume }
+      : null);
+  const prevForShown = (() => {
+    if (!shown) return null;
+    const idx = candles.findIndex((c) => c.time === shown.time);
+    return idx > 0 ? candles[idx - 1] : null;
+  })();
+  const changePct = prevForShown && prevForShown.close !== 0 ? ((shown!.close - prevForShown.close) / prevForShown.close) * 100 : null;
+
+  function overlayValueAt(points: IndicatorPoint[], time: number): number | null {
+    // Overlay series share the same bar times as the main candles, so an
+    // exact match is the common case; falling back to the closest point at
+    // or before `time` keeps the legend showing *something* (the overlay's
+    // last known value) during an indicator's warm-up period instead of
+    // blanking that row out while everything else still has a value.
+    for (let i = points.length - 1; i >= 0; i--) {
+      if (points[i].time <= time) return points[i].value;
+    }
+    return null;
+  }
+
   return (
     <div className="relative">
       <div ref={containerRef} className="w-full" />
-      {hover && (
-        <div className="pointer-events-none absolute left-2 top-2 rounded-md bg-white/90 px-2 py-1 text-xs text-brand-navy shadow-sm">
-          O <span className="font-medium">{hover.open.toFixed(2)}</span> H{" "}
-          <span className="font-medium">{hover.high.toFixed(2)}</span> L{" "}
-          <span className="font-medium">{hover.low.toFixed(2)}</span> C{" "}
-          <span className="font-medium">{hover.close.toFixed(2)}</span> Vol{" "}
-          <span className="font-medium">{hover.volume.toLocaleString("en-IN")}</span>
+      {shown && (
+        <div className="pointer-events-none absolute left-2 top-2 flex flex-col gap-0.5 rounded-md bg-white/90 px-2 py-1.5 text-xs text-brand-navy shadow-sm">
+          <div>
+            O <span className="font-medium">{shown.open.toFixed(2)}</span> H{" "}
+            <span className="font-medium">{shown.high.toFixed(2)}</span> L{" "}
+            <span className="font-medium">{shown.low.toFixed(2)}</span> C{" "}
+            <span className="font-medium">{shown.close.toFixed(2)}</span>{" "}
+            {changePct !== null && (
+              <span className={`font-semibold ${changePct >= 0 ? "text-brand-buy" : "text-brand-sell"}`}>
+                {changePct >= 0 ? "+" : ""}
+                {changePct.toFixed(2)}%
+              </span>
+            )}{" "}
+            Vol <span className="font-medium">{shown.volume.toLocaleString("en-IN")}</span>
+          </div>
+          {overlays.map((o) => {
+            const value = overlayValueAt(o.points, shown.time);
+            if (value === null) return null;
+            return (
+              <div key={o.label} style={{ color: o.color }} className="font-medium">
+                {o.label} <span>{value.toFixed(2)}</span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
