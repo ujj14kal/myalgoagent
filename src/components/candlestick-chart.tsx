@@ -136,6 +136,7 @@ export default function CandlestickChart({
   const onDrawingCompleteRef = useRef(onDrawingComplete);
   const magnetEnabledRef = useRef(magnetEnabled);
   const pendingPointRef = useRef<{ time: number; price: number } | null>(null);
+  const positionPendingRef = useRef<{ entryTime: number; entryPrice: number; stopPrice: number | null } | null>(null);
   const hadPreviewRef = useRef(false);
 
   useEffect(() => {
@@ -244,6 +245,30 @@ export default function CandlestickChart({
 
       if (tool === "anchoredVwap") {
         onDrawingCompleteRef.current?.({ kind: "anchoredVwap", anchorTime: point.time });
+        return;
+      }
+
+      if (tool === "longPosition" || tool === "shortPosition") {
+        const pending = positionPendingRef.current;
+        if (!pending) {
+          // Click 1: entry.
+          positionPendingRef.current = { entryTime: point.time, entryPrice: point.price, stopPrice: null };
+          return;
+        }
+        if (pending.stopPrice === null) {
+          // Click 2: stop.
+          positionPendingRef.current = { ...pending, stopPrice: point.price };
+          return;
+        }
+        // Click 3: target — commit and reset for the next one.
+        positionPendingRef.current = null;
+        onDrawingCompleteRef.current?.({
+          kind: tool,
+          entryTime: pending.entryTime,
+          entryPrice: pending.entryPrice,
+          stopPrice: pending.stopPrice,
+          targetPrice: point.price,
+        });
         return;
       }
 
@@ -459,6 +484,7 @@ export default function CandlestickChart({
   // Reset any in-progress two-click drawing when the active tool changes.
   useEffect(() => {
     pendingPointRef.current = null;
+    positionPendingRef.current = null;
     if (hadPreviewRef.current) {
       drawingsPrimitiveRef.current?.setPreview(null);
       hadPreviewRef.current = false;

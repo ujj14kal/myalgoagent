@@ -123,6 +123,28 @@ const TOOLS: { kind: Drawing["kind"]; label: string; hint: string; icon: ReactNo
       </svg>
     ),
   },
+  {
+    kind: "longPosition",
+    label: "Long position",
+    hint: "Click entry, then stop, then target",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M2 13h12M4 13V9M8 13V5M12 13V7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        <path d="M12 2l2.5 2.5M14.5 4.5L12 7M14.5 4.5H10.5" stroke="#00a83e" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+  {
+    kind: "shortPosition",
+    label: "Short position",
+    hint: "Click entry, then stop, then target",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M2 13h12M4 13V9M8 13V5M12 13V7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        <path d="M12 14l2.5-2.5M14.5 11.5L12 9M14.5 11.5H10.5" stroke="#d60000" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
 ];
 
 /** Vertical icon rail beside the chart, matching a TradingView-style layout. */

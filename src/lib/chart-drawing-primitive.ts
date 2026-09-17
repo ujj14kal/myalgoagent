@@ -21,7 +21,8 @@ export type Drawing =
   | { kind: "circle"; from: { time: number; price: number }; to: { time: number; price: number } }
   | { kind: "measure"; from: { time: number; price: number }; to: { time: number; price: number } }
   | { kind: "anchoredVwap"; anchorTime: number }
-  | { kind: "volumeProfile"; fromTime: number; toTime: number };
+  | { kind: "volumeProfile"; fromTime: number; toTime: number }
+  | { kind: "longPosition" | "shortPosition"; entryTime: number; entryPrice: number; stopPrice: number; targetPrice: number };
 
 const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 
@@ -254,6 +255,46 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
             ctx.fillStyle = "#d60000";
             ctx.fillText(`POC ${pocPrice.toFixed(2)}`, xLeft + 4, pocY - 4);
           }
+        } else if (d.kind === "longPosition" || d.kind === "shortPosition") {
+          const xLeft = toX(d.entryTime);
+          // No draggable right handle (out of scope for now) — the box
+          // just runs to the edge of whatever data is currently loaded, the
+          // same simplification volumeProfile's rendering already makes.
+          const lastCandle = this.primitive.candles.at(-1);
+          const xRight = lastCandle ? toX(lastCandle.time) : null;
+          const yEntry = toY(d.entryPrice);
+          const yStop = toY(d.stopPrice);
+          const yTarget = toY(d.targetPrice);
+          if (xLeft === null || xRight === null || yEntry === null || yStop === null || yTarget === null) return;
+
+          const risk = Math.abs(d.entryPrice - d.stopPrice);
+          const reward = Math.abs(d.targetPrice - d.entryPrice);
+          const rr = risk > 0 ? reward / risk : 0;
+
+          // Profit zone (entry -> target) in green, risk zone (entry ->
+          // stop) in red — same convention regardless of long/short, since
+          // it's always "green toward the target, red toward the stop".
+          ctx.fillStyle = "rgba(0, 168, 62, 0.15)";
+          ctx.fillRect(xLeft, Math.min(yEntry, yTarget), xRight - xLeft, Math.abs(yTarget - yEntry));
+          ctx.fillStyle = "rgba(214, 0, 0, 0.15)";
+          ctx.fillRect(xLeft, Math.min(yEntry, yStop), xRight - xLeft, Math.abs(yStop - yEntry));
+
+          ctx.strokeStyle = "#0e1b2d";
+          ctx.setLineDash([4, 3]);
+          ctx.beginPath();
+          ctx.moveTo(xLeft, yEntry);
+          ctx.lineTo(xRight, yEntry);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          ctx.font = "600 11px sans-serif";
+          const label = d.kind === "longPosition" ? "LONG" : "SHORT";
+          ctx.fillStyle = "#00a83e";
+          ctx.fillText(`Target ${d.targetPrice.toFixed(2)}`, xLeft + 4, Math.min(yEntry, yTarget) + 12);
+          ctx.fillStyle = "#d60000";
+          ctx.fillText(`Stop ${d.stopPrice.toFixed(2)}`, xLeft + 4, Math.max(yEntry, yStop) - 4);
+          ctx.fillStyle = "#0e1b2d";
+          ctx.fillText(`${label}  Entry ${d.entryPrice.toFixed(2)}  R:R ${rr.toFixed(2)}`, xLeft + 4, yEntry - 4);
         }
       };
 
