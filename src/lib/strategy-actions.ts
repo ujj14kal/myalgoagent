@@ -8,6 +8,7 @@ import { parseDsl, validateConditionNode, checkConditionFeasibility, collectAuxR
 import { NEVER_EXIT_CONDITION, type FeasibilityIssue } from "@/lib/strategy/types";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { validatePositionSizing, toRiskLeg, type PositionSizingMode, type RiskLegInput } from "@/lib/trading-engine/step";
+import { isUniqueConstraintViolation } from "@/lib/prisma-errors";
 import type { ConditionNode } from "@/lib/strategy";
 import type { Prisma } from "@prisma/client";
 
@@ -26,8 +27,6 @@ export interface StrategyInput {
   target: RiskLegInput;
   trailingSl: RiskLegInput;
   maxPyramidEntries: number;
-  /** Set to true to bypass the duplicate-name warning and save anyway. */
-  confirmDuplicateName?: boolean;
 }
 
 /** Cross-instrument operands (added for multi-instrument conditions) name a
@@ -46,21 +45,6 @@ async function validateReferencedInstruments(entry: ConditionNode, exit: Conditi
   if (missing.length > 0) {
     throw new Error(`Unknown instrument symbol(s) referenced in conditions: ${[...new Set(missing)].join(", ")}`);
   }
-}
-
-/** Throws the sentinel "DUPLICATE_NAME" error the client watches for, unless
- * the user has already confirmed they want to proceed with a reused name. */
-async function checkDuplicateName(userId: string, name: string, excludeId: string | undefined, confirmed: boolean | undefined): Promise<void> {
-  if (confirmed) return;
-  const existing = await prisma.strategy.findFirst({
-    where: {
-      userId,
-      name: { equals: name, mode: "insensitive" },
-      ...(excludeId ? { id: { not: excludeId } } : {}),
-    },
-    select: { id: true },
-  });
-  if (existing) throw new Error("DUPLICATE_NAME");
 }
 
 /** Rules about the strategy's risk configuration that no condition-tree
@@ -217,14 +201,15 @@ export async function createStrategy(input: StrategyInput): Promise<StrategyActi
   let strategyId: string;
   try {
     await enforceRateLimit(`strategy-write:${session.user.id}`, 30, 60_000);
-    await checkDuplicateName(session.user.id, input.name.trim(), undefined, input.confirmDuplicateName);
     const compiled = await compile(input);
+    const name = input.name.trim();
 
     const strategy = await prisma.strategy.create({
       data: {
         userId: session.user.id,
         instrumentId: input.instrumentId,
-        name: input.name.trim(),
+        name,
+        nameNormalized: name.toLowerCase(),
         mode: input.mode,
         entryCondition: compiled.entryCondition as unknown as Prisma.InputJsonValue,
         exitCondition: compiled.exitCondition as unknown as Prisma.InputJsonValue,
@@ -235,6 +220,7 @@ export async function createStrategy(input: StrategyInput): Promise<StrategyActi
     });
     strategyId = strategy.id;
   } catch (err) {
+    if (isUniqueConstraintViolation(err, "nameNormalized")) return { error: "DUPLICATE_NAME" };
     return { error: err instanceof Error ? err.message : "Something went wrong" };
   }
 
@@ -248,14 +234,15 @@ export async function updateStrategy(id: string, input: StrategyInput): Promise<
 
   try {
     await enforceRateLimit(`strategy-write:${session.user.id}`, 30, 60_000);
-    await checkDuplicateName(session.user.id, input.name.trim(), id, input.confirmDuplicateName);
     const compiled = await compile(input);
+    const name = input.name.trim();
 
     await prisma.strategy.updateMany({
       where: { id, userId: session.user.id },
       data: {
         instrumentId: input.instrumentId,
-        name: input.name.trim(),
+        name,
+        nameNormalized: name.toLowerCase(),
         mode: input.mode,
         entryCondition: compiled.entryCondition as unknown as Prisma.InputJsonValue,
         exitCondition: compiled.exitCondition as unknown as Prisma.InputJsonValue,
@@ -265,6 +252,7 @@ export async function updateStrategy(id: string, input: StrategyInput): Promise<
       },
     });
   } catch (err) {
+    if (isUniqueConstraintViolation(err, "nameNormalized")) return { error: "DUPLICATE_NAME" };
     return { error: err instanceof Error ? err.message : "Something went wrong" };
   }
 

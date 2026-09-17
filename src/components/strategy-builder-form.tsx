@@ -130,7 +130,6 @@ export default function StrategyBuilderForm({
   );
 
   const [feasibilityIssues, setFeasibilityIssues] = useState<DisplayIssue[] | null>(null);
-  const [duplicateName, setDuplicateName] = useState<StrategyInput | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const entryRef = useRef<HTMLDivElement>(null);
@@ -155,7 +154,7 @@ export default function StrategyBuilderForm({
     sectionRefs[section].current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
-  function buildInput(confirmDuplicateName?: boolean): StrategyInput {
+  function buildInput(): StrategyInput {
     const finalExitCondition = exitConditionOpen ? exitCondition : NEVER_EXIT_CONDITION;
     return {
       name,
@@ -173,7 +172,6 @@ export default function StrategyBuilderForm({
       target,
       trailingSl,
       maxPyramidEntries,
-      confirmDuplicateName,
     };
   }
 
@@ -189,7 +187,7 @@ export default function StrategyBuilderForm({
         // exempt from that redaction, which is why it's still handled below.
         const result = strategyId ? await updateStrategy(strategyId, input) : await createStrategy(input);
         if (result?.error === "DUPLICATE_NAME") {
-          setDuplicateName(input);
+          setFeasibilityIssues([{ message: `You already have a strategy named "${input.name.trim()}". Choose a different name.` }]);
           return;
         }
         if (result?.error) {
@@ -447,44 +445,6 @@ export default function StrategyBuilderForm({
           {isPending ? "Saving…" : strategyId ? "Save changes" : "Create strategy"}
         </button>
       </form>
-
-      {duplicateName && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <button
-            type="button"
-            aria-label="Close"
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setDuplicateName(null)}
-          />
-          <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-            <p className="text-sm font-semibold text-brand-navy">Strategy name already in use</p>
-            <p className="mt-2 text-sm text-brand-navy/60">
-              You already have a strategy named &ldquo;{duplicateName.name}&rdquo;. Use it anyway, or pick a
-              different name?
-            </p>
-            <div className="mt-5 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setDuplicateName(null)}
-                className="rounded-full border border-brand-navy/15 px-4 py-1.5 text-sm font-semibold text-brand-navy hover:border-brand-primary hover:text-brand-primary"
-              >
-                Choose another name
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const input = { ...duplicateName, confirmDuplicateName: true };
-                  setDuplicateName(null);
-                  submit(input);
-                }}
-                className="rounded-full bg-brand-primary px-4 py-1.5 text-sm font-semibold text-white hover:bg-brand-primary-light"
-              >
-                Use this name anyway
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {feasibilityIssues && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

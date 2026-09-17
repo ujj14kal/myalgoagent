@@ -180,6 +180,15 @@ model Strategy {
   userId              String
   instrumentId        String
   name                String
+  // Lowercase, trimmed copy of `name` — the actual duplicate-name check
+  // is case-insensitive (per product decision, "My Strategy" and "my
+  // strategy" collide), and Postgres unique constraints are always
+  // case-sensitive, so the constraint has to target this normalized
+  // column rather than `name` itself. Kept in sync with `name` by the
+  // application layer (strategy-actions.ts) on every create/update —
+  // there is no case-insensitive collation available to enforce this at
+  // the database level without one.
+  nameNormalized      String
   mode                StrategyMode
   // Whether the entry condition opens a long (buy first) or short (sell
   // first) position — fixed per strategy, same as risk/sizing config below.
@@ -220,6 +229,8 @@ model Strategy {
   backtestRuns  BacktestRun[]
   paperSessions PaperSession[]
   webhookAlerts WebhookAlert[]
+
+  @@unique([userId, nameNormalized])
 }
 
 enum PositionSizingMode {
