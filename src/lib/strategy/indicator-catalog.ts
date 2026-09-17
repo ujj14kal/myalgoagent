@@ -66,9 +66,18 @@ export const INDICATOR_BY_DSL_NAME: Map<string, IndicatorDef> = new Map(
   INDICATOR_CATALOG.map((d) => [d.dslName, d]),
 );
 
-/** Indicators on their own scale (0-100, +/-, unbounded volume, etc.) rather
- * than the instrument's price — these don't make sense drawn as a line over
- * a candlestick chart, only the price-scale ones do. */
+/** Indicators on their own scale — a bounded oscillator (0-100, +/-100, ...),
+ * an unbounded momentum/volume measure, or a raw volatility *magnitude*
+ * (ATR, StdDev: typically a few percent of price, never a price level
+ * itself) — rather than the instrument's own price scale. None of these
+ * make sense drawn as an overlay line on a candlestick chart (a volatility
+ * magnitude of ~80 is an invisible flat line against a price axis in the
+ * thousands), and none are meaningfully comparable to price or to each
+ * other in a strategy condition — only to a fixed threshold. Confirmed live
+ * for ATR/StdDev specifically: close never once dips below either across a
+ * full year of real NSE data, so "close crossesAbove atr(14)" can never
+ * fire — not a bug in atr()'s math (independently verified in Phase B),
+ * but this exact category of scale mismatch. */
 export const OSCILLATOR_KINDS: Set<IndicatorKind> = new Set([
   "RSI",
   "MACD_LINE",
@@ -88,4 +97,6 @@ export const OSCILLATOR_KINDS: Set<IndicatorKind> = new Set([
   "AROON_UP",
   "AROON_DOWN",
   "CMF",
+  "ATR",
+  "STDDEV",
 ]);

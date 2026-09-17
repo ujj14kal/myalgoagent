@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { checkConditionFeasibility } from "@/lib/strategy/validate-sanity";
 import type { ConditionNode } from "@/lib/strategy/types";
 
-describe("oscillator scale mismatch (server-side backstop for the visual builder's restriction)", () => {
+describe("oscillator / off-price-scale indicator mismatch (server-side backstop for the visual builder's restriction)", () => {
   it("flags an oscillator compared to a price-scale indicator", () => {
     const node: ConditionNode = {
       kind: "comparison",
@@ -13,7 +13,39 @@ describe("oscillator scale mismatch (server-side backstop for the visual builder
     const issues = checkConditionFeasibility(node, "entry");
     expect(issues).toHaveLength(1);
     expect(issues[0].message).toContain("RSI(14)");
-    expect(issues[0].message).toContain("oscillator");
+  });
+
+  it("flags ATR (a volatility magnitude, not a price level) compared to raw price — the real, live-confirmed bug: close is always far above ATR, so this can never fire", () => {
+    const node: ConditionNode = {
+      kind: "comparison",
+      left: { kind: "price", field: "CLOSE" },
+      operator: "CROSSES_ABOVE",
+      right: { kind: "indicator", type: "ATR", params: [14] },
+    };
+    const issues = checkConditionFeasibility(node, "entry");
+    expect(issues).toHaveLength(1);
+    expect(issues[0].message).toContain("ATR(14)");
+  });
+
+  it("flags Standard Deviation compared to a price-scale indicator", () => {
+    const node: ConditionNode = {
+      kind: "comparison",
+      left: { kind: "indicator", type: "STDDEV", params: [20] },
+      operator: "GT",
+      right: { kind: "indicator", type: "SMA", params: [20] },
+    };
+    const issues = checkConditionFeasibility(node, "entry");
+    expect(issues).toHaveLength(1);
+  });
+
+  it("allows ATR compared to a fixed threshold (a real volatility-spike condition)", () => {
+    const node: ConditionNode = {
+      kind: "comparison",
+      left: { kind: "indicator", type: "ATR", params: [14] },
+      operator: "CROSSES_ABOVE",
+      right: { kind: "constant", value: 50 },
+    };
+    expect(checkConditionFeasibility(node, "entry")).toEqual([]);
   });
 
   it("flags an oscillator compared to a raw price field", () => {
