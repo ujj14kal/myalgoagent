@@ -1,9 +1,18 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Drawing } from "@/lib/chart-drawing-primitive";
 
-const TOOLS: { kind: Drawing["kind"]; label: string; hint: string; icon: ReactNode }[] = [
+type Tool = { kind: Drawing["kind"]; label: string; hint: string; icon: ReactNode };
+
+// The five tools most charting tools reach for first — kept directly in the
+// vertical rail. Everything added afterward (Ray, Arrow, Circle, Measure,
+// Anchored VWAP, Volume Profile, Long/Short position) lives in the "More"
+// flyout instead of stacking onto the rail: with all 13 tools in one flat
+// column the rail grew taller than the chart itself and ran below the
+// x-axis — a real layout bug a user hit live, not just a style nitpick.
+const CORE_TOOLS: Tool[] = [
   {
     kind: "trendline",
     label: "Trend line",
@@ -56,6 +65,9 @@ const TOOLS: { kind: Drawing["kind"]; label: string; hint: string; icon: ReactNo
       </svg>
     ),
   },
+];
+
+const MORE_TOOLS: Tool[] = [
   {
     kind: "ray",
     label: "Ray",
@@ -147,7 +159,33 @@ const TOOLS: { kind: Drawing["kind"]; label: string; hint: string; icon: ReactNo
   },
 ];
 
-/** Vertical icon rail beside the chart, matching a TradingView-style layout. */
+function ToolButton({
+  tool,
+  active,
+  onClick,
+}: {
+  tool: Tool;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      title={tool.hint ? `${tool.label} — ${tool.hint}` : tool.label}
+      onClick={onClick}
+      className={`flex h-8 w-8 items-center justify-center rounded-md ${
+        active ? "bg-brand-primary text-white" : "text-brand-navy/50 hover:bg-brand-bg hover:text-brand-navy"
+      }`}
+    >
+      {tool.icon}
+    </button>
+  );
+}
+
+/** Vertical icon rail beside the chart, matching a TradingView-style layout.
+ * Core tools stay in the rail; everything else lives in a "More tools"
+ * flyout that opens to the right, so the rail's height never depends on how
+ * many drawing tools the app has. */
 export default function DrawingToolbar({
   activeTool,
   onSelectTool,
@@ -163,6 +201,23 @@ export default function DrawingToolbar({
   magnetEnabled: boolean;
   onToggleMagnet: () => void;
 }) {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  const activeInMore = MORE_TOOLS.some((t) => t.kind === activeTool);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    function onClickOutside(e: MouseEvent) {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [moreOpen]);
+
+  function selectTool(kind: Drawing["kind"]) {
+    onSelectTool(activeTool === kind ? null : kind);
+  }
+
   return (
     <div className="flex w-10 shrink-0 flex-col items-center gap-1 border-r border-black/5 py-2">
       <button
@@ -179,19 +234,47 @@ export default function DrawingToolbar({
         </svg>
       </button>
       <span className="my-0.5 h-px w-6 bg-black/5" />
-      {TOOLS.map((t) => (
+      {CORE_TOOLS.map((t) => (
+        <ToolButton key={t.kind} tool={t} active={activeTool === t.kind} onClick={() => selectTool(t.kind)} />
+      ))}
+
+      <div ref={moreRef} className="relative">
         <button
-          key={t.kind}
           type="button"
-          title={t.hint ? `${t.label} — ${t.hint}` : t.label}
-          onClick={() => onSelectTool(activeTool === t.kind ? null : t.kind)}
+          title="More drawing tools"
+          onClick={() => setMoreOpen((v) => !v)}
           className={`flex h-8 w-8 items-center justify-center rounded-md ${
-            activeTool === t.kind ? "bg-brand-primary text-white" : "text-brand-navy/50 hover:bg-brand-bg hover:text-brand-navy"
+            activeInMore || moreOpen ? "bg-brand-primary text-white" : "text-brand-navy/50 hover:bg-brand-bg hover:text-brand-navy"
           }`}
         >
-          {t.icon}
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="3.5" cy="8" r="1.4" fill="currentColor" />
+            <circle cx="8" cy="8" r="1.4" fill="currentColor" />
+            <circle cx="12.5" cy="8" r="1.4" fill="currentColor" />
+          </svg>
         </button>
-      ))}
+        {moreOpen && (
+          <div className="absolute left-full top-0 z-20 ml-1 w-44 rounded-lg border border-black/10 bg-white p-1.5 shadow-lg">
+            {MORE_TOOLS.map((t) => (
+              <button
+                key={t.kind}
+                type="button"
+                onClick={() => {
+                  selectTool(t.kind);
+                  setMoreOpen(false);
+                }}
+                className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-medium ${
+                  activeTool === t.kind ? "bg-brand-primary text-white" : "text-brand-navy hover:bg-brand-bg"
+                }`}
+              >
+                <span className={activeTool === t.kind ? "text-white" : "text-brand-navy/60"}>{t.icon}</span>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       {drawingsCount > 0 && (
         <button
           type="button"
