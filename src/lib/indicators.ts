@@ -301,15 +301,25 @@ export function obv(candles: Candle[]): IndicatorPoint[] {
   return points;
 }
 
-// Donchian Channels
+// Donchian Channels — the highest high / lowest low of the `period` bars
+// PRECEDING the current one (the standard Turtle Trading breakout
+// definition), not including the current bar itself. Including the current
+// bar (as an earlier version of this function did) makes the channel
+// mathematically unbreakable: a bar's own high/low is always part of its
+// own rolling max/min, so close[i] <= high[i] <= includedUpper[i] holds by
+// construction — a "close crosses above the upper channel" condition could
+// then never fire, confirmed live against real NSE data (zero entries
+// across every symbol tested, versus the excluded-current-bar version
+// firing normally). Excluding the current bar is what makes "today breaks
+// through the recent N-day high" an actually achievable event.
 export function donchianChannels(candles: Candle[], period = 20): { upper: IndicatorPoint[]; lower: IndicatorPoint[] } {
   const upper: IndicatorPoint[] = [];
   const lower: IndicatorPoint[] = [];
 
-  for (let i = period - 1; i < candles.length; i++) {
+  for (let i = period; i < candles.length; i++) {
     let highest = -Infinity;
     let lowest = Infinity;
-    for (let j = i - period + 1; j <= i; j++) {
+    for (let j = i - period; j <= i - 1; j++) {
       highest = Math.max(highest, candles[j].high);
       lowest = Math.min(lowest, candles[j].low);
     }

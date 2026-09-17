@@ -104,8 +104,21 @@ function tokenize(source: string): Token[] {
       continue;
     }
 
-    if (/[0-9]/.test(c) || (c === "." && /[0-9]/.test(source[i + 1] ?? ""))) {
+    // A leading "-" immediately before a digit/decimal point starts a
+    // negative number literal — this grammar has no subtraction operator
+    // anywhere else, so "-" is unambiguous here. Without this, indicators
+    // whose natural scale includes negative values (CCI, Williams %R,
+    // MACD, CMF, ROC, ...) had no way to express a negative threshold in
+    // code mode at all — confirmed missing via a full audit that tried a
+    // real "cci(20) crossesBelow -100" condition and hit a parse error.
+    const isNegativeNumberStart =
+      c === "-" && /[0-9.]/.test(source[i + 1] ?? "") && (tokens.length === 0 || tokens[tokens.length - 1].type !== "NUMBER");
+    if (/[0-9]/.test(c) || (c === "." && /[0-9]/.test(source[i + 1] ?? "")) || isNegativeNumberStart) {
       let num = "";
+      if (isNegativeNumberStart) {
+        num += "-";
+        advance();
+      }
       while (i < source.length && /[0-9.]/.test(source[i])) {
         num += source[i];
         advance();

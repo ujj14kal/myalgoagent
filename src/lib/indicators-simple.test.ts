@@ -85,16 +85,21 @@ describe("OBV — On-Balance Volume", () => {
 });
 
 describe("Donchian Channels", () => {
-  it("upper = highest high, lower = lowest low over the period window", () => {
+  it("upper = highest high, lower = lowest low over the `period` bars PRECEDING the current one (excludes it)", () => {
     const highs = [5, 8, 6, 9, 7];
     const lows = [1, 3, 2, 4, 3];
     const candles: Candle[] = highs.map((h, i) => candle(i, h, h, lows[i], h));
     const { upper, lower } = donchianChannels(candles, 3);
-    // i=2: highs[5,8,6]->8, lows[1,3,2]->1
-    // i=3: highs[8,6,9]->9, lows[3,2,4]->2
-    // i=4: highs[6,9,7]->9, lows[2,4,3]->2
-    expect(upper.map((p) => p.value)).toEqual([8, 9, 9]);
-    expect(lower.map((p) => p.value)).toEqual([1, 2, 2]);
+    // Window excludes the current bar — i=3 uses bars [0,1,2], i=4 uses [1,2,3].
+    // (A window that included the current bar would make "close crosses
+    // above the upper channel" mathematically impossible, since a bar's
+    // own high is always part of its own rolling max — confirmed live
+    // against real NSE data before this fix, zero entries every time.)
+    // i=3: highs[5,8,6]->8, lows[1,3,2]->1
+    // i=4: highs[8,6,9]->9, lows[3,2,4]->2
+    expect(upper.map((p) => p.value)).toEqual([8, 9]);
+    expect(lower.map((p) => p.value)).toEqual([1, 2]);
+    expect(upper.map((p) => p.time)).toEqual([3, 4]);
   });
 });
 
