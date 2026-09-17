@@ -1,7 +1,7 @@
 "use client";
 
-import type { ComparisonOperator, ConditionNode, Operand, PriceField } from "@/lib/strategy";
-import { INDICATOR_CATALOG, INDICATOR_BY_KIND, OSCILLATOR_KINDS } from "@/lib/strategy/indicator-catalog";
+import type { ComparisonOperator, ConditionNode, IndicatorKind, Operand, PriceField } from "@/lib/strategy";
+import { INDICATOR_CATALOG, INDICATOR_BY_KIND, operandsScaleCompatible } from "@/lib/strategy/indicator-catalog";
 import { CANDLE_PATTERN_CATALOG } from "@/lib/strategy/candle-pattern-catalog";
 import { CHART_PATTERN_CATALOG } from "@/lib/strategy/chart-pattern-catalog";
 import { VOLUME_PATTERN_CATALOG } from "@/lib/strategy/volume-pattern-catalog";
@@ -41,30 +41,20 @@ function defaultOperand(): Operand {
   return { kind: "price", field: "CLOSE" };
 }
 
-/** What scale an operand lives on. Oscillators (RSI, CCI, MACD histogram,
- * ADX, ...) each have their own bounded/unbounded 0-100-or-unbounded scale
- * and are never meaningfully comparable to price or to each other — only
- * to a fixed threshold (e.g. "RSI crosses above 70"). Price-scale operands
- * (SMA, Bollinger Bands, open/high/low/close, ...) share the instrument's
- * own price scale and remain freely comparable to one another. */
-type OperandScale = "OSCILLATOR" | "PRICE_SCALE" | "CONSTANT";
-
-function scaleOf(op: Operand): OperandScale {
-  if (op.kind === "constant") return "CONSTANT";
-  if (op.kind === "price") return "PRICE_SCALE";
-  return OSCILLATOR_KINDS.has(op.type) ? "OSCILLATOR" : "PRICE_SCALE";
+/** Filters what the operand picker should offer, given the operand
+ * currently on the *other* side of the comparison — computed here rather
+ * than left to the user to notice is wrong. Uses `operandsScaleCompatible`
+ * directly against each candidate indicator/price field rather than a
+ * coarse OSCILLATOR/PRICE_SCALE bucket, so paired oscillators (MACD
+ * Line/Signal, Stochastic %K/%D, +DI/-DI, Aroon Up/Down) stay comparable to
+ * each other while unrelated oscillators (RSI vs CCI, RSI vs price, ...)
+ * don't. */
+function isIndicatorAllowed(candidate: IndicatorKind, other: Operand): boolean {
+  return operandsScaleCompatible({ kind: "indicator", type: candidate, params: [] }, other);
 }
 
-/** Given the scale of the *other* side of a comparison, what this side's
- * operand picker should offer — computed here rather than left to the user
- * to notice is wrong, per the product rule that oscillators are
- * threshold-only. */
-type OperandRestrict = "ANY" | "CONSTANT_ONLY" | "EXCLUDE_OSCILLATOR";
-
-function restrictFor(otherScale: OperandScale): OperandRestrict {
-  if (otherScale === "OSCILLATOR") return "CONSTANT_ONLY";
-  if (otherScale === "PRICE_SCALE") return "EXCLUDE_OSCILLATOR";
-  return "ANY";
+function isPriceAllowed(other: Operand): boolean {
+  return operandsScaleCompatible({ kind: "price", field: "CLOSE" }, other);
 }
 
 function defaultComparison(): ConditionNode {
@@ -268,12 +258,15 @@ function OperandEditor({
   value,
   onChange,
   instruments,
-  restrict = "ANY",
+  other,
 }: {
   value: Operand;
   onChange: (v: Operand) => void;
   instruments: InstrumentOption[];
-  restrict?: OperandRestrict;
+  /** The operand on the other side of the comparison, if any — used to
+   * filter this picker to scale-compatible choices only. Omitted for
+   * operands that don't sit in a two-sided comparison (none currently). */
+  other?: Operand;
 }) {
   const indicatorDef = value.kind === "indicator" ? INDICATOR_BY_KIND.get(value.type) : undefined;
   const hasOverrides = value.kind === "indicator" || value.kind === "price";
@@ -286,11 +279,9 @@ function OperandEditor({
   // rule existed).
   const availableIndicators = INDICATOR_CATALOG.filter((i) => {
     if (value.kind === "indicator" && value.type === i.kind) return true;
-    if (restrict === "CONSTANT_ONLY") return false;
-    if (restrict === "EXCLUDE_OSCILLATOR") return !OSCILLATOR_KINDS.has(i.kind);
-    return true;
+    return !other || isIndicatorAllowed(i.kind, other);
   });
-  const showPriceGroup = restrict !== "CONSTANT_ONLY" || value.kind === "price";
+  const showPriceGroup = !other || isPriceAllowed(other) || value.kind === "price";
 
   return (
     <div className="flex flex-wrap items-center gap-1">
@@ -405,39 +396,26 @@ function ComparisonEditor({
   onRemove: () => void;
   instruments: InstrumentOption[];
 }) {
-  const leftScale = scaleOf(node.left);
-  const rightScale = scaleOf(node.right);
-
-  // Changing one side to an oscillator (or to a price-scale value) can
-  // strand the other side on a now-incompatible selection (e.g. right was
-  // EMA, left just became RSI). Rather than leave that stale mismatch
-  // sitting there until the user notices, snap the other side back to a
-  // sensible default the moment it becomes invalid.
+  // Changing one side can strand the other side on a now-incompatible
+  // selection (e.g. right was EMA, left just became RSI; or right was MACD
+  // Signal, left just became RSI — a different oscillator family). Rather
+  // than leave that stale mismatch sitting there until the user notices,
+  // snap the other side back to a fixed value the moment it becomes
+  // invalid, which is always a safe fallback since a constant is
+  // compatible with everything.
   function handleLeftChange(left: Operand) {
-    let right = node.right;
-    const newLeftScale = scaleOf(left);
-    if (newLeftScale === "OSCILLATOR" && scaleOf(right) !== "CONSTANT") {
-      right = { kind: "constant", value: 0 };
-    } else if (newLeftScale === "PRICE_SCALE" && scaleOf(right) === "OSCILLATOR") {
-      right = { kind: "constant", value: 0 };
-    }
+    const right = operandsScaleCompatible(left, node.right) ? node.right : { kind: "constant" as const, value: 0 };
     onChange({ ...node, left, right });
   }
 
   function handleRightChange(right: Operand) {
-    let left = node.left;
-    const newRightScale = scaleOf(right);
-    if (newRightScale === "OSCILLATOR" && scaleOf(left) !== "CONSTANT") {
-      left = { kind: "constant", value: 0 };
-    } else if (newRightScale === "PRICE_SCALE" && scaleOf(left) === "OSCILLATOR") {
-      left = { kind: "constant", value: 0 };
-    }
+    const left = operandsScaleCompatible(node.left, right) ? node.left : { kind: "constant" as const, value: 0 };
     onChange({ ...node, left, right });
   }
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg bg-brand-bg p-2">
-      <OperandEditor value={node.left} onChange={handleLeftChange} instruments={instruments} restrict={restrictFor(rightScale)} />
+      <OperandEditor value={node.left} onChange={handleLeftChange} instruments={instruments} other={node.right} />
       <select
         className={inputClass}
         value={node.operator}
@@ -449,7 +427,7 @@ function ComparisonEditor({
           </option>
         ))}
       </select>
-      <OperandEditor value={node.right} onChange={handleRightChange} instruments={instruments} restrict={restrictFor(leftScale)} />
+      <OperandEditor value={node.right} onChange={handleRightChange} instruments={instruments} other={node.left} />
       <button type="button" onClick={onRemove} className="ml-auto text-xs text-brand-navy/40 hover:text-brand-sell">
         Remove
       </button>

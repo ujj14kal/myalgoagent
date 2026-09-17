@@ -1,5 +1,5 @@
 import { isNeverExitCondition, type BooleanSignalKind, type ComparisonOperator, type ConditionNode, type FeasibilityIssue, type FeasibilitySection, type Operand } from "./types";
-import { OSCILLATOR_KINDS } from "./indicator-catalog";
+import { OSCILLATOR_KINDS, operandsScaleCompatible } from "./indicator-catalog";
 
 const FAMILY_LABEL: Record<BooleanSignalKind["family"], string> = {
   TIME_WINDOW: "time window",
@@ -124,19 +124,24 @@ function checkComparisonNode(node: Extract<ConditionNode, { kind: "comparison" }
   // to do with the instrument's price, and not even reliably with each
   // other's scale (RSI is 0-100, CCI is unbounded, Williams %R is -100-0,
   // ATR is a small fraction of price, ...). They're only meaningful against
-  // a fixed threshold — confirmed live for ATR specifically: close never
-  // dips anywhere near its ATR(14) across a full year of real NSE data, so
+  // a fixed threshold, or against another oscillator from the same
+  // `OSCILLATOR_SCALE_GROUP` family (MACD Line vs its own Signal line,
+  // Stochastic %K vs %D, +DI vs -DI, Aroon Up vs Down — each pair shares a
+  // real, comparable scale and is the standard signal that indicator is
+  // known for). Confirmed live for ATR specifically: close never dips
+  // anywhere near its ATR(14) across a full year of real NSE data, so
   // "close crossesAbove atr(14)" can never fire even once. The strategy
   // builder UI already restricts this at the point of selection
-  // (condition-group-editor.tsx), but this is the server-side backstop for
-  // the DSL code-mode path and any client that bypasses the visual picker.
+  // (condition-group-editor.tsx) using this exact same shared rule, but
+  // this is the server-side backstop for the DSL code-mode path and any
+  // client that bypasses the visual picker.
   const leftIsOscillator = left.kind === "indicator" && OSCILLATOR_KINDS.has(left.type);
   const rightIsOscillator = right.kind === "indicator" && OSCILLATOR_KINDS.has(right.type);
-  if ((leftIsOscillator && right.kind !== "constant") || (rightIsOscillator && left.kind !== "constant")) {
+  if ((leftIsOscillator || rightIsOscillator) && !operandsScaleCompatible(left, right)) {
     const oscillatorSide = leftIsOscillator ? left : right;
     issues.push({
       section,
-      message: `"${describeOperand(oscillatorSide)}" has its own scale, unrelated to price — it can only be compared to a fixed number (e.g. "${describeOperand(oscillatorSide)} > 70"), not to another indicator or price.`,
+      message: `"${describeOperand(oscillatorSide)}" has its own scale, unrelated to price — it can only be compared to a fixed number (e.g. "${describeOperand(oscillatorSide)} > 70") or to another indicator on the same scale, not to price or an unrelated indicator.`,
     });
     return;
   }

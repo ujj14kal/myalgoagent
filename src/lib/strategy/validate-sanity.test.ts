@@ -101,3 +101,77 @@ describe("oscillator / off-price-scale indicator mismatch (server-side backstop 
     expect(checkConditionFeasibility(node, "entry")).toEqual([]);
   });
 });
+
+describe("paired oscillators stay comparable — each is the standard signal that indicator is known for; an earlier version of this rule broke all four, caught live while building a real MACD strategy for a backtest", () => {
+  it("allows MACD Line crossing its own Signal line", () => {
+    const node: ConditionNode = {
+      kind: "comparison",
+      left: { kind: "indicator", type: "MACD_LINE", params: [12, 26, 9] },
+      operator: "CROSSES_ABOVE",
+      right: { kind: "indicator", type: "MACD_SIGNAL", params: [12, 26, 9] },
+    };
+    expect(checkConditionFeasibility(node, "entry")).toEqual([]);
+  });
+
+  it("allows MACD Histogram compared to MACD Line (same family)", () => {
+    const node: ConditionNode = {
+      kind: "comparison",
+      left: { kind: "indicator", type: "MACD_HISTOGRAM", params: [12, 26, 9] },
+      operator: "GT",
+      right: { kind: "indicator", type: "MACD_LINE", params: [12, 26, 9] },
+    };
+    expect(checkConditionFeasibility(node, "entry")).toEqual([]);
+  });
+
+  it("allows Stochastic %K crossing %D", () => {
+    const node: ConditionNode = {
+      kind: "comparison",
+      left: { kind: "indicator", type: "STOCH_K", params: [14, 3] },
+      operator: "CROSSES_ABOVE",
+      right: { kind: "indicator", type: "STOCH_D", params: [14, 3] },
+    };
+    expect(checkConditionFeasibility(node, "entry")).toEqual([]);
+  });
+
+  it("allows +DI crossing -DI", () => {
+    const node: ConditionNode = {
+      kind: "comparison",
+      left: { kind: "indicator", type: "PLUS_DI", params: [14] },
+      operator: "CROSSES_ABOVE",
+      right: { kind: "indicator", type: "MINUS_DI", params: [14] },
+    };
+    expect(checkConditionFeasibility(node, "entry")).toEqual([]);
+  });
+
+  it("allows Aroon Up crossing Aroon Down", () => {
+    const node: ConditionNode = {
+      kind: "comparison",
+      left: { kind: "indicator", type: "AROON_UP", params: [25] },
+      operator: "CROSSES_ABOVE",
+      right: { kind: "indicator", type: "AROON_DOWN", params: [25] },
+    };
+    expect(checkConditionFeasibility(node, "entry")).toEqual([]);
+  });
+
+  it("still flags MACD Line compared to an unrelated oscillator (RSI) — pairing is family-specific, not 'any two oscillators'", () => {
+    const node: ConditionNode = {
+      kind: "comparison",
+      left: { kind: "indicator", type: "MACD_LINE", params: [12, 26, 9] },
+      operator: "GT",
+      right: { kind: "indicator", type: "RSI", params: [14] },
+    };
+    const issues = checkConditionFeasibility(node, "entry");
+    expect(issues).toHaveLength(1);
+  });
+
+  it("still flags Stochastic %K compared to ADX — both 0-100 scale, but not the same paired family", () => {
+    const node: ConditionNode = {
+      kind: "comparison",
+      left: { kind: "indicator", type: "STOCH_K", params: [14, 3] },
+      operator: "GT",
+      right: { kind: "indicator", type: "ADX", params: [14] },
+    };
+    const issues = checkConditionFeasibility(node, "entry");
+    expect(issues).toHaveLength(1);
+  });
+});

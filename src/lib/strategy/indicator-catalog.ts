@@ -1,4 +1,4 @@
-import type { IndicatorKind } from "./types";
+import type { IndicatorKind, Operand } from "./types";
 
 export interface IndicatorDef {
   kind: IndicatorKind;
@@ -72,12 +72,13 @@ export const INDICATOR_BY_DSL_NAME: Map<string, IndicatorDef> = new Map(
  * itself) — rather than the instrument's own price scale. None of these
  * make sense drawn as an overlay line on a candlestick chart (a volatility
  * magnitude of ~80 is an invisible flat line against a price axis in the
- * thousands), and none are meaningfully comparable to price or to each
- * other in a strategy condition — only to a fixed threshold. Confirmed live
- * for ATR/StdDev specifically: close never once dips below either across a
- * full year of real NSE data, so "close crossesAbove atr(14)" can never
- * fire — not a bug in atr()'s math (independently verified in Phase B),
- * but this exact category of scale mismatch. */
+ * thousands), and none are meaningfully comparable to *price*, or to an
+ * oscillator from a different family — only to a fixed threshold, or to
+ * another member of the same `OSCILLATOR_SCALE_GROUP` (below). Confirmed
+ * live for ATR/StdDev specifically: close never once dips below either
+ * across a full year of real NSE data, so "close crossesAbove atr(14)" can
+ * never fire — not a bug in atr()'s math (independently verified in Phase
+ * B), but this exact category of scale mismatch. */
 export const OSCILLATOR_KINDS: Set<IndicatorKind> = new Set([
   "RSI",
   "MACD_LINE",
@@ -100,3 +101,49 @@ export const OSCILLATOR_KINDS: Set<IndicatorKind> = new Set([
   "ATR",
   "STDDEV",
 ]);
+
+/** A handful of oscillators are actually *paired* by construction — both
+ * sides come from the same computation and share the same real scale, so
+ * comparing them to each other is not just valid but is the single most
+ * standard signal each one is known for: MACD Line crossing its own Signal
+ * line, Stochastic %K crossing %D, +DI crossing -DI, Aroon Up crossing
+ * Aroon Down. An earlier version of the oscillator-scale restriction
+ * treated every oscillator as threshold-only with no exceptions, which
+ * would have made these four classic strategies impossible to build in the
+ * visual builder — caught live while trying to build a MACD Line vs MACD
+ * Signal crossover strategy for a real backtest and finding MACD wasn't
+ * even offered as an option. Every other oscillator (RSI, CCI, ROC, OBV,
+ * Williams %R, MFI, Awesome Oscillator, CMF, ADX, ATR, StdDev) has no
+ * natural partner on the same scale and stays threshold-only. */
+export const OSCILLATOR_SCALE_GROUP: Partial<Record<IndicatorKind, string>> = {
+  MACD_LINE: "MACD",
+  MACD_SIGNAL: "MACD",
+  MACD_HISTOGRAM: "MACD",
+  STOCH_K: "STOCH",
+  STOCH_D: "STOCH",
+  PLUS_DI: "DI",
+  MINUS_DI: "DI",
+  AROON_UP: "AROON",
+  AROON_DOWN: "AROON",
+};
+
+/** True when two operands can meaningfully appear on either side of a
+ * comparison: a constant is compatible with anything (it's the threshold
+ * every oscillator needs); two price-scale operands (price fields,
+ * non-oscillator indicators) are freely compatible as before; two
+ * oscillators are compatible only when they share an
+ * `OSCILLATOR_SCALE_GROUP` entry; an oscillator and a price-scale operand
+ * are never compatible. Shared by the visual builder's operand-picker
+ * restriction and the server-side feasibility check so both apply the
+ * exact same rule. */
+export function operandsScaleCompatible(a: Operand, b: Operand): boolean {
+  if (a.kind === "constant" || b.kind === "constant") return true;
+  const aOscillator = a.kind === "indicator" && OSCILLATOR_KINDS.has(a.type);
+  const bOscillator = b.kind === "indicator" && OSCILLATOR_KINDS.has(b.type);
+  if (aOscillator && bOscillator) {
+    const groupA = a.kind === "indicator" ? OSCILLATOR_SCALE_GROUP[a.type] : undefined;
+    const groupB = b.kind === "indicator" ? OSCILLATOR_SCALE_GROUP[b.type] : undefined;
+    return groupA !== undefined && groupA === groupB;
+  }
+  return !aOscillator && !bOscillator;
+}
