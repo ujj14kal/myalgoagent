@@ -31,6 +31,13 @@ model User {
   agentName           String?
   tutorialCompletedAt DateTime?
 
+  // Risk/safety notifications (RISK_EVENT, SESSION_STOPPED) are never
+  // gated by a preference — only the two high-volume, non-critical types
+  // are user-toggleable, so a user can't accidentally silence a kill-switch
+  // or risk-limit alert.
+  notifyOrderFilled Boolean @default(true)
+  notifySignalAlert Boolean @default(true)
+
   accounts            Account[]
   sessions            Session[]
   watchlistItems      WatchlistItem[]

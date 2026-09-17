@@ -76,6 +76,10 @@ export async function applyWebhookSignal(session: PaperSession, action: WebhookA
   }
 
   const riskSettings = await prisma.riskSettings.findUnique({ where: { userId: session.userId } });
+  const notifyPrefs = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { notifyOrderFilled: true },
+  });
   const recentClosedOrders = await prisma.paperOrder.findMany({
     where: { paperSessionId: session.id, side: "SELL" },
     orderBy: { time: "desc" },
@@ -121,14 +125,16 @@ export async function applyWebhookSignal(session: PaperSession, action: WebhookA
           positionPyramidCount: 1,
         },
       });
-      await tx.notification.create({
-        data: {
-          userId: session.userId,
-          paperSessionId: session.id,
-          type: "ORDER_FILLED",
-          message: `${action === "BUY" ? "Bought" : "Sold"} ${quantity} ${session.instrumentSymbol} at ₹${price.toFixed(2)} (${session.strategyName}) — via webhook signal.`,
-        },
-      });
+      if (notifyPrefs?.notifyOrderFilled ?? true) {
+        await tx.notification.create({
+          data: {
+            userId: session.userId,
+            paperSessionId: session.id,
+            type: "ORDER_FILLED",
+            message: `${action === "BUY" ? "Bought" : "Sold"} ${quantity} ${session.instrumentSymbol} at ₹${price.toFixed(2)} (${session.strategyName}) — via webhook signal.`,
+          },
+        });
+      }
       return created;
     });
     return { executed: true, paperOrderId: order.id };
@@ -161,14 +167,16 @@ export async function applyWebhookSignal(session: PaperSession, action: WebhookA
         positionPyramidCount: 1,
       },
     });
-    await tx.notification.create({
-      data: {
-        userId: session.userId,
-        paperSessionId: session.id,
-        type: "ORDER_FILLED",
-        message: `${action === "BUY" ? "Bought" : "Sold"} ${quantity} ${session.instrumentSymbol} at ₹${price.toFixed(2)} (${session.strategyName}) — via webhook signal.`,
-      },
-    });
+    if (notifyPrefs?.notifyOrderFilled ?? true) {
+      await tx.notification.create({
+        data: {
+          userId: session.userId,
+          paperSessionId: session.id,
+          type: "ORDER_FILLED",
+          message: `${action === "BUY" ? "Bought" : "Sold"} ${quantity} ${session.instrumentSymbol} at ₹${price.toFixed(2)} (${session.strategyName}) — via webhook signal.`,
+        },
+      });
+    }
     return created;
   });
   return { executed: true, paperOrderId: order.id };

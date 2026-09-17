@@ -1,10 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { setAgentNameAction } from "@/lib/agent-actions";
+import { setAgentNameAction, resetAgentNameAction } from "@/lib/agent-actions";
 import { DEFAULT_AGENT_NAME } from "@/lib/agent-constants";
 import RobotAvatar from "@/components/robot/robot-avatar";
-import ReplayTourButton from "@/components/tutorial/replay-tour-button";
 
 export default function AgentNameForm({ initialName }: { initialName: string }) {
   const [name, setName] = useState(initialName);
@@ -19,6 +18,21 @@ export default function AgentNameForm({ initialName }: { initialName: string }) 
     setSubmitting(false);
     setMessage(result.ok ? { type: "ok", text: "Saved." } : { type: "error", text: result.error });
   }
+
+  async function handleReset() {
+    setMessage(null);
+    setSubmitting(true);
+    const result = await resetAgentNameAction();
+    setSubmitting(false);
+    if (result.ok) {
+      setName(result.agentName);
+      setMessage({ type: "ok", text: "Reset to default." });
+    } else {
+      setMessage({ type: "error", text: result.error });
+    }
+  }
+
+  const isDefault = name === DEFAULT_AGENT_NAME;
 
   return (
     <form onSubmit={handleSubmit} className="flex items-start gap-4">
@@ -42,10 +56,16 @@ export default function AgentNameForm({ initialName }: { initialName: string }) 
           >
             {submitting ? "Saving…" : "Save name"}
           </button>
-          <span className="inline-flex items-center gap-1.5 text-sm text-brand-navy/60">
-            <ReplayTourButton />
-            Replay the tour
-          </span>
+          {!isDefault && (
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={handleReset}
+              className="text-sm font-medium text-brand-navy/50 hover:text-brand-primary disabled:opacity-50"
+            >
+              Reset to default
+            </button>
+          )}
         </div>
       </div>
     </form>

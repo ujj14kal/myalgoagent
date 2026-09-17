@@ -1,0 +1,2 @@
+ALTER TABLE "User" ADD COLUMN "notifyOrderFilled" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "User" ADD COLUMN "notifySignalAlert" BOOLEAN NOT NULL DEFAULT true;

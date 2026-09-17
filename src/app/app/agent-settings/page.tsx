@@ -4,6 +4,7 @@ import AgentNameForm from "@/components/agent-name-form";
 import { DEFAULT_AGENT_NAME } from "@/lib/agent-constants";
 import RobotAvatar from "@/components/robot/robot-avatar";
 import ReplayTourButton from "@/components/tutorial/replay-tour-button";
+import NotificationPrefsForm from "@/components/notification-prefs-form";
 
 export const metadata = { title: "Agent Settings", robots: { index: false } };
 
@@ -28,6 +29,18 @@ export default async function AgentSettingsPage() {
             </p>
             <div className="mt-4">
               <AgentNameForm initialName={user.agentName ?? DEFAULT_AGENT_NAME} />
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-black/5 bg-white p-6">
+            <h2 className="text-sm font-semibold text-brand-navy">Notifications from your agent</h2>
+            <p className="mt-1 text-xs text-brand-navy/50">
+              Choose which routine updates your agent sends you.
+            </p>
+            <div className="mt-4">
+              <NotificationPrefsForm
+                initial={{ notifyOrderFilled: user.notifyOrderFilled, notifySignalAlert: user.notifySignalAlert }}
+              />
             </div>
           </section>
 

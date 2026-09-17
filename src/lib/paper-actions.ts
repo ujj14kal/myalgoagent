@@ -130,6 +130,14 @@ async function syncPaperSessionInner(id: string, userId: string): Promise<PaperA
     maxConsecutiveLosses: riskSettings?.maxConsecutiveLosses ?? null,
   };
 
+  // Only these two high-volume, non-critical notification types are ever
+  // user-toggleable (Agent Settings) — RISK_EVENT/SESSION_STOPPED below are
+  // never gated, so a user can't accidentally silence a real risk alert.
+  const notifyPrefs = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { notifyOrderFilled: true, notifySignalAlert: true },
+  });
+
   const recentClosedOrders = await prisma.paperOrder.findMany({
     where: { paperSessionId: id, side: "SELL" },
     orderBy: { time: "desc" },
@@ -223,26 +231,30 @@ async function syncPaperSessionInner(id: string, userId: string): Promise<PaperA
         },
       }),
     ),
-    ...result.newOrders.map((o) =>
-      prisma.notification.create({
-        data: {
-          userId,
-          paperSessionId: id,
-          type: "ORDER_FILLED",
-          message: `${o.side === "BUY" ? "Bought" : "Sold"} ${o.quantity} ${paperSession.instrumentSymbol} at ₹${o.price.toFixed(2)} (${paperSession.strategyName})`,
-        },
-      }),
-    ),
-    ...result.signalAlerts.map((a) =>
-      prisma.notification.create({
-        data: {
-          userId,
-          paperSessionId: id,
-          type: "SIGNAL_ALERT",
-          message: `${paperSession.strategyName} (${paperSession.instrumentSymbol}): ${a.type} signal fired at ₹${a.price.toFixed(2)} — alert-only, no order placed.`,
-        },
-      }),
-    ),
+    ...(notifyPrefs?.notifyOrderFilled ?? true
+      ? result.newOrders.map((o) =>
+          prisma.notification.create({
+            data: {
+              userId,
+              paperSessionId: id,
+              type: "ORDER_FILLED",
+              message: `${o.side === "BUY" ? "Bought" : "Sold"} ${o.quantity} ${paperSession.instrumentSymbol} at ₹${o.price.toFixed(2)} (${paperSession.strategyName})`,
+            },
+          }),
+        )
+      : []),
+    ...(notifyPrefs?.notifySignalAlert ?? true
+      ? result.signalAlerts.map((a) =>
+          prisma.notification.create({
+            data: {
+              userId,
+              paperSessionId: id,
+              type: "SIGNAL_ALERT",
+              message: `${paperSession.strategyName} (${paperSession.instrumentSymbol}): ${a.type} signal fired at ₹${a.price.toFixed(2)} — alert-only, no order placed.`,
+            },
+          }),
+        )
+      : []),
   ];
 
   if (postCheck.breach) {
