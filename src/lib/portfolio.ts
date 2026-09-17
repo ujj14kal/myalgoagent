@@ -178,3 +178,29 @@ export async function getStrategyPerformance(userId: string, limit = 6): Promise
     };
   });
 }
+
+export type RecentBacktestRow = {
+  id: string;
+  strategyName: string;
+  instrumentSymbol: string;
+  range: string;
+  totalReturnPct: number;
+  createdAt: Date;
+};
+
+export async function getRecentBacktests(userId: string, limit = 5): Promise<RecentBacktestRow[]> {
+  const runs = await prisma.backtestRun.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    select: {
+      id: true,
+      strategyName: true,
+      instrumentSymbol: true,
+      range: true,
+      totalReturnPct: true,
+      createdAt: true,
+    },
+  });
+  return runs;
+}

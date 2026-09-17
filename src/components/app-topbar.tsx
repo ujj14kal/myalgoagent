@@ -9,10 +9,24 @@ export default function AppTopbar({
   user: { name?: string | null; email?: string | null; image?: string | null };
   unreadCount?: number;
 }) {
+  const displayName = user.name ?? user.email ?? "";
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "?";
+
   return (
-    <header className="flex h-16 items-center justify-between border-b border-black/5 bg-white px-4 md:px-6">
+    <header className="flex h-16 items-center border-b border-black/5 bg-white px-4 md:px-6">
       <MobileNavDrawer />
-      <div className="flex items-center gap-2 sm:gap-4">
+      {/* `ml-auto` (not `justify-between` on the header) keeps this group
+          pinned right regardless of whether MobileNavDrawer renders
+          anything — its own wrapper is `md:hidden`, so on desktop it's a
+          zero-width flex item and `justify-between` on the header would
+          have nothing to balance against, collapsing this whole group to
+          the left edge instead of the right. */}
+      <div className="ml-auto flex items-center gap-3 sm:gap-4">
         <Link
           href="/app/notifications"
           data-tour="notifications-bell"
@@ -28,9 +42,21 @@ export default function AppTopbar({
             </span>
           )}
         </Link>
-        <span className="hidden text-sm text-brand-navy/70 sm:inline">
-          {user.name ?? user.email}
-        </span>
+
+        <div className="hidden h-6 w-px bg-black/10 sm:block" />
+
+        <div className="hidden items-center gap-2 sm:flex">
+          {user.image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={user.image} alt="" className="h-8 w-8 rounded-full object-cover" />
+          ) : (
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-primary/10 text-xs font-semibold text-brand-primary">
+              {initials}
+            </span>
+          )}
+          <span className="max-w-[12rem] truncate text-sm font-medium text-brand-navy">{displayName}</span>
+        </div>
+
         <form
           action={async () => {
             "use server";

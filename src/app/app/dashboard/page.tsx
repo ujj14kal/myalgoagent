@@ -8,6 +8,7 @@ import {
   getPnlByPeriod,
   getRecentActivity,
   getStrategyPerformance,
+  getRecentBacktests,
 } from "@/lib/portfolio";
 import { DEFAULT_AGENT_NAME } from "@/lib/agent-constants";
 import EquityCurveChart from "@/components/equity-curve-chart";
@@ -18,6 +19,8 @@ import StrategyPerformanceList from "@/components/dashboard/strategy-performance
 import ActivityFeed from "@/components/dashboard/activity-feed";
 import WatchlistSnippet from "@/components/dashboard/watchlist-snippet";
 import DashboardEmptyState from "@/components/dashboard/dashboard-empty-state";
+import RecentBacktests from "@/components/dashboard/recent-backtests";
+import QuickActions from "@/components/dashboard/quick-actions";
 
 export const metadata = { title: "Dashboard", robots: { index: false } };
 
@@ -26,7 +29,7 @@ export default async function DashboardPage() {
   if (!session?.user?.id) return null;
   const userId = session.user.id;
 
-  const [user, rows, riskSettings, pnl, activity, strategies, watchlistItems, strategyCount] = await Promise.all([
+  const [user, rows, riskSettings, pnl, activity, strategies, watchlistItems, strategyCount, recentBacktests] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId }, select: { agentName: true } }),
     getPaperSessionRows(userId),
     prisma.riskSettings.findUnique({ where: { userId } }),
@@ -40,6 +43,7 @@ export default async function DashboardPage() {
       take: 5,
     }),
     prisma.strategy.count({ where: { userId } }),
+    getRecentBacktests(userId),
   ]);
 
   const agentName = user?.agentName ?? DEFAULT_AGENT_NAME;
@@ -167,6 +171,25 @@ export default async function DashboardPage() {
               <WatchlistSnippet
                 items={watchlistItems.map((w) => ({ symbol: w.instrument.symbol, name: w.instrument.name }))}
               />
+            </div>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="hover-lift rounded-2xl border border-black/5 bg-white p-5 lg:col-span-2">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-brand-navy">Recent backtests</p>
+                <Link href="/app/backtests" className="text-xs font-medium text-brand-primary hover:underline">
+                  View all →
+                </Link>
+              </div>
+              <div className="mt-3">
+                <RecentBacktests runs={recentBacktests} />
+              </div>
+            </div>
+
+            <div className="hover-lift rounded-2xl border border-black/5 bg-white p-5">
+              <p className="mb-3 text-sm font-semibold text-brand-navy">Quick actions</p>
+              <QuickActions />
             </div>
           </div>
       </div>
