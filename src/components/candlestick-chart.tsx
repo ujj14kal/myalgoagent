@@ -136,6 +136,7 @@ export default function CandlestickChart({
   const onDrawingCompleteRef = useRef(onDrawingComplete);
   const magnetEnabledRef = useRef(magnetEnabled);
   const pendingPointRef = useRef<{ time: number; price: number } | null>(null);
+  const hadPreviewRef = useRef(false);
 
   useEffect(() => {
     candlesRef.current = candles;
@@ -143,6 +144,28 @@ export default function CandlestickChart({
     onDrawingCompleteRef.current = onDrawingComplete;
     magnetEnabledRef.current = magnetEnabled;
   });
+
+  // Two-point tools whose in-progress shape can be usefully previewed
+  // between the first and second click, reusing the same Drawing shape the
+  // real commit uses.
+  function buildPreviewDrawing(
+    tool: Drawing["kind"],
+    from: { time: number; price: number },
+    to: { time: number; price: number },
+  ): Drawing | null {
+    switch (tool) {
+      case "trendline":
+      case "rectangle":
+      case "fibonacci":
+      case "ray":
+      case "arrow":
+      case "circle":
+      case "measure":
+        return { kind: tool, from, to };
+      default:
+        return null;
+    }
+  }
 
   // Chart instance — created once.
   useEffect(() => {
@@ -166,6 +189,31 @@ export default function CandlestickChart({
       }
       const c = candlesRef.current.find((x) => x.time === param.time);
       if (c) setHover({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume });
+
+      // Rubber-band preview for two-click tools: without this, the chart
+      // visibly does nothing after the first click while waiting for the
+      // second one, which reads as "the tool didn't work" — a real
+      // usability gap a user hit live. Kept in the primitive's own
+      // dedicated previewDrawing field (not React state, and not mixed
+      // into the real `drawings` array) so it repaints on every mouse move
+      // without a re-render and never risks getting persisted.
+      const tool = activeToolRef.current;
+      const pending = pendingPointRef.current;
+      if (tool && pending && param.point !== undefined && seriesRef.current) {
+        const rawPrice = seriesRef.current.coordinateToPrice(param.point.y);
+        if (rawPrice !== null) {
+          const preview = buildPreviewDrawing(tool, pending, { time: param.time as number, price: rawPrice });
+          if (preview) {
+            drawingsPrimitiveRef.current?.setPreview(preview);
+            hadPreviewRef.current = true;
+            return;
+          }
+        }
+      }
+      if (hadPreviewRef.current) {
+        drawingsPrimitiveRef.current?.setPreview(null);
+        hadPreviewRef.current = false;
+      }
     });
 
     chart.subscribeClick((param) => {
@@ -206,6 +254,10 @@ export default function CandlestickChart({
 
       const from = pendingPointRef.current;
       pendingPointRef.current = null;
+      if (hadPreviewRef.current) {
+        drawingsPrimitiveRef.current?.setPreview(null);
+        hadPreviewRef.current = false;
+      }
       if (tool === "trendline") onDrawingCompleteRef.current?.({ kind: "trendline", from, to: point });
       else if (tool === "rectangle") onDrawingCompleteRef.current?.({ kind: "rectangle", from, to: point });
       else if (tool === "fibonacci") onDrawingCompleteRef.current?.({ kind: "fibonacci", from, to: point });
@@ -407,6 +459,10 @@ export default function CandlestickChart({
   // Reset any in-progress two-click drawing when the active tool changes.
   useEffect(() => {
     pendingPointRef.current = null;
+    if (hadPreviewRef.current) {
+      drawingsPrimitiveRef.current?.setPreview(null);
+      hadPreviewRef.current = false;
+    }
   }, [activeTool]);
 
   // A persistent top-left legend — like TradingView's — rather than one

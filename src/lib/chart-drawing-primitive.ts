@@ -42,13 +42,13 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
       ctx.lineWidth = 1.5;
       ctx.font = "11px sans-serif";
 
-      for (const d of this.primitive.drawings) {
+      const renderOne = (d: Drawing) => {
         if (d.kind === "trendline") {
           const x1 = toX(d.from.time);
           const y1 = toY(d.from.price);
           const x2 = toX(d.to.time);
           const y2 = toY(d.to.price);
-          if (x1 === null || y1 === null || x2 === null || y2 === null) continue;
+          if (x1 === null || y1 === null || x2 === null || y2 === null) return;
           ctx.strokeStyle = "#471898";
           ctx.beginPath();
           ctx.moveTo(x1, y1);
@@ -56,7 +56,7 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
           ctx.stroke();
         } else if (d.kind === "horizontal") {
           const y = toY(d.price);
-          if (y === null) continue;
+          if (y === null) return;
           ctx.strokeStyle = "#466fff";
           ctx.setLineDash([4, 3]);
           ctx.beginPath();
@@ -71,7 +71,7 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
           const y1 = toY(d.from.price);
           const x2 = toX(d.to.time);
           const y2 = toY(d.to.price);
-          if (x1 === null || y1 === null || x2 === null || y2 === null) continue;
+          if (x1 === null || y1 === null || x2 === null || y2 === null) return;
           ctx.fillStyle = "rgba(71, 24, 152, 0.1)";
           ctx.strokeStyle = "rgba(71, 24, 152, 0.6)";
           const x = Math.min(x1, x2);
@@ -83,7 +83,7 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
         } else if (d.kind === "fibonacci") {
           const x1 = toX(d.from.time);
           const x2 = toX(d.to.time);
-          if (x1 === null || x2 === null) continue;
+          if (x1 === null || x2 === null) return;
           const left = Math.min(x1, x2);
           const right = Math.max(x1, x2);
           const priceRange = d.to.price - d.from.price;
@@ -102,7 +102,7 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
         } else if (d.kind === "text") {
           const x = toX(d.at.time);
           const y = toY(d.at.price);
-          if (x === null || y === null) continue;
+          if (x === null || y === null) return;
           ctx.font = "600 12px sans-serif";
           ctx.fillStyle = "#0e1b2d";
           ctx.fillText(d.text, x + 4, y - 4);
@@ -111,7 +111,7 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
           const y1 = toY(d.from.price);
           const x2 = toX(d.to.time);
           const y2 = toY(d.to.price);
-          if (x1 === null || y1 === null || x2 === null || y2 === null) continue;
+          if (x1 === null || y1 === null || x2 === null || y2 === null) return;
           // Extend the line from `to` in the from->to direction out to the pane edge.
           const dx = x2 - x1;
           const dy = y2 - y1;
@@ -128,7 +128,7 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
           const y1 = toY(d.from.price);
           const x2 = toX(d.to.time);
           const y2 = toY(d.to.price);
-          if (x1 === null || y1 === null || x2 === null || y2 === null) continue;
+          if (x1 === null || y1 === null || x2 === null || y2 === null) return;
           ctx.strokeStyle = "#00a83e";
           ctx.fillStyle = "#00a83e";
           ctx.beginPath();
@@ -148,7 +148,7 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
           const y1 = toY(d.from.price);
           const x2 = toX(d.to.time);
           const y2 = toY(d.to.price);
-          if (x1 === null || y1 === null || x2 === null || y2 === null) continue;
+          if (x1 === null || y1 === null || x2 === null || y2 === null) return;
           const cx = (x1 + x2) / 2;
           const cy = (y1 + y2) / 2;
           const rx = Math.abs(x2 - x1) / 2;
@@ -164,7 +164,7 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
           const y1 = toY(d.from.price);
           const x2 = toX(d.to.time);
           const y2 = toY(d.to.price);
-          if (x1 === null || y1 === null || x2 === null || y2 === null) continue;
+          if (x1 === null || y1 === null || x2 === null || y2 === null) return;
           const up = d.to.price >= d.from.price;
           const fill = up ? "rgba(0, 168, 62, 0.12)" : "rgba(214, 0, 0, 0.12)";
           const stroke = up ? "#00a83e" : "#d60000";
@@ -188,11 +188,11 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
           const lo = Math.min(d.fromTime, d.toTime);
           const hi = Math.max(d.fromTime, d.toTime);
           const rangeCandles = this.primitive.candles.filter((c) => c.time >= lo && c.time <= hi);
-          if (rangeCandles.length === 0) continue;
+          if (rangeCandles.length === 0) return;
 
           const priceLow = Math.min(...rangeCandles.map((c) => c.low));
           const priceHigh = Math.max(...rangeCandles.map((c) => c.high));
-          if (priceHigh <= priceLow) continue;
+          if (priceHigh <= priceLow) return;
 
           const BIN_COUNT = 24;
           const binHeight = (priceHigh - priceLow) / BIN_COUNT;
@@ -222,7 +222,7 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
           const pocIdx = bins.indexOf(maxBinVolume);
           const xLeft = toX(lo);
           const xRight = toX(hi);
-          if (xLeft === null || xRight === null) continue;
+          if (xLeft === null || xRight === null) return;
           const maxBarWidth = Math.max(24, (xRight - xLeft) * 0.5);
 
           for (let i = 0; i < BIN_COUNT; i++) {
@@ -255,6 +255,48 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
             ctx.fillText(`POC ${pocPrice.toFixed(2)}`, xLeft + 4, pocY - 4);
           }
         }
+      };
+
+      for (const d of this.primitive.drawings) renderOne(d);
+
+      // The in-progress drawing (between the first and second click) gets
+      // its own pass on top — same shape the real drawing will use, plus
+      // endpoint markers and a live length/price readout, so the chart
+      // visibly tracks the cursor instead of appearing to do nothing
+      // between the two clicks (a real usability gap a user hit live).
+      const preview = this.primitive.previewDrawing;
+      if (preview && "from" in preview && "to" in preview) {
+        ctx.save();
+        ctx.globalAlpha = 0.85;
+        renderOne(preview);
+        ctx.restore();
+
+        const x1 = toX(preview.from.time);
+        const y1 = toY(preview.from.price);
+        const x2 = toX(preview.to.time);
+        const y2 = toY(preview.to.price);
+        if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
+          ctx.fillStyle = "#0e1b2d";
+          ctx.beginPath();
+          ctx.arc(x1, y1, 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(x2, y2, 3, 0, Math.PI * 2);
+          ctx.fill();
+
+          const priceDelta = preview.to.price - preview.from.price;
+          const pct = preview.from.price !== 0 ? (priceDelta / preview.from.price) * 100 : 0;
+          const barsBetween = this.primitive.candles.filter(
+            (c) => c.time >= Math.min(preview.from.time, preview.to.time) && c.time <= Math.max(preview.from.time, preview.to.time),
+          ).length;
+          const label = `${priceDelta >= 0 ? "+" : ""}${priceDelta.toFixed(2)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%), ${barsBetween} bars`;
+          ctx.font = "600 11px sans-serif";
+          const textWidth = ctx.measureText(label).width;
+          ctx.fillStyle = "rgba(14, 27, 45, 0.85)";
+          ctx.fillRect(x2 + 8, y2 - 20, textWidth + 8, 16);
+          ctx.fillStyle = "#ffffff";
+          ctx.fillText(label, x2 + 12, y2 - 8);
+        }
       }
 
       ctx.restore();
@@ -277,6 +319,10 @@ export class DrawingsPrimitive implements ISeriesPrimitive<Time> {
   // candle volume (not just prices) to bucket into its histogram — kept in
   // sync from CandlestickChart's own data-sync effect via setCandles().
   candles: Candle[] = [];
+  // The in-progress two-click drawing, if any — set on every mouse move
+  // while a point is pending, cleared once the drawing commits or the tool
+  // changes. Kept separate from `drawings` so it never gets persisted.
+  previewDrawing: Drawing | null = null;
   private paneView = new DrawingsPaneView(this);
   private requestUpdateFn: (() => void) | null = null;
 
@@ -298,6 +344,11 @@ export class DrawingsPrimitive implements ISeriesPrimitive<Time> {
 
   setCandles(candles: Candle[]) {
     this.candles = candles;
+    this.requestUpdateFn?.();
+  }
+
+  setPreview(preview: Drawing | null) {
+    this.previewDrawing = preview;
     this.requestUpdateFn?.();
   }
 
