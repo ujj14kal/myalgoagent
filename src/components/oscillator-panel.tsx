@@ -11,9 +11,21 @@ export interface OscillatorSeries {
   type?: "line" | "histogram";
 }
 
+// A `= []` default parameter (or an inline `[...]` literal at a call site)
+// creates a NEW array on every render. Since this component's effect
+// depends on `referenceLines` by reference, that meant the chart was torn
+// down and recreated on every single re-render of the parent — including
+// every render during React's initial mount settling — which is what made
+// a chart with multiple oscillator panels appear blank for several seconds
+// after a page load restored from a saved layout: not actually broken,
+// just endlessly destroying and rebuilding itself before ever holding
+// still long enough to paint. CandlestickChart already documents and
+// avoids this exact pattern; this is the same fix applied here.
+const EMPTY_REFERENCE_LINES: number[] = [];
+
 export default function OscillatorPanel({
   series,
-  referenceLines = [],
+  referenceLines = EMPTY_REFERENCE_LINES,
 }: {
   series: OscillatorSeries[];
   referenceLines?: number[];

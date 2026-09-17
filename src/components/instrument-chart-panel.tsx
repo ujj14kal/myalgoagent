@@ -25,6 +25,10 @@ const HISTOGRAM_KINDS = new Set<IndicatorKind>(["MACD_HISTOGRAM", "AWESOME_OSCIL
 
 const OVERLAY_COLORS = ["#bda360", "#466fff", "#6a35c2", "#0e1b2d"];
 
+// Stable reference — see the comment on OscillatorPanel's own default for
+// why an inline `[0]` literal at a JSX call site is the same bug.
+const ZERO_LINE: number[] = [0];
+
 const CHART_TYPES: { value: ChartType; label: string }[] = [
   { value: "candlestick", label: "Candles" },
   { value: "line", label: "Line" },
@@ -389,7 +393,7 @@ export default function InstrumentChartPanel({
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
             Compare — % change from range start
           </p>
-          <OscillatorPanel series={comparePanel} referenceLines={[0]} />
+          <OscillatorPanel series={comparePanel} referenceLines={ZERO_LINE} />
         </div>
       )}
     </div>
