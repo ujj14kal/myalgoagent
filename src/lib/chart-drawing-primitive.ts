@@ -339,43 +339,50 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
 
       for (const d of this.primitive.drawings) renderOne(d);
 
-      // The in-progress drawing (between the first and second click) gets
-      // its own pass on top — same shape the real drawing will use, plus
-      // endpoint markers and a live length/price readout, so the chart
-      // visibly tracks the cursor instead of appearing to do nothing
-      // between the two clicks (a real usability gap a user hit live).
+      // The in-progress drawing (between clicks) gets its own pass on top —
+      // same shape the real drawing will use, so the chart visibly tracks
+      // the cursor instead of appearing to do nothing while a multi-click
+      // tool is only partway placed (a real usability gap a user hit live,
+      // for Trendline first, then found to also be missing — same failure
+      // mode — for Volume Profile and the Long/Short position tool once
+      // those were added). Every drawing kind renders here the same way it
+      // does when committed; the two-point shapes additionally get endpoint
+      // markers and a live length/price readout, since knowing the exact
+      // delta while you're still dragging is the whole point of a preview.
       const preview = this.primitive.previewDrawing;
-      if (preview && "from" in preview && "to" in preview) {
+      if (preview) {
         ctx.save();
         ctx.globalAlpha = 0.85;
         renderOne(preview);
         ctx.restore();
 
-        const x1 = toX(preview.from.time);
-        const y1 = toY(preview.from.price);
-        const x2 = toX(preview.to.time);
-        const y2 = toY(preview.to.price);
-        if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
-          ctx.fillStyle = "#0e1b2d";
-          ctx.beginPath();
-          ctx.arc(x1, y1, 3, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.arc(x2, y2, 3, 0, Math.PI * 2);
-          ctx.fill();
+        if ("from" in preview && "to" in preview) {
+          const x1 = toX(preview.from.time);
+          const y1 = toY(preview.from.price);
+          const x2 = toX(preview.to.time);
+          const y2 = toY(preview.to.price);
+          if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
+            ctx.fillStyle = "#0e1b2d";
+            ctx.beginPath();
+            ctx.arc(x1, y1, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x2, y2, 3, 0, Math.PI * 2);
+            ctx.fill();
 
-          const priceDelta = preview.to.price - preview.from.price;
-          const pct = preview.from.price !== 0 ? (priceDelta / preview.from.price) * 100 : 0;
-          const barsBetween = this.primitive.candles.filter(
-            (c) => c.time >= Math.min(preview.from.time, preview.to.time) && c.time <= Math.max(preview.from.time, preview.to.time),
-          ).length;
-          const label = `${priceDelta >= 0 ? "+" : ""}${priceDelta.toFixed(2)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%), ${barsBetween} bars`;
-          ctx.font = "600 11px sans-serif";
-          const textWidth = ctx.measureText(label).width;
-          ctx.fillStyle = "rgba(14, 27, 45, 0.85)";
-          ctx.fillRect(x2 + 8, y2 - 20, textWidth + 8, 16);
-          ctx.fillStyle = "#ffffff";
-          ctx.fillText(label, x2 + 12, y2 - 8);
+            const priceDelta = preview.to.price - preview.from.price;
+            const pct = preview.from.price !== 0 ? (priceDelta / preview.from.price) * 100 : 0;
+            const barsBetween = this.primitive.candles.filter(
+              (c) => c.time >= Math.min(preview.from.time, preview.to.time) && c.time <= Math.max(preview.from.time, preview.to.time),
+            ).length;
+            const label = `${priceDelta >= 0 ? "+" : ""}${priceDelta.toFixed(2)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%), ${barsBetween} bars`;
+            ctx.font = "600 11px sans-serif";
+            const textWidth = ctx.measureText(label).width;
+            ctx.fillStyle = "rgba(14, 27, 45, 0.85)";
+            ctx.fillRect(x2 + 8, y2 - 20, textWidth + 8, 16);
+            ctx.fillStyle = "#ffffff";
+            ctx.fillText(label, x2 + 12, y2 - 8);
+          }
         }
       }
 

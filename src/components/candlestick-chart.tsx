@@ -244,9 +244,30 @@ export default function CandlestickChart({
       case "circle":
       case "measure":
         return { kind: tool, from, to };
+      case "volumeProfile":
+        return { kind: "volumeProfile", fromTime: from.time, toTime: to.time };
       default:
         return null;
     }
+  }
+
+  // Long/Short position preview across all three of its clicks: before the
+  // stop is placed, show a tentative box using the cursor as a stand-in
+  // stop; once the stop is placed, show it using the cursor as a stand-in
+  // target — so the box is always visible from the very first click,
+  // instead of only appearing once all three clicks are done.
+  function buildPositionPreview(
+    tool: "longPosition" | "shortPosition",
+    pending: { entryTime: number; entryPrice: number; stopPrice: number | null },
+    cursorPrice: number,
+  ): Drawing {
+    return {
+      kind: tool,
+      entryTime: pending.entryTime,
+      entryPrice: pending.entryPrice,
+      stopPrice: pending.stopPrice ?? cursorPrice,
+      targetPrice: pending.stopPrice === null ? pending.entryPrice : cursorPrice,
+    };
   }
 
   // Chart instance — created once.
@@ -273,19 +294,34 @@ export default function CandlestickChart({
       const c = candlesRef.current.find((x) => x.time === param.time);
       if (c) setHover({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume });
 
-      // Rubber-band preview for two-click tools: without this, the chart
-      // visibly does nothing after the first click while waiting for the
-      // second one, which reads as "the tool didn't work" — a real
-      // usability gap a user hit live. Kept in the primitive's own
-      // dedicated previewDrawing field (not React state, and not mixed
-      // into the real `drawings` array) so it repaints on every mouse move
-      // without a re-render and never risks getting persisted.
+      // Live preview for every drawing tool that doesn't commit on a single
+      // click: without this, the chart visibly does nothing while waiting
+      // for the next click, which reads as "the tool didn't work" — a real
+      // usability gap a user hit live (originally reported for Trendline,
+      // then found to also be missing for Volume Profile and the Long/Short
+      // position tool, which never got a preview when they were added).
+      // Kept in the primitive's own dedicated previewDrawing field (not
+      // React state, and not mixed into the real `drawings` array) so it
+      // repaints on every mouse move without a re-render and never risks
+      // getting persisted.
       const tool = activeToolRef.current;
       const pending = pendingPointRef.current;
-      if (tool && pending && param.point !== undefined && seriesRef.current) {
+      const positionPending = positionPendingRef.current;
+
+      if (tool && seriesRef.current && param.point !== undefined) {
         const rawPrice = seriesRef.current.coordinateToPrice(param.point.y);
         if (rawPrice !== null) {
-          const preview = buildPreviewDrawing(tool, pending, { time: param.time as number, price: rawPrice });
+          let preview: Drawing | null = null;
+          if (pending) {
+            preview = buildPreviewDrawing(tool, pending, { time: param.time as number, price: rawPrice });
+          } else if (positionPending && (tool === "longPosition" || tool === "shortPosition")) {
+            preview = buildPositionPreview(tool, positionPending, rawPrice);
+          } else if (tool === "horizontal") {
+            // Single-click tool — there's no "between clicks" gap to fill,
+            // but showing where the line will land before you click is the
+            // same feedback principle: don't leave the cursor doing nothing.
+            preview = { kind: "horizontal", price: rawPrice };
+          }
           if (preview) {
             drawingsPrimitiveRef.current?.setPreview(preview);
             hadPreviewRef.current = true;
@@ -344,6 +380,10 @@ export default function CandlestickChart({
         }
         // Click 3: target — commit and reset for the next one.
         positionPendingRef.current = null;
+        if (hadPreviewRef.current) {
+          drawingsPrimitiveRef.current?.setPreview(null);
+          hadPreviewRef.current = false;
+        }
         onDrawingCompleteRef.current?.({
           kind: tool,
           entryTime: pending.entryTime,
