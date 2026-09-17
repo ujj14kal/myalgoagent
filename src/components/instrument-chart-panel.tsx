@@ -314,10 +314,11 @@ export default function InstrumentChartPanel({
             <span className="mx-1 h-4 w-px bg-brand-navy/10" />
             <IndicatorPicker label="Overlay" scope="overlay" onAdd={addOverlay} />
             <IndicatorPicker label="Oscillator" scope="oscillator" onAdd={addOscillator} />
+            <span className="mx-1 h-4 w-px bg-brand-navy/10" />
             <select
               value={compareSymbol ?? ""}
               onChange={(e) => setCompareSymbol(e.target.value || null)}
-              className="rounded-lg border border-brand-navy/15 px-3 py-1.5 text-xs outline-none focus:border-brand-primary"
+              className="rounded-full border border-brand-navy/15 px-3 py-1 text-xs font-medium text-brand-navy/60 outline-none focus:border-brand-primary"
             >
               <option value="">Compare to…</option>
               {allInstruments.filter((i) => i.symbol !== symbol).map((i) => (
@@ -329,7 +330,7 @@ export default function InstrumentChartPanel({
             <button
               onClick={handleSaveLayout}
               disabled={isPending}
-              className="rounded-full bg-brand-primary px-4 py-1.5 text-xs font-medium text-white hover:bg-brand-primary-light disabled:opacity-50"
+              className="rounded-full bg-brand-primary px-4 py-1 text-xs font-medium text-white hover:bg-brand-primary-light disabled:opacity-50"
             >
               {isPending ? "Saving…" : saveStatus === "saved" ? "Saved ✓" : "Save layout"}
             </button>

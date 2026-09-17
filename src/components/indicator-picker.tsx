@@ -17,7 +17,9 @@ export default function IndicatorPicker({
   onAdd: (kind: IndicatorKind) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -25,12 +27,20 @@ export default function IndicatorPicker({
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
     document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
+    // Focus the search box the moment the panel opens, matching a
+    // TradingView-style "Indicators" search rather than a plain dropdown.
+    const focusTimer = setTimeout(() => inputRef.current?.focus(), 0);
+    return () => {
+      document.removeEventListener("mousedown", onClickOutside);
+      clearTimeout(focusTimer);
+    };
   }, [open]);
 
-  const options = INDICATOR_CATALOG.filter((d) =>
+  const scoped = INDICATOR_CATALOG.filter((d) =>
     scope === "oscillator" ? OSCILLATOR_KINDS.has(d.kind) : !OSCILLATOR_KINDS.has(d.kind),
   );
+  const q = query.trim().toLowerCase();
+  const options = q ? scoped.filter((d) => d.label.toLowerCase().includes(q)) : scoped;
 
   return (
     <div ref={ref} className="relative inline-block">
@@ -42,20 +52,34 @@ export default function IndicatorPicker({
         + {label}
       </button>
       {open && (
-        <div className="absolute left-0 top-full z-20 mt-1 max-h-72 w-56 overflow-y-auto rounded-lg border border-black/10 bg-white p-1.5 shadow-lg">
-          {options.map((d) => (
-            <button
-              key={d.kind}
-              type="button"
-              onClick={() => {
-                onAdd(d.kind);
-                setOpen(false);
-              }}
-              className="block w-full rounded-md px-2 py-1.5 text-left text-sm text-brand-navy hover:bg-brand-bg"
-            >
-              {d.label}
-            </button>
-          ))}
+        <div className="absolute left-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-lg border border-black/10 bg-white shadow-lg">
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={`Search ${label.toLowerCase()}s…`}
+            className="w-full border-b border-black/5 px-2.5 py-2 text-sm outline-none placeholder:text-brand-navy/35"
+          />
+          <div className="max-h-64 overflow-y-auto p-1.5">
+            {options.length === 0 ? (
+              <p className="px-2 py-3 text-center text-xs text-brand-navy/40">No match.</p>
+            ) : (
+              options.map((d) => (
+                <button
+                  key={d.kind}
+                  type="button"
+                  onClick={() => {
+                    onAdd(d.kind);
+                    setOpen(false);
+                    setQuery("");
+                  }}
+                  className="block w-full rounded-md px-2 py-1.5 text-left text-sm text-brand-navy hover:bg-brand-bg"
+                >
+                  {d.label}
+                </button>
+              ))
+            )}
+          </div>
         </div>
       )}
     </div>
