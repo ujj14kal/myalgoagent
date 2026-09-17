@@ -142,6 +142,7 @@ export default function InstrumentChartPanel({
   const [undoStack, setUndoStack] = useState<Drawing[][]>([]);
   const [redoStack, setRedoStack] = useState<Drawing[][]>([]);
   const [activeTool, setActiveTool] = useState<Drawing["kind"] | null>(null);
+  const [magnetEnabled, setMagnetEnabled] = useState(false);
   const [compareSymbol, setCompareSymbol] = useState<string | null>(savedLayout?.compareSymbol ?? null);
   const [compareCandles, setCompareCandles] = useState<Candle[] | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saved">("idle");
@@ -490,7 +491,14 @@ export default function InstrumentChartPanel({
         )}
 
         <div className="flex">
-          <DrawingToolbar activeTool={activeTool} onSelectTool={setActiveTool} drawingsCount={drawings.length} onClear={handleClearDrawings} />
+          <DrawingToolbar
+            activeTool={activeTool}
+            onSelectTool={setActiveTool}
+            drawingsCount={drawings.length}
+            onClear={handleClearDrawings}
+            magnetEnabled={magnetEnabled}
+            onToggleMagnet={() => setMagnetEnabled((v) => !v)}
+          />
           <div className="min-w-0 flex-1 p-3">
             <CandlestickChart
               candles={candles}
@@ -500,6 +508,7 @@ export default function InstrumentChartPanel({
               drawings={drawings}
               activeTool={activeTool}
               onDrawingComplete={handleDrawingComplete}
+              magnetEnabled={magnetEnabled}
             />
           </div>
         </div>

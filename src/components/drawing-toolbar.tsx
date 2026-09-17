@@ -56,6 +56,50 @@ const TOOLS: { kind: Drawing["kind"]; label: string; hint: string; icon: ReactNo
       </svg>
     ),
   },
+  {
+    kind: "ray",
+    label: "Ray",
+    hint: "Click two points",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M2 13 L9 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        <path d="M9 6 L15 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeDasharray="1.5 1.5" />
+        <circle cx="2" cy="13" r="1.6" fill="currentColor" />
+      </svg>
+    ),
+  },
+  {
+    kind: "arrow",
+    label: "Arrow",
+    hint: "Click two points",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M2 13 L13 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        <path d="M13 3 L8 4 M13 3 L12 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+  {
+    kind: "circle",
+    label: "Circle",
+    hint: "Click two corners",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <ellipse cx="8" cy="8" rx="5.5" ry="4" stroke="currentColor" strokeWidth="1.6" />
+      </svg>
+    ),
+  },
+  {
+    kind: "measure",
+    label: "Measure",
+    hint: "Click two points — shows price/% delta",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="2.5" y="4" width="11" height="8" rx="1" strokeDasharray="2 1.5" stroke="currentColor" strokeWidth="1.4" />
+        <path d="M5 8h6" stroke="currentColor" strokeWidth="1.2" />
+      </svg>
+    ),
+  },
 ];
 
 /** Vertical icon rail beside the chart, matching a TradingView-style layout. */
@@ -64,14 +108,32 @@ export default function DrawingToolbar({
   onSelectTool,
   drawingsCount,
   onClear,
+  magnetEnabled,
+  onToggleMagnet,
 }: {
   activeTool: Drawing["kind"] | null;
   onSelectTool: (tool: Drawing["kind"] | null) => void;
   drawingsCount: number;
   onClear: () => void;
+  magnetEnabled: boolean;
+  onToggleMagnet: () => void;
 }) {
   return (
     <div className="flex w-10 shrink-0 flex-col items-center gap-1 border-r border-black/5 py-2">
+      <button
+        type="button"
+        title={magnetEnabled ? "Magnet snap: on — points snap to nearest OHLC" : "Magnet snap: off"}
+        onClick={onToggleMagnet}
+        className={`flex h-8 w-8 items-center justify-center rounded-md ${
+          magnetEnabled ? "bg-brand-gold text-white" : "text-brand-navy/50 hover:bg-brand-bg hover:text-brand-navy"
+        }`}
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M4 2v5a4 4 0 0 0 8 0V2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M4 2H2v5a6 6 0 0 0 12 0V2h-2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      </button>
+      <span className="my-0.5 h-px w-6 bg-black/5" />
       {TOOLS.map((t) => (
         <button
           key={t.kind}

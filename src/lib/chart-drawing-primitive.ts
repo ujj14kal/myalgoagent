@@ -14,7 +14,11 @@ export type Drawing =
   | { kind: "horizontal"; price: number }
   | { kind: "rectangle"; from: { time: number; price: number }; to: { time: number; price: number } }
   | { kind: "fibonacci"; from: { time: number; price: number }; to: { time: number; price: number } }
-  | { kind: "text"; at: { time: number; price: number }; text: string };
+  | { kind: "text"; at: { time: number; price: number }; text: string }
+  | { kind: "ray"; from: { time: number; price: number }; to: { time: number; price: number } }
+  | { kind: "arrow"; from: { time: number; price: number }; to: { time: number; price: number } }
+  | { kind: "circle"; from: { time: number; price: number }; to: { time: number; price: number } }
+  | { kind: "measure"; from: { time: number; price: number }; to: { time: number; price: number } };
 
 const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 
@@ -99,6 +103,84 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
           ctx.font = "600 12px sans-serif";
           ctx.fillStyle = "#0e1b2d";
           ctx.fillText(d.text, x + 4, y - 4);
+        } else if (d.kind === "ray") {
+          const x1 = toX(d.from.time);
+          const y1 = toY(d.from.price);
+          const x2 = toX(d.to.time);
+          const y2 = toY(d.to.price);
+          if (x1 === null || y1 === null || x2 === null || y2 === null) continue;
+          // Extend the line from `to` in the from->to direction out to the pane edge.
+          const dx = x2 - x1;
+          const dy = y2 - y1;
+          const t = dx !== 0 ? (dx > 0 ? (mediaSize.width - x1) / dx : (0 - x1) / dx) : 1e6;
+          const exX = x1 + dx * t;
+          const exY = y1 + dy * t;
+          ctx.strokeStyle = "#471898";
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(exX, exY);
+          ctx.stroke();
+        } else if (d.kind === "arrow") {
+          const x1 = toX(d.from.time);
+          const y1 = toY(d.from.price);
+          const x2 = toX(d.to.time);
+          const y2 = toY(d.to.price);
+          if (x1 === null || y1 === null || x2 === null || y2 === null) continue;
+          ctx.strokeStyle = "#00a83e";
+          ctx.fillStyle = "#00a83e";
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+          const angle = Math.atan2(y2 - y1, x2 - x1);
+          const headLen = 9;
+          ctx.beginPath();
+          ctx.moveTo(x2, y2);
+          ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI / 6), y2 - headLen * Math.sin(angle - Math.PI / 6));
+          ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 6), y2 - headLen * Math.sin(angle + Math.PI / 6));
+          ctx.closePath();
+          ctx.fill();
+        } else if (d.kind === "circle") {
+          const x1 = toX(d.from.time);
+          const y1 = toY(d.from.price);
+          const x2 = toX(d.to.time);
+          const y2 = toY(d.to.price);
+          if (x1 === null || y1 === null || x2 === null || y2 === null) continue;
+          const cx = (x1 + x2) / 2;
+          const cy = (y1 + y2) / 2;
+          const rx = Math.abs(x2 - x1) / 2;
+          const ry = Math.abs(y2 - y1) / 2;
+          ctx.fillStyle = "rgba(71, 24, 152, 0.1)";
+          ctx.strokeStyle = "rgba(71, 24, 152, 0.6)";
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        } else if (d.kind === "measure") {
+          const x1 = toX(d.from.time);
+          const y1 = toY(d.from.price);
+          const x2 = toX(d.to.time);
+          const y2 = toY(d.to.price);
+          if (x1 === null || y1 === null || x2 === null || y2 === null) continue;
+          const up = d.to.price >= d.from.price;
+          const fill = up ? "rgba(0, 168, 62, 0.12)" : "rgba(214, 0, 0, 0.12)";
+          const stroke = up ? "#00a83e" : "#d60000";
+          const x = Math.min(x1, x2);
+          const y = Math.min(y1, y2);
+          const w = Math.abs(x2 - x1);
+          const h = Math.abs(y2 - y1);
+          ctx.fillStyle = fill;
+          ctx.strokeStyle = stroke;
+          ctx.setLineDash([4, 3]);
+          ctx.fillRect(x, y, w, h);
+          ctx.strokeRect(x, y, w, h);
+          ctx.setLineDash([]);
+          const priceDelta = d.to.price - d.from.price;
+          const pct = d.from.price !== 0 ? (priceDelta / d.from.price) * 100 : 0;
+          const label = `${priceDelta >= 0 ? "+" : ""}${priceDelta.toFixed(2)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%)`;
+          ctx.font = "600 12px sans-serif";
+          ctx.fillStyle = stroke;
+          ctx.fillText(label, x2 + 6, y2 - 6);
         }
       }
 

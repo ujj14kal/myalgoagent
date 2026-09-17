@@ -100,6 +100,7 @@ export default function CandlestickChart({
   drawings = EMPTY_DRAWINGS,
   activeTool = null,
   onDrawingComplete,
+  magnetEnabled = false,
 }: {
   candles: Candle[];
   overlays?: Overlay[];
@@ -109,6 +110,7 @@ export default function CandlestickChart({
   drawings?: Drawing[];
   activeTool?: Drawing["kind"] | null;
   onDrawingComplete?: (drawing: Drawing) => void;
+  magnetEnabled?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -124,12 +126,14 @@ export default function CandlestickChart({
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const activeToolRef = useRef(activeTool);
   const onDrawingCompleteRef = useRef(onDrawingComplete);
+  const magnetEnabledRef = useRef(magnetEnabled);
   const pendingPointRef = useRef<{ time: number; price: number } | null>(null);
 
   useEffect(() => {
     candlesRef.current = candles;
     activeToolRef.current = activeTool;
     onDrawingCompleteRef.current = onDrawingComplete;
+    magnetEnabledRef.current = magnetEnabled;
   });
 
   // Chart instance — created once.
@@ -159,8 +163,17 @@ export default function CandlestickChart({
     chart.subscribeClick((param) => {
       const tool = activeToolRef.current;
       if (!tool || !param.time || param.point === undefined || !seriesRef.current) return;
-      const price = seriesRef.current.coordinateToPrice(param.point.y);
-      if (price === null) return;
+      const rawPrice = seriesRef.current.coordinateToPrice(param.point.y);
+      if (rawPrice === null) return;
+      let price: number = rawPrice;
+
+      if (magnetEnabledRef.current) {
+        const c = candlesRef.current.find((x) => x.time === param.time);
+        if (c) {
+          const candidates = [c.open, c.high, c.low, c.close];
+          price = candidates.reduce((best, v) => (Math.abs(v - price) < Math.abs(best - price) ? v : best), candidates[0]);
+        }
+      }
       const point = { time: param.time as number, price };
 
       if (tool === "horizontal") {
@@ -186,6 +199,10 @@ export default function CandlestickChart({
       if (tool === "trendline") onDrawingCompleteRef.current?.({ kind: "trendline", from, to: point });
       else if (tool === "rectangle") onDrawingCompleteRef.current?.({ kind: "rectangle", from, to: point });
       else if (tool === "fibonacci") onDrawingCompleteRef.current?.({ kind: "fibonacci", from, to: point });
+      else if (tool === "ray") onDrawingCompleteRef.current?.({ kind: "ray", from, to: point });
+      else if (tool === "arrow") onDrawingCompleteRef.current?.({ kind: "arrow", from, to: point });
+      else if (tool === "circle") onDrawingCompleteRef.current?.({ kind: "circle", from, to: point });
+      else if (tool === "measure") onDrawingCompleteRef.current?.({ kind: "measure", from, to: point });
     });
 
     const handleResize = () => {
