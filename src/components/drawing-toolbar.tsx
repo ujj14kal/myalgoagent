@@ -100,6 +100,29 @@ const TOOLS: { kind: Drawing["kind"]; label: string; hint: string; icon: ReactNo
       </svg>
     ),
   },
+  {
+    kind: "anchoredVwap",
+    label: "Anchored VWAP",
+    hint: "Click a bar to anchor",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M2 12 Q5 4 8 9 T14 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        <circle cx="2" cy="12" r="1.6" fill="currentColor" />
+      </svg>
+    ),
+  },
+  {
+    kind: "volumeProfile",
+    label: "Fixed range volume profile",
+    hint: "Click a start and end bar",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="2" y="3" width="6" height="2" fill="currentColor" />
+        <rect x="2" y="6.5" width="10" height="2" fill="currentColor" />
+        <rect x="2" y="10" width="4" height="2" fill="currentColor" />
+      </svg>
+    ),
+  },
 ];
 
 /** Vertical icon rail beside the chart, matching a TradingView-style layout. */

@@ -160,6 +160,25 @@ export function vwap(candles: Candle[]): IndicatorPoint[] {
   return points;
 }
 
+// Same cumulative volume-weighted typical-price formula as vwap() above, but
+// starting the accumulation at a user-chosen bar instead of the start of the
+// series — the "Anchored VWAP" drawing tool.
+export function anchoredVwap(candles: Candle[], anchorTime: number): IndicatorPoint[] {
+  const points: IndicatorPoint[] = [];
+  let cumulativePV = 0;
+  let cumulativeVolume = 0;
+
+  for (const c of candles) {
+    if (c.time < anchorTime) continue;
+    const typicalPrice = (c.high + c.low + c.close) / 3;
+    cumulativePV += typicalPrice * c.volume;
+    cumulativeVolume += c.volume;
+    points.push({ time: c.time, value: cumulativeVolume > 0 ? cumulativePV / cumulativeVolume : typicalPrice });
+  }
+
+  return points;
+}
+
 function trueRange(candles: Candle[], i: number): number {
   const prevClose = candles[i - 1].close;
   return Math.max(candles[i].high - candles[i].low, Math.abs(candles[i].high - prevClose), Math.abs(candles[i].low - prevClose));

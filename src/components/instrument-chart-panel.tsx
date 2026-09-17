@@ -10,6 +10,7 @@ import { saveChartLayout } from "@/lib/chart-layout-actions";
 import { RANGES, INTERVALS, isValidCombo, defaultIntervalForRange } from "@/lib/market-data";
 import type { Candle, CandleInterval, CandleRange } from "@/lib/market-data";
 import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
+import { anchoredVwap } from "@/lib/indicators";
 import { INDICATOR_BY_KIND } from "@/lib/strategy/indicator-catalog";
 import type { IndicatorKind } from "@/lib/strategy/types";
 import { instanceFromDefaults, type ActiveIndicatorInstance } from "@/lib/chart-indicator-instance";
@@ -236,7 +237,7 @@ export default function InstrumentChartPanel({
   }, [compareSymbol, range, interval]);
 
   const overlays: Overlay[] = useMemo(() => {
-    return overlayInstances.map((inst, idx) => {
+    const indicatorOverlays = overlayInstances.map((inst, idx) => {
       const def = INDICATOR_BY_KIND.get(inst.kind);
       const paramsLabel = inst.params.length > 0 ? ` (${inst.params.join(", ")})` : "";
       return {
@@ -245,7 +246,20 @@ export default function InstrumentChartPanel({
         points: computeIndicatorSeries(candles, inst.kind, inst.params),
       };
     });
-  }, [overlayInstances, candles]);
+    // Anchored VWAP is placed by clicking the chart (a drawing, so it
+    // undoes/redoes/persists like any other), but it's rendered as a real
+    // price-scale line series rather than a canvas overlay drawing — that's
+    // what gives it correct price-axis interaction and hover behavior,
+    // matching how TradingView itself renders it.
+    const anchoredVwapOverlays = drawings
+      .filter((d): d is Extract<Drawing, { kind: "anchoredVwap" }> => d.kind === "anchoredVwap")
+      .map((d, idx) => ({
+        label: `Anchored VWAP (${new Date(d.anchorTime * 1000).toLocaleDateString("en-IN")})`,
+        color: ["#d60000", "#00a83e", "#6a35c2"][idx % 3],
+        points: anchoredVwap(candles, d.anchorTime),
+      }));
+    return [...indicatorOverlays, ...anchoredVwapOverlays];
+  }, [overlayInstances, candles, drawings]);
 
   const oscillatorPanels = useMemo(() => {
     return oscillatorInstances.map((inst): { key: string; label: string; series: OscillatorSeries[]; referenceLines?: number[] } => {

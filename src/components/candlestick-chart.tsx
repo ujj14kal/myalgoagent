@@ -194,6 +194,11 @@ export default function CandlestickChart({
         return;
       }
 
+      if (tool === "anchoredVwap") {
+        onDrawingCompleteRef.current?.({ kind: "anchoredVwap", anchorTime: point.time });
+        return;
+      }
+
       if (!pendingPointRef.current) {
         pendingPointRef.current = point;
         return;
@@ -208,6 +213,8 @@ export default function CandlestickChart({
       else if (tool === "arrow") onDrawingCompleteRef.current?.({ kind: "arrow", from, to: point });
       else if (tool === "circle") onDrawingCompleteRef.current?.({ kind: "circle", from, to: point });
       else if (tool === "measure") onDrawingCompleteRef.current?.({ kind: "measure", from, to: point });
+      else if (tool === "volumeProfile")
+        onDrawingCompleteRef.current?.({ kind: "volumeProfile", fromTime: from.time, toTime: point.time });
     });
 
     const handleResize = () => {
@@ -389,6 +396,13 @@ export default function CandlestickChart({
   useEffect(() => {
     drawingsPrimitiveRef.current?.setDrawings(drawings);
   }, [drawings, chartType]);
+
+  // Volume-profile drawings need raw OHLCV to bucket, not just the drawing
+  // geometry — kept in sync separately since it changes on a different
+  // cadence (candles) than drawings do.
+  useEffect(() => {
+    drawingsPrimitiveRef.current?.setCandles(candles);
+  }, [candles, chartType]);
 
   // Reset any in-progress two-click drawing when the active tool changes.
   useEffect(() => {

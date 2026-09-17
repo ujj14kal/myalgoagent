@@ -8,6 +8,7 @@ import type {
   Time,
   UTCTimestamp,
 } from "lightweight-charts";
+import type { Candle } from "@/lib/market-data";
 
 export type Drawing =
   | { kind: "trendline"; from: { time: number; price: number }; to: { time: number; price: number } }
@@ -18,7 +19,9 @@ export type Drawing =
   | { kind: "ray"; from: { time: number; price: number }; to: { time: number; price: number } }
   | { kind: "arrow"; from: { time: number; price: number }; to: { time: number; price: number } }
   | { kind: "circle"; from: { time: number; price: number }; to: { time: number; price: number } }
-  | { kind: "measure"; from: { time: number; price: number }; to: { time: number; price: number } };
+  | { kind: "measure"; from: { time: number; price: number }; to: { time: number; price: number } }
+  | { kind: "anchoredVwap"; anchorTime: number }
+  | { kind: "volumeProfile"; fromTime: number; toTime: number };
 
 const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 
@@ -181,6 +184,76 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
           ctx.font = "600 12px sans-serif";
           ctx.fillStyle = stroke;
           ctx.fillText(label, x2 + 6, y2 - 6);
+        } else if (d.kind === "volumeProfile") {
+          const lo = Math.min(d.fromTime, d.toTime);
+          const hi = Math.max(d.fromTime, d.toTime);
+          const rangeCandles = this.primitive.candles.filter((c) => c.time >= lo && c.time <= hi);
+          if (rangeCandles.length === 0) continue;
+
+          const priceLow = Math.min(...rangeCandles.map((c) => c.low));
+          const priceHigh = Math.max(...rangeCandles.map((c) => c.high));
+          if (priceHigh <= priceLow) continue;
+
+          const BIN_COUNT = 24;
+          const binHeight = (priceHigh - priceLow) / BIN_COUNT;
+          const bins = new Array(BIN_COUNT).fill(0);
+          for (const c of rangeCandles) {
+            const span = c.high - c.low;
+            if (span <= 0) {
+              // Zero-range bar (e.g. a doji with high === low): all its
+              // volume belongs to the single bin containing that price.
+              const idx = Math.min(BIN_COUNT - 1, Math.max(0, Math.floor((c.close - priceLow) / binHeight)));
+              bins[idx] += c.volume;
+              continue;
+            }
+            // Distribute each candle's volume across every bin its high-low
+            // range overlaps, weighted by the fraction of the candle's own
+            // range inside that bin — the standard way a volume profile
+            // approximates intrabar volume without tick-level data.
+            for (let i = 0; i < BIN_COUNT; i++) {
+              const binLow = priceLow + i * binHeight;
+              const binHigh = binLow + binHeight;
+              const overlap = Math.min(c.high, binHigh) - Math.max(c.low, binLow);
+              if (overlap > 0) bins[i] += c.volume * (overlap / span);
+            }
+          }
+
+          const maxBinVolume = Math.max(...bins, 1);
+          const pocIdx = bins.indexOf(maxBinVolume);
+          const xLeft = toX(lo);
+          const xRight = toX(hi);
+          if (xLeft === null || xRight === null) continue;
+          const maxBarWidth = Math.max(24, (xRight - xLeft) * 0.5);
+
+          for (let i = 0; i < BIN_COUNT; i++) {
+            if (bins[i] <= 0) continue;
+            const binLow = priceLow + i * binHeight;
+            const binHigh = binLow + binHeight;
+            const yTop = toY(binHigh);
+            const yBottom = toY(binLow);
+            if (yTop === null || yBottom === null) continue;
+            const w = (bins[i] / maxBinVolume) * maxBarWidth;
+            ctx.fillStyle = i === pocIdx ? "rgba(214, 0, 0, 0.35)" : "rgba(189, 163, 96, 0.35)";
+            ctx.fillRect(xLeft, Math.min(yTop, yBottom), w, Math.max(1, Math.abs(yBottom - yTop) - 1));
+          }
+
+          ctx.strokeStyle = "rgba(14, 27, 45, 0.25)";
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.moveTo(xLeft, 0);
+          ctx.lineTo(xLeft, mediaSize.height);
+          ctx.moveTo(xRight, 0);
+          ctx.lineTo(xRight, mediaSize.height);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          const pocPrice = priceLow + (pocIdx + 0.5) * binHeight;
+          const pocY = toY(pocPrice);
+          if (pocY !== null) {
+            ctx.font = "600 11px sans-serif";
+            ctx.fillStyle = "#d60000";
+            ctx.fillText(`POC ${pocPrice.toFixed(2)}`, xLeft + 4, pocY - 4);
+          }
         }
       }
 
@@ -200,6 +273,10 @@ export class DrawingsPrimitive implements ISeriesPrimitive<Time> {
   chart: IChartApi | null = null;
   series: ISeriesApi<"Candlestick" | "Line" | "Area" | "Bar"> | null = null;
   drawings: Drawing[] = [];
+  // Raw OHLCV for the volume-profile drawing kind, which needs actual
+  // candle volume (not just prices) to bucket into its histogram — kept in
+  // sync from CandlestickChart's own data-sync effect via setCandles().
+  candles: Candle[] = [];
   private paneView = new DrawingsPaneView(this);
   private requestUpdateFn: (() => void) | null = null;
 
@@ -216,6 +293,11 @@ export class DrawingsPrimitive implements ISeriesPrimitive<Time> {
 
   setDrawings(drawings: Drawing[]) {
     this.drawings = drawings;
+    this.requestUpdateFn?.();
+  }
+
+  setCandles(candles: Candle[]) {
+    this.candles = candles;
     this.requestUpdateFn?.();
   }
 

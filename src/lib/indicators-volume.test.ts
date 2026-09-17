@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mfi, chaikinMoneyFlow, aroon } from "@/lib/indicators";
+import { mfi, chaikinMoneyFlow, aroon, anchoredVwap } from "@/lib/indicators";
 import type { Candle } from "@/lib/market-data";
 
 /** Batch 4 (Phase B): volume-weighted and trend-range indicators. Each
@@ -55,5 +55,27 @@ describe("Aroon Up / Aroon Down", () => {
     const { up, down } = aroon(candles, 3);
     expect(up[0].value).toBeCloseTo(100 / 3, 6);
     expect(down[0].value).toBeCloseTo(200 / 3, 6);
+  });
+});
+
+describe("Anchored VWAP", () => {
+  it("excludes bars before the anchor and accumulates identically to vwap() from that point", () => {
+    const candles = [
+      candle(0, 10, 8, 9, 100), // before anchor — must be excluded
+      candle(1, 12, 10, 11, 200), // anchor bar: TP = 11
+      candle(2, 13, 11, 12, 150), // TP = 12
+    ];
+    const result = anchoredVwap(candles, 1);
+    expect(result).toHaveLength(2);
+    expect(result[0].time).toBe(1);
+    // First point after the anchor is just its own typical price.
+    expect(result[0].value).toBeCloseTo(11, 10);
+    // Second point: cumulative (11*200 + 12*150) / (200+150)
+    expect(result[1].value).toBeCloseTo((11 * 200 + 12 * 150) / 350, 10);
+  });
+
+  it("returns an empty series when the anchor is after every bar", () => {
+    const candles = [candle(0, 10, 8, 9, 100), candle(1, 11, 9, 10, 100)];
+    expect(anchoredVwap(candles, 5)).toEqual([]);
   });
 });
