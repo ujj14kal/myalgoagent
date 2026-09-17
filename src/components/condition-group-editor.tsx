@@ -1,7 +1,7 @@
 "use client";
 
 import type { ComparisonOperator, ConditionNode, Operand, PriceField } from "@/lib/strategy";
-import { INDICATOR_CATALOG, INDICATOR_BY_KIND } from "@/lib/strategy/indicator-catalog";
+import { INDICATOR_CATALOG, INDICATOR_BY_KIND, OSCILLATOR_KINDS } from "@/lib/strategy/indicator-catalog";
 import { CANDLE_PATTERN_CATALOG } from "@/lib/strategy/candle-pattern-catalog";
 import { CHART_PATTERN_CATALOG } from "@/lib/strategy/chart-pattern-catalog";
 import { VOLUME_PATTERN_CATALOG } from "@/lib/strategy/volume-pattern-catalog";
@@ -39,6 +39,32 @@ const pillButtonClass =
 
 function defaultOperand(): Operand {
   return { kind: "price", field: "CLOSE" };
+}
+
+/** What scale an operand lives on. Oscillators (RSI, CCI, MACD histogram,
+ * ADX, ...) each have their own bounded/unbounded 0-100-or-unbounded scale
+ * and are never meaningfully comparable to price or to each other — only
+ * to a fixed threshold (e.g. "RSI crosses above 70"). Price-scale operands
+ * (SMA, Bollinger Bands, open/high/low/close, ...) share the instrument's
+ * own price scale and remain freely comparable to one another. */
+type OperandScale = "OSCILLATOR" | "PRICE_SCALE" | "CONSTANT";
+
+function scaleOf(op: Operand): OperandScale {
+  if (op.kind === "constant") return "CONSTANT";
+  if (op.kind === "price") return "PRICE_SCALE";
+  return OSCILLATOR_KINDS.has(op.type) ? "OSCILLATOR" : "PRICE_SCALE";
+}
+
+/** Given the scale of the *other* side of a comparison, what this side's
+ * operand picker should offer — computed here rather than left to the user
+ * to notice is wrong, per the product rule that oscillators are
+ * threshold-only. */
+type OperandRestrict = "ANY" | "CONSTANT_ONLY" | "EXCLUDE_OSCILLATOR";
+
+function restrictFor(otherScale: OperandScale): OperandRestrict {
+  if (otherScale === "OSCILLATOR") return "CONSTANT_ONLY";
+  if (otherScale === "PRICE_SCALE") return "EXCLUDE_OSCILLATOR";
+  return "ANY";
 }
 
 function defaultComparison(): ConditionNode {
@@ -242,14 +268,29 @@ function OperandEditor({
   value,
   onChange,
   instruments,
+  restrict = "ANY",
 }: {
   value: Operand;
   onChange: (v: Operand) => void;
   instruments: InstrumentOption[];
+  restrict?: OperandRestrict;
 }) {
   const indicatorDef = value.kind === "indicator" ? INDICATOR_BY_KIND.get(value.type) : undefined;
   const hasOverrides = value.kind === "indicator" || value.kind === "price";
   const overridable = hasOverrides ? (value as Extract<Operand, { kind: "indicator" } | { kind: "price" }>) : null;
+
+  // Filter out choices the other side of the comparison makes nonsensical
+  // (e.g. RSI vs a Bollinger Band), but never hide the operand's own
+  // *current* selection — that would silently desync the dropdown from a
+  // value that's still technically set (e.g. a strategy saved before this
+  // rule existed).
+  const availableIndicators = INDICATOR_CATALOG.filter((i) => {
+    if (value.kind === "indicator" && value.type === i.kind) return true;
+    if (restrict === "CONSTANT_ONLY") return false;
+    if (restrict === "EXCLUDE_OSCILLATOR") return !OSCILLATOR_KINDS.has(i.kind);
+    return true;
+  });
+  const showPriceGroup = restrict !== "CONSTANT_ONLY" || value.kind === "price";
 
   return (
     <div className="flex flex-wrap items-center gap-1">
@@ -266,20 +307,24 @@ function OperandEditor({
           }
         }}
       >
-        <optgroup label="Indicator">
-          {INDICATOR_CATALOG.map((i) => (
-            <option key={i.kind} value={i.kind}>
-              {i.label}
-            </option>
-          ))}
-        </optgroup>
-        <optgroup label="Price">
-          {PRICE_FIELDS.map((p) => (
-            <option key={p.value} value={`PRICE:${p.value}`}>
-              {p.label}
-            </option>
-          ))}
-        </optgroup>
+        {availableIndicators.length > 0 && (
+          <optgroup label="Indicator">
+            {availableIndicators.map((i) => (
+              <option key={i.kind} value={i.kind}>
+                {i.label}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {showPriceGroup && (
+          <optgroup label="Price">
+            {PRICE_FIELDS.map((p) => (
+              <option key={p.value} value={`PRICE:${p.value}`}>
+                {p.label}
+              </option>
+            ))}
+          </optgroup>
+        )}
         <option value="CONST">Fixed value</option>
       </select>
 
@@ -360,9 +405,39 @@ function ComparisonEditor({
   onRemove: () => void;
   instruments: InstrumentOption[];
 }) {
+  const leftScale = scaleOf(node.left);
+  const rightScale = scaleOf(node.right);
+
+  // Changing one side to an oscillator (or to a price-scale value) can
+  // strand the other side on a now-incompatible selection (e.g. right was
+  // EMA, left just became RSI). Rather than leave that stale mismatch
+  // sitting there until the user notices, snap the other side back to a
+  // sensible default the moment it becomes invalid.
+  function handleLeftChange(left: Operand) {
+    let right = node.right;
+    const newLeftScale = scaleOf(left);
+    if (newLeftScale === "OSCILLATOR" && scaleOf(right) !== "CONSTANT") {
+      right = { kind: "constant", value: 0 };
+    } else if (newLeftScale === "PRICE_SCALE" && scaleOf(right) === "OSCILLATOR") {
+      right = { kind: "constant", value: 0 };
+    }
+    onChange({ ...node, left, right });
+  }
+
+  function handleRightChange(right: Operand) {
+    let left = node.left;
+    const newRightScale = scaleOf(right);
+    if (newRightScale === "OSCILLATOR" && scaleOf(left) !== "CONSTANT") {
+      left = { kind: "constant", value: 0 };
+    } else if (newRightScale === "PRICE_SCALE" && scaleOf(left) === "OSCILLATOR") {
+      left = { kind: "constant", value: 0 };
+    }
+    onChange({ ...node, left, right });
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg bg-brand-bg p-2">
-      <OperandEditor value={node.left} onChange={(left) => onChange({ ...node, left })} instruments={instruments} />
+      <OperandEditor value={node.left} onChange={handleLeftChange} instruments={instruments} restrict={restrictFor(rightScale)} />
       <select
         className={inputClass}
         value={node.operator}
@@ -374,7 +449,7 @@ function ComparisonEditor({
           </option>
         ))}
       </select>
-      <OperandEditor value={node.right} onChange={(right) => onChange({ ...node, right })} instruments={instruments} />
+      <OperandEditor value={node.right} onChange={handleRightChange} instruments={instruments} restrict={restrictFor(leftScale)} />
       <button type="button" onClick={onRemove} className="ml-auto text-xs text-brand-navy/40 hover:text-brand-sell">
         Remove
       </button>

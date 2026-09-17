@@ -1,4 +1,5 @@
 import { isNeverExitCondition, type BooleanSignalKind, type ComparisonOperator, type ConditionNode, type FeasibilityIssue, type FeasibilitySection, type Operand } from "./types";
+import { OSCILLATOR_KINDS } from "./indicator-catalog";
 
 const FAMILY_LABEL: Record<BooleanSignalKind["family"], string> = {
   TIME_WINDOW: "time window",
@@ -117,6 +118,25 @@ function checkComparisonNode(node: Extract<ConditionNode, { kind: "comparison" }
   // the constant-vs-constant check above — worth noting it's not just
   // "meaningless" there but "can never fire even once," since neither
   // side can move relative to the other.)
+
+  // Oscillators (RSI, CCI, MACD histogram, ADX, ...) each sit on their own
+  // bounded/unbounded scale that has nothing to do with the instrument's
+  // price, and not even reliably with each other's scale (RSI is 0-100,
+  // CCI is unbounded, Williams %R is -100-0, ...). They're only meaningful
+  // against a fixed threshold. The strategy builder UI already restricts
+  // this at the point of selection (condition-group-editor.tsx), but this
+  // is the server-side backstop for the DSL code-mode path and any client
+  // that bypasses the visual picker.
+  const leftIsOscillator = left.kind === "indicator" && OSCILLATOR_KINDS.has(left.type);
+  const rightIsOscillator = right.kind === "indicator" && OSCILLATOR_KINDS.has(right.type);
+  if ((leftIsOscillator && right.kind !== "constant") || (rightIsOscillator && left.kind !== "constant")) {
+    const oscillatorSide = leftIsOscillator ? left : right;
+    issues.push({
+      section,
+      message: `"${describeOperand(oscillatorSide)}" is an oscillator on its own scale — it can only be compared to a fixed number (e.g. "${describeOperand(oscillatorSide)} > 70"), not to another indicator or price.`,
+    });
+    return;
+  }
 
   // Comparing two live series for *exact* equality will, in practice,
   // essentially never happen with real market data — two independently
