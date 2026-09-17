@@ -46,6 +46,16 @@ const TOOLS: { kind: Drawing["kind"]; label: string; hint: string; icon: ReactNo
       </svg>
     ),
   },
+  {
+    kind: "text",
+    label: "Text",
+    hint: "Click to place",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M3 3h10M8 3v10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+    ),
+  },
 ];
 
 /** Vertical icon rail beside the chart, matching a TradingView-style layout. */

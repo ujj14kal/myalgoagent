@@ -130,8 +130,17 @@ export default function InstrumentChartPanel({
   const [oscillatorInstances, setOscillatorInstances] = useState<ActiveIndicatorInstance[]>(
     savedLayout?.oscillators ?? [],
   );
-  const [showVolume, setShowVolume] = useState(savedLayout?.showVolume ?? false);
+  // Defaults to visible (matching TradingView's own out-of-box chart) for a
+  // fresh, never-saved layout — a saved layout's own explicit choice
+  // (including a deliberate "off") is always respected.
+  const [showVolume, setShowVolume] = useState(savedLayout?.showVolume ?? true);
   const [drawings, setDrawings] = useState<Drawing[]>(savedLayout?.drawings ?? []);
+  // Undo/redo history for drawings only — every mutation (adding a new
+  // drawing or clearing them all) pushes the *previous* state here first,
+  // and redoStack is dropped on any new mutation (the standard "redo dies
+  // the moment you diverge from that branch" rule).
+  const [undoStack, setUndoStack] = useState<Drawing[][]>([]);
+  const [redoStack, setRedoStack] = useState<Drawing[][]>([]);
   const [activeTool, setActiveTool] = useState<Drawing["kind"] | null>(null);
   const [compareSymbol, setCompareSymbol] = useState<string | null>(savedLayout?.compareSymbol ?? null);
   const [compareCandles, setCompareCandles] = useState<Candle[] | null>(null);
@@ -147,6 +156,37 @@ export default function InstrumentChartPanel({
     document.addEventListener("fullscreenchange", onFullscreenChange);
     return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
+
+  // Composites every canvas layer lightweight-charts renders (price pane,
+  // crosshair overlay, price/time axes — it draws each as a separately
+  // stacked <canvas>, not one) onto a single offscreen canvas at their real
+  // relative positions, then downloads that as a PNG. There's no single
+  // "give me an image" API on the chart instance itself for this version
+  // of the library, so compositing the actual rendered layers is the
+  // reliable way to get a real screenshot rather than a placeholder.
+  function downloadScreenshot() {
+    const card = cardRef.current;
+    if (!card) return;
+    const canvases = Array.from(card.querySelectorAll("canvas"));
+    if (canvases.length === 0) return;
+    const cardRect = card.getBoundingClientRect();
+    const scale = canvases[0].width / canvases[0].getBoundingClientRect().width || 1;
+    const out = document.createElement("canvas");
+    out.width = cardRect.width * scale;
+    out.height = cardRect.height * scale;
+    const ctx = out.getContext("2d");
+    if (!ctx) return;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, out.width, out.height);
+    for (const c of canvases) {
+      const r = c.getBoundingClientRect();
+      ctx.drawImage(c, (r.left - cardRect.left) * scale, (r.top - cardRect.top) * scale, r.width * scale, r.height * scale);
+    }
+    const link = document.createElement("a");
+    link.download = `${symbol}-chart.png`;
+    link.href = out.toDataURL("image/png");
+    link.click();
+  }
 
   function toggleFullscreen() {
     if (document.fullscreenElement) {
@@ -258,8 +298,37 @@ export default function InstrumentChartPanel({
   }
 
   function handleDrawingComplete(drawing: Drawing) {
+    setUndoStack((prev) => [...prev, drawings]);
+    setRedoStack([]);
     setDrawings((prev) => [...prev, drawing]);
     setActiveTool(null);
+  }
+
+  function handleClearDrawings() {
+    if (drawings.length === 0) return;
+    setUndoStack((prev) => [...prev, drawings]);
+    setRedoStack([]);
+    setDrawings([]);
+  }
+
+  function handleUndo() {
+    setUndoStack((prev) => {
+      if (prev.length === 0) return prev;
+      const last = prev[prev.length - 1];
+      setRedoStack((r) => [...r, drawings]);
+      setDrawings(last);
+      return prev.slice(0, -1);
+    });
+  }
+
+  function handleRedo() {
+    setRedoStack((prev) => {
+      if (prev.length === 0) return prev;
+      const last = prev[prev.length - 1];
+      setUndoStack((u) => [...u, drawings]);
+      setDrawings(last);
+      return prev.slice(0, -1);
+    });
   }
 
   function handleSaveLayout() {
@@ -352,6 +421,40 @@ export default function InstrumentChartPanel({
             >
               {isPending ? "Saving…" : saveStatus === "saved" ? "Saved ✓" : "Save layout"}
             </button>
+            <span className="mx-1 h-4 w-px bg-brand-navy/10" />
+            <button
+              type="button"
+              onClick={handleUndo}
+              disabled={undoStack.length === 0}
+              title="Undo drawing"
+              className="flex h-7 w-7 items-center justify-center rounded-full border border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary hover:text-brand-primary disabled:pointer-events-none disabled:opacity-30"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-1" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={handleRedo}
+              disabled={redoStack.length === 0}
+              title="Redo drawing"
+              className="flex h-7 w-7 items-center justify-center rounded-full border border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary hover:text-brand-primary disabled:pointer-events-none disabled:opacity-30"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 14 20 9l-5-5M20 9H9a5 5 0 0 0 0 10h1" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={downloadScreenshot}
+              title="Download chart as image"
+              className="flex h-7 w-7 items-center justify-center rounded-full border border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary hover:text-brand-primary"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 4h4l2-2h4l2 2h4v14H4V4Z" />
+                <circle cx="12" cy="11" r="3.5" />
+              </svg>
+            </button>
             <button
               type="button"
               onClick={toggleFullscreen}
@@ -387,7 +490,7 @@ export default function InstrumentChartPanel({
         )}
 
         <div className="flex">
-          <DrawingToolbar activeTool={activeTool} onSelectTool={setActiveTool} drawingsCount={drawings.length} onClear={() => setDrawings([])} />
+          <DrawingToolbar activeTool={activeTool} onSelectTool={setActiveTool} drawingsCount={drawings.length} onClear={handleClearDrawings} />
           <div className="min-w-0 flex-1 p-3">
             <CandlestickChart
               candles={candles}

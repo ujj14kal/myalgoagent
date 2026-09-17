@@ -168,6 +168,14 @@ export default function CandlestickChart({
         return;
       }
 
+      if (tool === "text") {
+        const text = window.prompt("Text for this label:");
+        if (text && text.trim()) {
+          onDrawingCompleteRef.current?.({ kind: "text", at: point, text: text.trim().slice(0, 60) });
+        }
+        return;
+      }
+
       if (!pendingPointRef.current) {
         pendingPointRef.current = point;
         return;

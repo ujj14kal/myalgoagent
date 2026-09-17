@@ -13,7 +13,8 @@ export type Drawing =
   | { kind: "trendline"; from: { time: number; price: number }; to: { time: number; price: number } }
   | { kind: "horizontal"; price: number }
   | { kind: "rectangle"; from: { time: number; price: number }; to: { time: number; price: number } }
-  | { kind: "fibonacci"; from: { time: number; price: number }; to: { time: number; price: number } };
+  | { kind: "fibonacci"; from: { time: number; price: number }; to: { time: number; price: number } }
+  | { kind: "text"; at: { time: number; price: number }; text: string };
 
 const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 
@@ -91,6 +92,13 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
             ctx.fillStyle = "#bda360";
             ctx.fillText(`${(level * 100).toFixed(1)}% (${price.toFixed(2)})`, right + 4, y + 3);
           }
+        } else if (d.kind === "text") {
+          const x = toX(d.at.time);
+          const y = toY(d.at.price);
+          if (x === null || y === null) continue;
+          ctx.font = "600 12px sans-serif";
+          ctx.fillStyle = "#0e1b2d";
+          ctx.fillText(d.text, x + 4, y - 4);
         }
       }
 
