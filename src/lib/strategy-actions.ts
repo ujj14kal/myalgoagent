@@ -261,18 +261,56 @@ export async function updateStrategy(id: string, input: StrategyInput): Promise<
   return {};
 }
 
-export async function setStrategyStatus(id: string, status: "DRAFT" | "ACTIVE" | "ARCHIVED") {
+// Draft vs Active is no longer a choice the user makes directly — every
+// strategy starts DRAFT, and the only thing that promotes it to ACTIVE is
+// actually putting it to work (see activateStrategyIfDraft, called from
+// startPaperSession). Backtesting alone does NOT activate a strategy: a
+// backtest is exploratory/historical testing, not deploying the strategy,
+// so a strategy someone has backtested twenty times and never run is still
+// meaningfully a draft. The only manual lifecycle action left is
+// archiving/restoring — a deliberate "get this out of my active list"
+// choice distinct from the automatic draft->active promotion.
+export async function archiveStrategyAction(id: string) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
   await prisma.strategy.updateMany({
     where: { id, userId: session.user.id },
-    data: { status },
+    data: { status: "ARCHIVED" },
   });
 
   revalidatePath("/app/strategies");
   revalidatePath(`/app/strategies/${id}`);
   revalidatePath("/app/dashboard");
+}
+
+export async function restoreStrategyAction(id: string) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  const hasPaperSession = await prisma.paperSession.findFirst({
+    where: { strategyId: id, userId: session.user.id },
+    select: { id: true },
+  });
+
+  await prisma.strategy.updateMany({
+    where: { id, userId: session.user.id },
+    data: { status: hasPaperSession ? "ACTIVE" : "DRAFT" },
+  });
+
+  revalidatePath("/app/strategies");
+  revalidatePath(`/app/strategies/${id}`);
+  revalidatePath("/app/dashboard");
+}
+
+/** Promotes a strategy from DRAFT to ACTIVE the moment it's actually put to
+ * work — currently: starting a paper trading session. Never touches a
+ * strategy that's already ACTIVE or that's been deliberately ARCHIVED. */
+export async function activateStrategyIfDraft(strategyId: string) {
+  await prisma.strategy.updateMany({
+    where: { id: strategyId, status: "DRAFT" },
+    data: { status: "ACTIVE" },
+  });
 }
 
 export async function deleteStrategy(id: string) {

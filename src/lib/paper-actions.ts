@@ -8,6 +8,7 @@ import { marketDataProvider } from "@/lib/market-data";
 import { syncPaperSession } from "@/lib/paper/sync";
 import { evaluateRisk } from "@/lib/risk/evaluate";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { activateStrategyIfDraft } from "@/lib/strategy-actions";
 import type { ConditionNode } from "@/lib/strategy";
 import type { Prisma } from "@prisma/client";
 
@@ -96,11 +97,17 @@ export async function startPaperSession(input: StartPaperSessionInput): Promise<
       },
     });
     sessionId = paperSession.id;
+
+    // Actually putting a strategy to work is what promotes it out of
+    // Draft — see activateStrategyIfDraft's own comment for why
+    // backtesting alone doesn't.
+    await activateStrategyIfDraft(strategy.id);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Something went wrong" };
   }
 
   revalidatePaperPaths();
+  revalidatePath("/app/strategies");
   redirect(`/app/paper-trading/${sessionId}`);
 }
 
