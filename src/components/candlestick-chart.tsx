@@ -158,7 +158,6 @@ export default function CandlestickChart({
 
     chart.subscribeClick((param) => {
       const tool = activeToolRef.current;
-      console.log("DEBUG2 click", { tool, time: param.time, point: param.point, hasSeries: !!seriesRef.current, pending: pendingPointRef.current });
       if (!tool || !param.time || param.point === undefined || !seriesRef.current) return;
       const price = seriesRef.current.coordinateToPrice(param.point.y);
       if (price === null) return;
