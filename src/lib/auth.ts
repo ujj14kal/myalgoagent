@@ -4,6 +4,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import { reactivateIfPending } from "@/lib/account-status";
 import { oauthFetch } from "@/lib/oauth-fetch";
+import { isCustomAvatarUrl } from "@/lib/avatar";
 
 // Username/password and email-magic-link sign-in are handled outside
 // Auth.js's own Credentials/Email providers (see account-actions.ts and
@@ -28,9 +29,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: "/login",
   },
   events: {
-    async signIn({ user }) {
+    async signIn({ user, account, profile }) {
       if (!user.id) return;
       await reactivateIfPending(user.id);
+
+      // PrismaAdapter only sets `image` from the OAuth profile on brand-new
+      // users (createUser) — a returning user who changes their Google
+      // photo, or who signed up some other way and later links Google,
+      // never gets it synced. Do that here on every Google sign-in, except
+      // when the user has already uploaded their own custom avatar (never
+      // silently overwrite a deliberate choice).
+      const picture = typeof profile?.picture === "string" ? profile.picture : null;
+      if (account?.provider === "google" && picture) {
+        const current = await prisma.user.findUnique({ where: { id: user.id }, select: { image: true } });
+        if (current && !isCustomAvatarUrl(current.image) && current.image !== picture) {
+          await prisma.user.update({ where: { id: user.id }, data: { image: picture } });
+        }
+      }
     },
   },
   // Vercel auto-detects itself and trusts its own host; AWS Amplify

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { signOut } from "@/lib/auth";
 import MobileNavDrawer from "@/components/mobile-nav-drawer";
+import { avatarInitials } from "@/lib/avatar";
 
 export default function AppTopbar({
   user,
@@ -10,12 +11,7 @@ export default function AppTopbar({
   unreadCount?: number;
 }) {
   const displayName = user.name ?? user.email ?? "";
-  const initials = displayName
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("") || "?";
+  const initials = avatarInitials(user.name, user.email);
 
   return (
     <header className="flex h-16 items-center border-b border-black/5 bg-white px-4 md:px-6">

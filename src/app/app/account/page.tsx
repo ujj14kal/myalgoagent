@@ -1,6 +1,7 @@
 import { auth, signOut } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import ProfileForm from "@/components/profile-form";
+import AvatarUploadForm from "@/components/avatar-upload-form";
 import ChangePasswordForm from "@/components/change-password-form";
 import SignOutOthersButton from "@/components/sign-out-others-button";
 import DangerZone from "@/components/danger-zone";
@@ -37,6 +38,9 @@ export default async function AccountPage() {
               <h2 className="text-sm font-semibold text-brand-navy">Profile</h2>
               <p className="mt-1 text-xs text-brand-navy/50">{user.email}</p>
               <div className="mt-4">
+                <AvatarUploadForm initialImage={user.image} name={user.name} email={user.email} />
+              </div>
+              <div className="mt-5 border-t border-black/5 pt-5">
                 <ProfileForm
                   initialName={user.name ?? ""}
                   initialUsername={user.username ?? ""}
