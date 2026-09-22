@@ -1,13 +1,16 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import ConditionGroupEditor, { defaultComparison } from "@/components/condition-group-editor";
 import SimpleConditionPicker, { ALL_CATEGORIES, fitsSimpleMode, unwrapForSimpleMode } from "@/components/simple-condition-picker";
 import StrategyCodeEditor from "@/components/strategy-code-editor";
 import PositionSizingFields from "@/components/position-sizing-fields";
 import RiskManagementFields, { type RiskLegState } from "@/components/risk-management-fields";
-import { createStrategy, updateStrategy, type StrategyInput } from "@/lib/strategy-actions";
+import DraftAutoSaveToast from "@/components/draft-autosave-toast";
+import { createStrategy, updateStrategy, autoSaveDraftStrategy, type StrategyInput } from "@/lib/strategy-actions";
 import { NEVER_EXIT_CONDITION, isNeverExitCondition, type FeasibilitySection } from "@/lib/strategy/types";
+import { consumeDraftReminderSkip, setDraftReminderSkipCount } from "@/lib/draft-reminder";
 import type { ConditionNode } from "@/lib/strategy";
 import type { PositionSizingMode, RiskUnit } from "@/lib/trading-engine/step";
 
@@ -132,6 +135,98 @@ export default function StrategyBuilderForm({
   const [feasibilityIssues, setFeasibilityIssues] = useState<DisplayIssue[] | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  // Only the "New Strategy" flow gets the leave-and-auto-save guard —
+  // editing an existing strategy already has its own row to save into,
+  // navigating away from an edit just discards the in-progress edits like
+  // any ordinary form, matching how it always worked.
+  const router = useRouter();
+  const isCreating = !strategyId;
+  const isDirty = isCreating && name.trim().length > 0;
+  // Effects below run once (mount-only) and read state through refs
+  // rather than closing over it directly, so they see the *current* value
+  // on every click/unload without having to resubscribe their listeners
+  // on every keystroke.
+  const isDirtyRef = useRef(isDirty);
+  // Assigned fresh every render (via the plain useEffect below, and right
+  // after buildInput is declared further down) so the click handler's
+  // effect — which only re-subscribes when isCreating/router change, not
+  // on every keystroke — always reads the *current* form state through
+  // these refs rather than whatever it closed over at mount.
+  const buildInputRef = useRef<() => StrategyInput>(null!);
+  const navigatingRef = useRef(false);
+  useEffect(() => {
+    isDirtyRef.current = isDirty;
+  });
+  const [showDraftToast, setShowDraftToast] = useState(false);
+  const [dontRemindChecked, setDontRemindChecked] = useState(false);
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+
+  // Native, un-customizable safety net for an actual tab close/refresh —
+  // browsers only allow a generic "leave site?" prompt here, never custom
+  // text or UI, so this is deliberately just a backstop; the real,
+  // designed experience is the in-app navigation intercept below.
+  useEffect(() => {
+    if (!isCreating) return;
+    function handler(e: BeforeUnloadEvent) {
+      if (!isDirtyRef.current) return;
+      e.preventDefault();
+    }
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isCreating]);
+
+  // Intercepts clicking any in-app link (sidebar nav, topbar, breadcrumbs)
+  // while the form has unsaved input — auto-saves as a draft, then lets
+  // the click's original navigation continue. A capture-phase document
+  // listener is the only reliable way to catch this across every link on
+  // the page without threading a handler through the whole app shell.
+  useEffect(() => {
+    if (!isCreating) return;
+    function handleClick(e: MouseEvent) {
+      if (!isDirtyRef.current || navigatingRef.current) return;
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const anchor = (e.target as HTMLElement).closest("a");
+      const href = anchor?.getAttribute("href");
+      if (!anchor || !href || href.startsWith("#")) return;
+      let url: URL;
+      try {
+        url = new URL(anchor.href, window.location.origin);
+      } catch {
+        return;
+      }
+      if (url.origin !== window.location.origin) return;
+
+      e.preventDefault();
+      navigatingRef.current = true;
+      void (async () => {
+        const result = await autoSaveDraftStrategy(buildInputRef.current());
+        if ("error" in result || consumeDraftReminderSkip() === false) {
+          router.push(href);
+          return;
+        }
+        setPendingHref(href);
+        setShowDraftToast(true);
+        // Purely a display window, not a decision deadline — nothing the
+        // user does or doesn't do here changes that the draft is already
+        // saved; navigation just proceeds on its own once it's had a
+        // moment to register.
+        window.setTimeout(() => router.push(href), 4500);
+      })();
+    }
+    document.addEventListener("click", handleClick, true);
+    return () => document.removeEventListener("click", handleClick, true);
+  }, [isCreating, router]);
+
+  function handleDontRemindChange(checked: boolean) {
+    setDontRemindChecked(checked);
+    setDraftReminderSkipCount(checked ? 5 : 0);
+  }
+
+  function dismissDraftToast() {
+    setShowDraftToast(false);
+    if (pendingHref) router.push(pendingHref);
+  }
+
   const entryRef = useRef<HTMLDivElement>(null);
   const exitRef = useRef<HTMLDivElement>(null);
   // Risk fields render in one of two places depending on mode (inside the
@@ -174,6 +269,9 @@ export default function StrategyBuilderForm({
       maxPyramidEntries,
     };
   }
+  useEffect(() => {
+    buildInputRef.current = buildInput;
+  });
 
   function submit(input: StrategyInput) {
     startTransition(async () => {
@@ -502,6 +600,14 @@ export default function StrategyBuilderForm({
             </div>
           </div>
         </div>
+      )}
+
+      {showDraftToast && (
+        <DraftAutoSaveToast
+          dontRemind={dontRemindChecked}
+          onDontRemindChange={handleDontRemindChange}
+          onDismiss={dismissDraftToast}
+        />
       )}
     </>
   );

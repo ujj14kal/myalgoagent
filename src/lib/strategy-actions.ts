@@ -194,19 +194,22 @@ export interface StrategyActionResult {
  * `redirect()`'s own internal mechanism is allowed to throw, since Next.js
  * handles that one specially regardless of this redaction.
  */
-export async function createStrategy(input: StrategyInput): Promise<StrategyActionResult> {
-  const session = await auth();
-  if (!session?.user?.id) return { error: "Unauthorized" };
-
-  let strategyId: string;
+/** Shared by createStrategy (redirects on success) and
+ * autoSaveDraftStrategy (doesn't — see its own comment for why). Every
+ * new strategy starts DRAFT by default (the schema default), which is
+ * exactly the state an auto-saved in-progress one should be in too. */
+async function createStrategyRow(
+  input: StrategyInput,
+  userId: string,
+): Promise<{ id: string } | { error: string }> {
   try {
-    await enforceRateLimit(`strategy-write:${session.user.id}`, 30, 60_000);
+    await enforceRateLimit(`strategy-write:${userId}`, 30, 60_000);
     const compiled = await compile(input);
     const name = input.name.trim();
 
     const strategy = await prisma.strategy.create({
       data: {
-        userId: session.user.id,
+        userId,
         instrumentId: input.instrumentId,
         name,
         nameNormalized: name.toLowerCase(),
@@ -218,14 +221,41 @@ export async function createStrategy(input: StrategyInput): Promise<StrategyActi
         ...riskFields(input),
       },
     });
-    strategyId = strategy.id;
+    return { id: strategy.id };
   } catch (err) {
     if (isUniqueConstraintViolation(err, "nameNormalized")) return { error: "DUPLICATE_NAME" };
     return { error: err instanceof Error ? err.message : "Something went wrong" };
   }
+}
+
+export async function createStrategy(input: StrategyInput): Promise<StrategyActionResult> {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Unauthorized" };
+
+  const result = await createStrategyRow(input, session.user.id);
+  if ("error" in result) return result;
 
   revalidatePath("/app/strategies");
-  redirect(`/app/strategies/${strategyId}`);
+  redirect(`/app/strategies/${result.id}`);
+}
+
+/** Called when a user navigates away from the "New Strategy" form before
+ * submitting it — the strategy builder intercepts that navigation, calls
+ * this, and only then lets it continue. Deliberately does NOT redirect
+ * (unlike createStrategy): the user is on their way somewhere else, and
+ * forcing them onto the newly-created draft's own page instead would
+ * override the navigation they were already mid-click on, which is the
+ * opposite of the point — they should land wherever they were headed,
+ * with the draft just waiting for them in Strategies whenever they come
+ * back to it. */
+export async function autoSaveDraftStrategy(input: StrategyInput): Promise<{ id: string } | { error: string }> {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Unauthorized" };
+  if (!input.name.trim()) return { error: "Nothing to save yet" };
+
+  const result = await createStrategyRow(input, session.user.id);
+  if (!("error" in result)) revalidatePath("/app/strategies");
+  return result;
 }
 
 export async function updateStrategy(id: string, input: StrategyInput): Promise<StrategyActionResult> {
