@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { marketDataProvider } from "@/lib/market-data";
 import PaperSessionForm from "@/components/paper-session-form";
 import EmptyState from "@/components/empty-state";
 
@@ -27,6 +28,32 @@ export default async function PaperTradingPage() {
       orderBy: { createdAt: "desc" },
     }),
   ]);
+
+  // Real bug, fixed here: this card's P&L used to add the position's full
+  // entry-price notional on top of `cash`, which is never debited/credited
+  // at entry (it only reflects realized gains from closed trades) — that
+  // double-counted the entry cost as unrealized profit, showing wildly
+  // inflated P&L (e.g. +98.9%) for any session with an open position. The
+  // correct number is cash plus the position's *unrealized* gain against
+  // its current price — the same fix already applied to the detail page's
+  // equity calc and to the kill-switch's risk check in paper-actions.ts.
+  const inPositionSymbols = Array.from(
+    new Set(sessions.filter((s) => s.positionQuantity !== null).map((s) => s.instrumentSymbol)),
+  );
+  const latestCloseBySymbol = new Map<string, number>();
+  await Promise.all(
+    inPositionSymbols.map(async (symbol) => {
+      try {
+        const candles = await marketDataProvider.getHistoricalCandles(symbol, "5d", "1d");
+        const latest = candles.at(-1)?.close;
+        if (latest !== undefined) latestCloseBySymbol.set(symbol, latest);
+      } catch {
+        // Leave this symbol out of the map — sessions on it fall back to
+        // entry price below (unrealizedGain of 0), same as a session with
+        // no position at all, rather than showing a broken/stale P&L.
+      }
+    }),
+  );
 
   return (
     <div>
@@ -67,7 +94,12 @@ export default async function PaperTradingPage() {
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {sessions.map((s) => {
             const inPosition = s.positionQuantity !== null;
-            const equity = s.cash + (inPosition ? (s.positionEntryPrice ?? 0) * (s.positionQuantity ?? 0) : 0);
+            const latestClose = latestCloseBySymbol.get(s.instrumentSymbol) ?? s.positionEntryPrice ?? 0;
+            const unrealizedGain =
+              inPosition && s.positionEntryPrice !== null
+                ? (s.direction === "SHORT" ? s.positionEntryPrice - latestClose : latestClose - s.positionEntryPrice) * (s.positionQuantity ?? 0)
+                : 0;
+            const equity = s.cash + unrealizedGain;
             const pnlPct = ((equity - s.startingCapital) / s.startingCapital) * 100;
             return (
               <Link

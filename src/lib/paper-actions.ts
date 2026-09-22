@@ -150,8 +150,24 @@ async function syncPaperSessionInner(id: string, userId: string): Promise<PaperA
     orderBy: { time: "desc" },
     take: 20,
   });
-  const priorEquity =
-    paperSession.cash + (paperSession.positionEntryPrice ?? 0) * (paperSession.positionQuantity ?? 0);
+  // Real bug, fixed here: cash is never debited/credited at entry (see the
+  // comment on this same formula in paper-trading/[id]/page.tsx) — it only
+  // reflects realized gains from closed trades. Adding the position's full
+  // entry-price notional on top of that un-debited cash double-counted the
+  // entry cost as unrealized profit, which fed a systematically inflated
+  // equity straight into the kill-switch's max-loss check — meaning a real
+  // account-wide loss on an open position could fail to trip it. Equity has
+  // to be cash plus the position's *unrealized* gain against its current
+  // price, mirroring the detail page's calculation.
+  let priorEquity = paperSession.cash;
+  if (paperSession.positionEntryPrice !== null && paperSession.positionQuantity !== null) {
+    const recentCandles = await marketDataProvider.getHistoricalCandles(paperSession.instrumentSymbol, "5d", "1d");
+    const latestClose = recentCandles.at(-1)?.close ?? paperSession.positionEntryPrice;
+    const unrealizedGain =
+      (paperSession.direction === "SHORT" ? paperSession.positionEntryPrice - latestClose : latestClose - paperSession.positionEntryPrice) *
+      paperSession.positionQuantity;
+    priorEquity = paperSession.cash + unrealizedGain;
+  }
 
   const preCheck = evaluateRisk(
     {
