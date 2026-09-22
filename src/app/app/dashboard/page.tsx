@@ -11,7 +11,9 @@ import {
   getRecentBacktests,
 } from "@/lib/portfolio";
 import { DEFAULT_AGENT_NAME } from "@/lib/agent-constants";
+import { getHealthAlerts } from "@/lib/health";
 import EquityCurveChart from "@/components/equity-curve-chart";
+import HealthPanel from "@/components/health-panel";
 import PnlSummary from "@/components/dashboard/pnl-summary";
 import AllocationDonut from "@/components/dashboard/allocation-donut";
 import RiskGauge from "@/components/dashboard/risk-gauge";
@@ -29,22 +31,24 @@ export default async function DashboardPage() {
   if (!session?.user?.id) return null;
   const userId = session.user.id;
 
-  const [user, rows, riskSettings, pnl, activity, strategies, watchlistItems, strategyCount, recentBacktests] = await Promise.all([
-    prisma.user.findUnique({ where: { id: userId }, select: { agentName: true } }),
-    getPaperSessionRows(userId),
-    prisma.riskSettings.findUnique({ where: { userId } }),
-    getPnlByPeriod(userId),
-    getRecentActivity(userId),
-    getStrategyPerformance(userId),
-    prisma.watchlistItem.findMany({
-      where: { userId },
-      include: { instrument: { select: { symbol: true, name: true } } },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-    }),
-    prisma.strategy.count({ where: { userId } }),
-    getRecentBacktests(userId),
-  ]);
+  const [user, rows, riskSettings, pnl, activity, strategies, watchlistItems, strategyCount, recentBacktests, healthAlerts] =
+    await Promise.all([
+      prisma.user.findUnique({ where: { id: userId }, select: { agentName: true } }),
+      getPaperSessionRows(userId),
+      prisma.riskSettings.findUnique({ where: { userId } }),
+      getPnlByPeriod(userId),
+      getRecentActivity(userId),
+      getStrategyPerformance(userId),
+      prisma.watchlistItem.findMany({
+        where: { userId },
+        include: { instrument: { select: { symbol: true, name: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      }),
+      prisma.strategy.count({ where: { userId } }),
+      getRecentBacktests(userId),
+      getHealthAlerts(userId),
+    ]);
 
   const agentName = user?.agentName ?? DEFAULT_AGENT_NAME;
   const summary = summarizePortfolio(rows);
@@ -110,6 +114,8 @@ export default async function DashboardPage() {
       )}
 
       <div className="mt-8 grid gap-6">
+        <HealthPanel alerts={healthAlerts} />
+
         <PnlSummary pnl={pnl} />
 
           <div className="grid gap-6 lg:grid-cols-3">

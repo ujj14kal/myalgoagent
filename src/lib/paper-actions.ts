@@ -324,6 +324,30 @@ async function syncPaperSessionInner(id: string, userId: string): Promise<PaperA
   return {};
 }
 
+/** Called from the Dashboard health panel's "Stop N redundant sessions"
+ * action, after the user confirms — stops every live session on this
+ * strategy except the one they chose to keep (the panel defaults that
+ * choice to whichever was started most recently). Scoped to `userId` and
+ * `strategyId` together so it can only ever touch the exact group of
+ * sessions the alert was actually about. */
+export async function stopDuplicateSessionsAction(strategyId: string, keepSessionId: string): Promise<PaperActionResult> {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Unauthorized" };
+
+  await prisma.paperSession.updateMany({
+    where: {
+      strategyId,
+      userId: session.user.id,
+      id: { not: keepSessionId },
+      status: { in: ["ACTIVE", "PAUSED"] },
+    },
+    data: { status: "STOPPED" },
+  });
+
+  revalidatePaperPaths();
+  return {};
+}
+
 export async function setPaperSessionStatus(id: string, status: "ACTIVE" | "PAUSED" | "STOPPED"): Promise<PaperActionResult> {
   const session = await auth();
   if (!session?.user?.id) return { error: "Unauthorized" };
