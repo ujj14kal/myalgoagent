@@ -12,7 +12,9 @@ export default async function BacktestsPage() {
 
   const [strategies, runs] = await Promise.all([
     prisma.strategy.findMany({
-      where: { userId: session.user.id },
+      // Deleted strategies never belong in a "pick one to run" list — that
+      // would defeat the point of deleting one in the first place.
+      where: { userId: session.user.id, status: { not: "DELETED" } },
       include: { instrument: true },
       orderBy: { updatedAt: "desc" },
     }),

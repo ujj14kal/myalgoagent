@@ -31,7 +31,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const tokenHash = createHash("sha256").update(token).digest("hex");
 
   const strategy = await prisma.strategy.findFirst({
-    where: { webhookTokenHash: tokenHash, webhookEnabled: true, mode: "WEBHOOK" },
+    // status: not DELETED — a strategy used to be gone the instant it was
+    // deleted (a hard delete), so this endpoint never had to think about a
+    // "deleted but still technically present" row before. Now that delete
+    // is soft, a deleted strategy's webhook must stop accepting signals
+    // just as completely as it used to when the row itself was removed.
+    where: { webhookTokenHash: tokenHash, webhookEnabled: true, mode: "WEBHOOK", status: { not: "DELETED" } },
     include: { instrument: true },
   });
   if (!strategy) {

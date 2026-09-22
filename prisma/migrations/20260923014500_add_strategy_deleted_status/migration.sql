@@ -1,0 +1,1 @@
+ALTER TYPE "StrategyStatus" ADD VALUE 'DELETED';

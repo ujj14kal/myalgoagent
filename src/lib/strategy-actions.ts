@@ -329,30 +329,60 @@ export async function getLivePaperSessionCount(strategyId: string) {
   });
 }
 
+/** "Delete" is a soft delete — it moves the strategy to DELETED (its own
+ * section, same as Draft/Active/Archived) rather than removing it, with a
+ * Restore / Delete forever choice from there. Only
+ * permanentlyDeleteStrategyAction ever actually removes the row. */
 export async function deleteStrategy(id: string) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
-  // Move any still-live paper sessions to history (STOPPED) *before*
-  // deleting the strategy, in the same transaction — this is enforced
-  // unconditionally here, not left to the confirmation dialog, so a
-  // session can never end up silently orphaned and still "live" with no
-  // strategy to trace it back to, regardless of what the user clicked
-  // through. Trade history (orders, P&L) is untouched — STOPPED only
-  // takes it out of live syncing, matching the pause/stop it already
-  // means for an ordinary session.
+  // Move any still-live paper sessions to history (STOPPED) at the same
+  // time — enforced unconditionally here, not left to the confirmation
+  // dialog, so a session can never keep syncing live against a strategy
+  // its owner just deleted, regardless of what the user clicked through.
+  // Trade history (orders, P&L) is untouched — STOPPED only takes it out
+  // of live syncing, matching the pause/stop it already means for an
+  // ordinary session.
+  await prisma.$transaction([
+    prisma.paperSession.updateMany({
+      where: { strategyId: id, userId: session.user.id, status: { in: ["ACTIVE", "PAUSED"] } },
+      data: { status: "STOPPED" },
+    }),
+    prisma.strategy.updateMany({
+      where: { id, userId: session.user.id },
+      data: { status: "DELETED" },
+    }),
+  ]);
+
+  revalidatePath("/app/strategies");
+  revalidatePath(`/app/strategies/${id}`);
+  revalidatePath("/app/dashboard");
+  revalidatePath("/app/paper-trading");
+  redirect("/app/strategies");
+}
+
+/** The only action that actually removes a strategy row — restricted to a
+ * strategy already sitting in DELETED, so it's never reachable in one
+ * click from a live strategy. Paper sessions are swept to STOPPED again
+ * defensively (a session could in principle have been reactivated after
+ * the soft delete); onDelete: SetNull then just drops their now-pointless
+ * link back once the row is actually gone. */
+export async function permanentlyDeleteStrategyAction(id: string) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
   await prisma.$transaction([
     prisma.paperSession.updateMany({
       where: { strategyId: id, userId: session.user.id, status: { in: ["ACTIVE", "PAUSED"] } },
       data: { status: "STOPPED" },
     }),
     prisma.strategy.deleteMany({
-      where: { id, userId: session.user.id },
+      where: { id, userId: session.user.id, status: "DELETED" },
     }),
   ]);
 
   revalidatePath("/app/strategies");
   revalidatePath("/app/dashboard");
   revalidatePath("/app/paper-trading");
-  redirect("/app/strategies");
 }

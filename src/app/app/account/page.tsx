@@ -18,7 +18,9 @@ export default async function AccountPage() {
 
   const [user, strategyCount, watchlistCount, linkedProviders] = await Promise.all([
     prisma.user.findUnique({ where: { id: session.user.id } }),
-    prisma.strategy.count({ where: { userId: session.user.id } }),
+    // Excludes Deleted — this is a user-visible "how many strategies do you
+    // have" stat, and a deleted one shouldn't inflate it.
+    prisma.strategy.count({ where: { userId: session.user.id, status: { not: "DELETED" } } }),
     prisma.watchlistItem.count({ where: { userId: session.user.id } }),
     getLinkedProviders(session.user.id),
   ]);

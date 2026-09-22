@@ -60,6 +60,9 @@ export async function startPaperSession(input: StartPaperSessionInput): Promise<
       include: { instrument: true },
     });
     if (!strategy) throw new Error("Strategy not found");
+    // Defense in depth against the dropdown filter — a deleted strategy
+    // shouldn't be startable even via a stale/direct request.
+    if (strategy.status === "DELETED") throw new Error("This strategy has been deleted");
 
     const candles = await marketDataProvider.getHistoricalCandles(strategy.instrument.symbol, "1mo", "1d");
     if (candles.length === 0) throw new Error("No historical data available for this instrument");

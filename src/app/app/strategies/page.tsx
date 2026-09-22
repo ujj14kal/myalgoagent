@@ -9,7 +9,50 @@ const STATUS_STYLE: Record<string, string> = {
   ACTIVE: "bg-brand-buy/10 text-brand-buy",
   DRAFT: "bg-brand-navy/10 text-brand-navy/60",
   ARCHIVED: "bg-brand-sell/10 text-brand-sell",
+  DELETED: "bg-brand-sell/10 text-brand-sell",
 };
+
+type StrategyCard = {
+  id: string;
+  name: string;
+  status: string;
+  mode: string;
+  instrument: { symbol: string };
+};
+
+function StrategyGrid({ strategies }: { strategies: StrategyCard[] }) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {strategies.map((s) => (
+        <Link
+          key={s.id}
+          href={`/app/strategies/${s.id}`}
+          className="hover-lift rounded-2xl border border-black/5 bg-white p-5 hover:border-brand-primary"
+        >
+          <div className="flex items-start justify-between">
+            <p className="text-sm font-semibold text-brand-navy">{s.name}</p>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[s.status]}`}>{s.status}</span>
+          </div>
+          <p className="mt-1 text-xs text-brand-navy/60">{s.instrument.symbol}</p>
+          <p className="mt-3 text-xs font-medium text-brand-navy/40">
+            {s.mode === "NO_CODE" ? "Built visually" : "Built with code"}
+          </p>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+// Rendered as separate sections/"columns" rather than one flat list — Draft
+// and Active are both fully automatic (see activateStrategyIfDraft), so
+// grouping them visually is what actually makes that automatic state useful
+// to see at a glance, rather than a status chip buried in a mixed grid.
+const SECTIONS: { status: "ACTIVE" | "DRAFT" | "ARCHIVED" | "DELETED"; title: string; description: string }[] = [
+  { status: "ACTIVE", title: "Active", description: "In real use — currently running in paper or live trading." },
+  { status: "DRAFT", title: "Drafts", description: "Built but never put to work yet." },
+  { status: "ARCHIVED", title: "Archived", description: "Sidelined on purpose — fully intact, restore anytime." },
+  { status: "DELETED", title: "Deleted", description: "Restore or delete forever — nothing here is gone yet." },
+];
 
 export default async function StrategiesPage() {
   const session = await auth();
@@ -20,6 +63,13 @@ export default async function StrategiesPage() {
     include: { instrument: true },
     orderBy: { updatedAt: "desc" },
   });
+
+  const byStatus = new Map<string, StrategyCard[]>();
+  for (const s of strategies) {
+    const list = byStatus.get(s.status) ?? [];
+    list.push(s);
+    byStatus.set(s.status, list);
+  }
 
   return (
     <div>
@@ -50,25 +100,23 @@ export default async function StrategiesPage() {
           />
         </div>
       ) : (
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {strategies.map((s) => (
-            <Link
-              key={s.id}
-              href={`/app/strategies/${s.id}`}
-              className="hover-lift rounded-2xl border border-black/5 bg-white p-5 hover:border-brand-primary"
-            >
-              <div className="flex items-start justify-between">
-                <p className="text-sm font-semibold text-brand-navy">{s.name}</p>
-                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[s.status]}`}>
-                  {s.status}
-                </span>
+        <div className="mt-8 space-y-10">
+          {SECTIONS.map(({ status, title, description }) => {
+            const list = byStatus.get(status);
+            if (!list || list.length === 0) return null;
+            return (
+              <div key={status}>
+                <div className="flex items-baseline gap-2">
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-navy/50">{title}</h2>
+                  <span className="text-xs text-brand-navy/30">{list.length}</span>
+                </div>
+                <p className="mt-0.5 text-xs text-brand-navy/40">{description}</p>
+                <div className="mt-3">
+                  <StrategyGrid strategies={list} />
+                </div>
               </div>
-              <p className="mt-1 text-xs text-brand-navy/60">{s.instrument.symbol}</p>
-              <p className="mt-3 text-xs font-medium text-brand-navy/40">
-                {s.mode === "NO_CODE" ? "Built visually" : "Built with code"}
-              </p>
-            </Link>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -169,6 +169,11 @@ enum StrategyStatus {
   DRAFT
   ACTIVE
   ARCHIVED
+  // Soft-deleted — "Delete" no longer removes a strategy outright, it
+  // moves here with a Restore / Delete forever choice, same safety net as
+  // an OS trash bin. Only permanentlyDeleteStrategyAction ever actually
+  // removes the row, and only when it's already in this state.
+  DELETED
 }
 
 enum StrategyMode {

@@ -50,6 +50,9 @@ export async function runBacktestAction(input: RunBacktestInput): Promise<Backte
       include: { instrument: true },
     });
     if (!strategy) throw new Error("Strategy not found");
+    // Defense in depth against the dropdown filter — a deleted strategy
+    // shouldn't be runnable even via a stale/direct request.
+    if (strategy.status === "DELETED") throw new Error("This strategy has been deleted");
 
     // Execution/risk config is fixed on the strategy itself (see the
     // "bulletproof strategy creation" change) — a backtest always runs with
