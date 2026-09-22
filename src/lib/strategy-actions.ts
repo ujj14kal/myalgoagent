@@ -313,15 +313,46 @@ export async function activateStrategyIfDraft(strategyId: string) {
   });
 }
 
+/** How many of this strategy's paper sessions are still live (ACTIVE or
+ * PAUSED) — used to warn before deleting, since the strategy relation is
+ * `onDelete: SetNull` (a session survives its strategy being deleted, it
+ * just loses the link back). Without this warning a user could delete a
+ * strategy with sessions still actively syncing and never notice — they'd
+ * keep running as orphans with no way to find them again from the UI,
+ * exactly what this check exists to prevent. */
+export async function getLivePaperSessionCount(strategyId: string) {
+  const session = await auth();
+  if (!session?.user?.id) return 0;
+
+  return prisma.paperSession.count({
+    where: { strategyId, userId: session.user.id, status: { in: ["ACTIVE", "PAUSED"] } },
+  });
+}
+
 export async function deleteStrategy(id: string) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
-  await prisma.strategy.deleteMany({
-    where: { id, userId: session.user.id },
-  });
+  // Move any still-live paper sessions to history (STOPPED) *before*
+  // deleting the strategy, in the same transaction — this is enforced
+  // unconditionally here, not left to the confirmation dialog, so a
+  // session can never end up silently orphaned and still "live" with no
+  // strategy to trace it back to, regardless of what the user clicked
+  // through. Trade history (orders, P&L) is untouched — STOPPED only
+  // takes it out of live syncing, matching the pause/stop it already
+  // means for an ordinary session.
+  await prisma.$transaction([
+    prisma.paperSession.updateMany({
+      where: { strategyId: id, userId: session.user.id, status: { in: ["ACTIVE", "PAUSED"] } },
+      data: { status: "STOPPED" },
+    }),
+    prisma.strategy.deleteMany({
+      where: { id, userId: session.user.id },
+    }),
+  ]);
 
   revalidatePath("/app/strategies");
   revalidatePath("/app/dashboard");
+  revalidatePath("/app/paper-trading");
   redirect("/app/strategies");
 }
