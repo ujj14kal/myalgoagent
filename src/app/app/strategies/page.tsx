@@ -5,11 +5,11 @@ import EmptyState from "@/components/empty-state";
 
 export const metadata = { title: "Strategies", robots: { index: false } };
 
-const STATUS_STYLE: Record<string, string> = {
-  ACTIVE: "bg-brand-buy/10 text-brand-buy",
-  DRAFT: "bg-brand-navy/10 text-brand-navy/60",
-  ARCHIVED: "bg-brand-sell/10 text-brand-sell",
-  DELETED: "bg-brand-sell/10 text-brand-sell",
+const STATUS_DOT: Record<string, string> = {
+  ACTIVE: "bg-brand-buy",
+  DRAFT: "bg-brand-navy/40",
+  ARCHIVED: "bg-brand-navy/30",
+  DELETED: "bg-brand-sell",
 };
 
 type StrategyCard = {
@@ -20,39 +20,58 @@ type StrategyCard = {
   instrument: { symbol: string };
 };
 
-function StrategyGrid({ strategies }: { strategies: StrategyCard[] }) {
+function StrategyRowCard({ s }: { s: StrategyCard }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {strategies.map((s) => (
-        <Link
-          key={s.id}
-          href={`/app/strategies/${s.id}`}
-          className="hover-lift rounded-2xl border border-black/5 bg-white p-5 hover:border-brand-primary"
-        >
-          <div className="flex items-start justify-between">
-            <p className="text-sm font-semibold text-brand-navy">{s.name}</p>
-            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[s.status]}`}>{s.status}</span>
-          </div>
-          <p className="mt-1 text-xs text-brand-navy/60">{s.instrument.symbol}</p>
-          <p className="mt-3 text-xs font-medium text-brand-navy/40">
-            {s.mode === "NO_CODE" ? "Built visually" : "Built with code"}
-          </p>
-        </Link>
-      ))}
-    </div>
+    <Link
+      href={`/app/strategies/${s.id}`}
+      className="hover-lift block rounded-xl border border-black/5 bg-white p-4 hover:border-brand-primary"
+    >
+      <div className="flex items-start gap-2">
+        <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[s.status]}`} />
+        <p className="text-sm font-semibold leading-tight text-brand-navy">{s.name}</p>
+      </div>
+      <p className="mt-1.5 pl-4 text-xs text-brand-navy/60">{s.instrument.symbol}</p>
+      <p className="mt-2 pl-4 text-xs font-medium text-brand-navy/40">
+        {s.mode === "NO_CODE" ? "Built visually" : "Built with code"}
+      </p>
+    </Link>
   );
 }
 
-// Rendered as separate sections/"columns" rather than one flat list — Draft
-// and Active are both fully automatic (see activateStrategyIfDraft), so
-// grouping them visually is what actually makes that automatic state useful
-// to see at a glance, rather than a status chip buried in a mixed grid.
-const SECTIONS: { status: "ACTIVE" | "DRAFT" | "ARCHIVED" | "DELETED"; title: string; description: string }[] = [
-  { status: "ACTIVE", title: "Active", description: "In real use — currently running in paper or live trading." },
-  { status: "DRAFT", title: "Drafts", description: "Built but never put to work yet." },
-  { status: "ARCHIVED", title: "Archived", description: "Sidelined on purpose — fully intact, restore anytime." },
-  { status: "DELETED", title: "Deleted", description: "Restore or delete forever — nothing here is gone yet." },
-];
+function KanbanColumn({
+  title,
+  description,
+  strategies,
+  accent,
+}: {
+  title: string;
+  description: string;
+  strategies: StrategyCard[];
+  accent: string;
+}) {
+  return (
+    <div className="flex min-w-0 flex-1 flex-col rounded-2xl border border-black/5 bg-brand-bg/40">
+      <div className={`rounded-t-2xl border-b border-black/5 px-4 py-3 ${accent}`}>
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-brand-navy">{title}</h2>
+          <span className="rounded-full bg-white/70 px-2 py-0.5 text-xs font-semibold text-brand-navy/60">
+            {strategies.length}
+          </span>
+        </div>
+        <p className="mt-0.5 text-xs text-brand-navy/50">{description}</p>
+      </div>
+      <div className="flex flex-1 flex-col gap-2 p-3">
+        {strategies.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-black/10 px-3 py-6 text-center text-xs text-brand-navy/30">
+            Nothing here
+          </p>
+        ) : (
+          strategies.map((s) => <StrategyRowCard key={s.id} s={s} />)
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default async function StrategiesPage() {
   const session = await auth();
@@ -70,6 +89,7 @@ export default async function StrategiesPage() {
     list.push(s);
     byStatus.set(s.status, list);
   }
+  const archived = byStatus.get("ARCHIVED") ?? [];
 
   return (
     <div>
@@ -79,11 +99,13 @@ export default async function StrategiesPage() {
           <p className="mt-2 text-sm text-brand-navy/60">
             Build rule-based strategies visually or with code, and preview
             exactly where they would have signalled on real historical data.
+            Draft and Active are set automatically — a strategy becomes
+            Active the moment you actually put it to work in paper trading.
           </p>
         </div>
         <Link
           href="/app/strategies/new"
-          className="rounded-full bg-brand-primary px-5 py-2 text-sm font-medium text-white hover:bg-brand-primary-light"
+          className="shrink-0 rounded-full bg-brand-primary px-5 py-2 text-sm font-medium text-white hover:bg-brand-primary-light"
         >
           New Strategy
         </Link>
@@ -100,23 +122,40 @@ export default async function StrategiesPage() {
           />
         </div>
       ) : (
-        <div className="mt-8 space-y-10">
-          {SECTIONS.map(({ status, title, description }) => {
-            const list = byStatus.get(status);
-            if (!list || list.length === 0) return null;
-            return (
-              <div key={status}>
-                <div className="flex items-baseline gap-2">
-                  <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-navy/50">{title}</h2>
-                  <span className="text-xs text-brand-navy/30">{list.length}</span>
-                </div>
-                <p className="mt-0.5 text-xs text-brand-navy/40">{description}</p>
-                <div className="mt-3">
-                  <StrategyGrid strategies={list} />
-                </div>
-              </div>
-            );
-          })}
+        <div className="mt-8 flex flex-col gap-4 lg:flex-row lg:items-start">
+          <KanbanColumn
+            title="Active"
+            description="In real use — running in paper or live trading."
+            strategies={byStatus.get("ACTIVE") ?? []}
+            accent="bg-brand-buy/5"
+          />
+          <KanbanColumn
+            title="Drafts"
+            description="Built but never put to work yet."
+            strategies={byStatus.get("DRAFT") ?? []}
+            accent="bg-brand-navy/5"
+          />
+          <KanbanColumn
+            title="Deleted"
+            description="Restore or delete forever — nothing here is gone yet."
+            strategies={byStatus.get("DELETED") ?? []}
+            accent="bg-brand-sell/5"
+          />
+        </div>
+      )}
+
+      {archived.length > 0 && (
+        <div className="mt-8">
+          <div className="flex items-baseline gap-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-navy/50">Archived</h2>
+            <span className="text-xs text-brand-navy/30">{archived.length}</span>
+          </div>
+          <p className="mt-0.5 text-xs text-brand-navy/40">Sidelined on purpose — fully intact, restore anytime.</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {archived.map((s) => (
+              <StrategyRowCard key={s.id} s={s} />
+            ))}
+          </div>
         </div>
       )}
     </div>
