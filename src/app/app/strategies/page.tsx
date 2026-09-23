@@ -68,8 +68,7 @@ export default async function StrategiesPage() {
             description="Built but never put to work yet."
             strategies={byStatus.get("DRAFT") ?? []}
             accent="bg-brand-navy/5"
-            addHref="/app/strategies/new"
-            emptyLabel="No drafts — start one below."
+            emptyLabel="No drafts yet — use New Strategy above to start one."
           />
           <StrategyBoardColumn
             title="Deleted"
