@@ -2,76 +2,9 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import EmptyState from "@/components/empty-state";
+import StrategyBoardColumn, { StrategyRowCard, type StrategyCard } from "@/components/strategy-board-column";
 
 export const metadata = { title: "Strategies", robots: { index: false } };
-
-const STATUS_DOT: Record<string, string> = {
-  ACTIVE: "bg-brand-buy",
-  DRAFT: "bg-brand-navy/40",
-  ARCHIVED: "bg-brand-navy/30",
-  DELETED: "bg-brand-sell",
-};
-
-type StrategyCard = {
-  id: string;
-  name: string;
-  status: string;
-  mode: string;
-  instrument: { symbol: string };
-};
-
-function StrategyRowCard({ s }: { s: StrategyCard }) {
-  return (
-    <Link
-      href={`/app/strategies/${s.id}`}
-      className="hover-lift block rounded-xl border border-black/5 bg-white p-4 hover:border-brand-primary"
-    >
-      <div className="flex items-start gap-2">
-        <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[s.status]}`} />
-        <p className="text-sm font-semibold leading-tight text-brand-navy">{s.name}</p>
-      </div>
-      <p className="mt-1.5 pl-4 text-xs text-brand-navy/60">{s.instrument.symbol}</p>
-      <p className="mt-2 pl-4 text-xs font-medium text-brand-navy/40">
-        {s.mode === "NO_CODE" ? "Built visually" : "Built with code"}
-      </p>
-    </Link>
-  );
-}
-
-function KanbanColumn({
-  title,
-  description,
-  strategies,
-  accent,
-}: {
-  title: string;
-  description: string;
-  strategies: StrategyCard[];
-  accent: string;
-}) {
-  return (
-    <div className="flex min-w-0 flex-1 flex-col rounded-2xl border border-black/5 bg-brand-bg/40">
-      <div className={`rounded-t-2xl border-b border-black/5 px-4 py-3 ${accent}`}>
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-brand-navy">{title}</h2>
-          <span className="rounded-full bg-white/70 px-2 py-0.5 text-xs font-semibold text-brand-navy/60">
-            {strategies.length}
-          </span>
-        </div>
-        <p className="mt-0.5 text-xs text-brand-navy/50">{description}</p>
-      </div>
-      <div className="flex flex-1 flex-col gap-2 p-3">
-        {strategies.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-black/10 px-3 py-6 text-center text-xs text-brand-navy/30">
-            Nothing here
-          </p>
-        ) : (
-          strategies.map((s) => <StrategyRowCard key={s.id} s={s} />)
-        )}
-      </div>
-    </div>
-  );
-}
 
 export default async function StrategiesPage() {
   const session = await auth();
@@ -123,23 +56,27 @@ export default async function StrategiesPage() {
         </div>
       ) : (
         <div className="mt-8 flex flex-col gap-4 lg:flex-row lg:items-start">
-          <KanbanColumn
+          <StrategyBoardColumn
             title="Active"
             description="In real use — running in paper or live trading."
             strategies={byStatus.get("ACTIVE") ?? []}
             accent="bg-brand-buy/5"
+            emptyLabel="Nothing active yet — put a draft to work in paper trading."
           />
-          <KanbanColumn
+          <StrategyBoardColumn
             title="Drafts"
             description="Built but never put to work yet."
             strategies={byStatus.get("DRAFT") ?? []}
             accent="bg-brand-navy/5"
+            addHref="/app/strategies/new"
+            emptyLabel="No drafts — start one below."
           />
-          <KanbanColumn
+          <StrategyBoardColumn
             title="Deleted"
             description="Restore or delete forever — nothing here is gone yet."
             strategies={byStatus.get("DELETED") ?? []}
             accent="bg-brand-sell/5"
+            emptyLabel="Nothing here"
           />
         </div>
       )}
