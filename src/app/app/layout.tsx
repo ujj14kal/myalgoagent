@@ -3,7 +3,6 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import AppSidebar from "@/components/app-sidebar";
 import AppTopbar from "@/components/app-topbar";
-import FeedbackWidget from "@/components/feedback-widget";
 import TutorialProvider from "@/components/tutorial/tutorial-provider";
 import AgentToastProvider from "@/components/agent-toast/agent-toast-provider";
 import { DEFAULT_AGENT_NAME } from "@/lib/agent-constants";
@@ -46,7 +45,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </span>
             </footer>
           </div>
-          <FeedbackWidget />
         </div>
       </AgentToastProvider>
     </TutorialProvider>

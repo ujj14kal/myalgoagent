@@ -36,7 +36,7 @@ export default function FeedbackWidget() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-40 rounded-full bg-brand-primary px-4 py-2.5 text-xs font-semibold text-white shadow-lg hover:bg-brand-primary-light"
+        className="w-full rounded-full bg-brand-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-primary-light"
       >
         Feedback
       </button>

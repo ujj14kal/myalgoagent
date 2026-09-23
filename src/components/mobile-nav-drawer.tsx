@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { navGroups } from "@/components/app-sidebar";
+import FeedbackWidget from "@/components/feedback-widget";
 
 /**
  * The main sidebar (app-sidebar.tsx) is `hidden md:block` — below the `md`
@@ -82,6 +83,9 @@ export default function MobileNavDrawer() {
                 </div>
               ))}
             </nav>
+            <div className="shrink-0 border-t border-black/5 p-4">
+              <FeedbackWidget />
+            </div>
           </aside>
         </div>
       )}

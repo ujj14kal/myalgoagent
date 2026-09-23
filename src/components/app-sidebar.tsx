@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import FeedbackWidget from "@/components/feedback-widget";
 
 export const navGroups = [
   {
@@ -55,14 +56,14 @@ export default function AppSidebar() {
     // itself scrolls out of view with the rest of the page instead of
     // staying reachable. overflow-y-auto is a defensive addition in case
     // the nav list itself ever grows taller than the viewport.
-    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 overflow-y-auto border-r border-black/5 bg-white md:block">
-      <div className="flex h-16 items-center gap-2 border-b border-black/5 px-5">
+    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col overflow-y-auto border-r border-black/5 bg-white md:flex">
+      <div className="flex h-16 shrink-0 items-center gap-2 border-b border-black/5 px-5">
         <Link href="/" className="flex items-center gap-2">
           <Image src="/brand/icon-mark.png" alt="MyAlgoAgent" width={28} height={28} />
           <span className="text-base font-bold text-brand-primary">MyAlgoAgent</span>
         </Link>
       </div>
-      <nav className="space-y-6 p-4" data-tour="sidebar-nav">
+      <nav className="flex-1 space-y-6 p-4" data-tour="sidebar-nav">
         {navGroups.map((group) => (
           <div key={group.label}>
             <p className="px-2 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
@@ -93,6 +94,9 @@ export default function AppSidebar() {
           </div>
         ))}
       </nav>
+      <div className="shrink-0 border-t border-black/5 p-4">
+        <FeedbackWidget />
+      </div>
     </aside>
   );
 }
