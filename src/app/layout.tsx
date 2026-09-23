@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Geist_Mono } from "next/font/google";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import Script from "next/script";
+import GlobalErrorListener from "@/components/global-error-listener";
 import "./globals.css";
 
 const inter = Inter({
@@ -108,6 +109,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
           />
         ))}
+        <GlobalErrorListener />
         {children}
         {process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID && (
           <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID} />

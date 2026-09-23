@@ -24,8 +24,21 @@ export default function WatchlistManager({
   allInstruments: InstrumentOption[];
 }) {
   const [query, setQuery] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const watchedSymbols = new Set(watchlistItems.map((w) => w.symbol));
+
+  function run(action: () => Promise<{ ok: true } | { ok: false; error: string }>) {
+    setError(null);
+    startTransition(async () => {
+      try {
+        const result = await action();
+        if (!result.ok) setError(result.error);
+      } catch {
+        setError("Couldn't reach the server — please try again.");
+      }
+    });
+  }
 
   const suggestions = query.trim()
     ? allInstruments
@@ -54,7 +67,7 @@ export default function WatchlistManager({
               <button
                 key={i.id}
                 onClick={() => {
-                  startTransition(() => addToWatchlist(i.id));
+                  run(() => addToWatchlist(i.id));
                   setQuery("");
                 }}
                 className="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:bg-brand-bg"
@@ -67,6 +80,8 @@ export default function WatchlistManager({
         )}
       </div>
 
+      {error && <p className="mt-3 text-sm text-brand-sell">{error}</p>}
+
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {watchlistItems.map((w) => (
           <div
@@ -78,7 +93,7 @@ export default function WatchlistManager({
               <p className="mt-1 text-xs text-brand-navy/60">{w.name}</p>
             </Link>
             <button
-              onClick={() => startTransition(() => removeFromWatchlist(w.id))}
+              onClick={() => run(() => removeFromWatchlist(w.id))}
               disabled={isPending}
               className="text-xs text-brand-navy/40 hover:text-brand-sell"
               aria-label={`Remove ${w.symbol} from watchlist`}

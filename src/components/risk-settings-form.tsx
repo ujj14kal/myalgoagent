@@ -24,14 +24,15 @@ export default function RiskSettingsForm({
     setSaved(false);
     startTransition(async () => {
       try {
-        await updateRiskSettings({
+        const result = await updateRiskSettings({
           killSwitchEnabled,
           maxLossPercent: maxLossPercent.trim() ? Number(maxLossPercent) : null,
           maxConsecutiveLosses: maxConsecutiveLosses.trim() ? Number(maxConsecutiveLosses) : null,
         });
-        setSaved(true);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong");
+        if (result.ok) setSaved(true);
+        else setError(result.error);
+      } catch {
+        setError("Couldn't reach the server — check your connection and try again.");
       }
     });
   }

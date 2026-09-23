@@ -5,6 +5,11 @@ import { enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { parseTradingViewPayload } from "@/lib/webhooks/tradingview";
 import { getOrCreateActivePaperSession } from "@/lib/webhooks/session";
 import { applyWebhookSignal } from "@/lib/webhooks/apply-signal";
+import { logError } from "@/lib/logger";
+
+// A TradingView alert is a one-line message or a tiny JSON object; anything
+// near this size is not a real alert.
+const MAX_WEBHOOK_BODY_CHARS = 20_000;
 
 // Postgres's text columns reject a raw NUL byte outright ("invalid byte
 // sequence for encoding UTF8: 0x00"). An arbitrary webhook body, or an
@@ -26,8 +31,37 @@ function sanitizeForStorage(value: string): string {
  * A wrong/unknown token returns 404 rather than 401, so a guesser can't
  * distinguish "wrong token" from "no such endpoint."
  */
-export async function POST(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+export async function POST(request: NextRequest, ctx: { params: Promise<{ token: string }> }) {
+  // Safety net: the handler below deals with every *expected* failure
+  // itself, but a DB outage on the strategy lookup or alert-log write would
+  // otherwise surface as a raw, unlogged 500 to TradingView.
+  try {
+    return await handleWebhook(request, ctx);
+  } catch (err) {
+    logError("api/webhooks/tradingview", err);
+    return NextResponse.json({ ok: false, error: "Internal error" }, { status: 500 });
+  }
+}
+
+async function handleWebhook(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
+
+  // Before any DB work: an unknown token costs a query on every attempt, so
+  // a flood of guesses could exhaust the connection pool for everyone. The
+  // per-strategy limit below only applies once a token is valid. Deliberately
+  // generous (10/s) — TradingView sends every user's alerts from a small
+  // shared set of IPs, so this must never throttle legitimate aggregate
+  // traffic, only floods.
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  try {
+    await enforceRateLimit(`webhook-ip:${ip}`, 600, 60_000);
+  } catch (err) {
+    if (err instanceof RateLimitError) {
+      return NextResponse.json({ error: err.message }, { status: 429 });
+    }
+    throw err;
+  }
+
   const tokenHash = createHash("sha256").update(token).digest("hex");
 
   const strategy = await prisma.strategy.findFirst({
@@ -52,7 +86,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     throw err;
   }
 
-  const rawPayload = sanitizeForStorage(await request.text());
+  const bodyText = await request.text();
+  if (bodyText.length > MAX_WEBHOOK_BODY_CHARS) {
+    return NextResponse.json({ ok: false, error: "Payload too large" }, { status: 413 });
+  }
+  const rawPayload = sanitizeForStorage(bodyText);
   const parsed = parseTradingViewPayload(rawPayload);
 
   // Logged even on a parse failure — a complete signal history is the whole
@@ -86,14 +124,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ ok: true, action: parsed.action, executed: result.executed, error: result.error });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to execute signal";
+    logError("api/webhooks/tradingview:execute", err, { strategyId: strategy.id, alertId: alert.id });
     // Best-effort logging — if even a sanitized message somehow fails to
     // write, the alert row already exists from the create() above, and the
     // response below is what actually matters to the caller.
     try {
       await prisma.webhookAlert.update({ where: { id: alert.id }, data: { parseError: sanitizeForStorage(message) } });
-    } catch {
-      // Already logged as much as we safely can — don't let a
-      // failure-to-log mask the real error response.
+    } catch (updateErr) {
+      // Don't let a failure-to-log mask the real error response — but do
+      // leave a trace that the alert row couldn't be annotated.
+      logError("api/webhooks/tradingview:annotate-alert", updateErr, { alertId: alert.id });
     }
     return NextResponse.json({ ok: false, error: message }, { status: 502 });
   }

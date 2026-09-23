@@ -1,4 +1,5 @@
 import { DynamoDBClient, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
+import { logWarn } from "@/lib/logger";
 
 const TABLE_NAME = "myalgoagent-rate-limits";
 const REGION = "ap-south-1";
@@ -28,6 +29,21 @@ function enforceInMemory(key: string, maxCalls: number, windowMs: number): void 
   }
   timestamps.push(now);
   fallbackBuckets.set(key, timestamps);
+}
+
+/**
+ * For Server Actions that return `{ ok: false, error }` instead of throwing:
+ * resolves null when the call is allowed, or the message to hand back to the
+ * caller when it's rate limited. Any other failure still propagates.
+ */
+export async function checkRateLimit(key: string, maxCalls: number, windowMs: number): Promise<string | null> {
+  try {
+    await enforceRateLimit(key, maxCalls, windowMs);
+    return null;
+  } catch (err) {
+    if (err instanceof RateLimitError) return err.message;
+    throw err;
+  }
 }
 
 /**
@@ -65,6 +81,11 @@ export async function enforceRateLimit(key: string, maxCalls: number, windowMs: 
     if (err instanceof RateLimitError) throw err;
     // DynamoDB unreachable (network blip, etc.) — fail open to the
     // best-effort in-memory limiter rather than blocking every request.
+    // Logged so a sustained DynamoDB problem (which silently weakens rate
+    // limiting to per-container) is visible instead of invisible.
+    logWarn("rate-limit", "DynamoDB unavailable, using in-memory fallback", {
+      error: err instanceof Error ? err.message : String(err),
+    });
     enforceInMemory(key, maxCalls, windowMs);
   }
 }

@@ -150,7 +150,7 @@ export default function InstrumentChartPanel({
   const [magnetEnabled, setMagnetEnabled] = useState(false);
   const [compareSymbol, setCompareSymbol] = useState<string | null>(savedLayout?.compareSymbol ?? null);
   const [compareCandles, setCompareCandles] = useState<Candle[] | null>(null);
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saved">("idle");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
   const [isPending, startTransition] = useTransition();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -361,18 +361,22 @@ export default function InstrumentChartPanel({
 
   function handleSaveLayout() {
     startTransition(async () => {
-      await saveChartLayout(instrumentId, {
-        chartType,
-        interval,
-        overlays: overlayInstances,
-        oscillators: oscillatorInstances,
-        showVolume,
-        drawings,
-        compareSymbol,
-        showVisibleRangeVolumeProfile,
-      });
-      setSaveStatus("saved");
-      setTimeout(() => setSaveStatus("idle"), 2000);
+      try {
+        const result = await saveChartLayout(instrumentId, {
+          chartType,
+          interval,
+          overlays: overlayInstances,
+          oscillators: oscillatorInstances,
+          showVolume,
+          drawings,
+          compareSymbol,
+          showVisibleRangeVolumeProfile,
+        });
+        setSaveStatus(result.ok ? "saved" : "error");
+      } catch {
+        setSaveStatus("error");
+      }
+      setTimeout(() => setSaveStatus("idle"), 2500);
     });
   }
 
@@ -459,7 +463,7 @@ export default function InstrumentChartPanel({
               disabled={isPending}
               className="rounded-full bg-brand-primary px-4 py-1 text-xs font-medium text-white hover:bg-brand-primary-light disabled:opacity-50"
             >
-              {isPending ? "Saving…" : saveStatus === "saved" ? "Saved ✓" : "Save layout"}
+              {isPending ? "Saving…" : saveStatus === "saved" ? "Saved ✓" : saveStatus === "error" ? "Save failed — retry" : "Save layout"}
             </button>
             <span className="mx-1 h-4 w-px bg-brand-navy/10" />
             <button

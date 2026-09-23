@@ -34,12 +34,20 @@ export function parseTradingViewPayload(raw: string): ParsedWebhookPayload {
       if (typeof candidate === "string") {
         const action = wordsToAction(candidate);
         if (action) return { action };
-        return { error: `Could not determine BUY or SELL from "action" field: "${candidate}"` };
+        // Clipped: this string is stored and echoed back, and the value is
+        // whatever the sender chose to put there.
+        return { error: `Could not determine BUY or SELL from "action" field: "${candidate.slice(0, 80)}"` };
       }
     }
     return { error: 'JSON body did not contain a recognizable "action"/"side"/"signal" field' };
   } catch {
-    // Not JSON — fall through to plain-text matching.
+    // Not valid JSON. Plain-text alerts ("BUY ADANIENT") legitimately land
+    // here — but a body that *starts like* JSON and fails to parse is a
+    // broken/truncated template, and word-matching inside it would place an
+    // order off half a message. Reject it instead of guessing.
+    if (/^[{[]/.test(trimmed)) {
+      return { error: "Body looks like JSON but isn't valid JSON — check your TradingView alert message template" };
+    }
   }
 
   const action = wordsToAction(trimmed);

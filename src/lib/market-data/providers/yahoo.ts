@@ -1,3 +1,4 @@
+import { fetchJsonWithRetry } from "@/lib/fetch-json-with-retry";
 import type {
   Candle,
   CandleInterval,
@@ -38,7 +39,9 @@ export class YahooFinanceProvider implements MarketDataProvider {
   ): Promise<Candle[]> {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`;
 
-    const res = await fetch(url, {
+    // Bounded: a hung Yahoo request used to block indefinitely, and paper
+    // sync, backtests and the kill-switch's risk check all depend on it.
+    const res = await fetchJsonWithRetry<YahooChartResponse>(url, {
       // Explicitly declining compression, rather than trusting the runtime
       // to transparently gzip-decode the response: under Next's dev-server
       // fetch instrumentation (the `next: { revalidate }` cache layer,
@@ -55,7 +58,10 @@ export class YahooFinanceProvider implements MarketDataProvider {
       throw new Error(`Yahoo Finance request failed: ${res.status}`);
     }
 
-    const data = (await res.json()) as YahooChartResponse;
+    const data = res.data;
+    if (!data?.chart) {
+      throw new Error("Yahoo Finance returned an unexpected response");
+    }
 
     if (data.chart.error) {
       throw new Error(`Yahoo Finance error: ${data.chart.error.description}`);
