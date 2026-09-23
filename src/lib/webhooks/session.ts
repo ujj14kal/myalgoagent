@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { marketDataProvider } from "@/lib/market-data";
+import { activateStrategyIfDraft } from "@/lib/strategy-actions";
 import type { Strategy, PaperSession } from "@prisma/client";
 
 // Same defaults shown to a user starting a paper session by hand
@@ -24,7 +25,13 @@ export async function getOrCreateActivePaperSession(
     where: { strategyId: strategy.id, status: "ACTIVE" },
     orderBy: { createdAt: "desc" },
   });
-  if (existing) return existing;
+  if (existing) {
+    // Defensive — the DB trigger (see migration add_strategy_active_trigger)
+    // already handles this on insert, but an existing session found here
+    // could predate that trigger, same class of bug as the one it fixes.
+    await activateStrategyIfDraft(strategy.id);
+    return existing;
+  }
 
   const candles = await marketDataProvider.getHistoricalCandles(strategy.instrument.symbol, "1mo", "1d");
   const latestTime = candles.at(-1)?.time ?? Math.floor(Date.now() / 1000);
