@@ -8,6 +8,9 @@ import { DEFAULT_AGENT_NAME } from "@/lib/agent-constants";
 import { AI_BLOCKED_REPLY as BLOCKED_REPLY, AI_LIMITS, AI_MODELS } from "@/lib/ai/config";
 import { buildSystemPrompt } from "@/lib/ai/system-prompt";
 import { converse } from "@/lib/ai/bedrock";
+import { AGENT_TOOLS, runAgentTool } from "@/lib/ai/tools";
+import { PROPOSAL_TITLES, honestProposalReply, type AgentProposal, type ProposalStatus } from "@/lib/ai/proposals";
+import type { Prisma } from "@prisma/client";
 
 export type AgentChatMessage = {
   id: string;
@@ -15,6 +18,7 @@ export type AgentChatMessage = {
   content: string;
   guardrailHit: boolean;
   rating: 1 | -1 | null;
+  proposal: AgentProposal | null;
   createdAt: string;
 };
 
@@ -30,6 +34,7 @@ function toMessage(m: {
   content: string;
   guardrailHit: boolean;
   rating: number | null;
+  proposal?: Prisma.JsonValue | null;
   createdAt: Date;
 }): AgentChatMessage {
   return {
@@ -38,6 +43,7 @@ function toMessage(m: {
     content: m.content,
     guardrailHit: m.guardrailHit,
     rating: m.rating === 1 || m.rating === -1 ? m.rating : null,
+    proposal: (m.proposal as AgentProposal | null | undefined) ?? null,
     createdAt: m.createdAt.toISOString(),
   };
 }
@@ -106,8 +112,26 @@ export async function sendAgentMessage(input: {
   if (perDay) return { ok: false, error: "You have reached today's message limit. It resets within 24 hours." };
 
   try {
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { agentName: true } });
+    const [user, strategies, sessions] = await Promise.all([
+      prisma.user.findUnique({ where: { id: userId }, select: { agentName: true } }),
+      prisma.strategy.findMany({
+        where: { userId, status: { in: ["DRAFT", "ACTIVE"] } },
+        orderBy: { updatedAt: "desc" },
+        take: 25,
+        select: { name: true, status: true, instrument: { select: { symbol: true } } },
+      }),
+      prisma.paperSession.findMany({
+        where: { userId, status: { in: ["ACTIVE", "PAUSED"] } },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        select: { strategyName: true, instrumentSymbol: true, status: true },
+      }),
+    ]);
     const agentName = user?.agentName ?? DEFAULT_AGENT_NAME;
+    const userContext = {
+      strategies: strategies.map((s) => ({ name: s.name, instrument: s.instrument.symbol, status: s.status })),
+      activeSessions: sessions.map((s) => ({ strategy: s.strategyName, instrument: s.instrumentSymbol, status: s.status })),
+    };
 
     // Ownership check: a conversation id from the client is only used if it's this user's.
     let conversationId: string | null = null;
@@ -132,7 +156,7 @@ export async function sendAgentMessage(input: {
       where: { conversationId },
       orderBy: { createdAt: "desc" },
       take: AI_LIMITS.historyMessages,
-      select: { role: true, content: true },
+      select: { role: true, content: true, proposal: true },
     });
 
     const userMessage = await prisma.agentMessage.create({
@@ -140,9 +164,16 @@ export async function sendAgentMessage(input: {
     });
 
     const request = {
-      system: buildSystemPrompt(agentName),
+      tools: AGENT_TOOLS,
+      runTool: (name: string, args: string) => runAgentTool(userId, name, args),
+      system: buildSystemPrompt(agentName, userContext),
       turns: [
-        ...history.reverse().map((m) => ({ role: m.role === "USER" ? ("user" as const) : ("assistant" as const), text: m.content })),
+        ...history.reverse().map((m) => {
+          // Let the agent know what happened to anything it proposed earlier.
+          const p = m.proposal as AgentProposal | null;
+          const note = p ? `\n\n[${PROPOSAL_TITLES[p.kind]} proposal — ${p.status === "pending" ? "not decided yet" : p.status} by the user]` : "";
+          return { role: m.role === "USER" ? ("user" as const) : ("assistant" as const), text: m.content + note };
+        }),
         { role: "user" as const, text },
       ],
     };
@@ -164,7 +195,11 @@ export async function sendAgentMessage(input: {
       return { ok: false, error: `${agentName} is unavailable at the moment. Please try again shortly.` };
     }
 
-    const content = reply.guardrailHit || !reply.text ? BLOCKED_REPLY : reply.text;
+    const content = reply.guardrailHit
+      ? BLOCKED_REPLY
+      : reply.proposal
+        ? honestProposalReply(reply.text, reply.proposal)
+        : reply.text || BLOCKED_REPLY;
     const saved = await prisma.agentMessage.create({
       data: {
         conversationId,
@@ -175,6 +210,7 @@ export async function sendAgentMessage(input: {
         outputTokens: reply.outputTokens,
         latencyMs: reply.latencyMs,
         guardrailHit: reply.guardrailHit,
+        ...(reply.proposal && !reply.guardrailHit ? { proposal: reply.proposal as unknown as Prisma.InputJsonValue } : {}),
       },
     });
     await prisma.agentConversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } });
@@ -207,4 +243,40 @@ export async function rateAgentMessage(input: { messageId: string; rating: 1 | -
     logError("agent-chat:rate", err, { userId: session.user.id });
     return { ok: false, error: "We couldn't save your rating. Please try again." };
   }
+}
+
+/**
+ * Records what the user decided about a proposal. The action itself runs
+ * through the platform's normal server action (createStrategy, runBacktest…)
+ * from the review window; this only keeps the chat's record in step.
+ */
+export async function setProposalStatus(input: {
+  messageId: string;
+  status: ProposalStatus;
+  resultId?: string;
+}): Promise<{ ok: true } | Fail> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, error: "Not signed in." };
+  if (!["pending", "confirmed", "rejected"].includes(input?.status)) return { ok: false, error: "Invalid status." };
+  try {
+    const msg = await prisma.agentMessage.findFirst({
+      where: { id: input.messageId, role: "ASSISTANT", conversation: { userId: session.user.id } },
+      select: { id: true, proposal: true },
+    });
+    const proposal = msg?.proposal as AgentProposal | null;
+    if (!msg || !proposal) return { ok: false, error: "We couldn't find that proposal." };
+    const next = { ...proposal, status: input.status, ...(input.resultId ? { resultId: input.resultId.slice(0, 64) } : {}) };
+    await prisma.agentMessage.update({ where: { id: msg.id }, data: { proposal: next as unknown as Prisma.InputJsonValue } });
+    return { ok: true };
+  } catch (err) {
+    logError("agent-chat:proposal-status", err, { userId: session.user.id });
+    return { ok: false, error: "We couldn't update that. Please try again." };
+  }
+}
+
+/** Instruments for the review window's picker. */
+export async function listInstrumentsForReview(): Promise<{ id: string; symbol: string; name: string }[]> {
+  const session = await auth();
+  if (!session?.user?.id) return [];
+  return prisma.instrument.findMany({ orderBy: { symbol: "asc" }, select: { id: true, symbol: true, name: true } });
 }

@@ -96,14 +96,12 @@ const groups: Group[] = [
     icon: Sparkles,
     items: [
       "Ask anything about the platform, indicators or risk in plain English — it explains and points you to the right page",
-      "Describe a strategy and get a clear draft of its rules to review, with a button straight to the builder",
-      "Uses the same indicators, conditions and risk rules as the visual builder, and every strategy you build from a draft passes the same checks",
-      "Never gives buy or sell calls, never predicts prices, and never acts without your confirmation",
+      "Describe a strategy and it builds and checks it for you, then opens a review — confirm and it's created",
+      "Prepares backtests, paper sessions, loss limits, the kill switch and watchlist changes the same way — you just review and confirm",
+      "Answers from your own data: your strategies, backtest results, paper sessions and risk settings",
+      "Uses the same validator as the builder, never gives buy or sell calls, and never acts without your confirmation",
     ],
-    soon: [
-      "Builds and backtests a strategy for you after you confirm",
-      "Explains why each paper trade happened and flags risk events as they occur",
-    ],
+    soon: ["Explains why each paper trade happened and flags risk events as they occur"],
   },
 ];
 

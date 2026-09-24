@@ -511,6 +511,9 @@ model AgentMessage {
   guardrailHit   Boolean          @default(false)
   // The user's rating of an assistant reply: 1 = helpful, -1 = not helpful.
   rating         Int?
+  // An action the agent prepared for review (see src/lib/ai/proposals.ts),
+  // with the user's decision recorded in its status.
+  proposal       Json?
   createdAt      DateTime         @default(now())
 
   conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)

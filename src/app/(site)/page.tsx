@@ -212,19 +212,21 @@ export default function Home() {
           <div className="mx-auto grid max-w-6xl items-center gap-14 px-4 py-20 lg:grid-cols-[0.85fr_1.15fr]">
             <div>
               <div className="flex items-center gap-2.5">
-                <p className="text-xs font-bold uppercase tracking-widest text-brand-primary">AI Strategy Assistant</p>
-                <span className="rounded-full bg-brand-gold/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-gold">
-                  Coming soon
+                <p className="text-xs font-bold uppercase tracking-widest text-brand-primary">Your AI agent</p>
+                <span className="rounded-full bg-brand-buy/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-buy">
+                  Live
                 </span>
               </div>
               <h2 className="mt-2 text-3xl font-bold text-brand-navy">
-                Describe your strategy in plain English. Let AI build it — and check it.
+                Describe it in plain English. Your agent builds it — you confirm.
               </h2>
               <p className="mt-4 text-brand-navy/70">
-                Type what you want to trade on, and the assistant translates it
-                into a real strategy — indicators, entry/exit conditions and
-                risk rules — using the exact same building blocks as the
-                visual builder.
+                Tell your agent what you want and it prepares it for you — a
+                strategy with its indicators, entry/exit conditions and risk
+                rules, a backtest, a paper session or new loss limits — using
+                the exact same building blocks as the rest of the platform.
+                You review every detail and confirm; nothing happens without
+                you.
               </p>
               <p className="mt-3 text-brand-navy/70">
                 Every AI-generated strategy runs through the same feasibility
@@ -232,18 +234,18 @@ export default function Home() {
                 contradiction, an impossible time window, or a rule that
                 could never fire against real market data.
               </p>
-              <Link href="/contact" className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-brand-navy hover:text-brand-primary">
-                Get notified when it launches <Icon name="arrow" size={14} />
+              <Link href="/signup" className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-brand-navy hover:text-brand-primary">
+                Try it free <Icon name="arrow" size={14} />
               </Link>
             </div>
             <div className="hover-lift overflow-hidden rounded-2xl bg-brand-navy text-white shadow-xl shadow-brand-navy/15">
               <div className="flex items-center justify-between border-b border-white/10 px-6 py-4 text-sm font-semibold">
                 <span className="flex items-center gap-2">
                   <Icon name="braces" size={16} />
-                  AI Strategy Assistant
+                  Your agent
                 </span>
                 <span className="rounded-full bg-brand-gold/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-gold">
-                  Preview
+                  Example
                 </span>
               </div>
               <div className="space-y-4 px-6 py-6">
@@ -252,7 +254,7 @@ export default function Home() {
                   SMA. Exit at 5% profit or a 2% stop loss.
                 </div>
                 <div className="max-w-[90%] space-y-2.5 rounded-2xl rounded-tl-sm bg-brand-primary/20 px-4 py-3 text-sm">
-                  <p className="text-white/90">Built your strategy:</p>
+                  <p className="text-white/90">Ready for your review:</p>
                   <div className="space-y-1.5 text-xs text-white/70">
                     <div className="flex items-center gap-2">
                       <span className="text-brand-buy"><Icon name="check" size={13} /></span>
@@ -270,7 +272,7 @@ export default function Home() {
                 </div>
               </div>
               <div className="flex items-center justify-between border-t border-white/10 px-6 py-3 text-[11px] text-white/40">
-                <span>Illustrative preview — feature in development</span>
+                <span>Illustrative example — you confirm before anything is created</span>
               </div>
             </div>
           </div>

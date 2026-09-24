@@ -35,9 +35,24 @@ function getSigner(): SignatureV4 {
   return signer;
 }
 
-export type MantleMessage = { role: "system" | "user" | "assistant"; content: string };
+export type MantleToolCall = { id: string; type: "function"; function: { name: string; arguments: string } };
 
-export type MantleResult = { text: string; inputTokens: number | null; outputTokens: number | null };
+export type MantleMessage =
+  | { role: "system" | "user"; content: string }
+  | { role: "assistant"; content: string | null; tool_calls?: MantleToolCall[] }
+  | { role: "tool"; tool_call_id: string; content: string };
+
+export type MantleTool = {
+  type: "function";
+  function: { name: string; description: string; parameters: Record<string, unknown> };
+};
+
+export type MantleResult = {
+  text: string;
+  toolCalls: MantleToolCall[];
+  inputTokens: number | null;
+  outputTokens: number | null;
+};
 
 /** One chat completion. Retries once on throttling or a 5xx. */
 export async function mantleChat({
@@ -45,16 +60,24 @@ export async function mantleChat({
   messages,
   maxTokens,
   temperature,
+  tools,
   signal,
 }: {
   model: string;
   messages: MantleMessage[];
   maxTokens: number;
   temperature: number;
+  tools?: MantleTool[];
   signal?: AbortSignal;
 }): Promise<MantleResult> {
   const path = "/v1/chat/completions";
-  const body = JSON.stringify({ model, messages, max_tokens: maxTokens, temperature });
+  const body = JSON.stringify({
+    model,
+    messages,
+    max_tokens: maxTokens,
+    temperature,
+    ...(tools?.length ? { tools, tool_choice: "auto" } : {}),
+  });
 
   for (let attempt = 0; ; attempt++) {
     const signed = await getSigner().sign({
@@ -68,11 +91,12 @@ export async function mantleChat({
     const res = await fetch(`https://${HOST}${path}`, { method: "POST", headers: signed.headers, body, signal });
     if (res.ok) {
       const data = (await res.json()) as {
-        choices?: { message?: { content?: string | null } }[];
+        choices?: { message?: { content?: string | null; tool_calls?: MantleToolCall[] } }[];
         usage?: { prompt_tokens?: number; completion_tokens?: number };
       };
       return {
         text: (data.choices?.[0]?.message?.content ?? "").trim(),
+        toolCalls: data.choices?.[0]?.message?.tool_calls ?? [],
         inputTokens: data.usage?.prompt_tokens ?? null,
         outputTokens: data.usage?.completion_tokens ?? null,
       };

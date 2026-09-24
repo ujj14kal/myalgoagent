@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { Activity, ArrowRight, ArrowUp, Check, ClipboardList, Copy, FlaskConical, History, Layers, Plus, ThumbsDown, ThumbsUp, TrendingDown, X } from "lucide-react";
 import BodyPortal from "@/components/ui/body-portal";
@@ -17,6 +18,8 @@ import {
   type AgentConversationSummary,
 } from "@/lib/agent-chat-actions";
 import { parseReplyBlocks, parseReplyLinks } from "@/lib/ai/links";
+import type { AgentProposal, ProposalStatus } from "@/lib/ai/proposals";
+import { ProposalCard, ProposalReviewModal } from "./proposal-review";
 
 const STARTERS = [
   { text: "How do I build my first strategy?", icon: <Layers size={15} /> },
@@ -234,10 +237,21 @@ function StrategyDraftCard({ fields, onNavigate }: { fields: { label: string; va
   );
 }
 
-/** An assistant reply: prose, strategy drafts and next-step buttons. */
-function AssistantReply({ content, onNavigate }: { content: string; onNavigate: () => void }) {
+/** An assistant reply: prose, strategy drafts, a prepared action and next-step buttons. */
+function AssistantReply({
+  content,
+  onNavigate,
+  proposal,
+  onReview,
+}: {
+  content: string;
+  onNavigate: () => void;
+  proposal?: AgentProposal | null;
+  onReview?: () => void;
+}) {
   const blocks = parseReplyBlocks(content);
-  const actions = blocks.filter((b) => b.kind === "action").slice(0, 2);
+  // A prepared action has its own review; extra page buttons would only compete with it.
+  const actions = proposal ? [] : blocks.filter((b) => b.kind === "action").slice(0, 2);
   return (
     <div className="space-y-3">
       {blocks.map((b, i) =>
@@ -247,6 +261,7 @@ function AssistantReply({ content, onNavigate }: { content: string; onNavigate: 
           <StrategyDraftCard key={i} fields={b.fields} onNavigate={onNavigate} />
         ) : null
       )}
+      {proposal && onReview && <ProposalCard proposal={proposal} onReview={onReview} />}
       {actions.length > 0 && (
         <div className="flex flex-wrap gap-2 pt-0.5">
           {actions.map((a) =>
@@ -283,6 +298,19 @@ export default function AgentChatPanel({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const pendingSeq = useRef(0);
+  const [reviewing, setReviewing] = useState<{ messageId: string; proposal: AgentProposal } | null>(null);
+
+  // Any navigation (a link in a reply, or a confirmed action landing on its
+  // result page) closes the chat so the page is visible.
+  const pathname = usePathname();
+  const openedOn = useRef(pathname);
+  useEffect(() => {
+    if (open && pathname !== openedOn.current) onClose();
+    openedOn.current = pathname;
+  }, [pathname, open, onClose]);
+
+  const markProposal = (messageId: string, status: ProposalStatus) =>
+    setMessages((ms) => ms.map((m) => (m.id === messageId && m.proposal ? { ...m, proposal: { ...m.proposal, status } } : m)));
 
   // Load the most recent conversation the first time the panel opens.
   useEffect(() => {
@@ -349,6 +377,7 @@ export default function AgentChatPanel({
       content: trimmed,
       guardrailHit: false,
       rating: null,
+      proposal: null,
       createdAt: "",
     };
     setMessages((m) => [...m, optimistic]);
@@ -364,6 +393,8 @@ export default function AgentChatPanel({
         setConversationId(res.conversationId);
         setMessages((m) => [...m.filter((x) => x.id !== optimistic.id), res.userMessage, res.reply]);
         setJustReplied(true);
+        // The agent prepared something — open the review straight away.
+        if (res.reply.proposal?.status === "pending") setReviewing({ messageId: res.reply.id, proposal: res.reply.proposal });
       } catch {
         setMessages((m) => m.filter((x) => x.id !== optimistic.id));
         setDraft(trimmed);
@@ -551,7 +582,12 @@ export default function AgentChatPanel({
                                   m.guardrailHit ? "bg-brand-gold/10 ring-1 ring-brand-gold/30" : "bg-white ring-1 ring-black/[0.06]"
                                 }`}
                               >
-                                <AssistantReply content={m.content} onNavigate={onClose} />
+                                <AssistantReply
+                                  content={m.content}
+                                  onNavigate={onClose}
+                                  proposal={m.proposal}
+                                  onReview={m.proposal ? () => setReviewing({ messageId: m.id, proposal: m.proposal! }) : undefined}
+                                />
                               </div>
                               </div>
                               {!m.id.startsWith("pending-") && <RateReply messageId={m.id} initial={m.rating} />}
@@ -642,6 +678,22 @@ export default function AgentChatPanel({
               </div>
             </motion.aside>
           </div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {open && reviewing && (
+          <ProposalReviewModal
+            key={reviewing.messageId}
+            messageId={reviewing.messageId}
+            proposal={reviewing.proposal}
+            agentName={agentName}
+            onClose={() => setReviewing(null)}
+            onDecided={(status) => markProposal(reviewing.messageId, status)}
+            onDone={() => {
+              setReviewing(null);
+              onClose();
+            }}
+          />
         )}
       </AnimatePresence>
     </BodyPortal>

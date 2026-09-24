@@ -5,7 +5,8 @@ import {
   type ApplyGuardrailCommandOutput,
   type Message,
 } from "@aws-sdk/client-bedrock-runtime";
-import { mantleChat } from "./mantle";
+import { mantleChat, type MantleMessage, type MantleTool } from "./mantle";
+import type { AgentProposal } from "./proposals";
 import { looksLikeAdvice } from "./advice-check";
 import { AI_GUARDRAIL, AI_LIMITS, AI_REGION } from "./config";
 
@@ -20,6 +21,8 @@ export type ChatTurn = { role: "user" | "assistant"; text: string };
 
 export type AgentReply = {
   text: string;
+  /** An action the agent prepared for the user to review (tool-enabled chats only). */
+  proposal?: AgentProposal;
   model: string;
   inputTokens: number | null;
   outputTokens: number | null;
@@ -81,14 +84,23 @@ async function checkGuardrail(text: string, source: "INPUT" | "OUTPUT", signal: 
   return { blocked: false, text: out.outputs?.[0]?.text ?? text };
 }
 
+export type ToolRunner = (name: string, args: string) => Promise<{ result: unknown; proposal?: AgentProposal }>;
+
+/** Most tool rounds per message — enough to look something up, then prepare an action. */
+const MAX_TOOL_ROUNDS = 4;
+
 async function converseMantle({
   model,
   system,
   turns,
+  tools,
+  runTool,
 }: {
   model: string;
   system: string;
   turns: ChatTurn[];
+  tools?: MantleTool[];
+  runTool?: ToolRunner;
 }): Promise<AgentReply> {
   const started = Date.now();
   const signal = AbortSignal.timeout(AI_LIMITS.timeoutMs);
@@ -111,27 +123,63 @@ async function converseMantle({
   if (input.blocked) return blocked();
   if (lastIdx >= 0) merged[lastIdx].content = input.text;
 
-  const res = await mantleChat({
-    model: model.slice(MANTLE_PREFIX.length),
-    messages: [{ role: "system", content: system }, ...merged],
-    maxTokens: AI_LIMITS.maxOutputTokens,
-    temperature: 0.3,
-    signal,
-  });
+  const messages: MantleMessage[] = [{ role: "system", content: system }, ...merged];
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let proposal: AgentProposal | undefined;
+  let text = "";
 
-  const output = await checkGuardrail(res.text, "OUTPUT", signal);
-  if (output.blocked) return { ...blocked(), inputTokens: res.inputTokens, outputTokens: res.outputTokens };
+  for (let round = 0; ; round++) {
+    const useTools = !!(tools?.length && runTool) && round < MAX_TOOL_ROUNDS;
+    const res = await mantleChat({
+      model: model.slice(MANTLE_PREFIX.length),
+      messages,
+      maxTokens: AI_LIMITS.maxOutputTokens,
+      temperature: 0.3,
+      tools: useTools ? tools : undefined,
+      signal,
+    });
+    inputTokens += res.inputTokens ?? 0;
+    outputTokens += res.outputTokens ?? 0;
+    if (!useTools || res.toolCalls.length === 0) {
+      text = res.text;
+      break;
+    }
+    messages.push({ role: "assistant", content: res.text || null, tool_calls: res.toolCalls });
+    for (const call of res.toolCalls) {
+      let result: unknown;
+      try {
+        const out = await runTool!(call.function.name, call.function.arguments);
+        result = out.result;
+        if (out.proposal) proposal = out.proposal;
+      } catch {
+        result = { error: "That lookup failed. Tell the user briefly and continue without it." };
+      }
+      messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result).slice(0, 12_000) });
+    }
+  }
+
+  const output = await checkGuardrail(text, "OUTPUT", signal);
+  if (output.blocked) return { ...blocked(), inputTokens, outputTokens };
   return {
     text: output.text,
+    proposal,
     model,
-    inputTokens: res.inputTokens,
-    outputTokens: res.outputTokens,
+    inputTokens,
+    outputTokens,
     latencyMs: Date.now() - started,
     guardrailHit: false,
   };
 }
 
-export async function converse(args: { model: string; system: string; turns: ChatTurn[] }): Promise<AgentReply> {
+export async function converse(args: {
+  model: string;
+  system: string;
+  turns: ChatTurn[];
+  tools?: MantleTool[];
+  runTool?: ToolRunner;
+}): Promise<AgentReply> {
+  // Tools run on the OpenAI-compatible endpoint; the runtime path answers without them.
   const reply = await (args.model.startsWith(MANTLE_PREFIX) ? converseMantle(args) : converseRuntime(args));
   // Safety net on the reply itself: clear advice phrasing is replaced by the refusal.
   return !reply.guardrailHit && looksLikeAdvice(reply.text) ? { ...reply, text: "", guardrailHit: true } : reply;

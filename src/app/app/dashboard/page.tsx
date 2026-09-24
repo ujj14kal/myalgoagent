@@ -12,6 +12,7 @@ import {
   getRecentBacktests,
 } from "@/lib/portfolio";
 import { DEFAULT_AGENT_NAME } from "@/lib/agent-constants";
+import AskAgentButton from "@/components/agent-chat/ask-agent-button";
 import { getHealthAlerts } from "@/lib/health";
 import { formatINR, formatPct, formatSignedINR, toneOf, TONE_TEXT } from "@/lib/format";
 import type { AgentPose } from "@/components/robot/agent-2d";
@@ -221,19 +222,17 @@ export default async function DashboardPage() {
           </span>
           <div>
             <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold text-brand-navy">AI Strategy Assistant</p>
-              <span className="inline-flex items-center gap-1 rounded-full bg-brand-gold/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#8a7437]">
-                <Sparkles size={10} /> Coming soon
+              <p className="text-sm font-semibold text-brand-navy">{agentName} can do it for you</p>
+              <span className="inline-flex items-center gap-1 rounded-full bg-brand-buy/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-buy">
+                <Sparkles size={10} /> Live
               </span>
             </div>
             <p className="mt-0.5 text-xs text-brand-navy/60">
-              Describe a strategy in plain English and get a built, feasibility-checked strategy back — every rule stays visible and editable.
+              Describe a strategy, a backtest or a paper session in plain English — {agentName} prepares it, checks it, and you just review and confirm.
             </p>
           </div>
         </div>
-        <Link href="/#ai-assistant" className="shrink-0 self-start rounded-full border border-brand-primary/25 px-4 py-1.5 text-xs font-semibold text-brand-primary hover:bg-brand-primary/5 sm:self-auto">
-          Learn more
-        </Link>
+        <AskAgentButton className="self-start sm:self-auto" />
       </Card>
 
     </div>
