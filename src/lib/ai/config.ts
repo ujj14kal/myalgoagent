@@ -18,7 +18,7 @@ export const AI_MODELS = {
  * `myalgoagent-no-advice`, created in ap-south-1 on 2026-09-24. Set to
  * null to run without it (local experiments only — production must have it).
  */
-export const AI_GUARDRAIL: { id: string; version: string } | null = { id: "p717f2wfyw7e", version: "1" };
+export const AI_GUARDRAIL: { id: string; version: string } | null = { id: "p717f2wfyw7e", version: "2" };
 
 export const AI_LIMITS = {
   /** Longest message a user can send. */

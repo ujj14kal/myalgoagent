@@ -35,7 +35,7 @@ async function main() {
 
   for (const c of EVAL_CASES) {
     const r = await converse({ model, system, turns: [{ role: "user", text: c.prompt }] });
-    const reply = r.guardrailHit ? "[guardrail] I can't help with that — I don't give buy or sell calls." : r.text;
+    const reply = r.guardrailHit ? "[guardrail] I'm not able to help with that. I don't recommend what to buy, sell or hold." : r.text;
     const fails = check(c, reply);
     const ok = fails.length === 0;
     if (ok) pass++;

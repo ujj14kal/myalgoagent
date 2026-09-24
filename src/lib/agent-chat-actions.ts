@@ -22,7 +22,7 @@ export type AgentConversationSummary = { id: string; title: string; updatedAt: s
 type Fail = { ok: false; error: string };
 
 const BLOCKED_REPLY =
-  "I can't help with that one — I don't give buy, sell or hold calls, pick stocks, or predict prices and returns. What I can do is help you turn the idea into clear rules and backtest it, so you can see how it would have behaved on real data.";
+  "I'm not able to help with that. I don't recommend what to buy, sell or hold, select stocks, or predict prices or returns. I can, however, help you turn your idea into clear rules and backtest it, so you can see how it would have performed on historical data.";
 
 function toMessage(m: {
   id: string;
@@ -57,7 +57,7 @@ export async function listAgentConversations(): Promise<{ ok: true; conversation
     };
   } catch (err) {
     logError("agent-chat:list", err, { userId: session.user.id });
-    return { ok: false, error: "Couldn't load your conversations — please try again." };
+    return { ok: false, error: "We couldn't load your conversations. Please try again." };
   }
 }
 
@@ -80,7 +80,7 @@ export async function getAgentConversation(
     return { ok: true, conversationId: convo.id, messages: convo.messages.map(toMessage) };
   } catch (err) {
     logError("agent-chat:get", err, { userId: session.user.id });
-    return { ok: false, error: "Couldn't load this conversation — please try again." };
+    return { ok: false, error: "We couldn't load this conversation. Please try again." };
   }
 }
 
@@ -93,15 +93,15 @@ export async function sendAgentMessage(input: {
   const userId = session.user.id;
 
   const text = typeof input?.text === "string" ? input.text.trim() : "";
-  if (!text) return { ok: false, error: "Type a message first." };
+  if (!text) return { ok: false, error: "Please enter a message." };
   if (text.length > AI_LIMITS.maxUserChars) {
-    return { ok: false, error: `That's a bit long — keep it under ${AI_LIMITS.maxUserChars} characters.` };
+    return { ok: false, error: `Your message is too long. Please keep it under ${AI_LIMITS.maxUserChars.toLocaleString("en-IN")} characters.` };
   }
 
   const perMinute = await checkRateLimit(`agent-chat:${userId}`, AI_LIMITS.perMinute, 60_000);
   if (perMinute) return { ok: false, error: perMinute };
   const perDay = await checkRateLimit(`agent-chat-day:${userId}`, AI_LIMITS.perDay, 24 * 60 * 60_000);
-  if (perDay) return { ok: false, error: "You've reached today's message limit — it resets within 24 hours." };
+  if (perDay) return { ok: false, error: "You have reached today's message limit. It resets within 24 hours." };
 
   try {
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { agentName: true } });
@@ -154,7 +154,7 @@ export async function sendAgentMessage(input: {
         ? prisma.agentConversation.delete({ where: { id: conversationId } })
         : prisma.agentMessage.delete({ where: { id: userMessage.id } })
       ).catch((cleanupErr) => logError("agent-chat:cleanup", cleanupErr, { userId, conversationId }));
-      return { ok: false, error: `${agentName} couldn't answer just now — please try again in a moment.` };
+      return { ok: false, error: `${agentName} is unavailable at the moment. Please try again shortly.` };
     }
 
     const content = reply.guardrailHit || !reply.text ? BLOCKED_REPLY : reply.text;
@@ -175,6 +175,6 @@ export async function sendAgentMessage(input: {
     return { ok: true, conversationId, userMessage: toMessage(userMessage), reply: toMessage(saved) };
   } catch (err) {
     logError("agent-chat:send", err, { userId });
-    return { ok: false, error: "Something went wrong — please refresh the page and try again." };
+    return { ok: false, error: "Something went wrong. Please refresh the page and try again." };
   }
 }

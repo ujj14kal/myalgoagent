@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowRight, ArrowUp, Check, ClipboardList, Copy, History, Plus, X } from "lucide-react";
+import { Activity, ArrowRight, ArrowUp, Check, ClipboardList, Copy, FlaskConical, History, Layers, Plus, TrendingDown, X } from "lucide-react";
 import BodyPortal from "@/components/ui/body-portal";
 import AgentAvatar from "@/components/ui/agent-avatar";
+import Agent2D from "@/components/robot/agent-2d";
 import type { AgentPose } from "@/components/robot/agent-2d";
 import {
   getAgentConversation,
@@ -17,10 +18,10 @@ import {
 import { parseReplyBlocks, parseReplyLinks } from "@/lib/ai/links";
 
 const STARTERS = [
-  "How do I build my first strategy?",
-  "Explain RSI in simple terms",
-  "What does max drawdown mean?",
-  "How is paper trading different from a backtest?",
+  { text: "How do I build my first strategy?", icon: <Layers size={15} /> },
+  { text: "Explain RSI in simple terms", icon: <Activity size={15} /> },
+  { text: "What does max drawdown mean?", icon: <TrendingDown size={15} /> },
+  { text: "How is paper trading different from a backtest?", icon: <FlaskConical size={15} /> },
 ];
 
 const MAX_CHARS = 2000;
@@ -86,6 +87,30 @@ function ReplyBody({ content, onNavigate }: { content: string; onNavigate: () =>
   );
 }
 
+function HeaderButton({
+  label,
+  active = false,
+  onClick,
+  children,
+}: {
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      whileTap={{ scale: 0.9 }}
+      className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-white/10 hover:text-white ${active ? "bg-white/15 text-white" : "text-white/65"}`}
+    >
+      {children}
+    </motion.button>
+  );
+}
+
 /** A drafted strategy the user reviews before building it themselves. */
 function StrategyDraftCard({ fields, onNavigate }: { fields: { label: string; value: string }[]; onNavigate: () => void }) {
   const [copied, setCopied] = useState(false);
@@ -100,7 +125,12 @@ function StrategyDraftCard({ fields, onNavigate }: { fields: { label: string; va
     }
   };
   return (
-    <div className="overflow-hidden rounded-xl bg-brand-bg ring-1 ring-brand-primary/15">
+    <motion.div
+      initial={{ opacity: 0, y: 8, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.3, delay: 0.1 }}
+      className="overflow-hidden rounded-xl bg-brand-bg ring-1 ring-brand-primary/15"
+    >
       <div className="flex items-center gap-2 border-b border-brand-primary/10 bg-brand-primary/[0.05] px-3 py-2">
         <ClipboardList size={14} className="text-brand-primary" />
         <span className="text-xs font-bold uppercase tracking-wider text-brand-primary">Strategy draft</span>
@@ -122,7 +152,7 @@ function StrategyDraftCard({ fields, onNavigate }: { fields: { label: string; va
           {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy rules"}
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -258,7 +288,7 @@ export default function AgentChatPanel({
       } catch {
         setMessages((m) => m.filter((x) => x.id !== optimistic.id));
         setDraft(trimmed);
-        setError("Couldn't reach the server — please refresh the page and try again.");
+        setError("We couldn't reach the server. Please refresh the page and try again.");
       }
     });
   };
@@ -308,100 +338,195 @@ export default function AgentChatPanel({
               transition={{ type: "spring", stiffness: 380, damping: 40 }}
             >
               {/* header */}
-              <div className="app-sidebar-bg flex shrink-0 items-center gap-3 px-4 py-3.5 text-white sm:rounded-tl-3xl">
-                <AgentAvatar pose={pose} size={44} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-base font-bold text-white">{agentName}</p>
-                  <p className="flex items-center gap-1.5 text-[11px] text-white/60">
-                    <span className={`h-1.5 w-1.5 rounded-full ${isPending ? "animate-pulse bg-brand-gold" : "bg-brand-buy"}`} />
-                    {isPending ? "Thinking…" : "Explains and guides — never gives trade advice"}
+              <div className="app-sidebar-bg relative flex shrink-0 items-center gap-3 overflow-hidden px-4 py-3.5 text-white sm:rounded-tl-3xl">
+                <span aria-hidden className="pointer-events-none absolute -right-10 -top-16 h-40 w-40 rounded-full bg-brand-primary-light/30 blur-2xl" />
+                <motion.span
+                  className="relative"
+                  animate={isPending ? { y: [0, -2, 0] } : { y: 0 }}
+                  transition={isPending ? { duration: 1.2, repeat: Infinity, ease: "easeInOut" } : { duration: 0.2 }}
+                >
+                  <AgentAvatar pose={pose} size={44} />
+                </motion.span>
+                <div className="relative min-w-0 flex-1">
+                  <p className="truncate text-base font-bold leading-tight text-white">{agentName}</p>
+                  <p className="mt-0.5 flex items-center gap-1.5 text-[11.5px] text-white/65">
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${isPending ? "animate-pulse bg-brand-gold" : "bg-brand-buy"}`} />
+                    <AnimatePresence mode="wait" initial={false}>
+                      <motion.span
+                        key={isPending ? "thinking" : "ready"}
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: 0.18 }}
+                        className="truncate"
+                      >
+                        {isPending ? "Thinking…" : "Platform guide · Not investment advice"}
+                      </motion.span>
+                    </AnimatePresence>
                   </p>
                 </div>
-                <button type="button" onClick={view === "history" ? () => setView("chat") : showHistory} aria-label={view === "history" ? "Back to chat" : "Past conversations"} className="flex h-8 w-8 items-center justify-center rounded-lg text-white/60 hover:bg-white/10 hover:text-white">
-                  <History size={17} />
-                </button>
-                <button type="button" onClick={newChat} aria-label="New conversation" className="flex h-8 w-8 items-center justify-center rounded-lg text-white/60 hover:bg-white/10 hover:text-white">
-                  <Plus size={18} />
-                </button>
-                <button type="button" onClick={onClose} aria-label="Close chat" className="flex h-8 w-8 items-center justify-center rounded-lg text-white/60 hover:bg-white/10 hover:text-white">
-                  <X size={18} />
-                </button>
+                <div className="relative flex items-center gap-0.5">
+                  <HeaderButton
+                    label={view === "history" ? "Back to chat" : "Past conversations"}
+                    active={view === "history"}
+                    onClick={view === "history" ? () => setView("chat") : showHistory}
+                  >
+                    <History size={17} />
+                  </HeaderButton>
+                  <HeaderButton label="New conversation" onClick={newChat}>
+                    <Plus size={18} />
+                  </HeaderButton>
+                  <HeaderButton label="Close chat" onClick={onClose}>
+                    <X size={18} />
+                  </HeaderButton>
+                </div>
               </div>
 
               {/* body */}
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5" aria-live="polite">
-                {view === "history" ? (
-                  <div>
-                    <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-brand-navy/40">Past conversations</p>
-                    {history.length === 0 ? (
-                      <p className="text-sm text-brand-navy/55">No conversations yet.</p>
-                    ) : (
-                      <ul className="space-y-1.5">
-                        {history.map((c) => (
-                          <li key={c.id}>
-                            <button type="button" onClick={() => openConversation(c.id)} className={`w-full rounded-xl px-3 py-2.5 text-left text-sm transition-colors hover:bg-white ${c.id === conversationId ? "bg-white ring-1 ring-brand-primary/20" : ""}`}>
-                              <span className="block truncate font-medium text-brand-navy">{c.title}</span>
-                              <span className="text-[11px] text-brand-navy/45">{new Date(c.updatedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                ) : messages.length === 0 && loaded ? (
-                  <div className="flex flex-col items-center pt-6 text-center">
-                    <p className="text-lg font-bold text-brand-navy">Hi, I&rsquo;m {agentName}</p>
-                    <p className="mt-1.5 max-w-xs text-sm text-brand-navy/60">
-                      Ask me how anything on the platform works, what an indicator means, or help turning an idea into rules you can backtest.
-                    </p>
-                    <div className="mt-6 flex w-full flex-col gap-2">
-                      {STARTERS.map((s) => (
-                        <button key={s} type="button" onClick={() => send(s)} className="surface-interactive surface rounded-xl px-4 py-3 text-left text-sm font-medium text-brand-navy">
-                          {s}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <ul className="space-y-4">
-                    {messages.map((m) =>
-                      m.role === "user" ? (
-                        <li key={m.id} className="flex justify-end">
-                          <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-brand-primary px-4 py-2.5 text-sm leading-relaxed text-white">{m.content}</div>
-                        </li>
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 [scrollbar-width:thin]" aria-live="polite">
+                <AnimatePresence mode="wait" initial={false}>
+                  {view === "history" ? (
+                    <motion.div key="history" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }} transition={{ duration: 0.2 }}>
+                      <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-brand-navy/45">Past conversations</p>
+                      {history.length === 0 ? (
+                        <p className="rounded-xl bg-white px-4 py-6 text-center text-sm text-brand-navy/55 ring-1 ring-black/5">No conversations yet.</p>
                       ) : (
-                        <li key={m.id} className="flex items-start gap-2">
-                          <AgentAvatar pose={m.guardrailHit ? "alert" : "idle"} size={28} className="mt-0.5" />
-                          <div className={`max-w-[88%] rounded-2xl rounded-tl-md px-4 py-2.5 text-sm leading-relaxed text-brand-navy/80 ${m.guardrailHit ? "bg-brand-gold/10 ring-1 ring-brand-gold/30" : "bg-white ring-1 ring-black/5"}`}>
-                            <AssistantReply content={m.content} onNavigate={onClose} />
-                          </div>
-                        </li>
-                      )
-                    )}
-                    {isPending && (
-                      <li className="flex items-center gap-2" aria-label={`${agentName} is typing`}>
-                        <AgentAvatar pose="thinking" size={28} />
-                        <span className="flex gap-1 rounded-2xl bg-white px-4 py-3 ring-1 ring-black/5">
-                          {[0, 1, 2].map((i) => (
-                            <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-brand-primary/50" style={{ animationDelay: `${i * 0.15}s` }} />
+                        <ul className="space-y-1.5">
+                          {history.map((c, i) => (
+                            <motion.li key={c.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 8) * 0.03 }}>
+                              <button
+                                type="button"
+                                onClick={() => openConversation(c.id)}
+                                className={`w-full rounded-xl px-3.5 py-2.5 text-left text-sm transition-all hover:bg-white hover:shadow-sm ${c.id === conversationId ? "bg-white ring-1 ring-brand-primary/25" : ""}`}
+                              >
+                                <span className="block truncate font-medium text-brand-navy">{c.title}</span>
+                                <span className="text-[11px] text-brand-navy/45">
+                                  {new Date(c.updatedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+                                </span>
+                              </button>
+                            </motion.li>
                           ))}
-                        </span>
-                      </li>
-                    )}
-                  </ul>
-                )}
+                        </ul>
+                      )}
+                    </motion.div>
+                  ) : messages.length === 0 && loaded ? (
+                    <motion.div key="welcome" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.28 }} className="flex flex-col items-center pt-2 text-center">
+                      <div className="relative">
+                        <span aria-hidden className="absolute inset-x-2 bottom-2 top-6 rounded-full bg-brand-primary/10 blur-2xl" />
+                        <Agent2D pose="wave" size={112} trackCursor={false} className="relative" />
+                      </div>
+                      <p className="mt-1 text-lg font-bold text-brand-navy">Hi, I&rsquo;m {agentName}</p>
+                      <p className="mt-1.5 max-w-xs text-sm leading-relaxed text-brand-navy/60">
+                        Ask me how any part of the platform works, what an indicator means, or how to turn an idea into rules you can backtest.
+                      </p>
+                      <p className="mb-2.5 mt-6 self-start text-[11px] font-semibold uppercase tracking-wider text-brand-navy/40">Try asking</p>
+                      <div className="grid w-full gap-2">
+                        {STARTERS.map((st, i) => (
+                          <motion.button
+                            key={st.text}
+                            type="button"
+                            onClick={() => send(st.text)}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.12 + i * 0.06, duration: 0.25 }}
+                            whileHover={{ y: -2 }}
+                            whileTap={{ scale: 0.98 }}
+                            className="group flex items-center gap-3 rounded-xl bg-white px-3.5 py-3 text-left text-sm font-medium text-brand-navy shadow-[0_1px_2px_rgba(14,27,45,0.04)] ring-1 ring-black/[0.06] transition-shadow hover:shadow-[0_8px_20px_-10px_rgba(71,24,152,0.35)] hover:ring-brand-primary/20"
+                          >
+                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-primary/[0.07] text-brand-primary">{st.icon}</span>
+                            <span className="flex-1">{st.text}</span>
+                            <ArrowRight size={14} className="text-brand-navy/25 transition-transform group-hover:translate-x-0.5 group-hover:text-brand-primary" />
+                          </motion.button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <motion.ul key="chat" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="space-y-4">
+                      <AnimatePresence initial={false}>
+                        {messages.map((m) =>
+                          m.role === "user" ? (
+                            <motion.li
+                              key={m.id}
+                              layout="position"
+                              initial={{ opacity: 0, y: 10, scale: 0.97 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                              className="flex justify-end"
+                            >
+                              <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-gradient-to-br from-brand-primary to-brand-primary-light px-4 py-2.5 text-sm leading-relaxed text-white shadow-[0_6px_16px_-8px_rgba(71,24,152,0.6)]">
+                                {m.content}
+                              </div>
+                            </motion.li>
+                          ) : (
+                            <motion.li
+                              key={m.id}
+                              layout="position"
+                              initial={{ opacity: 0, y: 12 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                              className="flex items-start gap-2.5"
+                            >
+                              <AgentAvatar pose={m.guardrailHit ? "alert" : "idle"} size={30} className="mt-0.5" />
+                              <div
+                                className={`max-w-[86%] rounded-2xl rounded-tl-md px-4 py-3 text-sm leading-relaxed text-brand-navy/85 shadow-[0_1px_2px_rgba(14,27,45,0.05)] ${
+                                  m.guardrailHit ? "bg-brand-gold/10 ring-1 ring-brand-gold/30" : "bg-white ring-1 ring-black/[0.06]"
+                                }`}
+                              >
+                                <AssistantReply content={m.content} onNavigate={onClose} />
+                              </div>
+                            </motion.li>
+                          )
+                        )}
+                        {isPending && (
+                          <motion.li
+                            key="typing"
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, transition: { duration: 0.1 } }}
+                            className="flex items-center gap-2.5"
+                            aria-label={`${agentName} is typing`}
+                          >
+                            <AgentAvatar pose="thinking" size={30} />
+                            <span className="flex items-center gap-1 rounded-2xl rounded-tl-md bg-white px-4 py-3.5 ring-1 ring-black/[0.06]">
+                              {[0, 1, 2].map((i) => (
+                                <motion.span
+                                  key={i}
+                                  className="h-1.5 w-1.5 rounded-full bg-brand-primary/60"
+                                  animate={{ y: [0, -4, 0], opacity: [0.4, 1, 0.4] }}
+                                  transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15, ease: "easeInOut" }}
+                                />
+                              ))}
+                            </span>
+                          </motion.li>
+                        )}
+                      </AnimatePresence>
+                    </motion.ul>
+                  )}
+                </AnimatePresence>
                 <div ref={endRef} />
               </div>
 
               {/* composer */}
-              <div className="shrink-0 border-t border-black/5 bg-white px-4 pb-4 pt-3">
-                {error && <p className="mb-2 text-xs font-medium text-brand-sell">{error}</p>}
+              <div className="shrink-0 border-t border-black/5 bg-white/90 px-4 pb-4 pt-3 backdrop-blur">
+                <AnimatePresence>
+                  {error && (
+                    <motion.p
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="mb-2 overflow-hidden rounded-lg bg-brand-sell/[0.06] px-3 py-2 text-xs font-medium text-brand-sell"
+                      role="alert"
+                    >
+                      {error}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
                     send(draft);
                   }}
-                  className="flex items-end gap-2 rounded-2xl border border-brand-navy/10 bg-brand-bg p-1.5 focus-within:border-brand-primary/50 focus-within:ring-2 focus-within:ring-brand-primary/10"
+                  className="flex items-end gap-2 rounded-2xl border border-brand-navy/10 bg-brand-bg p-1.5 transition-shadow focus-within:border-brand-primary/50 focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgba(71,24,152,0.08)]"
                 >
                   <textarea
                     ref={inputRef}
@@ -414,16 +539,24 @@ export default function AgentChatPanel({
                       }
                     }}
                     rows={1}
-                    placeholder={`Ask ${agentName} anything…`}
+                    placeholder={`Message ${agentName}…`}
                     aria-label={`Message ${agentName}`}
-                    className="max-h-32 min-h-[40px] flex-1 resize-none bg-transparent px-2.5 py-2 text-sm text-brand-navy outline-none placeholder:text-brand-navy/35 [field-sizing:content]"
+                    className="max-h-32 min-h-[40px] flex-1 resize-none bg-transparent px-2.5 py-2 text-sm text-brand-navy outline-none placeholder:text-brand-navy/40 [field-sizing:content]"
                   />
-                  <button type="submit" disabled={!draft.trim() || isPending} aria-label="Send" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary text-white transition-colors hover:bg-brand-primary-light disabled:opacity-40">
+                  <motion.button
+                    type="submit"
+                    disabled={!draft.trim() || isPending}
+                    aria-label="Send"
+                    whileTap={{ scale: 0.88 }}
+                    animate={{ scale: draft.trim() && !isPending ? 1 : 0.92 }}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary text-white shadow-[0_4px_12px_-4px_rgba(71,24,152,0.6)] transition-colors hover:bg-brand-primary-light disabled:bg-brand-navy/20 disabled:shadow-none"
+                  >
                     <ArrowUp size={17} />
-                  </button>
+                  </motion.button>
                 </form>
-                <p className="mt-2 text-center text-[10.5px] leading-snug text-brand-navy/40">
-                  AI-generated — can be wrong. Never investment advice; past results don&rsquo;t guarantee future returns.
+                <p className="mt-2 text-center text-[10.5px] leading-snug text-brand-navy/55">
+                  Responses are AI-generated and may contain errors. They are not investment advice, and past performance does not
+                  guarantee future results.
                 </p>
               </div>
             </motion.aside>
