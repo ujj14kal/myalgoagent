@@ -99,10 +99,13 @@ export default function TutorialTour({
   useEffect(() => {
     if (!open || !step) return;
     const el = findVisible(step.target);
-    // Tall targets (the sidebar) are already on screen; scrolling them into
-    // view would only scroll the sidebar's own nav list out of place.
-    if (el && el.getBoundingClientRect().height < window.innerHeight * 0.6) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    // Only scroll when the target is actually off screen. Targets inside the
+    // pinned sidebar (or a floating button) are always visible, and asking the
+    // browser to "center" them scrolls the whole page out of place instead.
+    if (el) {
+      const r = el.getBoundingClientRect();
+      const offScreen = r.top < 0 || r.bottom > window.innerHeight;
+      if (offScreen && r.height < window.innerHeight * 0.6) el.scrollIntoView({ behavior: "smooth", block: "center" });
     }
     const update = () => setRect(measure(step.target));
     // Re-measure after the scroll settles, and again when the page changes
