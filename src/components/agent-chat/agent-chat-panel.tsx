@@ -360,7 +360,7 @@ export default function AgentChatPanel({
                         transition={{ duration: 0.18 }}
                         className="truncate"
                       >
-                        {isPending ? "Thinking…" : "Platform guide · Not investment advice"}
+                        {isPending ? "Thinking…" : "Your guide to MyAlgoAgent"}
                       </motion.span>
                     </AnimatePresence>
                   </p>
