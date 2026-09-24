@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
+import BodyPortal from "@/components/ui/body-portal";
 import { ArrowRight, Menu, X } from "lucide-react";
 
 /** The marketing header's navigation on phones (the desktop nav is hidden below md). */
@@ -35,6 +36,7 @@ export default function SiteMobileMenu({ links }: { links: { href: string; label
       >
         {open ? <X size={20} /> : <Menu size={20} />}
       </button>
+      <BodyPortal>
       <AnimatePresence>
         {open && (
           <motion.div
@@ -70,6 +72,7 @@ export default function SiteMobileMenu({ links }: { links: { href: string; label
           </motion.div>
         )}
       </AnimatePresence>
+      </BodyPortal>
     </div>
   );
 }

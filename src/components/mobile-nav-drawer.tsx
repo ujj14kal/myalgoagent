@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
+import BodyPortal from "@/components/ui/body-portal";
 import { Menu, X } from "lucide-react";
 import AppNavList from "@/components/app-nav-list";
 import AgentStatusCard from "@/components/agent-status-card";
@@ -43,6 +44,7 @@ export default function MobileNavDrawer({ agentName, liveSessions }: { agentName
         <Menu size={20} />
       </button>
 
+      <BodyPortal>
       <AnimatePresence>
         {open && (
           <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Navigation">
@@ -87,6 +89,7 @@ export default function MobileNavDrawer({ agentName, liveSessions }: { agentName
           </div>
         )}
       </AnimatePresence>
+      </BodyPortal>
     </div>
   );
 }
