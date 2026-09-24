@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import BodyPortal from "@/components/ui/body-portal";
 import Agent2D from "@/components/robot/agent-2d";
@@ -25,6 +25,22 @@ export function useAgentChat(): AgentChatContextValue {
   const ctx = useContext(AgentChatContext);
   if (!ctx) throw new Error("useAgentChat must be used within AgentChatProvider");
   return ctx;
+}
+
+/** True for ~1.6s each time the agent lands in its home button (end of the tour). */
+export function useHomeCelebration(): boolean {
+  const { homeSignal } = useAgentChat();
+  const [celebrating, setCelebrating] = useState(false);
+  useEffect(() => {
+    if (homeSignal === 0) return;
+    const start = setTimeout(() => setCelebrating(true), 0);
+    const stop = setTimeout(() => setCelebrating(false), 1600);
+    return () => {
+      clearTimeout(start);
+      clearTimeout(stop);
+    };
+  }, [homeSignal]);
+  return celebrating;
 }
 
 /** The visible chat button (sidebar card on desktop, floating button on phones). */

@@ -63,6 +63,7 @@ const STEPS: TourStep[] = [
     id: "home",
     target: '[data-tour="agent-home"]',
     pose: "beam",
+    placement: "side",
     title: "If you ever need me, I live right here",
     body: "Ask me anything — how a feature works, what an indicator means, or how to turn an idea into rules you can backtest. I explain; you decide. I never recommend what to buy or sell. You can replay this tour at any time from Agent Settings.",
   },

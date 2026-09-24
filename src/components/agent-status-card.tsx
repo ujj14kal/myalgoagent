@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Settings2 } from "lucide-react";
 import AgentAvatar from "@/components/ui/agent-avatar";
 import AgentChatButton from "@/components/agent-chat/agent-chat-button";
+import { useHomeCelebration } from "@/components/agent-chat/agent-chat-provider";
 
 /**
  * The agent's home in the sidebar: who it is, what it's doing right now, and
@@ -18,12 +19,13 @@ export default function AgentStatusCard({
   liveSessions: number;
   onAsk?: () => void;
 }) {
+  const justArrived = useHomeCelebration();
   const status =
     liveSessions > 0 ? `Watching ${liveSessions} live session${liveSessions === 1 ? "" : "s"}` : "On standby — nothing running";
   return (
     <div className="rounded-2xl bg-white/[0.06] p-2.5 ring-1 ring-white/10">
       <div className="flex items-center gap-3">
-        <AgentAvatar pose={liveSessions > 0 ? "idle" : "sleep"} size={38} />
+        <AgentAvatar pose={justArrived ? "happy" : liveSessions > 0 ? "idle" : "sleep"} size={38} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-semibold text-white">{agentName}</span>
           <span className="flex items-center gap-1.5 text-[11px] text-white/55">

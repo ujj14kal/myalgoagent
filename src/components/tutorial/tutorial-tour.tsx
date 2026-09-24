@@ -11,6 +11,8 @@ export type TourStep = {
   id: string;
   target: string | null;
   pose?: AgentPose;
+  /** "side": sit beside the target (so a pointing agent points straight at it) when there's room. */
+  placement?: "side";
   title: string;
   body: string;
 };
@@ -48,7 +50,7 @@ function measure(selector: string | null): Rect | null {
 }
 
 /** Put the card beside the highlighted element, never on top of it. */
-function place(rect: Rect, bw: number, bh: number) {
+function place(rect: Rect, bw: number, bh: number, prefer?: "side") {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const clampX = (x: number) => Math.min(Math.max(x, EDGE), vw - bw - EDGE);
@@ -56,6 +58,11 @@ function place(rect: Rect, bw: number, bh: number) {
   const right = vw - (rect.left + rect.width);
   const below = vh - (rect.top + rect.height);
 
+  if (prefer === "side") {
+    const top = clampY(rect.top + rect.height / 2 - bh / 2);
+    if (right > bw + GAP + EDGE) return { top, left: rect.left + rect.width + GAP };
+    if (rect.left > bw + GAP + EDGE) return { top, left: rect.left - bw - GAP };
+  }
   // Tall targets (the sidebar) read best with the card alongside.
   if (rect.height > vh * 0.45 && right > bw + GAP + EDGE) {
     return { top: clampY(rect.top + 24), left: rect.left + rect.width + GAP };
@@ -135,8 +142,8 @@ export default function TutorialTour({
       return;
     }
     const b = cardRef.current.getBoundingClientRect();
-    setPos(place(rect, b.width, b.height));
-  }, [rect, stepIndex]);
+    setPos(place(rect, b.width, b.height, step?.placement));
+  }, [rect, stepIndex, step?.placement]);
 
   useEffect(() => {
     if (!open) return;
