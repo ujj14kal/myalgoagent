@@ -109,6 +109,7 @@ export async function sendAgentMessage(input: {
 
     // Ownership check: a conversation id from the client is only used if it's this user's.
     let conversationId: string | null = null;
+    let createdNow = false;
     if (input.conversationId) {
       const owned = await prisma.agentConversation.findFirst({
         where: { id: input.conversationId, userId },
@@ -122,6 +123,7 @@ export async function sendAgentMessage(input: {
         select: { id: true },
       });
       conversationId = created.id;
+      createdNow = true;
     }
 
     const history = await prisma.agentMessage.findMany({
@@ -147,6 +149,11 @@ export async function sendAgentMessage(input: {
       });
     } catch (err) {
       logError("agent-chat:bedrock", err, { userId, conversationId });
+      // Don't leave an unanswered message behind — the user retries from the composer.
+      await (createdNow
+        ? prisma.agentConversation.delete({ where: { id: conversationId } })
+        : prisma.agentMessage.delete({ where: { id: userMessage.id } })
+      ).catch((cleanupErr) => logError("agent-chat:cleanup", cleanupErr, { userId, conversationId }));
       return { ok: false, error: `${agentName} couldn't answer just now — please try again in a moment.` };
     }
 

@@ -311,7 +311,7 @@ export default function AgentChatPanel({
               <div className="app-sidebar-bg flex shrink-0 items-center gap-3 px-4 py-3.5 text-white sm:rounded-tl-3xl">
                 <AgentAvatar pose={pose} size={44} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-base font-bold">{agentName}</p>
+                  <p className="truncate text-base font-bold text-white">{agentName}</p>
                   <p className="flex items-center gap-1.5 text-[11px] text-white/60">
                     <span className={`h-1.5 w-1.5 rounded-full ${isPending ? "animate-pulse bg-brand-gold" : "bg-brand-buy"}`} />
                     {isPending ? "Thinking…" : "Explains and guides — never gives trade advice"}
