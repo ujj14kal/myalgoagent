@@ -32,7 +32,7 @@ export default function RiskSettingsForm({
         if (result.ok) setSaved(true);
         else setError(result.error);
       } catch {
-        setError("Couldn't reach the server — check your connection and try again.");
+        setError("Couldn't complete that — please refresh the page and try again.");
       }
     });
   }

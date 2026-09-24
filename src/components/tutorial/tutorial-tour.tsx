@@ -85,19 +85,30 @@ export default function TutorialTour({
   useEffect(() => {
     if (!open || !step) return;
     const el = step.target ? document.querySelector(step.target) : null;
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // Tall targets (the sidebar) are already on screen; scrolling them into
+    // view would only scroll the sidebar's own nav list out of place.
+    if (el && el.getBoundingClientRect().height < window.innerHeight * 0.6) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
     const update = () => setRect(measure(step.target));
     // Re-measure after the scroll settles, and again when the page changes
     // underneath (replaying the tour navigates to the dashboard first).
+    // "scrollend" (plus a late fallback timer for browsers without it)
+    // guarantees a final measure once the smooth scroll has settled, so the
+    // card is never placed against a mid-scroll position.
     const t1 = setTimeout(update, 60);
     const t2 = setTimeout(update, 450);
+    const t3 = setTimeout(update, 1000);
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
+    window.addEventListener("scrollend", update, true);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
+      clearTimeout(t3);
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
+      window.removeEventListener("scrollend", update, true);
     };
   }, [open, step, pathname]);
 

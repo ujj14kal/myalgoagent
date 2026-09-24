@@ -16,7 +16,7 @@ export default function KillSwitchToggle({ enabled }: { enabled: boolean }) {
         const result = await toggleKillSwitch(!enabled);
         if (!result.ok) setError(result.error);
       } catch {
-        setError("Couldn't reach the server — the kill switch was NOT changed. Please try again.");
+        setError("The kill switch was NOT changed — please refresh the page and try again.");
       }
     });
   }

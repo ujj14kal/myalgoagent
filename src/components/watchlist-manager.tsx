@@ -40,7 +40,7 @@ export default function WatchlistManager({
         const result = await action();
         if (!result.ok) setError(result.error);
       } catch {
-        setError("Couldn't reach the server — please try again.");
+        setError("Couldn't complete that — please refresh the page and try again.");
       }
     });
   }
