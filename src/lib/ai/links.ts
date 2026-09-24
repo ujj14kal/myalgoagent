@@ -41,7 +41,9 @@ const BLOCK = /\[\[strategy\]\]([\s\S]*?)\[\[\/strategy\]\]|\[\[go:([^|\]\s]{1,2
  * Splits a reply into prose, strategy-draft cards and action buttons. Action
  * buttons only survive for allow-listed pages; anything else is dropped.
  */
-export function parseReplyBlocks(reply: string): ReplyBlock[] {
+export function parseReplyBlocks(raw: string): ReplyBlock[] {
+  // Some models wrap the draft in a code fence; the card replaces the fence.
+  const reply = raw.replace(/```[a-z]*\s*(\[\[strategy\]\][\s\S]*?\[\[\/strategy\]\])\s*```/g, "$1");
   const blocks: ReplyBlock[] = [];
   let last = 0;
   const pushText = (t: string) => {

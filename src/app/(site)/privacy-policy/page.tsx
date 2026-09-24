@@ -77,7 +77,7 @@ const sections: LegalSection[] = [
     paragraphs: [
       "Inside the app you can chat with your agent, an AI assistant that explains the platform and trading concepts and helps you draft strategy rules. It never places trades or changes anything on its own, and it does not give investment advice.",
       "When you send it a message, the text of that message and of the recent conversation, together with general information about the platform, is sent to Amazon Bedrock (an AWS service) to generate a reply. Bedrock may process this text in AWS data centers outside India; AWS does not use it to train models and does not retain it after generating the reply. We do not include your name, email address or phone number in these requests — please don’t type personal or financial identifiers (such as PAN, Aadhaar or bank details) into the chat.",
-      "Your conversations are stored in our database in India so you can revisit them, are included in your account data export, and are deleted when your account is deleted. We keep usage details (such as message counts and processing time) to operate the service, prevent abuse and manage costs.",
+      "Your conversations are stored in our database in India so you can revisit them, are included in your account data export, and are deleted when your account is deleted. We keep usage details (such as message counts and processing time) and any ratings you give its replies, to operate and improve the service, prevent abuse and manage costs.",
     ],
   },
   {

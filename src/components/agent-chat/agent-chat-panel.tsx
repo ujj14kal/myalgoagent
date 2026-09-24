@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
-import { Activity, ArrowRight, ArrowUp, Check, ClipboardList, Copy, FlaskConical, History, Layers, Plus, TrendingDown, X } from "lucide-react";
+import { Activity, ArrowRight, ArrowUp, Check, ClipboardList, Copy, FlaskConical, History, Layers, Plus, ThumbsDown, ThumbsUp, TrendingDown, X } from "lucide-react";
 import BodyPortal from "@/components/ui/body-portal";
 import AgentAvatar from "@/components/ui/agent-avatar";
 import Agent2D from "@/components/robot/agent-2d";
@@ -11,6 +11,7 @@ import type { AgentPose } from "@/components/robot/agent-2d";
 import {
   getAgentConversation,
   listAgentConversations,
+  rateAgentMessage,
   sendAgentMessage,
   type AgentChatMessage,
   type AgentConversationSummary,
@@ -108,6 +109,54 @@ function HeaderButton({
     >
       {children}
     </motion.button>
+  );
+}
+
+/** 👍 / 👎 under a reply — saved instantly, click again to undo. */
+function RateReply({ messageId, initial }: { messageId: string; initial: 1 | -1 | null }) {
+  const [rating, setRating] = useState<1 | -1 | null>(initial);
+  const [thanks, setThanks] = useState(false);
+  const rate = async (value: 1 | -1) => {
+    const next = rating === value ? null : value;
+    const prev = rating;
+    setRating(next);
+    const res = await rateAgentMessage({ messageId, rating: next ?? 0 }).catch(() => ({ ok: false as const }));
+    if (!res.ok) return setRating(prev);
+    if (next) {
+      setThanks(true);
+      setTimeout(() => setThanks(false), 1800);
+    }
+  };
+  const btn = (value: 1 | -1, label: string, icon: React.ReactNode) => (
+    <motion.button
+      type="button"
+      onClick={() => rate(value)}
+      aria-label={label}
+      aria-pressed={rating === value}
+      whileTap={{ scale: 0.85 }}
+      className={`flex h-6 w-6 items-center justify-center rounded-md transition-colors ${
+        rating === value
+          ? value === 1
+            ? "bg-brand-buy/10 text-brand-buy"
+            : "bg-brand-sell/10 text-brand-sell"
+          : "text-brand-navy/30 hover:bg-brand-navy/5 hover:text-brand-navy/70"
+      }`}
+    >
+      {icon}
+    </motion.button>
+  );
+  return (
+    <div className="mt-1 flex items-center gap-0.5 pl-[42px]">
+      {btn(1, "Helpful", <ThumbsUp size={12} />)}
+      {btn(-1, "Not helpful", <ThumbsDown size={12} />)}
+      <AnimatePresence>
+        {thanks && (
+          <motion.span initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} className="ml-1.5 text-[11px] text-brand-navy/45">
+            Thanks for the feedback
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -270,6 +319,7 @@ export default function AgentChatPanel({
       role: "user",
       content: trimmed,
       guardrailHit: false,
+      rating: null,
       createdAt: "",
     };
     setMessages((m) => [...m, optimistic]);
@@ -464,8 +514,8 @@ export default function AgentChatPanel({
                               initial={{ opacity: 0, y: 12 }}
                               animate={{ opacity: 1, y: 0 }}
                               transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                              className="flex items-start gap-2.5"
                             >
+                              <div className="flex items-start gap-2.5">
                               <AgentAvatar pose={m.guardrailHit ? "alert" : "idle"} size={30} className="mt-0.5" />
                               <div
                                 className={`max-w-[86%] rounded-2xl rounded-tl-md px-4 py-3 text-sm leading-relaxed text-brand-navy/85 shadow-[0_1px_2px_rgba(14,27,45,0.05)] ${
@@ -474,6 +524,8 @@ export default function AgentChatPanel({
                               >
                                 <AssistantReply content={m.content} onNavigate={onClose} />
                               </div>
+                              </div>
+                              {!m.id.startsWith("pending-") && <RateReply messageId={m.id} initial={m.rating} />}
                             </motion.li>
                           )
                         )}

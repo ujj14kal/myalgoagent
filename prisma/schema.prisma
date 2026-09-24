@@ -509,6 +509,8 @@ model AgentMessage {
   // True when the Bedrock guardrail blocked or rewrote the exchange (e.g. a
   // request for buy/sell advice).
   guardrailHit   Boolean          @default(false)
+  // The user's rating of an assistant reply: 1 = helpful, -1 = not helpful.
+  rating         Int?
   createdAt      DateTime         @default(now())
 
   conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)

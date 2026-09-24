@@ -63,3 +63,10 @@ describe("parseReplyBlocks", () => {
     expect(parseReplyBlocks("[[go:/app/admin|Admin]]")).toEqual([]);
   });
 });
+
+describe("parseReplyBlocks with a fenced draft", () => {
+  it("renders a strategy card even when the model wraps it in a code fence", () => {
+    const blocks = parseReplyBlocks("Draft:\n```\n[[strategy]]\nName: X\n[[/strategy]]\n```\nDone.");
+    expect(blocks.map((b) => b.kind)).toEqual(["text", "strategy", "text"]);
+  });
+});

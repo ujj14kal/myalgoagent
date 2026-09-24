@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { logError } from "@/lib/logger";
 import { DEFAULT_AGENT_NAME } from "@/lib/agent-constants";
-import { AI_LIMITS, AI_MODELS } from "@/lib/ai/config";
+import { AI_BLOCKED_REPLY as BLOCKED_REPLY, AI_LIMITS, AI_MODELS } from "@/lib/ai/config";
 import { buildSystemPrompt } from "@/lib/ai/system-prompt";
 import { converse } from "@/lib/ai/bedrock";
 
@@ -14,6 +14,7 @@ export type AgentChatMessage = {
   role: "user" | "assistant";
   content: string;
   guardrailHit: boolean;
+  rating: 1 | -1 | null;
   createdAt: string;
 };
 
@@ -21,14 +22,14 @@ export type AgentConversationSummary = { id: string; title: string; updatedAt: s
 
 type Fail = { ok: false; error: string };
 
-const BLOCKED_REPLY =
-  "I'm not able to help with that. I don't recommend what to buy, sell or hold, select stocks, or predict prices or returns. I can, however, help you turn your idea into clear rules and backtest it, so you can see how it would have performed on historical data.";
+
 
 function toMessage(m: {
   id: string;
   role: "USER" | "ASSISTANT";
   content: string;
   guardrailHit: boolean;
+  rating: number | null;
   createdAt: Date;
 }): AgentChatMessage {
   return {
@@ -36,6 +37,7 @@ function toMessage(m: {
     role: m.role === "USER" ? "user" : "assistant",
     content: m.content,
     guardrailHit: m.guardrailHit,
+    rating: m.rating === 1 || m.rating === -1 ? m.rating : null,
     createdAt: m.createdAt.toISOString(),
   };
 }
@@ -137,16 +139,21 @@ export async function sendAgentMessage(input: {
       data: { conversationId, role: "USER", content: text },
     });
 
+    const request = {
+      system: buildSystemPrompt(agentName),
+      turns: [
+        ...history.reverse().map((m) => ({ role: m.role === "USER" ? ("user" as const) : ("assistant" as const), text: m.content })),
+        { role: "user" as const, text },
+      ],
+    };
     let reply;
     try {
-      reply = await converse({
-        model: AI_MODELS.main,
-        system: buildSystemPrompt(agentName),
-        turns: [
-          ...history.reverse().map((m) => ({ role: m.role === "USER" ? ("user" as const) : ("assistant" as const), text: m.content })),
-          { role: "user" as const, text },
-        ],
-      });
+      try {
+        reply = await converse({ model: AI_MODELS.main, ...request });
+      } catch (err) {
+        logError("agent-chat:bedrock-main", err, { userId, conversationId, model: AI_MODELS.main });
+        reply = await converse({ model: AI_MODELS.fallback, ...request });
+      }
     } catch (err) {
       logError("agent-chat:bedrock", err, { userId, conversationId });
       // Don't leave an unanswered message behind — the user retries from the composer.
@@ -176,5 +183,28 @@ export async function sendAgentMessage(input: {
   } catch (err) {
     logError("agent-chat:send", err, { userId });
     return { ok: false, error: "Something went wrong. Please refresh the page and try again." };
+  }
+}
+
+/** 👍 / 👎 on one of the agent's replies (0 clears it). Only the reply's owner can rate it. */
+export async function rateAgentMessage(input: { messageId: string; rating: 1 | -1 | 0 }): Promise<{ ok: true } | Fail> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, error: "Not signed in." };
+  const rating = input?.rating;
+  if (rating !== 1 && rating !== -1 && rating !== 0) return { ok: false, error: "Invalid rating." };
+
+  const limited = await checkRateLimit(`agent-rate:${session.user.id}`, 60, 60_000);
+  if (limited) return { ok: false, error: limited };
+
+  try {
+    const res = await prisma.agentMessage.updateMany({
+      where: { id: input.messageId, role: "ASSISTANT", conversation: { userId: session.user.id } },
+      data: { rating: rating === 0 ? null : rating },
+    });
+    if (res.count === 0) return { ok: false, error: "We couldn't find that reply." };
+    return { ok: true };
+  } catch (err) {
+    logError("agent-chat:rate", err, { userId: session.user.id });
+    return { ok: false, error: "We couldn't save your rating. Please try again." };
   }
 }

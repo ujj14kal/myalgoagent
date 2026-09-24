@@ -1,64 +1,86 @@
-// Runs the agent test set against Bedrock and prints a scorecard.
-//   AWS_PROFILE=myalgoagent-admin npx tsx scripts/agent-eval.ts [modelId]
-// Uses the same system prompt and guardrail as production. Costs a fraction
-// of a cent per full run on Nova models.
+// Runs the agent test set against one or more models and prints a scorecard.
+//   AWS_PROFILE=myalgoagent-admin npx tsx scripts/agent-eval.ts [modelId ...] [--out file.json]
+// Model ids use the same form as AI_MODELS ("mantle:openai.gpt-oss-120b" or a
+// Bedrock runtime id). Uses the production system prompt and guardrail.
+// Costs a few cents per model for a full run.
 
+import { writeFileSync } from "node:fs";
 import { converse } from "../src/lib/ai/bedrock";
-import { AI_MODELS } from "../src/lib/ai/config";
+import { AI_BLOCKED_REPLY, AI_MODELS } from "../src/lib/ai/config";
 import { buildSystemPrompt } from "../src/lib/ai/system-prompt";
 import { EVAL_CASES, type EvalCase } from "../src/lib/ai/evals/cases";
 
+// USD per 1M tokens (input, output), ap-south-1 — AWS price list, 2026-09-24.
 const PRICES: Record<string, [number, number]> = {
-  // USD per 1M tokens, ap-south-1 (AWS price list, 2026-09-24)
   "global.amazon.nova-2-lite-v1:0": [0.35, 2.95],
-  "apac.amazon.nova-lite-v1:0": [0.07, 0.28],
-  "apac.amazon.nova-micro-v1:0": [0.041, 0.164],
-  "global.anthropic.claude-haiku-4-5-20251001-v1:0": [1, 5],
+  "mantle:openai.gpt-oss-120b": [0.18, 0.71],
+  "mantle:openai.gpt-oss-20b": [0.08, 0.35],
+  "mantle:qwen.qwen3-235b-a22b-2507": [0.26, 1.04],
+  "mantle:deepseek.v3.2": [0.74, 2.22],
+  "mantle:mistral.mistral-large-3-675b-instruct": [0.59, 1.76],
+  "mantle:moonshotai.kimi-k2.5": [0.72, 3.6],
+  "mantle:zai.glm-4.7": [0.72, 2.64],
 };
+
+// Checked on every reply: leaked reasoning or raw markup the user should never see.
+const ALWAYS_BAD = [/<\/?think>/i, /^\s*(analysis|reasoning)\s*:/im, /<\|[a-z_]+\|>/i];
 
 function check(c: EvalCase, reply: string): string[] {
   const fails: string[] = [];
   for (const re of c.mustMatch ?? []) if (!re.test(reply)) fails.push(`missing ${re}`);
-  for (const re of c.mustNotMatch ?? []) if (re.test(reply)) fails.push(`contains ${re}`);
+  for (const re of [...(c.mustNotMatch ?? []), ...ALWAYS_BAD]) if (re.test(reply)) fails.push(`contains ${re}`);
   if (c.maxChars && reply.length > c.maxChars) fails.push(`too long (${reply.length} > ${c.maxChars})`);
+  if (!reply.trim()) fails.push("empty reply");
   return fails;
 }
 
-async function main() {
-  const model = process.argv[2] ?? AI_MODELS.main;
-  const system = buildSystemPrompt("Nova");
-  let pass = 0;
-  let inTok = 0;
-  let outTok = 0;
-  let latency = 0;
-  const byGroup: Record<string, [number, number]> = {};
+type Row = { group: string; prompt: string; reply: string; ok: boolean; fails: string[]; ms: number; inTok: number; outTok: number };
 
-  for (const c of EVAL_CASES) {
-    const r = await converse({ model, system, turns: [{ role: "user", text: c.prompt }] });
-    const reply = r.guardrailHit ? "[guardrail] I'm not able to help with that. I don't recommend what to buy, sell or hold." : r.text;
-    const fails = check(c, reply);
-    const ok = fails.length === 0;
-    if (ok) pass++;
-    inTok += r.inputTokens ?? 0;
-    outTok += r.outputTokens ?? 0;
-    latency += r.latencyMs;
-    const g = (byGroup[c.group] ??= [0, 0]);
-    g[1]++;
-    if (ok) g[0]++;
-    console.log(`${ok ? "PASS" : "FAIL"}  [${c.group}] ${c.prompt}`);
-    if (!ok || process.env.VERBOSE) {
-      console.log(`      ${fails.join("; ")}`);
-      console.log(`      ↳ ${reply.replace(/\n/g, " ⏎ ").slice(0, 400)}`);
+async function runModel(model: string, system: string): Promise<Row[]> {
+  const rows: Row[] = [];
+  // A few at a time — fast, but gentle on rate limits.
+  const queue = [...EVAL_CASES];
+  async function worker() {
+    for (let c = queue.shift(); c; c = queue.shift()) {
+      try {
+        const r = await converse({ model, system, turns: [{ role: "user", text: c.prompt }] });
+        const reply = r.guardrailHit ? AI_BLOCKED_REPLY : r.text;
+        const fails = check(c, reply);
+        rows.push({ group: c.group, prompt: c.prompt, reply, ok: fails.length === 0, fails, ms: r.latencyMs, inTok: r.inputTokens ?? 0, outTok: r.outputTokens ?? 0 });
+      } catch (err) {
+        rows.push({ group: c.group, prompt: c.prompt, reply: "", ok: false, fails: [`error: ${(err as Error).message.slice(0, 160)}`], ms: 0, inTok: 0, outTok: 0 });
+      }
     }
   }
+  await Promise.all([worker(), worker(), worker()]);
+  return rows;
+}
 
-  const [pin, pout] = PRICES[model] ?? [0, 0];
-  const cost = (inTok * pin + outTok * pout) / 1e6;
-  console.log(`\nModel: ${model}`);
-  console.log(`Score: ${pass}/${EVAL_CASES.length}`);
-  for (const [g, [p, t]] of Object.entries(byGroup)) console.log(`  ${g.padEnd(12)} ${p}/${t}`);
-  console.log(`Tokens: ${inTok} in / ${outTok} out — ≈ $${cost.toFixed(4)} for the run, ≈ $${(cost / EVAL_CASES.length).toFixed(5)} per message`);
-  console.log(`Avg latency: ${Math.round(latency / EVAL_CASES.length)} ms`);
+async function main() {
+  const args = process.argv.slice(2);
+  const outIdx = args.indexOf("--out");
+  const outFile = outIdx >= 0 ? args.splice(outIdx, 2)[1] : null;
+  const models = args.length ? args : [AI_MODELS.main];
+  const system = buildSystemPrompt("Mr. Agent");
+  const all: Record<string, Row[]> = {};
+
+  for (const model of models) {
+    const rows = await runModel(model, system);
+    all[model] = rows;
+    const pass = rows.filter((r) => r.ok).length;
+    const inTok = rows.reduce((s, r) => s + r.inTok, 0);
+    const outTok = rows.reduce((s, r) => s + r.outTok, 0);
+    const [pin, pout] = PRICES[model] ?? [0, 0];
+    const perMsg = (inTok * pin + outTok * pout) / 1e6 / rows.length;
+    const lat = rows.filter((r) => r.ms).map((r) => r.ms).sort((a, b) => a - b);
+    const groups = [...new Set(rows.map((r) => r.group))]
+      .map((g) => `${g} ${rows.filter((r) => r.group === g && r.ok).length}/${rows.filter((r) => r.group === g).length}`)
+      .join(" · ");
+    console.log(`\n${model}\n  score ${pass}/${rows.length}  ·  ${groups}`);
+    console.log(`  ≈ $${perMsg.toFixed(5)}/message  ·  median ${lat[Math.floor(lat.length / 2)] ?? 0} ms  ·  p90 ${lat[Math.floor(lat.length * 0.9)] ?? 0} ms  ·  avg ${Math.round(outTok / rows.length)} output tokens`);
+    for (const r of rows.filter((x) => !x.ok)) console.log(`  FAIL [${r.group}] ${r.prompt} — ${r.fails.join("; ")}\n       ↳ ${r.reply.replace(/\n/g, " ⏎ ").slice(0, 220)}`);
+  }
+  if (outFile) writeFileSync(outFile, JSON.stringify(all, null, 2));
 }
 
 main().catch((err) => {
