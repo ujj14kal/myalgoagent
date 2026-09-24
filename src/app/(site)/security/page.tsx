@@ -3,11 +3,12 @@ import PageHeader from "@/components/page-header";
 import { Breadcrumbs, Prose } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 import Reveal from "@/components/reveal";
+import ComingSoonTag from "@/components/coming-soon-tag";
 
 export const metadata: Metadata = pageMetadata({
   title: "Security",
   description:
-    "How MyAlgoAgent protects credentials, trading data and infrastructure: secret management, encryption, authorization, audit logging and safe failure states.",
+    "How MyAlgoAgent protects credentials, trading data and infrastructure: secret management, encryption, authorization, logging and safe failure states.",
   path: "/security",
 });
 
@@ -47,12 +48,17 @@ export default function SecurityPage() {
           <li>Parameterized queries / ORM protections against SQL injection</li>
         </ul>
 
-        <h2>Monitoring & audit logging</h2>
+        <h2>Monitoring & logging</h2>
         <p>
-          Authentication events, account changes, strategy changes, broker
-          connections and trading actions are recorded to an audit log.
-          Application monitoring and error logging are configured to avoid
-          leaking secrets or sensitive user information.
+          Every risk-limit breach and kill-switch block is recorded as a
+          risk event, and infrastructure activity is logged by AWS
+          CloudTrail. Application monitoring and error logging are
+          configured to avoid leaking secrets or sensitive user information.
+        </p>
+        <p>
+          <ComingSoonTag /> A full audit log of authentication events,
+          account changes, strategy changes, broker connections and trading
+          actions.
         </p>
 
         <h2>Safe failure states</h2>

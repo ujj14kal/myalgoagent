@@ -4,6 +4,7 @@ import PageHeader from "@/components/page-header";
 import { Breadcrumbs, Prose } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 import Reveal from "@/components/reveal";
+import ComingSoonTag from "@/components/coming-soon-tag";
 
 export const metadata: Metadata = pageMetadata({
   title: "How It Works",
@@ -13,14 +14,14 @@ export const metadata: Metadata = pageMetadata({
 });
 
 const steps = [
-  { title: "1. Market data", text: "The platform pulls historical and near-real-time OHLCV data for supported instruments through a data-provider abstraction, so the trading engine is not tied to one provider." },
+  { title: "1. Market data", text: "The platform pulls historical and intraday OHLCV data for supported instruments through a data-provider abstraction, so the trading engine is not tied to one provider." },
   { title: "2. Strategy creation", text: "Define entry and exit rules using the no-code strategy builder: indicators, price/volume conditions, time rules and position sizing. See the Strategy Builder section of Features." },
   { title: "3. Backtesting", text: "Run the strategy against historical data with configurable capital, fees, brokerage and slippage. Backtests are designed to avoid look-ahead bias and future-data leakage." },
   { title: "4. Validation", text: "Review trade-by-trade results, the equity curve, drawdown and performance metrics before trusting a strategy with any capital." },
-  { title: "5. Paper trading", text: "Run the validated strategy against live market data using virtual capital only, to see how it behaves in real time before risking money." },
-  { title: "6. Risk controls", text: "Set daily loss limits, position caps, exposure limits and the kill switch. These are enforced server-side, independent of the UI." },
-  { title: "7. Broker connection", text: "Connect a supported broker account. The platform tests the connection and synchronizes account state before enabling live trading." },
-  { title: "8. Live execution", text: "With explicit confirmation, the strategy can place real orders through the broker, with the same risk controls active." },
+  { title: "5. Paper trading", text: "Run the validated strategy forward on end-of-day market data using virtual capital only, to see how it behaves on new data before risking money." },
+  { title: "6. Risk controls", text: "Set a per-session loss limit, a losing-streak limit and the kill switch. These are enforced server-side, independent of the UI." },
+  { title: "7. Broker connection", text: "Connect a supported broker account. The platform tests the connection and synchronizes account state before enabling live trading.", soon: true },
+  { title: "8. Live execution", text: "With explicit confirmation, the strategy can place real orders through the broker, with the same risk controls active.", soon: true },
 ];
 
 export default function HowItWorksPage() {
@@ -37,7 +38,10 @@ export default function HowItWorksPage() {
       <Prose>
         {steps.map((s) => (
           <div key={s.title}>
-            <h2>{s.title}</h2>
+            <h2>
+              {s.title}
+              {"soon" in s && <ComingSoonTag className="ml-2.5" />}
+            </h2>
             <p>{s.text}</p>
           </div>
         ))}

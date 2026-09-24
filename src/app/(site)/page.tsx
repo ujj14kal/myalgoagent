@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { siteUrl } from "@/lib/site";
 import Reveal from "@/components/reveal";
 import Agent2D from "@/components/robot/agent-2d";
+import ComingSoonTag from "@/components/coming-soon-tag";
 
 export const metadata: Metadata = {
   description:
@@ -11,27 +12,27 @@ export const metadata: Metadata = {
 };
 
 const workflow = [
-  { step: "01", title: "Market Data", text: "Pull historical and near-real-time price data for supported instruments.", icon: "radio" as const },
+  { step: "01", title: "Market Data", text: "Pull historical and intraday price data for supported instruments.", icon: "radio" as const },
   { step: "02", title: "Strategy Builder", text: "Combine indicators, entry/exit rules and risk parameters — no code required.", icon: "braces" as const },
   { step: "03", title: "Backtesting", text: "Simulate the strategy against history with fees, slippage and realistic fills.", icon: "chart" as const },
-  { step: "04", title: "Paper Trading", text: "Run the strategy live against real market data using virtual capital only.", icon: "layers" as const },
-  { step: "05", title: "Risk Controls", text: "Set daily loss limits, position caps and a kill switch before going further.", icon: "shield" as const },
-  { step: "06", title: "Live Execution", text: "Connect a supported broker and run the strategy with real capital, with your explicit authorization.", icon: "route" as const },
+  { step: "04", title: "Paper Trading", text: "Run the strategy forward on end-of-day market data using virtual capital only.", icon: "layers" as const },
+  { step: "05", title: "Risk Controls", text: "Set a loss limit, a losing-streak limit and a kill switch before going further.", icon: "shield" as const },
+  { step: "06", title: "Live Execution", text: "Connect a supported broker and run the strategy with real capital, with your explicit authorization.", icon: "route" as const, soon: true },
 ];
 
 const capabilities = [
   { title: "No-code strategy builder", text: "Compose entry/exit conditions from indicators, price action and time rules." },
   { title: "Realistic backtesting", text: "Configurable brokerage, fees, slippage and position sizing — not just raw price math." },
-  { title: "Paper trading", text: "Validate strategies against live market data with virtual capital before risking real money." },
-  { title: "Risk management engine", text: "Daily loss limits, position caps, per-strategy exposure limits and an emergency kill switch." },
-  { title: "Portfolio & order tracking", text: "Positions, P&L, open orders and fills in one dashboard, reconciled with your broker." },
-  { title: "Alerts & audit logs", text: "Signal, fill and risk-limit alerts, plus an audit trail for every trading action." },
+  { title: "Paper trading", text: "Validate strategies on end-of-day market data with virtual capital before risking real money." },
+  { title: "Risk management engine", text: "Per-session loss limits, a losing-streak limit and an emergency kill switch, enforced on the server." },
+  { title: "Portfolio & order tracking", text: "Positions, P&L, orders and fills in one dashboard." },
+  { title: "Alerts & notifications", text: "Signal, fill and risk-limit alerts, delivered in the app as they happen." },
 ];
 
 const faqs = [
-  { q: "Can I test without risking real capital?", a: "Yes. Paper trading runs a strategy against live market data using virtual capital before any live broker execution." },
+  { q: "Can I test without risking real capital?", a: "Yes. Paper trading runs a strategy forward on end-of-day market data using virtual capital only." },
   { q: "Does a successful backtest guarantee results?", a: "No. Historical and backtested results are illustrative and cannot guarantee future performance." },
-  { q: "How is live trading authorized?", a: "You connect a supported broker and explicitly authorize execution. You can disconnect the broker or use the kill switch at any time." },
+  { q: "How is live trading authorized?", a: "Live trading is coming soon. When it launches, you’ll connect a supported broker and explicitly authorize execution. You can disconnect the broker or use the kill switch at any time." },
 ];
 
 function Icon({ name, size = 18 }: { name: "radio" | "braces" | "chart" | "layers" | "shield" | "route" | "check" | "arrow" | "gauge" | "lock" | "stop"; size?: number }) {
@@ -80,8 +81,8 @@ export default function Home() {
             </h1>
             <p className="mt-5 max-w-xl text-lg text-brand-navy/70">
               MyAlgoAgent brings strategy building, realistic backtesting,
-              paper trading and live execution into one risk-managed
-              workflow.
+              and paper trading into one risk-managed workflow — with live
+              execution coming soon.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-5">
               <Link
@@ -100,15 +101,15 @@ export default function Home() {
             </div>
             <div className="mt-7 flex flex-wrap gap-5 text-xs text-brand-navy/60">
               <span className="flex items-center gap-1.5"><Icon name="check" size={14} /> No-code workflow</span>
-              <span className="flex items-center gap-1.5"><Icon name="check" size={14} /> Broker-authorized execution</span>
-              <span className="flex items-center gap-1.5"><Icon name="check" size={14} /> Auditable controls</span>
+              <span className="flex items-center gap-1.5"><Icon name="check" size={14} /> Risk-free paper trading</span>
+              <span className="flex items-center gap-1.5"><Icon name="check" size={14} /> Server-side limits</span>
             </div>
           </div>
 
           <div className="relative [animation:scale-in_0.7s_ease_0.15s_both]">
             {/* The agent, reading the backtest it just ran — desktop only, so
                 phones keep a light, fast hero. */}
-            <div className="pointer-events-none absolute -left-24 -bottom-10 z-10 hidden lg:block">
+            <div className="pointer-events-none absolute -left-16 -bottom-10 z-10 hidden lg:block">
               <Agent2D pose="point" size={150} className="drop-shadow-[0_18px_30px_rgba(14,27,45,0.25)]" />
             </div>
             <div className="hover-lift overflow-hidden rounded-2xl border border-white/10 bg-brand-navy text-white shadow-2xl shadow-brand-navy/20">
@@ -192,7 +193,10 @@ export default function Home() {
                     <Icon name={s.icon} size={20} />
                   </span>
                 </div>
-                <h3 className="mt-4 text-lg font-semibold text-brand-navy">{s.title}</h3>
+                <h3 className="mt-4 flex flex-wrap items-center gap-2.5 text-lg font-semibold text-brand-navy">
+                  {s.title}
+                  {"soon" in s && <ComingSoonTag />}
+                </h3>
                 <p className="mt-2 text-sm text-brand-navy/65">{s.text}</p>
               </li>
             ))}
@@ -286,15 +290,15 @@ export default function Home() {
             </div>
             <div className="hover-lift overflow-hidden rounded-2xl bg-brand-navy text-white shadow-xl shadow-brand-navy/15">
               <div className="flex items-center justify-between border-b border-white/10 px-6 py-4 text-sm font-semibold">
-                <span>Live control status</span>
+                <span>Control status</span>
                 <span className="flex items-center gap-2 text-xs font-medium text-brand-buy">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-buy" /> Systems active
                 </span>
               </div>
               {[
-                { icon: "gauge" as const, label: "Daily loss limit", sub: "Stops new orders at your threshold", status: "Configured" },
-                { icon: "lock" as const, label: "Position cap", sub: "Limits concentration per strategy", status: "Active" },
-                { icon: "stop" as const, label: "Global kill switch", sub: "Halt execution across strategies", status: "Armed" },
+                { icon: "gauge" as const, label: "Max loss per session", sub: "Stops a session at your threshold", status: "Configured" },
+                { icon: "lock" as const, label: "Losing-streak limit", sub: "Stops a session after consecutive losses", status: "Active" },
+                { icon: "stop" as const, label: "Global kill switch", sub: "Blocks new positions across all sessions", status: "Armed" },
               ].map((row, i, arr) => (
                 <div key={row.label} className={`flex items-center justify-between px-6 py-5 ${i < arr.length - 1 ? "border-b border-white/10" : ""}`}>
                   <div className="flex items-center gap-3.5">

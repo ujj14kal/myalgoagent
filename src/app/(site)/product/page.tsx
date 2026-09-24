@@ -7,7 +7,7 @@ import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 export const metadata: Metadata = pageMetadata({
   title: "Product Overview — What MyAlgoAgent Does",
   description:
-    "A plain-language overview of MyAlgoAgent: an algo-trading software platform covering strategy building, backtesting, paper trading, live broker execution and risk management.",
+    "A plain-language overview of MyAlgoAgent: an algo-trading software platform covering strategy building, backtesting, paper trading and risk management, with live broker execution coming soon.",
   path: "/product",
 });
 
@@ -74,8 +74,8 @@ const sections: LegalSection[] = [
     title: "Paper trading",
     body: (
       <p className="mt-3 text-sm leading-relaxed text-brand-navy/70">
-        Paper trading runs a strategy against current market data using
-        virtual capital only. No real orders are placed and no real money
+        Paper trading runs a strategy forward on end-of-day market data
+        using virtual capital only. No real orders are placed and no real money
         is at risk. It exists to validate a strategy&rsquo;s live behavior
         before any capital is committed. See{" "}
         <Link href="/paper-trading" className="text-brand-primary underline">Paper Trading</Link>.
@@ -85,6 +85,7 @@ const sections: LegalSection[] = [
   {
     id: "live-trading",
     title: "Live trading & broker integration",
+    comingSoon: true,
     body: (
       <p className="mt-3 text-sm leading-relaxed text-brand-navy/70">
         Live trading requires the user to explicitly connect a supported
@@ -102,10 +103,10 @@ const sections: LegalSection[] = [
     title: "Risk management",
     body: (
       <p className="mt-3 text-sm leading-relaxed text-brand-navy/70">
-        Configurable daily loss limits, maximum position size, maximum
-        exposure and a global kill switch are enforced independently of
-        the user interface, so a strategy can be stopped even if a user
-        is offline or unresponsive. See{" "}
+        A per-session loss limit, a consecutive-loss limit and a global
+        kill switch are enforced on the server, independently of the user
+        interface, so a session can be stopped even if you are offline.
+        Daily loss, position-size and exposure limits are coming soon. See{" "}
         <Link href="/risk-management" className="text-brand-primary underline">Risk Management</Link>.
       </p>
     ),
@@ -114,12 +115,14 @@ const sections: LegalSection[] = [
     id: "monitoring",
     title: "Alerts, portfolio monitoring, order tracking and reporting",
     paragraphs: [
-      "Users receive alerts for signals, fills, rejected orders and risk-limit breaches, and can review positions, P&L, open orders and a full trade history, with exports for further analysis.",
+      "Users receive alerts for signals, fills and risk-limit breaches, and can review positions, P&L, orders and a full trade history.",
     ],
+    soon: ["Alerts for rejected broker orders", "CSV exports for further analysis"],
   },
   {
     id: "ai",
     title: "AI functionality",
+    comingSoon: true,
     paragraphs: [
       "Where implemented, AI features assist with translating a natural-language strategy description into explicit rules, summarizing backtest results and flagging signs of possible overfitting. AI output is informational only — never a guarantee of future performance or personalized financial advice.",
     ],

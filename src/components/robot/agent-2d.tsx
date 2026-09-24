@@ -67,7 +67,9 @@ const REST_R: Pt = [182, 218];
 const HANDS: Record<AgentPose, { l: Pt[]; r: Pt[]; dur?: number }> = {
   idle: { l: [REST_L, [60, 214], REST_L], r: [REST_R, [180, 214], REST_R], dur: 3 },
   wave: { l: [REST_L], r: [[206, 118], [218, 142], [206, 118]], dur: 0.7 },
-  point: { l: [REST_L], r: [[222, 164]] },
+  // Kept inside the head-and-ears width (x 36–204) so the reach never
+  // pokes past the silhouette or the viewBox.
+  point: { l: [REST_L], r: [[186, 162]] },
   talk: { l: [REST_L], r: [[196, 180], [204, 160], [196, 180]], dur: 1.1 },
   happy: { l: [[38, 118], [30, 108], [38, 118]], r: [[202, 118], [210, 108], [202, 118]], dur: 0.7 },
   thinking: { l: [REST_L], r: [[160, 124]] },
@@ -299,7 +301,7 @@ function Props({ pose, color, reduce, uid }: { pose: AgentPose; color: string; r
       )}
       {pose === "point" && (
         <motion.g key="finger" {...pop}>
-          <rect x="226" y="159" width="16" height="9" rx="4.5" fill={VIOLET_LIGHT} />
+          <rect x="192" y="158" width="12" height="8" rx="4" fill={VIOLET_LIGHT} />
         </motion.g>
       )}
     </AnimatePresence>

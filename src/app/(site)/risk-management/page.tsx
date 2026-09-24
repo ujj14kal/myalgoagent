@@ -7,7 +7,7 @@ import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 export const metadata: Metadata = pageMetadata({
   title: "Risk Management",
   description:
-    "Server-side risk controls — daily loss limits, position caps, exposure limits and a global kill switch — that operate independently of the user interface.",
+    "Server-side risk controls — per-session loss limits, a consecutive-loss limit and a global kill switch — that operate independently of the user interface.",
   path: "/risk-management",
 });
 
@@ -16,15 +16,17 @@ const sections: LegalSection[] = [
     id: "limits",
     title: "Configurable limits",
     bullets: [
+      "Maximum loss per session, as a percentage of its starting capital",
+      "Maximum consecutive losses",
+    ],
+    soon: [
       "Maximum daily loss",
-      "Maximum total drawdown",
       "Maximum position size",
       "Maximum capital allocated to one strategy",
       "Maximum portfolio exposure",
       "Maximum number of open positions",
       "Maximum trades per day",
       "Maximum order value",
-      "Maximum consecutive losses",
       "Per-trade risk percentage",
     ],
   },
@@ -32,12 +34,13 @@ const sections: LegalSection[] = [
     id: "kill-switches",
     title: "Kill switches",
     paragraphs: [
-      "A global kill switch stops every active strategy across a user's account immediately. A strategy-level kill switch stops a single strategy without affecting others. Both are reachable from the dashboard at all times when live or paper strategies are running.",
+      "A global kill switch immediately blocks every paper session on your account from opening new positions. Any single session can also be paused or stopped on its own without affecting the others. The kill switch is always one click away on the Risk Controls page.",
     ],
   },
   {
     id: "failure-handling",
     title: "Failure handling",
+    comingSoon: true,
     bullets: [
       "Broker-disconnect safety behavior — no new orders are placed while disconnected",
       "Stale market-data detection, so a strategy doesn't act on outdated prices",
@@ -48,8 +51,9 @@ const sections: LegalSection[] = [
     id: "auditability",
     title: "Auditability",
     paragraphs: [
-      "Every risk-limit breach and every kill-switch activation is logged to an audit trail, along with the account and trading actions that triggered it, so behavior can be reviewed after the fact.",
+      "Every risk-limit breach and every trade blocked by the kill switch is recorded as a risk event and sent to your notifications, so behavior can be reviewed after the fact.",
     ],
+    soon: ["A full audit trail of the account and trading actions behind each event"],
   },
   {
     id: "disclosure",

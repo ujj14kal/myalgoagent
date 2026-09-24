@@ -1,12 +1,17 @@
 import Link from "next/link";
 import Reveal from "@/components/reveal";
 import { Breadcrumbs } from "@/components/section";
+import ComingSoonTag, { ComingSoonList } from "@/components/coming-soon-tag";
 
 export interface LegalSection {
   id: string;
   title: string;
   paragraphs?: string[];
   bullets?: string[];
+  /** Planned items, listed after the built ones under a "Coming soon" tag. */
+  soon?: string[];
+  /** The whole section describes something not built yet. */
+  comingSoon?: boolean;
   /**
    * Full custom content for a section — use when a paragraph needs an
    * inline <Link>, a <Callout>, or anything else plain strings can't
@@ -62,7 +67,10 @@ export default function LegalPage({
               >
                 <span className="pt-1 font-mono text-xs font-bold text-brand-gold">{String(i + 1).padStart(2, "0")}</span>
                 <div>
-                  <h2 className="text-xl font-bold text-brand-navy">{section.title}</h2>
+                  <h2 className="text-xl font-bold text-brand-navy">
+                    {section.title}
+                    {section.comingSoon && <ComingSoonTag className="ml-2.5" />}
+                  </h2>
                   {section.body ?? (
                     <>
                       {section.paragraphs?.map((p, pi) => (
@@ -82,6 +90,7 @@ export default function LegalPage({
                       )}
                     </>
                   )}
+                  {section.soon && <ComingSoonList items={section.soon} />}
                   {section.extra}
                 </div>
               </section>

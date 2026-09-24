@@ -4,26 +4,37 @@ import PageHeader from "@/components/page-header";
 import { Breadcrumbs } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 import Reveal from "@/components/reveal";
+import ComingSoonTag, { ComingSoonList } from "@/components/coming-soon-tag";
 
 export const metadata: Metadata = pageMetadata({
   title: "Features",
   description:
-    "Strategy builder, technical indicators, realistic backtesting, paper trading, live broker execution, risk controls and portfolio tracking.",
+    "Strategy builder, technical indicators, realistic backtesting, paper trading, risk controls and portfolio tracking — with live broker execution coming soon.",
   path: "/features",
 });
 
-const groups = [
+type Group = {
+  title: string;
+  icon: typeof Layers;
+  items: string[];
+  /** Planned, not built yet — shown under a "Coming soon" tag. */
+  soon?: string[];
+  comingSoon?: boolean;
+};
+
+const groups: Group[] = [
   {
     title: "Strategy Builder",
     icon: Layers,
     items: [
-      "No-code visual builder with AND/OR condition groups",
+      "No-code visual builder with AND/OR condition groups — or write the same rules as code",
       "Entry and exit conditions, long and short support where the market allows it",
       "Indicator-to-indicator and price-to-indicator comparisons, crossovers and crossunders",
       "Stop-loss, take-profit and trailing-stop rules",
-      "Position sizing by fixed quantity, fixed capital, percentage of capital or risk per trade",
-      "Cooldown periods, maximum trade limits and human-readable strategy summaries",
+      "Position sizing by fixed quantity, fixed capital or percentage of capital",
+      "Human-readable strategy summaries",
     ],
+    soon: ["Risk-per-trade position sizing", "Cooldown periods and maximum trade limits"],
   },
   {
     title: "Technical Indicators",
@@ -33,24 +44,26 @@ const groups = [
       "RSI, MACD, Bollinger Bands, ATR",
       "VWAP, ADX/DMI, Stochastic Oscillator, CCI",
       "ROC/Momentum, OBV and other volume-based indicators",
-      "Support/resistance, Donchian channels and pivot points",
+      "Donchian channels and pivot points",
     ],
+    soon: ["Automatic support and resistance levels"],
   },
   {
     title: "Backtesting & Analytics",
     icon: FlaskConical,
     items: [
-      "Configurable date range, timeframe, starting capital, brokerage, fees and slippage",
-      "Total return, CAGR, win rate, profit factor, max drawdown, Sharpe/Sortino, expectancy",
+      "Configurable date range, timeframe, starting capital, brokerage and slippage",
+      "Total return, CAGR, win rate, profit factor, max drawdown, Sharpe ratio, expectancy",
       "Trade-by-trade history with chart markers for entries and exits",
-      "Equity curve, drawdown curve and benchmark comparison",
+      "Equity curve for every run",
     ],
+    soon: ["Sortino ratio", "Drawdown curve and benchmark comparison"],
   },
   {
     title: "Paper & Live Trading",
     icon: Radio,
-    items: [
-      "Paper trading with virtual capital and simulated fills",
+    items: ["Paper trading with virtual capital and simulated fills on end-of-day data"],
+    soon: [
       "Live trading via supported broker APIs, with explicit user authorization",
       "Order lifecycle tracking: pending, submitted, filled, rejected, cancelled",
       "Position and P&L reconciliation with the connected broker",
@@ -60,9 +73,12 @@ const groups = [
     title: "Risk Management",
     icon: ShieldCheck,
     items: [
+      "Maximum loss per session and maximum consecutive losses",
+      "Global emergency kill switch, plus pause or stop for any single session",
+    ],
+    soon: [
       "Maximum daily loss, position size and portfolio exposure limits",
       "Per-strategy capital allocation and maximum trades per day",
-      "Global emergency kill switch and strategy-level kill switch",
       "Broker-disconnect and stale-data safety behavior",
     ],
   },
@@ -70,11 +86,10 @@ const groups = [
     title: "Monitoring & Reporting",
     icon: Bell,
     items: [
-      "Alerts for signals, fills, rejections and risk-limit breaches",
+      "Alerts for signals, fills, stopped sessions and risk-limit breaches",
       "Portfolio, order and position dashboards",
-      "Audit logs for authentication, strategy and trading actions",
-      "CSV export of trades and backtest results",
     ],
+    soon: ["Audit logs for authentication, strategy and trading actions", "CSV export of trades and backtest results"],
   },
   {
     title: "AI Strategy Assistant",
@@ -98,7 +113,7 @@ export default function FeaturesPage() {
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/features", label: "Features" }]} />
-      <PageHeader eyebrow="Features" title="Everything the platform is built to do" description="A structured feature set covering strategy creation, testing, execution and risk control." />
+      <PageHeader eyebrow="Features" title="What you can use today — and what’s next" description="Strategy creation, testing and risk control you can use now, with planned features clearly marked as coming soon." />
       <Reveal>
         <div className="mx-auto grid max-w-5xl gap-6 px-4 py-14 sm:grid-cols-2">
           {groups.map((g) => (
@@ -108,11 +123,7 @@ export default function FeaturesPage() {
               </span>
               <div className="mt-4 flex items-center gap-2.5">
                 <h2 className="text-lg font-semibold text-brand-navy">{g.title}</h2>
-                {g.comingSoon && (
-                  <span className="rounded-full bg-brand-gold/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#8a7437]">
-                    Coming soon
-                  </span>
-                )}
+                {g.comingSoon && <ComingSoonTag />}
               </div>
               <ul className="mt-3 space-y-2 text-sm leading-relaxed text-brand-navy/70">
                 {g.items.map((i2) => (
@@ -122,6 +133,7 @@ export default function FeaturesPage() {
                   </li>
                 ))}
               </ul>
+              {g.soon && <ComingSoonList items={g.soon} />}
             </div>
           ))}
         </div>

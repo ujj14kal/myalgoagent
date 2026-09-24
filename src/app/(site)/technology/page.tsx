@@ -40,7 +40,7 @@ const sections: LegalSection[] = [
     paragraphs: ["The production architecture, running entirely on AWS:"],
     bullets: [
       "Compute: AWS Amplify Hosting (Lambda-based), so capacity scales with load instead of running always-on idle servers.",
-      "Database: Amazon RDS for PostgreSQL for durable, transactional storage of accounts, strategies, orders and audit logs.",
+      "Database: Amazon RDS for PostgreSQL for durable, transactional storage of accounts, strategies, backtests and paper orders.",
       "Storage: Amazon S3 for user uploads and static assets.",
       "Rate limiting: Amazon DynamoDB for cross-instance request throttling.",
       "Email: Amazon SES for transactional account and security email.",
@@ -63,8 +63,8 @@ const sections: LegalSection[] = [
       <p className="mt-3 text-sm leading-relaxed text-brand-navy/70">
         HTTPS/TLS everywhere, secrets never stored in source control or
         exposed to browser code, server-side authorization checks on every
-        trading action, and audit logging for authentication and trading
-        events. See the full <Link href="/security" className="text-brand-primary underline">Security</Link> page.
+        trading action, with a full audit log of authentication and trading
+        events coming soon. See the full <Link href="/security" className="text-brand-primary underline">Security</Link> page.
       </p>
     ),
   },

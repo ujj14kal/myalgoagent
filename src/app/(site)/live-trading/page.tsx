@@ -7,14 +7,22 @@ import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 export const metadata: Metadata = pageMetadata({
   title: "Live Algo Trading & Broker Integration",
   description:
-    "Live trading through supported broker APIs, protected by explicit user confirmation, server-side risk controls and a global kill switch.",
+    "Coming soon: live trading through supported broker APIs, protected by explicit user confirmation, server-side risk controls and a global kill switch.",
   path: "/live-trading",
 });
 
 const sections: LegalSection[] = [
   {
+    id: "status",
+    title: "Availability",
+    paragraphs: [
+      "Live trading is not available yet. Today you can build strategies, backtest them and run them in paper trading with virtual capital. Everything below describes how live trading will work when it launches.",
+    ],
+  },
+  {
     id: "connection",
     title: "Broker connection",
+    comingSoon: true,
     paragraphs: [
       "A user connects a supported broker account through that broker's API. The platform tests the connection and synchronizes account, position and funds data before marking the broker as connected. API credentials are handled through secure secret management and are never exposed to browser-side code.",
     ],
@@ -22,6 +30,7 @@ const sections: LegalSection[] = [
   {
     id: "before-live",
     title: "Before a strategy can trade live",
+    comingSoon: true,
     bullets: [
       "An explicit risk acknowledgment from the user",
       "A tested, active broker connection",
@@ -32,6 +41,7 @@ const sections: LegalSection[] = [
   {
     id: "orders",
     title: "Order & state management",
+    comingSoon: true,
     bullets: [
       "Order lifecycle tracking: pending, submitted, open, filled, partially filled, rejected, cancelled, failed",
       "Client-generated order IDs mapped to broker order IDs for traceability",
@@ -43,6 +53,7 @@ const sections: LegalSection[] = [
   {
     id: "safety",
     title: "Safety behavior",
+    comingSoon: true,
     paragraphs: [
       "If a broker API, market-data feed or internal service becomes unavailable, the platform is designed to fail safe — stopping new order placement rather than guessing — and to alert the user. A global emergency kill switch can halt all live strategies immediately.",
     ],
