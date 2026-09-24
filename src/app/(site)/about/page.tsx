@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
 import { Breadcrumbs, Prose } from "@/components/section";
-import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 import Reveal from "@/components/reveal";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "About",
   description:
     "MyAlgoAgent is built by Shagoon Softech to give traders and developers a structured, risk-aware way to build and run algorithmic trading strategies.",
-  alternates: { canonical: `${siteUrl}/about` },
-};
+  path: "/about",
+});
 
 export default function AboutPage() {
   const jsonLd = breadcrumbJsonLd([

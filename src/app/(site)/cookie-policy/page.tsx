@@ -1,14 +1,15 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
 import { Breadcrumbs, Prose } from "@/components/section";
-import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 import Reveal from "@/components/reveal";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Cookie Policy",
-  description: "How MyAlgoAgent uses cookies and similar technologies.",
-  alternates: { canonical: `${siteUrl}/cookie-policy` },
-};
+  description:
+    "How MyAlgoAgent uses cookies and similar technologies.",
+  path: "/cookie-policy",
+});
 
 export default function CookiePolicyPage() {
   const jsonLd = breadcrumbJsonLd([

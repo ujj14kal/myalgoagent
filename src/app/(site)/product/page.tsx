@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import LegalPage, { type LegalSection } from "@/components/legal-page";
 import { Callout } from "@/components/section";
-import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Product Overview — What MyAlgoAgent Does",
   description:
     "A plain-language overview of MyAlgoAgent: an algo-trading software platform covering strategy building, backtesting, paper trading, live broker execution and risk management.",
-  alternates: { canonical: `${siteUrl}/product` },
-};
+  path: "/product",
+});
 
 const sections: LegalSection[] = [
   {

@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import LegalPage, { type LegalSection } from "@/components/legal-page";
 import { Callout } from "@/components/section";
-import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Live Algo Trading & Broker Integration",
   description:
     "Live trading through supported broker APIs, protected by explicit user confirmation, server-side risk controls and a global kill switch.",
-  alternates: { canonical: `${siteUrl}/live-trading` },
-};
+  path: "/live-trading",
+});
 
 const sections: LegalSection[] = [
   {

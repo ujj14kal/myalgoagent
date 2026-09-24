@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import LegalPage, { type LegalSection } from "@/components/legal-page";
-import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Privacy Policy",
   description:
     "MyAlgoAgent's Privacy Policy: what data we collect (including via Google sign-in), why we collect it, how it's stored and protected, who we share it with, your rights, and how to contact us.",
-  alternates: { canonical: `${siteUrl}/privacy-policy` },
-};
+  path: "/privacy-policy",
+});
 
 const sections: LegalSection[] = [
   {

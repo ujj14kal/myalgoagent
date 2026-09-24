@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import LegalPage, { type LegalSection } from "@/components/legal-page";
-import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Technology & AWS Infrastructure",
   description:
     "The technology stack behind MyAlgoAgent and the AWS architecture used to run it: compute, database, storage, APIs, monitoring and cost-conscious design.",
-  alternates: { canonical: `${siteUrl}/technology` },
-};
+  path: "/technology",
+});
 
 const sections: LegalSection[] = [
   {

@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import LegalPage, { type LegalSection } from "@/components/legal-page";
 import { Callout } from "@/components/section";
-import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Risk Management",
   description:
     "Server-side risk controls — daily loss limits, position caps, exposure limits and a global kill switch — that operate independently of the user interface.",
-  alternates: { canonical: `${siteUrl}/risk-management` },
-};
+  path: "/risk-management",
+});
 
 const sections: LegalSection[] = [
   {

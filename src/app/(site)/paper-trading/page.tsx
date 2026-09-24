@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
 import { Breadcrumbs, Prose } from "@/components/section";
-import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 import Reveal from "@/components/reveal";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Paper Trading",
   description:
     "Run a strategy against live market data using virtual capital only — no real orders, no real money at risk.",
-  alternates: { canonical: `${siteUrl}/paper-trading` },
-};
+  path: "/paper-trading",
+});
 
 export default function PaperTradingPage() {
   const jsonLd = breadcrumbJsonLd([

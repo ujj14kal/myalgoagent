@@ -2,13 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import LegalPage, { type LegalSection } from "@/components/legal-page";
 import { Callout } from "@/components/section";
-import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Risk Disclosure",
-  description: "Trading and algo-trading risk disclosure for MyAlgoAgent.",
-  alternates: { canonical: `${siteUrl}/risk-disclosure` },
-};
+  description:
+    "Trading and algo-trading risk disclosure for MyAlgoAgent.",
+  path: "/risk-disclosure",
+});
 
 const sections: LegalSection[] = [
   {

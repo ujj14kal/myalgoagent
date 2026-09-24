@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
 import { Breadcrumbs, Prose } from "@/components/section";
-import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 import Reveal from "@/components/reveal";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Security",
   description:
     "How MyAlgoAgent protects credentials, trading data and infrastructure: secret management, encryption, authorization, audit logging and safe failure states.",
-  alternates: { canonical: `${siteUrl}/security` },
-};
+  path: "/security",
+});
 
 export default function SecurityPage() {
   const jsonLd = breadcrumbJsonLd([

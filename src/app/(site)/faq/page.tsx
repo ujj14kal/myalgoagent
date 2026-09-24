@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import LegalPage, { type LegalSection } from "@/components/legal-page";
-import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "FAQ",
-  description: "Frequently asked questions about MyAlgoAgent's algo trading platform, backtesting, paper trading and live execution.",
-  alternates: { canonical: `${siteUrl}/faq` },
-};
+  description:
+    "Frequently asked questions about MyAlgoAgent's algo trading platform, backtesting, paper trading and live execution.",
+  path: "/faq",
+});
 
 const faqs: { id: string; q: string; a: string }[] = [
   { id: "broker", q: "Is MyAlgoAgent a broker?", a: "No. MyAlgoAgent is software that connects to supported broker APIs on your behalf, with your explicit authorization. It does not custody funds or execute trades independently of your broker account." },

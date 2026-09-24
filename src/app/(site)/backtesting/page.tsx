@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import LegalPage, { type LegalSection } from "@/components/legal-page";
 import { Callout } from "@/components/section";
-import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Backtesting Engine",
   description:
     "Realistic strategy backtesting with configurable fees, brokerage and slippage, look-ahead bias prevention, and a full set of performance metrics.",
-  alternates: { canonical: `${siteUrl}/backtesting` },
-};
+  path: "/backtesting",
+});
 
 const sections: LegalSection[] = [
   {

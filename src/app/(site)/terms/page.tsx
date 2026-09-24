@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import LegalPage, { type LegalSection } from "@/components/legal-page";
-import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Terms & Conditions",
-  description: "Terms of service for using the MyAlgoAgent platform.",
-  alternates: { canonical: `${siteUrl}/terms` },
-};
+  description:
+    "Terms of service for using the MyAlgoAgent platform.",
+  path: "/terms",
+});
 
 const sections: LegalSection[] = [
   {

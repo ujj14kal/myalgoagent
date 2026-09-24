@@ -1,16 +1,17 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
 import { Breadcrumbs } from "@/components/section";
-import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 import { auth } from "@/lib/auth";
 import Reveal from "@/components/reveal";
 import SupportForm from "@/components/support-form";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Contact",
-  description: "Get in touch with the MyAlgoAgent team.",
-  alternates: { canonical: `${siteUrl}/contact` },
-};
+  description:
+    "Contact the MyAlgoAgent team for product questions, account or technical support, partnerships and feedback. Send a message and we'll get back to you.",
+  path: "/contact",
+});
 
 export default async function ContactPage() {
   const session = await auth();

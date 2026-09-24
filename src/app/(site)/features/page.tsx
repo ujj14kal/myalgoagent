@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
 import { Breadcrumbs } from "@/components/section";
-import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 import Reveal from "@/components/reveal";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Features",
   description:
     "Strategy builder, technical indicators, realistic backtesting, paper trading, live broker execution, risk controls and portfolio tracking.",
-  alternates: { canonical: `${siteUrl}/features` },
-};
+  path: "/features",
+});
 
 const groups = [
   {

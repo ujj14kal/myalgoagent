@@ -2,15 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import PageHeader from "@/components/page-header";
 import { Breadcrumbs, Prose } from "@/components/section";
-import { breadcrumbJsonLd, siteUrl } from "@/lib/site";
+import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 import Reveal from "@/components/reveal";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "How It Works",
   description:
     "From market data to a live, risk-managed strategy: how MyAlgoAgent takes a trading idea through strategy building, backtesting, paper trading and live execution.",
-  alternates: { canonical: `${siteUrl}/how-it-works` },
-};
+  path: "/how-it-works",
+});
 
 const steps = [
   { title: "1. Market data", text: "The platform pulls historical and near-real-time OHLCV data for supported instruments through a data-provider abstraction, so the trading engine is not tied to one provider." },
