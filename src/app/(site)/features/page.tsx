@@ -92,14 +92,17 @@ const groups: Group[] = [
     soon: ["Audit logs for authentication, strategy and trading actions", "CSV export of trades and backtest results"],
   },
   {
-    title: "AI Strategy Assistant",
+    title: "Your AI agent",
     icon: Sparkles,
-    comingSoon: true,
     items: [
-      "Describe a strategy in plain English and get a built, validated strategy back",
-      "Uses the same indicators, conditions and risk rules as the visual builder — nothing exclusive to AI-built strategies",
-      "Every AI-generated strategy passes the same feasibility checks as one built by hand",
-      "Refine a strategy conversationally instead of re-editing the condition tree by hand",
+      "Ask anything about the platform, indicators or risk in plain English — it explains and points you to the right page",
+      "Describe a strategy and get a clear draft of its rules to review, with a button straight to the builder",
+      "Uses the same indicators, conditions and risk rules as the visual builder, and every strategy you build from a draft passes the same checks",
+      "Never gives buy or sell calls, never predicts prices, and never acts without your confirmation",
+    ],
+    soon: [
+      "Builds and backtests a strategy for you after you confirm",
+      "Explains why each paper trade happened and flags risk events as they occur",
     ],
   },
 ];

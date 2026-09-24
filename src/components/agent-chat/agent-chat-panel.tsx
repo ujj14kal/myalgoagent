@@ -52,38 +52,67 @@ function Inline({ text, onNavigate }: { text: string; onNavigate: () => void }) 
   );
 }
 
-/** A reply as paragraphs and bullet lists — no raw HTML is ever rendered. */
+const LIST_ITEM = /^\s*([-*•]|\d+[.)])\s+/;
+
+/**
+ * A reply as paragraphs and bullet lists — no raw HTML is ever rendered.
+ * Lines are grouped as they come, so a heading line followed by bullets in
+ * the same paragraph renders as a heading and a real list.
+ */
 function ReplyBody({ content, onNavigate }: { content: string; onNavigate: () => void }) {
-  const blocks = content.split(/\n{2,}/);
+  type Group = { kind: "p"; lines: string[] } | { kind: "list"; ordered: boolean; items: string[] };
+  const groups: Group[] = [];
+  for (const block of content.split(/\n{2,}/)) {
+    let current: Group | null = null;
+    for (const line of block.split("\n").filter((l) => l.trim())) {
+      if (LIST_ITEM.test(line)) {
+        const ordered = /^\s*\d/.test(line);
+        if (current?.kind !== "list" || current.ordered !== ordered) {
+          current = { kind: "list", ordered, items: [] };
+          groups.push(current);
+        }
+        current.items.push(line.replace(LIST_ITEM, ""));
+      } else {
+        if (current?.kind !== "p") {
+          current = { kind: "p", lines: [] };
+          groups.push(current);
+        }
+        current.lines.push(line);
+      }
+    }
+  }
   return (
     <div className="space-y-2">
-      {blocks.map((block, bi) => {
-        const lines = block.split("\n").filter((l) => l.trim());
-        const isList = lines.length > 0 && lines.every((l) => /^\s*([-*•]|\d+[.)])\s+/.test(l));
-        if (isList) {
-          const ordered = /^\s*\d/.test(lines[0]);
-          const Tag = ordered ? "ol" : "ul";
-          return (
-            <Tag key={bi} className={`space-y-1 pl-5 ${ordered ? "list-decimal" : "list-disc"} marker:text-brand-primary/50`}>
-              {lines.map((l, li) => (
-                <li key={li}>
-                  <Inline text={l.replace(/^\s*([-*•]|\d+[.)])\s+/, "")} onNavigate={onNavigate} />
+      {groups.map((g, gi) =>
+        g.kind === "list" ? (
+          g.ordered ? (
+            <ol key={gi} className="list-decimal space-y-1 pl-5 marker:text-brand-primary/60">
+              {g.items.map((it, i) => (
+                <li key={i}>
+                  <Inline text={it} onNavigate={onNavigate} />
                 </li>
               ))}
-            </Tag>
-          );
-        }
-        return (
-          <p key={bi}>
-            {lines.map((l, li) => (
+            </ol>
+          ) : (
+            <ul key={gi} className="list-disc space-y-1 pl-5 marker:text-brand-primary/50">
+              {g.items.map((it, i) => (
+                <li key={i}>
+                  <Inline text={it} onNavigate={onNavigate} />
+                </li>
+              ))}
+            </ul>
+          )
+        ) : (
+          <p key={gi}>
+            {g.lines.map((l, li) => (
               <span key={li}>
                 {li > 0 && <br />}
                 <Inline text={l} onNavigate={onNavigate} />
               </span>
             ))}
           </p>
-        );
-      })}
+        )
+      )}
     </div>
   );
 }

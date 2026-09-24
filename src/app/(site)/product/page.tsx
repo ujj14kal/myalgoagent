@@ -122,10 +122,10 @@ const sections: LegalSection[] = [
   {
     id: "ai",
     title: "AI functionality",
-    comingSoon: true,
     paragraphs: [
-      "Where implemented, AI features assist with translating a natural-language strategy description into explicit rules, summarizing backtest results and flagging signs of possible overfitting. AI output is informational only — never a guarantee of future performance or personalized financial advice.",
+      "Every account has its own AI agent, named by the user. It explains the platform and trading concepts and turns a plain-English idea into a draft of explicit rules that the user reviews and builds themselves. It runs on Amazon Bedrock, never places trades or changes anything on its own, and its output is informational only — never a guarantee of future performance or personalized financial advice.",
     ],
+    soon: ["Building and backtesting a strategy on the user's confirmation", "Summarizing backtest results and flagging signs of possible overfitting"],
   },
   {
     id: "disclosure",

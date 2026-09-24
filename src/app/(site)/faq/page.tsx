@@ -16,7 +16,7 @@ const faqs: { id: string; q: string; a: string }[] = [
   { id: "auto-start", q: "Can a strategy start live trading automatically?", a: "No. Live trading is coming soon, and when it launches it will always require a connected, tested broker account, configured risk limits, and an explicit manual start from you." },
   { id: "credentials", q: "How are broker credentials protected?", a: "Broker API credentials are handled through secure secret management and are never exposed to browser-side code or stored in application source code." },
   { id: "disconnect", q: "What happens if the broker connection drops?", a: "Live trading is coming soon. When it launches, the platform is designed to stop placing new orders and reconcile state once the connection is restored, rather than guessing at account state." },
-  { id: "ai-advice", q: "Does the AI assistant give financial advice?", a: "No. The AI assistant is coming soon, and its features will be informational — helping translate ideas into rules or summarize results — and never presented as guaranteed returns or personalized financial advice." },
+  { id: "ai-advice", q: "Does the AI assistant give financial advice?", a: "No. Your in-app agent is informational only — it explains the platform and trading concepts and helps translate ideas into rules you review — and never presented as guaranteed returns or personalized financial advice." },
   { id: "aws-affiliation", q: "Is MyAlgoAgent affiliated with Amazon or AWS?", a: "No. MyAlgoAgent uses AWS as third-party cloud infrastructure. There is no endorsement, sponsorship or partnership with Amazon or AWS." },
 ];
 
