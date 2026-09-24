@@ -130,6 +130,15 @@ export async function autoSaveDraftStrategy(input: StrategyInput): Promise<{ id:
   return result;
 }
 
+/** Creates a strategy and returns its id without redirecting — for the agent's multi-step plans. */
+export async function createStrategyForAgent(input: StrategyInput): Promise<{ id: string } | { error: string }> {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Unauthorized" };
+  const result = await createStrategyRow(input, session.user.id);
+  if ("id" in result) revalidatePath("/app/strategies");
+  return result;
+}
+
 export async function updateStrategy(id: string, input: StrategyInput): Promise<StrategyActionResult> {
   const session = await auth();
   if (!session?.user?.id) return { error: "Unauthorized" };

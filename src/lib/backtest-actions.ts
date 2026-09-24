@@ -32,13 +32,10 @@ export interface BacktestActionResult {
  * try block below. See strategy-actions.ts for the same fix and fuller
  * explanation — this action had the identical bug.
  */
-export async function runBacktestAction(input: RunBacktestInput): Promise<BacktestActionResult> {
-  const session = await auth();
-  if (!session?.user?.id) return { error: "Unauthorized" };
-
-  let runId: string;
+/** Validates, runs and saves a backtest; shared by the form (which redirects) and the agent (which chains). */
+async function runBacktestCore(userId: string, input: RunBacktestInput): Promise<{ id: string } | { error: string }> {
   try {
-    await enforceRateLimit(`backtest:${session.user.id}`, 10, 60_000);
+    await enforceRateLimit(`backtest:${userId}`, 10, 60_000);
 
     if (input.startingCapital <= 0) throw new Error("Starting capital must be positive");
     if (input.brokeragePercent < 0 || input.slippagePercent < 0) {
@@ -46,7 +43,7 @@ export async function runBacktestAction(input: RunBacktestInput): Promise<Backte
     }
 
     const strategy = await prisma.strategy.findFirst({
-      where: { id: input.strategyId, userId: session.user.id },
+      where: { id: input.strategyId, userId: userId },
       include: { instrument: true },
     });
     if (!strategy) throw new Error("Strategy not found");
@@ -96,7 +93,7 @@ export async function runBacktestAction(input: RunBacktestInput): Promise<Backte
 
     const run = await prisma.backtestRun.create({
       data: {
-        userId: session.user.id,
+        userId: userId,
         strategyId: strategy.id,
         strategyName: strategy.name,
         instrumentSymbol: strategy.instrument.symbol,
@@ -144,13 +141,30 @@ export async function runBacktestAction(input: RunBacktestInput): Promise<Backte
         },
       },
     });
-    runId = run.id;
+    return { id: run.id };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Something went wrong" };
   }
+}
+
+export async function runBacktestAction(input: RunBacktestInput): Promise<BacktestActionResult> {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Unauthorized" };
+
+  const result = await runBacktestCore(session.user.id, input);
+  if ("error" in result) return result;
 
   revalidatePath("/app/backtests");
-  redirect(`/app/backtests/${runId}`);
+  redirect(`/app/backtests/${result.id}`);
+}
+
+/** Same as runBacktestAction but returns the new run's id instead of redirecting — for the agent's multi-step plans. */
+export async function runBacktestForAgent(input: RunBacktestInput): Promise<{ id: string } | { error: string }> {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Unauthorized" };
+  const result = await runBacktestCore(session.user.id, input);
+  if ("id" in result) revalidatePath("/app/backtests");
+  return result;
 }
 
 export async function deleteBacktestRun(id: string): Promise<BacktestActionResult> {

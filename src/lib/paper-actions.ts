@@ -42,13 +42,10 @@ export interface PaperActionResult {
  * success) is exempt, which is why it stays outside the try block. See
  * strategy-actions.ts for the same fix and fuller explanation.
  */
-export async function startPaperSession(input: StartPaperSessionInput): Promise<PaperActionResult> {
-  const session = await auth();
-  if (!session?.user?.id) return { error: "Unauthorized" };
-
-  let sessionId: string;
+/** Validates and starts a paper session; shared by the form (which redirects) and the agent (which chains). */
+async function startPaperSessionCore(userId: string, input: StartPaperSessionInput): Promise<{ id: string } | { error: string }> {
   try {
-    await enforceRateLimit(`paper-start:${session.user.id}`, 10, 60_000);
+    await enforceRateLimit(`paper-start:${userId}`, 10, 60_000);
 
     if (input.startingCapital <= 0) throw new Error("Starting capital must be positive");
     if (input.brokeragePercent < 0 || input.slippagePercent < 0) {
@@ -56,7 +53,7 @@ export async function startPaperSession(input: StartPaperSessionInput): Promise<
     }
 
     const strategy = await prisma.strategy.findFirst({
-      where: { id: input.strategyId, userId: session.user.id },
+      where: { id: input.strategyId, userId: userId },
       include: { instrument: true },
     });
     if (!strategy) throw new Error("Strategy not found");
@@ -70,7 +67,7 @@ export async function startPaperSession(input: StartPaperSessionInput): Promise<
 
     const paperSession = await prisma.paperSession.create({
       data: {
-        userId: session.user.id,
+        userId: userId,
         strategyId: strategy.id,
         strategyName: strategy.name,
         instrumentSymbol: strategy.instrument.symbol,
@@ -99,19 +96,39 @@ export async function startPaperSession(input: StartPaperSessionInput): Promise<
         lastSyncedTime: latestTime,
       },
     });
-    sessionId = paperSession.id;
 
     // Actually putting a strategy to work is what promotes it out of
     // Draft — see activateStrategyIfDraft's own comment for why
     // backtesting alone doesn't.
     await activateStrategyIfDraft(strategy.id);
+    return { id: paperSession.id };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Something went wrong" };
   }
+}
+
+export async function startPaperSession(input: StartPaperSessionInput): Promise<PaperActionResult> {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Unauthorized" };
+
+  const result = await startPaperSessionCore(session.user.id, input);
+  if ("error" in result) return result;
 
   revalidatePaperPaths();
   revalidatePath("/app/strategies");
-  redirect(`/app/paper-trading/${sessionId}`);
+  redirect(`/app/paper-trading/${result.id}`);
+}
+
+/** Same as startPaperSession but returns the new session's id instead of redirecting — for the agent's multi-step plans. */
+export async function startPaperSessionForAgent(input: StartPaperSessionInput): Promise<{ id: string } | { error: string }> {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Unauthorized" };
+  const result = await startPaperSessionCore(session.user.id, input);
+  if ("id" in result) {
+    revalidatePaperPaths();
+    revalidatePath("/app/strategies");
+  }
+  return result;
 }
 
 export async function syncPaperSessionAction(id: string): Promise<PaperActionResult> {

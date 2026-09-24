@@ -3,7 +3,7 @@ import { INDICATOR_CATALOG } from "@/lib/strategy/indicator-catalog";
 import { getPaperSessionRows, summarizePortfolio } from "@/lib/portfolio";
 import { compile } from "@/lib/strategy-compile";
 import type { MantleTool } from "./mantle";
-import { toStrategyInput, type AgentProposal, type RiskUnitName, type SizingModeName } from "./proposals";
+import { NEW_STRATEGY_ID, toStrategyInput, type AgentProposal, type PlanStep, type RiskUnitName, type SizingModeName } from "./proposals";
 
 // Tools the agent can call. Read tools answer from the user's own data.
 // "propose_*" tools never change anything: they validate a ready-to-run
@@ -17,6 +17,28 @@ const DSL_REFERENCE = [
   "- combine with and / or / not and brackets, e.g. (rsi(14) < 30) and (close > sma(200))",
   "- indicators (name(settings)): " + INDICATOR_CATALOG.map((d) => `${d.dslName}(${d.paramLabels.join(", ")})`).join(", "),
 ].join("\n");
+
+const backtestStepSchema = {
+  type: "object",
+  description: "Also backtest it in the same review (the user asked to test it)",
+  properties: {
+    period: { type: "string", enum: ["3mo", "6mo", "1y", "5y"] },
+    starting_capital: { type: "number" },
+    brokerage_percent: { type: "number" },
+    slippage_percent: { type: "number" },
+  },
+};
+
+const paperStepSchema = {
+  type: "object",
+  description: "Also start paper trading it in the same review (the user asked to run it forward / paper trade it)",
+  properties: {
+    starting_capital: { type: "number" },
+    brokerage_percent: { type: "number" },
+    slippage_percent: { type: "number" },
+    alert_only: { type: "boolean" },
+  },
+};
 
 const riskLegSchema = {
   type: "object",
@@ -94,6 +116,8 @@ export const AGENT_TOOLS: MantleTool[] = [
             },
             required: ["mode"],
           },
+          also_backtest: backtestStepSchema,
+          also_paper_trade: paperStepSchema,
         },
         required: ["name", "direction", "entry", "exit"],
       },
@@ -112,6 +136,7 @@ export const AGENT_TOOLS: MantleTool[] = [
           starting_capital: { type: "number" },
           brokerage_percent: { type: "number" },
           slippage_percent: { type: "number" },
+          also_paper_trade: paperStepSchema,
         },
         required: ["strategy"],
       },
@@ -248,6 +273,42 @@ function leg(v: unknown): { enabled: boolean; unit: RiskUnitName; value: number 
   return value && value > 0 ? { enabled: true, unit, value } : { enabled: false, unit: "PERCENT", value: 0 };
 }
 
+type StrategyRef = { strategyId: string; strategyName: string; instrumentSymbol: string };
+
+function runCosts(o: Record<string, unknown>) {
+  const capital = num(o.starting_capital);
+  return {
+    startingCapital: capital && capital > 0 ? capital : DEFAULTS.startingCapital,
+    brokeragePercent: num(o.brokerage_percent) ?? DEFAULTS.brokeragePercent,
+    slippagePercent: num(o.slippage_percent) ?? DEFAULTS.slippagePercent,
+  };
+}
+
+function backtestStep(ref: StrategyRef, o: Record<string, unknown>): PlanStep {
+  const period = str(o.period);
+  return {
+    kind: "backtest",
+    status: "pending",
+    draft: { ...ref, ...runCosts(o), range: RANGES.has(period) ? (period as "3mo" | "6mo" | "1y" | "5y") : "1y" },
+  };
+}
+
+function paperStep(ref: StrategyRef, o: Record<string, unknown>): PlanStep {
+  return { kind: "paper_session", status: "pending", draft: { ...ref, ...runCosts(o), alertOnly: o.alert_only === true } };
+}
+
+const asObject = (v: unknown): Record<string, unknown> | null => (v && typeof v === "object" ? (v as Record<string, unknown>) : null);
+
+/** A single proposal, or a plan when the user asked for follow-up steps too. */
+function withFollowUps(first: PlanStep, ref: StrategyRef, a: Record<string, unknown>): { proposal: AgentProposal; steps: number } {
+  const steps: PlanStep[] = [first];
+  const bt = asObject(a.also_backtest);
+  const pt = asObject(a.also_paper_trade);
+  if (bt && first.kind !== "backtest") steps.push(backtestStep(ref, bt));
+  if (pt) steps.push(paperStep(ref, pt));
+  return steps.length === 1 ? { proposal: first, steps: 1 } : { proposal: { kind: "plan", status: "pending", steps }, steps: steps.length };
+}
+
 async function proposeStrategy(userId: string, a: Record<string, unknown>): Promise<ToolOutcome> {
   const instrument = str(a.instrument_symbol) ? await findInstrument(str(a.instrument_symbol)) : null;
   if (str(a.instrument_symbol) && !instrument) {
@@ -279,13 +340,19 @@ async function proposeStrategy(userId: string, a: Record<string, unknown>): Prom
     return { result: { error: `The strategy didn't pass validation: ${msg}. Fix it and call propose_strategy again.` } };
   }
 
+  const planned = withFollowUps(
+    { kind: "strategy", status: "pending", draft },
+    { strategyId: NEW_STRATEGY_ID, strategyName: draft.name, instrumentSymbol: draft.instrumentSymbol ?? "" },
+    a
+  );
   return {
     result: {
       ok: true,
-      note: "A review window is now open for the user. Briefly tell them what you prepared; do not repeat every field. Don't claim it is saved — they confirm it.",
+      steps: planned.steps,
+      note: "A review window is now open for the user. Briefly tell them what you prepared (and the follow-up steps, if any); do not repeat every field. Don't claim anything is done — they confirm it.",
       needsInstrument: !draft.instrumentId,
     },
-    proposal: { kind: "strategy", status: "pending", draft },
+    proposal: planned.proposal,
   };
 }
 
@@ -348,19 +415,12 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
     case "propose_paper_session": {
       const strategy = await findStrategy(userId, str(a.strategy));
       if (!strategy) return { result: { error: `No strategy matches "${str(a.strategy)}". Call get_my_strategies and use an exact name.` } };
-      const common = {
-        strategyId: strategy.id,
-        strategyName: strategy.name,
-        instrumentSymbol: strategy.instrument.symbol,
-        startingCapital: num(a.starting_capital) && num(a.starting_capital)! > 0 ? num(a.starting_capital)! : DEFAULTS.startingCapital,
-        brokeragePercent: num(a.brokerage_percent) ?? DEFAULTS.brokeragePercent,
-        slippagePercent: num(a.slippage_percent) ?? DEFAULTS.slippagePercent,
-      };
-      const proposal: AgentProposal =
-        name === "propose_backtest"
-          ? { kind: "backtest", status: "pending", draft: { ...common, range: RANGES.has(str(a.period)) ? (str(a.period) as "3mo" | "6mo" | "1y" | "5y") : "1y" } }
-          : { kind: "paper_session", status: "pending", draft: { ...common, alertOnly: a.alert_only === true } };
-      return { result: { ok: true, note: "A review window is open for the user to confirm. Summarise in one sentence." }, proposal };
+      const ref = { strategyId: strategy.id, strategyName: strategy.name, instrumentSymbol: strategy.instrument.symbol };
+      if (name === "propose_paper_session") {
+        return { result: { ok: true, note: "A review window is open for the user to confirm. Summarise in one sentence." }, proposal: paperStep(ref, a) };
+      }
+      const planned = withFollowUps(backtestStep(ref, a), ref, a);
+      return { result: { ok: true, steps: planned.steps, note: "A review window is open for the user to confirm. Summarise in one sentence." }, proposal: planned.proposal };
     }
     case "propose_risk_limits": {
       const current = await prisma.riskSettings.findUnique({ where: { userId } });

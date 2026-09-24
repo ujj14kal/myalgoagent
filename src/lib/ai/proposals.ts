@@ -82,7 +82,20 @@ export type AgentProposal =
       resultId?: string;
       draft: { sessionId: string; strategyName: string; instrumentSymbol: string; action: "sync" | "pause" | "resume" | "stop" };
     }
-  | { kind: "strategy_archive"; status: ProposalStatus; resultId?: string; draft: { strategyId: string; strategyName: string } };
+  | { kind: "strategy_archive"; status: ProposalStatus; resultId?: string; draft: { strategyId: string; strategyName: string } }
+  | {
+      // Several steps in one review, run in order — e.g. create a strategy, backtest it, paper trade it.
+      kind: "plan";
+      status: ProposalStatus;
+      resultId?: string;
+      steps: PlanStep[];
+    };
+
+/** A step inside a plan. A backtest/paper step can target the strategy the plan itself creates. */
+export type PlanStep = Extract<AgentProposal, { kind: "strategy" | "backtest" | "paper_session" }>;
+
+/** Stands in for the id of the strategy a plan creates in its first step. */
+export const NEW_STRATEGY_ID = "__new_strategy__";
 
 export const PROPOSAL_TITLES: Record<AgentProposal["kind"], string> = {
   strategy: "New strategy",
@@ -94,6 +107,7 @@ export const PROPOSAL_TITLES: Record<AgentProposal["kind"], string> = {
   watchlist_remove: "Remove from watchlist",
   paper_control: "Paper session",
   strategy_archive: "Archive strategy",
+  plan: "Multi-step plan",
 };
 
 /** A strategy draft as the builder's own input (code mode), for validating and creating it. */

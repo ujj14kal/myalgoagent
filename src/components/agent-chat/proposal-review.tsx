@@ -11,6 +11,7 @@ import {
   Check,
   FlaskConical,
   Layers,
+  ListChecks,
   OctagonX,
   PlayCircle,
   RefreshCw,
@@ -19,11 +20,11 @@ import {
 } from "lucide-react";
 import BodyPortal from "@/components/ui/body-portal";
 import Agent2D from "@/components/robot/agent-2d";
-import { PROPOSAL_TITLES, toStrategyInput, type AgentProposal, type ProposalStatus } from "@/lib/ai/proposals";
+import { NEW_STRATEGY_ID, PROPOSAL_TITLES, toStrategyInput, type AgentProposal, type PlanStep, type ProposalStatus } from "@/lib/ai/proposals";
 import { listInstrumentsForReview, setProposalStatus } from "@/lib/agent-chat-actions";
-import { createStrategy, archiveStrategyAction } from "@/lib/strategy-actions";
-import { runBacktestAction } from "@/lib/backtest-actions";
-import { setPaperSessionStatus, startPaperSession, syncPaperSessionAction } from "@/lib/paper-actions";
+import { createStrategy, createStrategyForAgent, archiveStrategyAction } from "@/lib/strategy-actions";
+import { runBacktestAction, runBacktestForAgent } from "@/lib/backtest-actions";
+import { setPaperSessionStatus, startPaperSession, startPaperSessionForAgent, syncPaperSessionAction } from "@/lib/paper-actions";
 import { toggleKillSwitch, updateRiskSettings } from "@/lib/risk-actions";
 import { addToWatchlist, removeFromWatchlist } from "@/lib/watchlist-actions";
 
@@ -37,7 +38,10 @@ const ICONS: Record<AgentProposal["kind"], React.ReactNode> = {
   watchlist_remove: <BookmarkMinus size={16} />,
   paper_control: <RefreshCw size={16} />,
   strategy_archive: <Archive size={16} />,
+  plan: <ListChecks size={16} />,
 };
+
+const STEP_TITLES: Record<PlanStep["kind"], string> = { strategy: "Create the strategy", backtest: "Backtest it", paper_session: "Paper trade it" };
 
 const RANGE_LABEL = { "3mo": "3 months", "6mo": "6 months", "1y": "1 year", "5y": "5 years" } as const;
 const PAPER_VERB = { sync: "Sync now", pause: "Pause", resume: "Resume", stop: "Stop" } as const;
@@ -63,6 +67,8 @@ export function proposalSummary(p: AgentProposal): string {
       return `${PAPER_VERB[p.draft.action]} · ${p.draft.strategyName} (${p.draft.instrumentSymbol})`;
     case "strategy_archive":
       return p.draft.strategyName;
+    case "plan":
+      return p.steps.map((st) => STEP_TITLES[st.kind]).join(" → ");
   }
 }
 
@@ -86,6 +92,8 @@ function confirmLabel(p: AgentProposal): string {
       return PAPER_VERB[p.draft.action];
     case "strategy_archive":
       return "Archive";
+    case "plan":
+      return `Run all ${p.steps.length} steps`;
   }
 }
 
@@ -162,7 +170,63 @@ async function execute(p: AgentProposal, instrumentId: string | null, go: (path:
       go("/app/strategies");
       return null;
     }
+    case "plan":
+      return "Plans run step by step."; // handled by runPlan
   }
+}
+
+type StepState = "waiting" | "running" | "done" | "failed";
+
+/**
+ * Runs a plan's steps in order with the non-redirecting variants of each
+ * action, then goes to the last result. Stops at the first failure — steps
+ * already done stay done (and are listed), nothing after them runs.
+ */
+async function runPlan(
+  p: Extract<AgentProposal, { kind: "plan" }>,
+  instrumentId: string | null,
+  onStep: (i: number, state: StepState) => void,
+  go: (path: string) => void
+): Promise<{ error: string | null; lastPath: string | null }> {
+  let newStrategyId: string | null = null;
+  let lastPath: string | null = null;
+  for (let i = 0; i < p.steps.length; i++) {
+    const step = p.steps[i];
+    onStep(i, "running");
+    let res: { id: string } | { error: string };
+    if (step.kind === "strategy") {
+      if (!instrumentId) {
+        onStep(i, "failed");
+        return { error: "Pick an instrument for the strategy first.", lastPath };
+      }
+      res = await createStrategyForAgent(toStrategyInput(step.draft, instrumentId));
+      if ("id" in res) {
+        newStrategyId = res.id;
+        lastPath = `/app/strategies/${res.id}`;
+      }
+    } else {
+      const strategyId = step.draft.strategyId === NEW_STRATEGY_ID ? newStrategyId : step.draft.strategyId;
+      if (!strategyId) {
+        onStep(i, "failed");
+        return { error: "The strategy for this step wasn't created.", lastPath };
+      }
+      const { startingCapital, brokeragePercent, slippagePercent } = step.draft;
+      if (step.kind === "backtest") {
+        res = await runBacktestForAgent({ strategyId, startingCapital, brokeragePercent, slippagePercent, range: step.draft.range });
+        if ("id" in res) lastPath = `/app/backtests/${res.id}`;
+      } else {
+        res = await startPaperSessionForAgent({ strategyId, startingCapital, brokeragePercent, slippagePercent, alertOnly: step.draft.alertOnly });
+        if ("id" in res) lastPath = `/app/paper-trading/${res.id}`;
+      }
+    }
+    if ("error" in res) {
+      onStep(i, "failed");
+      return { error: `${STEP_TITLES[step.kind]}: ${readableError(res.error)}`, lastPath };
+    }
+    onStep(i, "done");
+  }
+  if (lastPath) go(lastPath);
+  return { error: null, lastPath };
 }
 
 // ---------- the chat card ----------
@@ -474,6 +538,29 @@ function ProposalFields({
           Archive <strong>{p.draft.strategyName}</strong>. It moves out of your active list and can be restored at any time.
         </Statement>
       );
+    case "plan": {
+      const newName = p.steps.find((st) => st.kind === "strategy")?.draft.name;
+      const setStep = (i: number, step: PlanStep) => onChange({ ...p, steps: p.steps.map((st, j) => (j === i ? step : st)) });
+      return (
+        <ol className="space-y-5">
+          {p.steps.map((step, i) => {
+            const target =
+              step.kind !== "strategy" && step.draft.strategyId === NEW_STRATEGY_ID
+                ? ({ ...step, draft: { ...step.draft, strategyName: newName ?? step.draft.strategyName, instrumentSymbol: step.draft.instrumentSymbol || "the chosen instrument" } } as PlanStep)
+                : step;
+            return (
+              <li key={i} className="rounded-2xl p-4 ring-1 ring-brand-primary/15">
+                <p className="mb-3 flex items-center gap-2 text-sm font-bold text-brand-navy">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-primary text-[11px] text-white">{i + 1}</span>
+                  {STEP_TITLES[step.kind]}
+                </p>
+                <ProposalFields p={target} onChange={(next) => setStep(i, next as PlanStep)} instrumentId={instrumentId} onInstrument={onInstrument} />
+              </li>
+            );
+          })}
+        </ol>
+      );
+    }
   }
 }
 
@@ -495,7 +582,9 @@ export function ProposalReviewModal({
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState<AgentProposal>(proposal);
-  const [instrumentId, setInstrumentId] = useState<string | null>(proposal.kind === "strategy" ? proposal.draft.instrumentId : null);
+  const firstStrategy = proposal.kind === "strategy" ? proposal : proposal.kind === "plan" ? proposal.steps.find((st) => st.kind === "strategy") : undefined;
+  const [instrumentId, setInstrumentId] = useState<string | null>(firstStrategy?.kind === "strategy" ? firstStrategy.draft.instrumentId : null);
+  const [stepStates, setStepStates] = useState<StepState[]>(proposal.kind === "plan" ? proposal.steps.map(() => "waiting") : []);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const destructive = (draft.kind === "kill_switch" && draft.draft.enabled) || (draft.kind === "paper_control" && draft.draft.action === "stop");
@@ -522,7 +611,17 @@ export function ProposalReviewModal({
       onDecided("confirmed");
       let failure: string | null;
       try {
-        failure = await execute(draft, instrumentId, (path) => router.push(path));
+        if (draft.kind === "plan") {
+          const out = await runPlan(draft, instrumentId, (i, st) => setStepStates((all) => all.map((v, j) => (j === i ? st : v))), (path) => router.push(path));
+          if (out.error && stepStates.length && out.lastPath) {
+            // Earlier steps finished — keep the proposal marked done and offer what was created.
+            setError(`${out.error} Steps before this one were completed.`);
+            return;
+          }
+          failure = out.error;
+        } else {
+          failure = await execute(draft, instrumentId, (path) => router.push(path));
+        }
       } catch (err) {
         // A redirect from the server action surfaces as a thrown navigation signal — that's success.
         if (err && typeof err === "object" && "digest" in err && String((err as { digest?: string }).digest).startsWith("NEXT_REDIRECT")) {
@@ -578,7 +677,32 @@ export function ProposalReviewModal({
             <p className="mb-4 flex items-center gap-2 text-xs text-brand-navy/55">
               <Check size={13} className="text-brand-buy" /> Everything is filled in and checked. Review it, change anything you like, then confirm.
             </p>
-            <ProposalFields p={draft} onChange={setDraft} instrumentId={instrumentId} onInstrument={setInstrumentId} />
+            {draft.kind === "plan" && stepStates.some((st) => st !== "waiting") ? (
+              <ol className="space-y-2">
+                {draft.steps.map((step, i) => (
+                  <li key={i} className="flex items-center gap-3 rounded-xl bg-brand-bg px-4 py-3 text-sm ring-1 ring-black/5">
+                    <span
+                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                        stepStates[i] === "done"
+                          ? "bg-brand-buy text-white"
+                          : stepStates[i] === "failed"
+                            ? "bg-brand-sell text-white"
+                            : stepStates[i] === "running"
+                              ? "bg-brand-primary text-white"
+                              : "bg-brand-navy/10 text-brand-navy/50"
+                      }`}
+                    >
+                      {stepStates[i] === "done" ? <Check size={13} /> : stepStates[i] === "failed" ? <X size={13} /> : i + 1}
+                    </span>
+                    <span className="flex-1 font-medium text-brand-navy">{STEP_TITLES[step.kind]}</span>
+                    {stepStates[i] === "running" && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand-primary/30 border-t-brand-primary" />}
+                    {stepStates[i] === "done" && <span className="text-xs font-semibold text-brand-buy">Done</span>}
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <ProposalFields p={draft} onChange={setDraft} instrumentId={instrumentId} onInstrument={setInstrumentId} />
+            )}
             <AnimatePresence>
               {error && (
                 <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} role="alert" className="mt-4 overflow-hidden rounded-lg bg-brand-sell/[0.07] px-3 py-2.5 text-sm font-medium text-brand-sell">
