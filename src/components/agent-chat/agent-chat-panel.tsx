@@ -63,11 +63,25 @@ const LIST_ITEM = /^\s*([-*•]|\d+[.)])\s+/;
  * the same paragraph renders as a heading and a real list.
  */
 function ReplyBody({ content, onNavigate }: { content: string; onNavigate: () => void }) {
-  type Group = { kind: "p"; lines: string[] } | { kind: "list"; ordered: boolean; items: string[] };
+  type Group =
+    | { kind: "p"; lines: string[] }
+    | { kind: "list"; ordered: boolean; items: string[] }
+    | { kind: "table"; rows: string[][] };
+  const TABLE_ROW = /^\s*\|.*\|\s*$/;
+  const TABLE_RULE = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
   const groups: Group[] = [];
   for (const block of content.split(/\n{2,}/)) {
     let current: Group | null = null;
     for (const line of block.split("\n").filter((l) => l.trim())) {
+      if (TABLE_RULE.test(line)) continue;
+      if (TABLE_ROW.test(line)) {
+        if (current?.kind !== "table") {
+          current = { kind: "table", rows: [] };
+          groups.push(current);
+        }
+        current.rows.push(line.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim()));
+        continue;
+      }
       if (LIST_ITEM.test(line)) {
         const ordered = /^\s*\d/.test(line);
         if (current?.kind !== "list" || current.ordered !== ordered) {
@@ -87,7 +101,32 @@ function ReplyBody({ content, onNavigate }: { content: string; onNavigate: () =>
   return (
     <div className="space-y-2">
       {groups.map((g, gi) =>
-        g.kind === "list" ? (
+        g.kind === "table" ? (
+          <div key={gi} className="-mx-1 overflow-x-auto rounded-lg ring-1 ring-black/5">
+            <table className="w-full text-left text-[12px]">
+              <thead className="bg-brand-bg text-brand-navy/55">
+                <tr>
+                  {g.rows[0].map((h, i) => (
+                    <th key={i} className="whitespace-nowrap px-2.5 py-1.5 font-semibold">
+                      <Inline text={h} onNavigate={onNavigate} />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-black/5">
+                {g.rows.slice(1).map((r, ri) => (
+                  <tr key={ri}>
+                    {r.map((cell, ci) => (
+                      <td key={ci} className="px-2.5 py-1.5 align-top text-brand-navy/80">
+                        <Inline text={cell} onNavigate={onNavigate} />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : g.kind === "list" ? (
           g.ordered ? (
             <ol key={gi} className="list-decimal space-y-1 pl-5 marker:text-brand-primary/60">
               {g.items.map((it, i) => (

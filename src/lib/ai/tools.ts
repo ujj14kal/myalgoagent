@@ -444,7 +444,7 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
         result: rows.map((r) => ({
           type: r.type,
           message: r.message,
-          at: r.createdAt.toISOString().slice(0, 16).replace("T", " "),
+          at: r.createdAt.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + " IST",
           link: r.paperSessionId ? `/app/paper-trading/${r.paperSessionId}` : null,
         })),
       };
