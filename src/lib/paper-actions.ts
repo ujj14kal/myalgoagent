@@ -10,6 +10,9 @@ import { evaluateRisk } from "@/lib/risk/evaluate";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { activateStrategyIfDraft } from "@/lib/strategy-actions";
 import type { ConditionNode } from "@/lib/strategy";
+import { conditionToText } from "@/lib/strategy/format";
+import { explainPaperOrder, type ExplainContext } from "@/lib/paper/explain";
+import type { RiskUnit } from "@/lib/trading-engine/step";
 import type { Prisma } from "@prisma/client";
 
 export interface StartPaperSessionInput {
@@ -245,6 +248,19 @@ async function syncPaperSessionInner(id: string, userId: string): Promise<PaperA
     riskContext,
   );
 
+  // Facts for explaining each fill: the rules as written, and the risk legs.
+  const leg = (enabled: boolean, unit: RiskUnit | null, value: number | null) => (enabled && unit && value != null ? { unit, value } : null);
+  const explainCtx: ExplainContext = {
+    symbol: paperSession.instrumentSymbol,
+    strategyName: paperSession.strategyName,
+    direction: paperSession.direction,
+    entryRule: conditionToText(paperSession.entryCondition as unknown as ConditionNode),
+    exitRule: conditionToText(paperSession.exitCondition as unknown as ConditionNode),
+    stopLoss: leg(paperSession.stopLossEnabled, paperSession.stopLossUnit, paperSession.stopLossValue),
+    target: leg(paperSession.targetEnabled, paperSession.targetUnit, paperSession.targetValue),
+    trailingStop: leg(paperSession.trailingSlEnabled, paperSession.trailingSlUnit, paperSession.trailingSlValue),
+  };
+
   const writes: Prisma.PrismaPromise<unknown>[] = [
     prisma.paperSession.update({
       where: { id },
@@ -281,7 +297,7 @@ async function syncPaperSessionInner(id: string, userId: string): Promise<PaperA
               userId,
               paperSessionId: id,
               type: "ORDER_FILLED",
-              message: `${o.side === "BUY" ? "Bought" : "Sold"} ${o.quantity} ${paperSession.instrumentSymbol} at ₹${o.price.toFixed(2)} (${paperSession.strategyName})`,
+              message: explainPaperOrder(o, explainCtx),
             },
           }),
         )
@@ -293,7 +309,7 @@ async function syncPaperSessionInner(id: string, userId: string): Promise<PaperA
               userId,
               paperSessionId: id,
               type: "SIGNAL_ALERT",
-              message: `${paperSession.strategyName} (${paperSession.instrumentSymbol}): ${a.type} signal fired at ₹${a.price.toFixed(2)} — alert-only, no order placed.`,
+              message: `${paperSession.strategyName} (${paperSession.instrumentSymbol}): your ${a.type} rule (${a.type === "entry" ? explainCtx.entryRule : explainCtx.exitRule}) fired at ₹${a.price.toFixed(2)} — alert-only, no order placed.`,
             },
           }),
         )

@@ -11,7 +11,8 @@ type Rect = { left: number; top: number; width: number; height: number };
 type AgentChatContextValue = {
   agentName: string;
   isOpen: boolean;
-  openChat: () => void;
+  /** Opens the chat; with a question, the panel starts a new conversation and asks it. */
+  openChat: (question?: string) => void;
   closeChat: () => void;
   /** Increments each time the agent "arrives home" — the chat button plays its welcome bounce. */
   homeSignal: number;
@@ -60,9 +61,13 @@ export default function AgentChatProvider({ agentName, children }: { agentName: 
   const reduce = useReducedMotion();
   const [isOpen, setIsOpen] = useState(false);
   const [homeSignal, setHomeSignal] = useState(0);
+  const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
   const [flight, setFlight] = useState<{ from: Rect; to: Rect } | null>(null);
 
-  const openChat = useCallback(() => setIsOpen(true), []);
+  const openChat = useCallback((question?: string) => {
+    if (typeof question === "string" && question.trim()) setPendingQuestion(question.trim());
+    setIsOpen(true);
+  }, []);
   const closeChat = useCallback(() => setIsOpen(false), []);
 
   const flyHome = useCallback(
@@ -89,7 +94,13 @@ export default function AgentChatProvider({ agentName, children }: { agentName: 
   return (
     <AgentChatContext.Provider value={{ agentName, isOpen, openChat, closeChat, homeSignal, flyHome }}>
       {children}
-      <AgentChatPanel open={isOpen} onClose={closeChat} agentName={agentName} />
+      <AgentChatPanel
+        open={isOpen}
+        onClose={closeChat}
+        agentName={agentName}
+        pendingQuestion={pendingQuestion}
+        onQuestionTaken={() => setPendingQuestion(null)}
+      />
       <BodyPortal>
         <AnimatePresence>
           {flight && path && (

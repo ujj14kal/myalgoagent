@@ -281,10 +281,15 @@ export default function AgentChatPanel({
   open,
   onClose,
   agentName,
+  pendingQuestion,
+  onQuestionTaken,
 }: {
   open: boolean;
   onClose: () => void;
   agentName: string;
+  /** A question to ask as soon as the panel is ready (e.g. "Ask {agent}" on a toast). */
+  pendingQuestion?: string | null;
+  onQuestionTaken?: () => void;
 }) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<AgentChatMessage[]>([]);
@@ -308,6 +313,16 @@ export default function AgentChatPanel({
     if (open && pathname !== openedOn.current) onClose();
     openedOn.current = pathname;
   }, [pathname, open, onClose]);
+
+  // A question handed over from elsewhere (a toast) starts a fresh conversation and is sent once.
+  const sendRef = useRef<(text: string, fresh?: boolean) => void>(() => {});
+  useEffect(() => {
+    if (!open || !loaded || !pendingQuestion) return;
+    const q = pendingQuestion;
+    onQuestionTaken?.();
+    const t = setTimeout(() => sendRef.current(q, true), 0);
+    return () => clearTimeout(t);
+  }, [open, loaded, pendingQuestion, onQuestionTaken]);
 
   const markProposal = (messageId: string, status: ProposalStatus) =>
     setMessages((ms) => ms.map((m) => (m.id === messageId && m.proposal ? { ...m, proposal: { ...m.proposal, status } } : m)));
@@ -366,9 +381,15 @@ export default function AgentChatPanel({
     ? "wave"
     : "idle";
 
-  const send = (text: string) => {
+  const send = (text: string, fresh = false) => {
     const trimmed = text.trim();
     if (!trimmed || isPending) return;
+    const convoId = fresh ? null : conversationId;
+    if (fresh) {
+      setConversationId(null);
+      setMessages([]);
+      setView("chat");
+    }
     setError(null);
     setDraft("");
     const optimistic: AgentChatMessage = {
@@ -383,7 +404,7 @@ export default function AgentChatPanel({
     setMessages((m) => [...m, optimistic]);
     startTransition(async () => {
       try {
-        const res = await sendAgentMessage({ conversationId, text: trimmed });
+        const res = await sendAgentMessage({ conversationId: convoId, text: trimmed });
         if (!res.ok) {
           setMessages((m) => m.filter((x) => x.id !== optimistic.id));
           setDraft(trimmed);
@@ -402,6 +423,10 @@ export default function AgentChatPanel({
       }
     });
   };
+
+  useEffect(() => {
+    sendRef.current = send;
+  });
 
   const newChat = () => {
     setConversationId(null);

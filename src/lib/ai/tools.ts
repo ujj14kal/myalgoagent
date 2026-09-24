@@ -85,6 +85,14 @@ export const AGENT_TOOLS: MantleTool[] = [
   {
     type: "function",
     function: {
+      name: "get_recent_events",
+      description: "The user's recent notifications: paper fills (with the rule that caused each), signals, risk events and stopped sessions. Use to explain what happened or give a summary of recent activity.",
+      parameters: { type: "object", properties: { days: { type: "number", description: "Look-back in days, 1-30, default 7" } } },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "list_instruments",
       description: "Instruments available on the platform (NSE symbols).",
       parameters: { type: "object", properties: {} },
@@ -241,20 +249,39 @@ async function findInstrument(symbol: string) {
   });
 }
 
-async function findStrategy(userId: string, ref: string) {
+type StrategyMatch = { id: string; name: string; instrument: { symbol: string } };
+
+/**
+ * An exact id or name match, or a single partial match. Several partial
+ * matches are returned as `ambiguous` so the agent asks which one — it never
+ * guesses between the user's strategies.
+ */
+async function findStrategy(userId: string, ref: string): Promise<StrategyMatch | { ambiguous: string[] } | null> {
   const r = ref.trim();
   if (!r) return null;
   const select = { id: true, name: true, instrument: { select: { symbol: true } } } as const;
-  return (
+  const exact =
     (await prisma.strategy.findFirst({ where: { id: r, userId, status: { not: "DELETED" } }, select })) ??
-    (await prisma.strategy.findFirst({ where: { userId, nameNormalized: r.toLowerCase(), status: { not: "DELETED" } }, select })) ??
-    (await prisma.strategy.findFirst({
-      where: { userId, name: { contains: r, mode: "insensitive" }, status: { not: "DELETED" } },
-      orderBy: { updatedAt: "desc" },
-      select,
-    }))
-  );
+    (await prisma.strategy.findFirst({ where: { userId, nameNormalized: r.toLowerCase(), status: { not: "DELETED" } }, select }));
+  if (exact) return exact;
+  const partial = await prisma.strategy.findMany({
+    where: { userId, name: { contains: r, mode: "insensitive" }, status: { in: ["DRAFT", "ACTIVE"] } },
+    orderBy: { updatedAt: "desc" },
+    take: 6,
+    select,
+  });
+  if (partial.length === 1) return partial[0];
+  if (partial.length > 1) return { ambiguous: partial.map((p) => `${p.name} (${p.instrument.symbol})`) };
+  return null;
 }
+
+const ambiguityResult = (options: string[]) => ({
+  result: {
+    ambiguous: true,
+    options,
+    note: "Several strategies match. Ask the user which one they mean (list these names briefly); do not pick one yourself.",
+  },
+});
 
 async function uniqueStrategyName(userId: string, name: string): Promise<string> {
   let candidate = name.trim().slice(0, 80) || "New strategy";
@@ -405,6 +432,23 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
       const r = await prisma.riskSettings.findUnique({ where: { userId } });
       return { result: { killSwitchEnabled: r?.killSwitchEnabled ?? false, maxLossPercent: r?.maxLossPercent ?? null, maxConsecutiveLosses: r?.maxConsecutiveLosses ?? null } };
     }
+    case "get_recent_events": {
+      const days = Math.min(Math.max(num(a.days) ?? 7, 1), 30);
+      const rows = await prisma.notification.findMany({
+        where: { userId, createdAt: { gte: new Date(Date.now() - days * 86_400_000) } },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+        select: { type: true, message: true, createdAt: true, paperSessionId: true },
+      });
+      return {
+        result: rows.map((r) => ({
+          type: r.type,
+          message: r.message,
+          at: r.createdAt.toISOString().slice(0, 16).replace("T", " "),
+          link: r.paperSessionId ? `/app/paper-trading/${r.paperSessionId}` : null,
+        })),
+      };
+    }
     case "list_instruments": {
       const rows = await prisma.instrument.findMany({ orderBy: { symbol: "asc" }, select: { symbol: true, name: true, sector: true } });
       return { result: rows };
@@ -414,7 +458,8 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
     case "propose_backtest":
     case "propose_paper_session": {
       const strategy = await findStrategy(userId, str(a.strategy));
-      if (!strategy) return { result: { error: `No strategy matches "${str(a.strategy)}". Call get_my_strategies and use an exact name.` } };
+      if (!strategy) return { result: { error: `No strategy matches "${str(a.strategy)}". Ask the user which strategy they mean.` } };
+      if ("ambiguous" in strategy) return ambiguityResult(strategy.ambiguous);
       const ref = { strategyId: strategy.id, strategyName: strategy.name, instrumentSymbol: strategy.instrument.symbol };
       if (name === "propose_paper_session") {
         return { result: { ok: true, note: "A review window is open for the user to confirm. Summarise in one sentence." }, proposal: paperStep(ref, a) };
@@ -463,13 +508,25 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
     case "propose_paper_session_action": {
       const ref = str(a.session);
       const select = { id: true, strategyName: true, instrumentSymbol: true, status: true } as const;
-      const found =
-        (await prisma.paperSession.findFirst({ where: { id: ref, userId }, select })) ??
-        (await prisma.paperSession.findFirst({
+      let found = await prisma.paperSession.findFirst({ where: { id: ref, userId }, select });
+      if (!found && ref) {
+        const candidates = await prisma.paperSession.findMany({
           where: { userId, strategyName: { contains: ref, mode: "insensitive" }, status: { not: "STOPPED" } },
           orderBy: { createdAt: "desc" },
+          take: 6,
           select,
-        }));
+        });
+        if (candidates.length > 1) {
+          return {
+            result: {
+              ambiguous: true,
+              options: candidates.map((c) => `${c.strategyName} on ${c.instrumentSymbol} (${c.status.toLowerCase()}, id ${c.id})`),
+              note: "Several paper sessions match. Ask the user which one; do not pick one yourself.",
+            },
+          };
+        }
+        found = candidates[0] ?? null;
+      }
       const action = ["sync", "pause", "resume", "stop"].includes(str(a.action)) ? (str(a.action) as "sync" | "pause" | "resume" | "stop") : null;
       if (!found || !action) return { result: { error: "No matching paper session or action. Call get_my_paper_sessions and use its id." } };
       if (found.status === "STOPPED") return { result: { error: "That session is already stopped — stopped sessions can't be changed." } };
@@ -484,7 +541,8 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
     }
     case "propose_strategy_archive": {
       const strategy = await findStrategy(userId, str(a.strategy));
-      if (!strategy) return { result: { error: `No strategy matches "${str(a.strategy)}".` } };
+      if (!strategy) return { result: { error: `No strategy matches "${str(a.strategy)}". Ask the user which strategy they mean.` } };
+      if ("ambiguous" in strategy) return ambiguityResult(strategy.ambiguous);
       return {
         result: { ok: true, note: "Review window open." },
         proposal: { kind: "strategy_archive", status: "pending", draft: { strategyId: strategy.id, strategyName: strategy.name } },

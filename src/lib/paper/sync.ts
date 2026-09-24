@@ -7,6 +7,7 @@ import {
   stepBar,
   markToMarket,
   type EngineState,
+  type ExitReason,
   type PositionSizing,
   type RiskManagementConfig,
   type StrategyDirection,
@@ -54,6 +55,10 @@ export interface NewPaperOrder {
   quantity: number;
   fees: number;
   netPnl: number | null;
+  /** Why this order happened: opening (entry rule / pyramid add) or closing (which rule closed it). */
+  reason: "entry_rule" | "pyramid" | ExitReason;
+  /** The bar whose close triggered it (rule-based fills happen at the next bar's open). */
+  signalTime: number;
 }
 
 export interface SignalAlert {
@@ -189,6 +194,8 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
         quantity: stepped.trade.quantity,
         fees: stepped.trade.fees,
         netPnl: stepped.trade.netPnl,
+        reason: stepped.exitReason ?? "exit_rule",
+        signalTime: candles[i].time,
       });
     } else if (wasFlat && state.position) {
       newOrders.push({
@@ -198,6 +205,8 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
         quantity: state.position.quantity,
         fees: 0,
         netPnl: null,
+        reason: "entry_rule",
+        signalTime: candles[i].time,
       });
     } else if (!wasFlat && state.position && state.position.quantity > prevQuantity) {
       // A pyramid add — reconstruct this leg's own fill price from the
@@ -212,6 +221,8 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
         quantity: addedQuantity,
         fees: 0,
         netPnl: null,
+        reason: "pyramid",
+        signalTime: candles[i].time,
       });
     }
 

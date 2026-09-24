@@ -195,6 +195,9 @@ function closeTrade(
  * reversal — a standard OHLC-only backtesting convention, since the true
  * intrabar order of price movement isn't knowable from candle data.
  */
+/** Why a position closed — reported with each trade so fills can be explained. */
+export type ExitReason = "trailing_stop" | "stop_loss" | "target" | "exit_rule";
+
 export function stepBar(
   candles: Candle[],
   i: number,
@@ -202,7 +205,7 @@ export function stepBar(
   exitSignal: boolean,
   state: EngineState,
   config: EngineConfig,
-): { state: EngineState; trade?: EngineTrade; sizeTooSmall?: boolean } {
+): { state: EngineState; trade?: EngineTrade; exitReason?: ExitReason; sizeTooSmall?: boolean } {
   const nextBar = candles[i + 1];
   const direction = config.direction ?? "LONG";
   const isShort = direction === "SHORT";
@@ -225,23 +228,27 @@ export function stepBar(
     }
 
     let exitPrice: number | null = null;
+    let exitReason: ExitReason | null = null;
     if (trailingStopPrice !== null && (isShort ? bar.high >= trailingStopPrice : bar.low <= trailingStopPrice)) {
       exitPrice = trailingStopPrice;
+      exitReason = "trailing_stop";
     } else if (pos.stopLossPrice !== null && (isShort ? bar.high >= pos.stopLossPrice : bar.low <= pos.stopLossPrice)) {
       exitPrice = pos.stopLossPrice;
+      exitReason = "stop_loss";
     } else if (pos.targetPrice !== null && (isShort ? bar.low <= pos.targetPrice : bar.high >= pos.targetPrice)) {
       exitPrice = pos.targetPrice;
+      exitReason = "target";
     }
 
-    if (exitPrice !== null) {
+    if (exitPrice !== null && exitReason) {
       const trade = closeTrade(candles, pos, i, exitPrice, config.brokeragePercent, direction);
-      return { state: { cash: state.cash + trade.netPnl, position: null }, trade };
+      return { state: { cash: state.cash + trade.netPnl, position: null }, trade, exitReason };
     }
 
     if (exitSignal && nextBar) {
       const fillPrice = closeFillPrice(nextBar.open);
       const trade = closeTrade(candles, pos, i + 1, fillPrice, config.brokeragePercent, direction);
-      return { state: { cash: state.cash + trade.netPnl, position: null }, trade };
+      return { state: { cash: state.cash + trade.netPnl, position: null }, trade, exitReason: "exit_rule" };
     }
 
     const maxPyramidEntries = config.maxPyramidEntries ?? 1;
