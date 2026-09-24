@@ -1,50 +1,11 @@
 import Link from "next/link";
+import { Activity, FlaskConical, Plus, Star, type LucideIcon } from "lucide-react";
 
-const ACTIONS = [
-  {
-    href: "/app/strategies/new",
-    label: "New strategy",
-    description: "Build a rule visually or as code",
-    icon: (
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-    ),
-  },
-  {
-    href: "/app/backtests",
-    label: "Run a backtest",
-    description: "Test a strategy on real historical data",
-    icon: (
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M3 3v18h18M7 15l3.5-4 3 2.5L18 8"
-      />
-    ),
-  },
-  {
-    href: "/app/watchlist",
-    label: "Add to watchlist",
-    description: "Track an instrument's price and signals",
-    icon: (
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M12 17.25l-6.16 3.24 1.18-6.88L2 8.76l6.92-1L12 1.5l3.08 6.26 6.92 1-5.02 4.85 1.18 6.88z"
-      />
-    ),
-  },
-  {
-    href: "/app/paper-trading",
-    label: "Start paper trading",
-    description: "Run a strategy live against virtual capital",
-    icon: (
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M12 6v6l4 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-      />
-    ),
-  },
+const ACTIONS: { href: string; label: string; description: string; icon: LucideIcon }[] = [
+  { href: "/app/strategies/new", label: "New strategy", description: "Build rules visually or as code", icon: Plus },
+  { href: "/app/backtests", label: "Run a backtest", description: "Test on real historical data", icon: FlaskConical },
+  { href: "/app/paper-trading", label: "Paper trade", description: "Run live on virtual capital", icon: Activity },
+  { href: "/app/watchlist", label: "Watchlist", description: "Track instruments you follow", icon: Star },
 ];
 
 export default function QuickActions() {
@@ -54,17 +15,13 @@ export default function QuickActions() {
         <Link
           key={a.href}
           href={a.href}
-          className="group flex flex-col gap-2 rounded-xl border border-black/5 p-3 transition-colors hover:border-brand-primary/30 hover:bg-brand-bg"
+          className="group rounded-2xl border border-black/[0.06] bg-white p-3.5 transition-all hover:border-brand-primary/25 hover:bg-white hover:shadow-[var(--shadow-card-hover)]"
         >
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-primary/10 text-brand-primary">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
-              {a.icon}
-            </svg>
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-primary/[0.08] text-brand-primary transition-colors group-hover:bg-brand-primary group-hover:text-white">
+            <a.icon size={17} strokeWidth={2.2} />
           </span>
-          <span>
-            <span className="block text-sm font-semibold text-brand-navy group-hover:text-brand-primary">{a.label}</span>
-            <span className="block text-xs text-brand-navy/50">{a.description}</span>
-          </span>
+          <span className="mt-2.5 block text-sm font-semibold text-brand-navy group-hover:text-brand-primary">{a.label}</span>
+          <span className="block text-xs text-brand-navy/50">{a.description}</span>
         </Link>
       ))}
     </div>

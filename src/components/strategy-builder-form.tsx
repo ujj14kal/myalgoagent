@@ -381,7 +381,7 @@ export default function StrategyBuilderForm({
           </div>
         </div>
 
-        <div ref={positionSizingRef} className="rounded-2xl border border-black/5 bg-white p-4">
+        <div ref={positionSizingRef} className="surface p-4">
           <p className="mb-2 text-sm font-semibold text-brand-navy">Direction, position sizing &amp; pyramiding</p>
           <div className="grid gap-4 sm:grid-cols-4">
             <div>
@@ -435,7 +435,7 @@ export default function StrategyBuilderForm({
         </div>
 
         {mode === "WEBHOOK" ? (
-          <div className="rounded-2xl border border-black/5 bg-white p-4">
+          <div className="surface p-4">
             <p className="text-sm font-semibold text-brand-navy">Webhook-triggered strategy</p>
             <p className="mt-1 text-sm text-brand-navy/60">
               Trades are triggered by an external TradingView alert, not by conditions you build here — there&apos;s
@@ -464,7 +464,7 @@ export default function StrategyBuilderForm({
           </div>
         ) : (
           <div className="grid gap-6 xl:grid-cols-2">
-            <div ref={entryRef} className="rounded-2xl border border-black/5 bg-white p-4">
+            <div ref={entryRef} className="surface p-4">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-sm font-semibold text-brand-navy">Entry condition</p>
                 {mode === "NO_CODE" && (
@@ -484,7 +484,7 @@ export default function StrategyBuilderForm({
               )}
             </div>
 
-            <div ref={exitRef} className="rounded-2xl border border-black/5 bg-white p-4">
+            <div ref={exitRef} className="surface p-4">
               <p className="mb-2 text-sm font-semibold text-brand-navy">Exit condition</p>
 
               <div ref={riskRef} className="rounded-xl border border-brand-primary/20 bg-brand-primary/5 p-3">

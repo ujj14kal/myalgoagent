@@ -24,7 +24,7 @@ export function StrategyRowCard({ s }: { s: StrategyCard }) {
   return (
     <Link
       href={`/app/strategies/${s.id}`}
-      className="hover-lift block rounded-xl border border-black/5 bg-white p-4 hover:border-brand-primary"
+      className="surface surface-interactive block p-4"
     >
       <div className="flex items-start gap-2">
         <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[s.status]}`} />
@@ -59,8 +59,8 @@ export default function StrategyBoardColumn({
   const paged = strategies.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col rounded-2xl border border-black/5 bg-brand-bg/40">
-      <div className={`rounded-t-2xl border-b border-black/5 px-4 py-3 ${accent}`}>
+    <div className="flex min-w-0 flex-1 flex-col rounded-3xl border border-black/[0.06] bg-white/60 backdrop-blur-sm">
+      <div className={`rounded-t-3xl border-b border-black/5 px-4 py-3 ${accent}`}>
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-brand-navy">{title}</h2>
           <span className="rounded-full bg-white/70 px-2 py-0.5 text-xs font-semibold text-brand-navy/60">

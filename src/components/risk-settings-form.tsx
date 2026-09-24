@@ -38,7 +38,7 @@ export default function RiskSettingsForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-2xl border border-black/5 bg-white p-5">
+    <form onSubmit={handleSubmit} className="surface p-5">
       <p className="text-sm font-semibold text-brand-navy">Loss limits</p>
       <p className="mt-1 text-xs text-brand-navy/60">
         Applies to all your paper trading sessions. A session that crosses a

@@ -26,16 +26,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect("/onboarding/username");
   }
 
-  const unreadCount = await prisma.notification.count({ where: { userId: session.user.id, read: false } });
+  const [unreadCount, liveSessions] = await Promise.all([
+    prisma.notification.count({ where: { userId: session.user.id, read: false } }),
+    prisma.paperSession.count({ where: { userId: session.user.id, status: "ACTIVE" } }),
+  ]);
+  const agentName = dbUser.agentName ?? DEFAULT_AGENT_NAME;
 
   return (
     <TutorialProvider initialAgentName={dbUser.agentName} tutorialCompleted={!!dbUser.tutorialCompletedAt}>
-      <AgentToastProvider agentName={dbUser.agentName ?? DEFAULT_AGENT_NAME}>
-        <div className="flex min-h-screen bg-brand-bg">
-          <AppSidebar />
-          <div className="flex flex-1 flex-col">
-            <AppTopbar user={session.user} unreadCount={unreadCount} />
-            <main className="flex-1 p-4 md:p-6">{children}</main>
+      <AgentToastProvider agentName={agentName}>
+        <div className="app-canvas flex min-h-screen">
+          <AppSidebar agentName={agentName} liveSessions={liveSessions} />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <AppTopbar user={session.user} unreadCount={unreadCount} agentName={agentName} liveSessions={liveSessions} />
+            <main className="mx-auto w-full max-w-[1400px] flex-1 p-4 md:p-6 lg:p-8">{children}</main>
             <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-black/5 px-6 py-3 text-xs text-brand-navy/40">
               <span>© {new Date().getFullYear()} MyAlgoAgent™, a product of Shagoon Softech Pvt. Ltd.</span>
               <span className="flex items-center gap-3">

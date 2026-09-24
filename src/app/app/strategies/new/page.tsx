@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import StrategyBuilderForm from "@/components/strategy-builder-form";
+import { Layers } from "lucide-react";
+import PageHeader from "@/components/ui/page-header";
 
 export const metadata = { title: "New Strategy", robots: { index: false } };
 
@@ -11,11 +13,7 @@ export default async function NewStrategyPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-brand-navy">New Strategy</h1>
-      <p className="mt-2 text-sm text-brand-navy/60">
-        Build your entry and exit rules visually, or write them as code —
-        both are evaluated identically.
-      </p>
+      <PageHeader title="New Strategy" icon={Layers} description={<>Build your entry and exit rules visually, or write them as code — both are evaluated identically.</>} />
       <div className="mt-6">
         <StrategyBuilderForm instruments={instruments} />
       </div>

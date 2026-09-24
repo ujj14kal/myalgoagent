@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import InstrumentSearch from "@/components/instrument-search";
+import { CandlestickChart } from "lucide-react";
+import PageHeader from "@/components/ui/page-header";
 
 export const metadata = { title: "Market Data", robots: { index: false } };
 
@@ -11,10 +13,7 @@ export default async function InstrumentsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-brand-navy">Market Data</h1>
-      <p className="mt-2 text-sm text-brand-navy/60">
-        {instruments.length} NSE instruments. Search by symbol or company name.
-      </p>
+      <PageHeader title="Market Data" icon={CandlestickChart} description={<>{instruments.length} NSE instruments. Search by symbol or company name.</>} />
       <div className="mt-6">
         <InstrumentSearch instruments={instruments} />
       </div>

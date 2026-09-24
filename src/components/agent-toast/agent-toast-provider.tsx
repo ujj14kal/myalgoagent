@@ -2,17 +2,17 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import RobotAvatar from "@/components/robot/robot-avatar";
-import type { RobotPose } from "@/components/robot/robot-mascot";
+import { X } from "lucide-react";
+import Agent2D, { type AgentPose } from "@/components/robot/agent-2d";
 
 type Severity = "info" | "warning" | "success" | "danger";
 type Toast = { id: string; severity: Severity; message: string };
 
-const SEVERITY: Record<Severity, { border: string; bg: string; pose: RobotPose }> = {
-  info: { border: "border-brand-blue/30", bg: "bg-brand-blue-light", pose: "talk" },
-  warning: { border: "border-brand-gold/40", bg: "bg-brand-gold/10", pose: "alert" },
-  success: { border: "border-brand-buy/30", bg: "bg-brand-buy/10", pose: "happy" },
-  danger: { border: "border-brand-sell/30", bg: "bg-brand-sell/10", pose: "sad" },
+const SEVERITY: Record<Severity, { ring: string; bar: string; label: string; pose: AgentPose }> = {
+  info: { ring: "ring-brand-blue/20", bar: "bg-brand-blue", label: "Update", pose: "talk" },
+  warning: { ring: "ring-brand-gold/40", bar: "bg-brand-gold", label: "Heads up", pose: "alert" },
+  success: { ring: "ring-brand-buy/25", bar: "bg-brand-buy", label: "Done", pose: "happy" },
+  danger: { ring: "ring-brand-sell/30", bar: "bg-brand-sell", label: "Warning", pose: "alert" },
 };
 
 const NOTIFICATION_SEVERITY: Record<string, Severity> = {
@@ -111,16 +111,35 @@ export default function AgentToastProvider({
             return (
               <motion.div
                 key={t.id}
-                initial={{ opacity: 0, y: 16, scale: 0.95 }}
+                layout
+                role="status"
+                initial={{ opacity: 0, y: 20, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, x: 40, transition: { duration: 0.2 } }}
-                className={`pointer-events-auto flex items-start gap-3 rounded-2xl border ${style.border} ${style.bg} bg-white p-3 shadow-lg shadow-black/10`}
+                exit={{ opacity: 0, x: 60, transition: { duration: 0.2 } }}
+                transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                className={`pointer-events-auto relative flex items-end gap-2 overflow-hidden rounded-2xl bg-white/95 p-3 pr-8 shadow-[0_18px_40px_-16px_rgba(14,27,45,0.35)] ring-1 backdrop-blur ${style.ring}`}
               >
-                <RobotAvatar pose={style.pose} size={40} />
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-brand-navy">{agentName} says</p>
-                  <p className="text-sm text-brand-navy/80">{t.message}</p>
+                <Agent2D pose={style.pose} size={54} trackCursor={false} className="-mb-1 shrink-0" />
+                <div className="min-w-0 pb-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-navy/45">
+                    {agentName} · {style.label}
+                  </p>
+                  <p className="text-sm font-medium text-brand-navy">{t.message}</p>
                 </div>
+                <button
+                  type="button"
+                  aria-label="Dismiss"
+                  onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
+                  className="absolute right-2 top-2 rounded-md p-1 text-brand-navy/35 hover:bg-brand-navy/5 hover:text-brand-navy"
+                >
+                  <X size={14} />
+                </button>
+                <motion.span
+                  className={`absolute bottom-0 left-0 h-0.5 ${style.bar}`}
+                  initial={{ width: "100%" }}
+                  animate={{ width: "0%" }}
+                  transition={{ duration: TOAST_LIFETIME_MS / 1000, ease: "linear" }}
+                />
               </motion.div>
             );
           })}

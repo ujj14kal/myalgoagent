@@ -1,28 +1,31 @@
+import { CalendarDays, CalendarRange, Clock3, Infinity as InfinityIcon } from "lucide-react";
 import type { PeriodPnl } from "@/lib/portfolio";
-
-function fmt(n: number) {
-  const sign = n > 0 ? "+" : "";
-  return `${sign}₹${n.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
-}
+import StatCard from "@/components/ui/stat-card";
+import { formatSignedINR, toneOf } from "@/lib/format";
 
 export default function PnlSummary({ pnl }: { pnl: PeriodPnl }) {
-  const rows: { label: string; value: number }[] = [
-    { label: "Today", value: pnl.today },
-    { label: "This week", value: pnl.week },
-    { label: "This month", value: pnl.month },
-    { label: "All time", value: pnl.allTime },
+  const rows = [
+    { label: "Today", value: pnl.today, icon: Clock3 },
+    { label: "This week", value: pnl.week, icon: CalendarDays },
+    { label: "This month", value: pnl.month, icon: CalendarRange },
+    { label: "All time", value: pnl.allTime, icon: InfinityIcon },
   ];
-
   return (
-    <div data-tour="pnl-summary" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      {rows.map((r) => (
-        <div key={r.label} className="hover-lift rounded-2xl border border-black/5 bg-white p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">{r.label}</p>
-          <p className={`mt-2 text-xl font-bold ${r.value >= 0 ? "text-brand-buy" : "text-brand-sell"}`}>
-            {fmt(r.value)}
-          </p>
-        </div>
-      ))}
+    <div data-tour="pnl-summary" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {rows.map((r) => {
+        const tone = toneOf(r.value);
+        return (
+          <StatCard
+            key={r.label}
+            label={r.label}
+            value={formatSignedINR(r.value)}
+            sub="Realised P&L"
+            tone={tone}
+            icon={r.icon}
+            accent={tone === "up" ? "buy" : tone === "down" ? "sell" : "primary"}
+          />
+        );
+      })}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import Image from "next/image";
+import Agent2D from "@/components/robot/agent-2d";
 import { redirect } from "next/navigation";
 import { auth, signIn } from "@/lib/auth";
 import LoginForm from "@/components/login-form";
@@ -34,7 +34,7 @@ export default async function LoginPage({
 
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-sm flex-col items-center px-4 py-12 text-center">
-      <Image src="/brand/icon-mark.png" alt="MyAlgoAgent" width={64} height={64} />
+      <Agent2D pose="wave" size={110} />
       <h1 className="mt-6 text-2xl font-bold text-brand-navy">
         Sign in to MyAlgoAgent
       </h1>

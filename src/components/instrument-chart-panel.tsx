@@ -385,7 +385,7 @@ export default function InstrumentChartPanel({
       {/* Everything lives in one card, wrapped tightly around the chart —
           interval + chart-type + tool controls above, drawing tools as a
           vertical rail beside the plot, the range strip directly under it. */}
-      <div ref={cardRef} className="overflow-hidden rounded-2xl border border-black/5 bg-white [&:fullscreen]:flex [&:fullscreen]:flex-col [&:fullscreen]:bg-white">
+      <div ref={cardRef} className="overflow-hidden surface [&:fullscreen]:flex [&:fullscreen]:flex-col [&:fullscreen]:bg-white">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/5 p-3">
           <div className="flex flex-wrap items-center gap-2">
             {INTERVALS.map((iv) => {
@@ -574,14 +574,14 @@ export default function InstrumentChartPanel({
       </div>
 
       {oscillatorPanels.map((panel) => (
-        <div key={panel.key} className="mt-4 rounded-2xl border border-black/5 bg-white p-4">
+        <div key={panel.key} className="mt-4 surface p-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">{panel.label}</p>
           <OscillatorPanel series={panel.series} referenceLines={panel.referenceLines} />
         </div>
       ))}
 
       {comparePanel && (
-        <div className="mt-4 rounded-2xl border border-black/5 bg-white p-4">
+        <div className="mt-4 surface p-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
             Compare — % change from range start
           </p>

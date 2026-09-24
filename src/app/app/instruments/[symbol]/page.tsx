@@ -8,6 +8,7 @@ import type { ChartType } from "@/components/candlestick-chart";
 import type { Drawing } from "@/lib/chart-drawing-primitive";
 import type { CandleInterval } from "@/lib/market-data";
 import { normalizeIndicatorInstances } from "@/lib/chart-indicator-instance";
+import { formatPct, formatPrice, formatSignedINR, toneOf, TONE_TEXT } from "@/lib/format";
 
 export async function generateMetadata({ params }: { params: Promise<{ symbol: string }> }) {
   const { symbol } = await params;
@@ -46,6 +47,9 @@ export default async function InstrumentDetailPage({
   }
 
   const latest = candles.at(-1);
+  const prev = candles.at(-2);
+  const dayChange = latest && prev ? latest.close - prev.close : null;
+  const dayChangePct = dayChange !== null && prev ? (dayChange / prev.close) * 100 : null;
   const rawConfig = savedLayout
     ? (savedLayout.config as unknown as {
         chartType: ChartType;
@@ -71,25 +75,35 @@ export default async function InstrumentDetailPage({
 
   return (
     <div>
-      <div className="flex items-baseline justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-brand-navy">{instrument.symbol}</h1>
-            <SymbolSwitcher currentSymbol={instrument.symbol} allInstruments={allInstruments} />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex items-start gap-3.5">
+          <span className="mt-0.5 hidden h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-primary text-xs font-bold text-white sm:flex">
+            {instrument.symbol.replace(/\.NS$|\.BO$/, "").slice(0, 3)}
+          </span>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight text-brand-navy">{instrument.symbol}</h1>
+              <SymbolSwitcher currentSymbol={instrument.symbol} allInstruments={allInstruments} />
+            </div>
+            <p className="mt-0.5 text-sm text-brand-navy/60">{instrument.name}</p>
           </div>
-          <p className="mt-1 text-sm text-brand-navy/60">{instrument.name}</p>
         </div>
         {latest && (
-          <div className="text-right">
-            <p className="text-2xl font-bold text-brand-navy">
-              ₹{latest.close.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+          <div className="sm:text-right">
+            <p className="num text-2xl font-bold tracking-tight text-brand-navy">₹{formatPrice(latest.close)}</p>
+            <p className="text-xs text-brand-navy/50">
+              {dayChange !== null && dayChangePct !== null && (
+                <span className={`num mr-1.5 font-semibold ${TONE_TEXT[toneOf(dayChange)]}`}>
+                  {formatSignedINR(dayChange, 2)} ({formatPct(dayChangePct)})
+                </span>
+              )}
+              Last close
             </p>
-            <p className="text-xs text-brand-navy/50">Last close</p>
           </div>
         )}
       </div>
 
-      <p className="mt-1 text-xs text-brand-navy/40">
+      <p className="mt-3 text-xs text-brand-navy/45">
         Data: {marketDataProvider.name}
         {!marketDataProvider.isOfficial && " (interim feed, not an official NSE/BSE source)"}
         {" · "}Delayed, not real-time · bar size set by the interval selected below
@@ -97,11 +111,11 @@ export default async function InstrumentDetailPage({
 
       <div className="mt-6">
         {fetchError ? (
-          <div className="rounded-2xl border border-black/5 bg-white p-4">
+          <div className="surface p-4">
             <p className="py-16 text-center text-sm text-brand-sell">{fetchError}</p>
           </div>
         ) : candles.length === 0 ? (
-          <div className="rounded-2xl border border-black/5 bg-white p-4">
+          <div className="surface p-4">
             <p className="py-16 text-center text-sm text-brand-navy/50">No data available.</p>
           </div>
         ) : (

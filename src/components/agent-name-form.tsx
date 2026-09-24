@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { setAgentNameAction, resetAgentNameAction } from "@/lib/agent-actions";
 import { DEFAULT_AGENT_NAME } from "@/lib/agent-constants";
-import RobotAvatar from "@/components/robot/robot-avatar";
+import AgentAvatar from "@/components/ui/agent-avatar";
 
 export default function AgentNameForm({ initialName }: { initialName: string }) {
   const [name, setName] = useState(initialName);
@@ -36,7 +36,7 @@ export default function AgentNameForm({ initialName }: { initialName: string }) 
 
   return (
     <form onSubmit={handleSubmit} className="flex items-start gap-4">
-      <RobotAvatar pose={submitting ? "thinking" : message?.type === "ok" ? "happy" : "idle"} size={48} />
+      <AgentAvatar pose={submitting ? "thinking" : message?.type === "ok" ? "happy" : "idle"} size={48} />
       <div className="flex-1 space-y-3">
         <input
           value={name}

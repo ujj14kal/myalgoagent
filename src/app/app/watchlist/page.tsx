@@ -1,6 +1,9 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { marketDataProvider } from "@/lib/market-data";
 import WatchlistManager from "@/components/watchlist-manager";
+import { Star } from "lucide-react";
+import PageHeader from "@/components/ui/page-header";
 
 export const metadata = { title: "Watchlist", robots: { index: false } };
 
@@ -20,19 +23,33 @@ export default async function WatchlistPage() {
     }),
   ]);
 
+  // Last close + day change per watched symbol. A failed quote leaves that
+  // item price-less rather than failing the whole page.
+  const quotes = new Map<string, { close: number; change: number | null }>();
+  await Promise.all(
+    watchlistItems.map(async (w) => {
+      try {
+        const candles = await marketDataProvider.getHistoricalCandles(w.instrument.symbol, "5d", "1d");
+        const last = candles.at(-1);
+        const prev = candles.at(-2);
+        if (last) quotes.set(w.instrument.symbol, { close: last.close, change: prev ? ((last.close - prev.close) / prev.close) * 100 : null });
+      } catch {
+        // leave this symbol without a quote
+      }
+    }),
+  );
+
   return (
     <div>
-      <h1 className="text-2xl font-bold text-brand-navy">Watchlist</h1>
-      <p className="mt-2 text-sm text-brand-navy/60">
-        Track instruments you&rsquo;re watching. Prices update on page load
-        (not real-time streaming yet).
-      </p>
-      <div className="mt-6">
+      <PageHeader title="Watchlist" icon={Star} description={<>Track instruments you&rsquo;re watching. Prices are the last daily close, refreshed on page load — not real-time.</>} />
+      <div>
         <WatchlistManager
           watchlistItems={watchlistItems.map((w) => ({
             id: w.id,
             symbol: w.instrument.symbol,
             name: w.instrument.name,
+            close: quotes.get(w.instrument.symbol)?.close ?? null,
+            changePct: quotes.get(w.instrument.symbol)?.change ?? null,
           }))}
           allInstruments={allInstruments}
         />

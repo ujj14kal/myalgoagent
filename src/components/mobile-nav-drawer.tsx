@@ -1,22 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { navGroups } from "@/components/app-sidebar";
+import { AnimatePresence, motion } from "motion/react";
+import { Menu, X } from "lucide-react";
+import AppNavList from "@/components/app-nav-list";
+import AgentStatusCard from "@/components/agent-status-card";
 import FeedbackWidget from "@/components/feedback-widget";
 
-/**
- * The main sidebar (app-sidebar.tsx) is `hidden md:block` — below the `md`
- * breakpoint there was previously no way to reach it at all, so this is
- * the mobile equivalent: a hamburger trigger (rendered in the topbar) plus
- * a slide-in drawer with the same nav groups, closing itself on navigation
- * or backdrop tap.
- */
-export default function MobileNavDrawer() {
-  const [open, setOpen] = useState(false);
+/** Below `md` the sidebar is hidden — this is the same navigation as a slide-in drawer. */
+export default function MobileNavDrawer({ agentName, liveSessions }: { agentName: string; liveSessions: number }) {
   const pathname = usePathname();
+  // Remember which page the drawer was opened on: navigating anywhere else
+  // (a link tap, browser back) closes it with no extra effect needed.
+  const [openOn, setOpenOn] = useState<string | null>(null);
+  const open = openOn !== null && openOn === pathname;
+  const setOpen = (v: boolean) => setOpenOn(v ? pathname : null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpenOn(null);
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
 
   return (
     <div className="md:hidden">
@@ -24,71 +37,56 @@ export default function MobileNavDrawer() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open navigation menu"
-        className="flex h-9 w-9 items-center justify-center rounded-lg text-brand-navy/70 hover:bg-brand-bg hover:text-brand-primary"
+        aria-expanded={open}
+        className="flex h-9 w-9 items-center justify-center rounded-xl text-brand-navy/70 hover:bg-brand-primary/5 hover:text-brand-primary"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-6 w-6">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
-        </svg>
+        <Menu size={20} />
       </button>
 
-      {open && (
-        <div className="fixed inset-0 z-50">
-          <button
-            type="button"
-            aria-label="Close navigation menu"
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setOpen(false)}
-          />
-          <aside className="relative flex h-full w-72 max-w-[80vw] flex-col bg-white shadow-xl">
-            <div className="flex h-16 items-center justify-between gap-2 border-b border-black/5 px-5">
-              <Link href="/" className="flex items-center gap-2" onClick={() => setOpen(false)}>
-                <Image src="/brand/icon-mark.png" alt="MyAlgoAgent" width={28} height={28} />
-                <span className="text-base font-bold text-brand-primary">MyAlgoAgent</span>
-              </Link>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                aria-label="Close navigation menu"
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-brand-navy/50 hover:bg-brand-bg hover:text-brand-primary"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <nav className="flex-1 space-y-6 overflow-y-auto p-4">
-              {navGroups.map((group) => (
-                <div key={group.label}>
-                  <p className="px-2 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">{group.label}</p>
-                  <ul className="mt-2 space-y-1">
-                    {group.items.map((item) => {
-                      const active = pathname === item.href || pathname?.startsWith(item.href + "/");
-                      return (
-                        <li key={item.href}>
-                          <Link
-                            href={item.href}
-                            onClick={() => setOpen(false)}
-                            className={`block rounded-lg px-2 py-2 text-sm font-medium transition-colors ${
-                              active
-                                ? "bg-brand-primary/10 text-brand-primary"
-                                : "text-brand-navy/70 hover:bg-brand-bg hover:text-brand-primary"
-                            }`}
-                          >
-                            {item.label}
-                          </Link>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              ))}
-            </nav>
-            <div className="shrink-0 border-t border-black/5 p-4">
-              <FeedbackWidget />
-            </div>
-          </aside>
-        </div>
-      )}
+      <AnimatePresence>
+        {open && (
+          <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Navigation">
+            <motion.button
+              type="button"
+              aria-label="Close navigation menu"
+              className="absolute inset-0 bg-[#0e1b2d]/50 backdrop-blur-[2px]"
+              onClick={() => setOpen(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            />
+            <motion.aside
+              className="app-sidebar-bg relative flex h-full w-72 max-w-[82vw] flex-col text-white shadow-2xl"
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", stiffness: 380, damping: 38 }}
+            >
+              <div className="flex h-16 shrink-0 items-center justify-between px-5">
+                <Link href="/app/dashboard" className="flex items-center gap-2.5" onClick={() => setOpen(false)}>
+                  <Image src="/brand/icon-mark.png" alt="" width={30} height={30} className="rounded-lg ring-1 ring-white/20" />
+                  <span className="text-base font-bold text-white">MyAlgoAgent</span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  aria-label="Close navigation menu"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-white/60 hover:bg-white/10 hover:text-white"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-2">
+                <AppNavList layoutId="drawer-active" onNavigate={() => setOpen(false)} />
+              </div>
+              <div className="shrink-0 space-y-3 border-t border-white/10 p-3">
+                <AgentStatusCard agentName={agentName} liveSessions={liveSessions} />
+                <FeedbackWidget />
+              </div>
+            </motion.aside>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

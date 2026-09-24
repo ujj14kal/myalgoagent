@@ -2,6 +2,10 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import EmptyState from "@/components/empty-state";
+import { ListOrdered } from "lucide-react";
+import PageHeader from "@/components/ui/page-header";
+import StatusBadge from "@/components/ui/status-badge";
+import { formatPrice, formatSignedINR, toneOf, TONE_TEXT } from "@/lib/format";
 
 export const metadata = { title: "Orders", robots: { index: false } };
 
@@ -18,45 +22,46 @@ export default async function OrdersPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-brand-navy">Orders</h1>
-      <p className="mt-2 text-sm text-brand-navy/60">
-        Paper trading order history across all your sessions.
-      </p>
+      <PageHeader title="Orders" icon={ListOrdered} description={<>Paper trading order history across all your sessions.</>} />
 
       {orders.length === 0 ? (
         <div className="mt-8">
           <EmptyState pose="idle" title="No orders yet." description="Start a paper trading session to generate real order history." ctaLabel="Go to Paper Trading" ctaHref="/app/paper-trading" />
         </div>
       ) : (
-        <div className="mt-6 overflow-x-auto rounded-2xl border border-black/5 bg-white">
-          <table className="w-full text-left text-sm">
+        <div className="mt-6 overflow-x-auto surface">
+          <table className="data-table">
             <thead>
-              <tr className="border-b border-black/5 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
-                <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3">Session</th>
-                <th className="px-4 py-3">Instrument</th>
-                <th className="px-4 py-3">Side</th>
-                <th className="px-4 py-3">Price</th>
-                <th className="px-4 py-3">Qty</th>
-                <th className="px-4 py-3">Fees</th>
-                <th className="px-4 py-3">Net P&amp;L</th>
+              <tr>
+                <th>Date</th>
+                <th>Session</th>
+                <th>Instrument</th>
+                <th>Side</th>
+                <th className="num-cell">Price</th>
+                <th className="num-cell">Qty</th>
+                <th className="num-cell">Fees</th>
+                <th className="num-cell">Net P&amp;L</th>
               </tr>
             </thead>
             <tbody>
               {orders.map((o) => (
-                <tr key={o.id} className="border-b border-black/5 last:border-0">
-                  <td className="px-4 py-2">{new Date(o.time * 1000).toLocaleDateString("en-IN")}</td>
-                  <td className="px-4 py-2">
-                    <Link href={`/app/paper-trading/${o.paperSessionId}`} className="text-brand-primary hover:underline">
+                <tr key={o.id}>
+                  <td className="text-brand-navy/70">{new Date(o.time * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}</td>
+                  <td>
+                    <Link href={`/app/paper-trading/${o.paperSessionId}`} className="font-medium text-brand-primary hover:underline">
                       {o.paperSession.strategyName}
                     </Link>
                   </td>
-                  <td className="px-4 py-2">{o.paperSession.instrumentSymbol}</td>
-                  <td className={`px-4 py-2 font-medium ${o.side === "BUY" ? "text-brand-buy" : "text-brand-sell"}`}>{o.side}</td>
-                  <td className="px-4 py-2">₹{o.price.toFixed(2)}</td>
-                  <td className="px-4 py-2">{o.quantity}</td>
-                  <td className="px-4 py-2">₹{o.fees.toFixed(2)}</td>
-                  <td className="px-4 py-2">{o.netPnl !== null ? `₹${o.netPnl.toFixed(2)}` : "—"}</td>
+                  <td className="font-medium">{o.paperSession.instrumentSymbol}</td>
+                  <td>
+                    <StatusBadge status={o.side} />
+                  </td>
+                  <td className="num-cell">₹{formatPrice(o.price)}</td>
+                  <td className="num-cell">{o.quantity}</td>
+                  <td className="num-cell text-brand-navy/60">₹{formatPrice(o.fees)}</td>
+                  <td className={`num-cell font-semibold ${o.netPnl !== null ? TONE_TEXT[toneOf(o.netPnl)] : "text-brand-navy/40"}`}>
+                    {o.netPnl !== null ? formatSignedINR(o.netPnl, 2) : "—"}
+                  </td>
                 </tr>
               ))}
             </tbody>

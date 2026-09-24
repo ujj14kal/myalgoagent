@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { siteUrl } from "@/lib/site";
 import Reveal from "@/components/reveal";
+import Agent2D from "@/components/robot/agent-2d";
 
 export const metadata: Metadata = {
   description:
@@ -66,7 +67,7 @@ export default function Home() {
     <>
       <section className="gradient-mesh border-b border-black/5">
         <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-20 md:grid-cols-2 md:py-28">
-          <div className="[animation:slide-up_0.7s_ease_both]">
+          <div>
             <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-brand-primary">
               <span className="relative flex h-2 w-2">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-buy opacity-75" />
@@ -84,18 +85,17 @@ export default function Home() {
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-5">
               <Link
-                href="/product"
+                href="/signup"
                 className="group inline-flex items-center gap-2 rounded-full bg-brand-primary px-6 py-3 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:bg-brand-primary-light hover:shadow-lg hover:shadow-brand-primary/25"
               >
-                See how it works
+                Get started free
                 <Icon name="arrow" size={15} />
               </Link>
               <Link
-                href="/technology"
-                className="inline-flex items-center gap-2 text-sm font-semibold text-brand-navy hover:text-brand-primary"
+                href="/product"
+                className="inline-flex items-center gap-2 rounded-full border border-brand-navy/15 bg-white/70 px-6 py-3 text-sm font-semibold text-brand-navy transition-colors hover:border-brand-primary hover:text-brand-primary"
               >
-                Technology & AWS infrastructure
-                <Icon name="arrow" size={14} />
+                See how it works
               </Link>
             </div>
             <div className="mt-7 flex flex-wrap gap-5 text-xs text-brand-navy/60">
@@ -105,7 +105,12 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="[animation:scale-in_0.7s_ease_0.15s_both]">
+          <div className="relative [animation:scale-in_0.7s_ease_0.15s_both]">
+            {/* The agent, reading the backtest it just ran — desktop only, so
+                phones keep a light, fast hero. */}
+            <div className="pointer-events-none absolute -left-24 -bottom-10 z-10 hidden lg:block">
+              <Agent2D pose="point" size={150} className="drop-shadow-[0_18px_30px_rgba(14,27,45,0.25)]" />
+            </div>
             <div className="hover-lift overflow-hidden rounded-2xl border border-white/10 bg-brand-navy text-white shadow-2xl shadow-brand-navy/20">
               <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
                 <div className="flex items-center gap-2 text-sm font-semibold">
@@ -127,7 +132,7 @@ export default function Home() {
                 </div>
                 <div className="bg-brand-navy p-4">
                   <p className="text-[10px] uppercase tracking-wide text-white/40">Max drawdown</p>
-                  <p className="mt-1 text-2xl font-bold text-brand-sell">-9%</p>
+                  <p className="mt-1 text-2xl font-bold text-brand-sell">&minus;9%</p>
                   <p className="text-[10px] text-white/30">Historical</p>
                 </div>
               </div>

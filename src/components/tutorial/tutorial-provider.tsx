@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import TutorialTour, { type TourStep } from "./tutorial-tour";
 import { setAgentNameAction, completeTutorialAction } from "@/lib/agent-actions";
 import { DEFAULT_AGENT_NAME } from "@/lib/agent-constants";
@@ -9,8 +10,8 @@ const STEPS: TourStep[] = [
   {
     id: "welcome",
     target: null,
-    pose: "talk",
-    title: "Hi, I'm your {agent}",
+    pose: "wave",
+    title: "Hi, I'm {agent} — your agent",
     body: "I'll show you around in under a minute — what's here, what it does, and what's different about it. What would you like to call me?",
   },
   {
@@ -23,7 +24,7 @@ const STEPS: TourStep[] = [
   {
     id: "portfolio-chart",
     target: '[data-tour="portfolio-chart"]',
-    pose: "talk",
+    pose: "analyzing",
     title: "Your portfolio, over time",
     body: "This tracks your combined paper-trading equity as your strategies run, built from your real order history — not a simulated demo feed.",
   },
@@ -32,12 +33,12 @@ const STEPS: TourStep[] = [
     target: '[data-tour="pnl-summary"]',
     pose: "talk",
     title: "P&L at a glance",
-    body: "Today, this week, this month, and all-time — green means you're up, red means you're down. No digging through a spreadsheet.",
+    body: "Today, this week, this month and all-time realised P&L — green is up, red is down, grey is flat. No digging through a spreadsheet.",
   },
   {
     id: "strategies-list",
     target: '[data-tour="strategies-list"]',
-    pose: "point",
+    pose: "working",
     title: "Your strategies",
     body: "Build one visually or with code, then backtest it against real historical data with no look-ahead bias — most tools let a strategy accidentally 'see the future'; this one can't.",
   },
@@ -51,7 +52,7 @@ const STEPS: TourStep[] = [
   {
     id: "risk-gauge",
     target: '[data-tour="risk-gauge"]',
-    pose: "thinking",
+    pose: "guarding",
     title: "Your safety net",
     body: "Set a max-loss limit and I enforce it server-side — even if a strategy or a bug tries to ignore it. That's the part most hobby bots skip.",
   },
@@ -60,7 +61,7 @@ const STEPS: TourStep[] = [
     target: null,
     pose: "happy",
     title: "That's it — you're set",
-    body: "You can replay this tour anytime from your account page or the clock icon up top. Now let's go build something.",
+    body: "You can replay this tour any time from Agent Settings. I'll keep an eye on things from the sidebar — now let's build something.",
   },
 ];
 
@@ -88,8 +89,13 @@ export default function TutorialProvider({
   const [nameDraft, setNameDraft] = useState(initialAgentName ?? "");
   const [saving, setSaving] = useState(false);
 
+  const pathname = usePathname();
+  const router = useRouter();
+  // The tour's steps point at dashboard elements, so replaying it from any
+  // other page goes to the dashboard first instead of spotlighting nothing.
   const startTour = () => {
     setStepIndex(0);
+    if (pathname !== "/app/dashboard") router.push("/app/dashboard");
     setOpen(true);
   };
 
@@ -118,13 +124,13 @@ export default function TutorialProvider({
         onChange={(e) => setNameDraft(e.target.value)}
         placeholder={DEFAULT_AGENT_NAME}
         maxLength={24}
-        className="w-full rounded-full border border-brand-navy/15 px-3 py-1.5 text-sm focus:border-brand-primary focus:outline-none"
+        className="w-full rounded-full border border-brand-navy/15 px-4 py-2 text-sm focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/15"
       />
       <button
         type="button"
         disabled={saving}
         onClick={submitName}
-        className="shrink-0 rounded-full bg-brand-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-primary-light disabled:opacity-50"
+        className="shrink-0 rounded-full bg-brand-primary px-4 py-2 text-xs font-semibold text-white hover:bg-brand-primary-light disabled:opacity-50"
       >
         {saving ? "Saving…" : "Set name"}
       </button>

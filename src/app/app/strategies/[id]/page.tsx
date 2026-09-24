@@ -14,6 +14,9 @@ import CandlestickChart, { type Overlay } from "@/components/candlestick-chart";
 import StrategyBuilderForm from "@/components/strategy-builder-form";
 import StrategyStatusControls from "@/components/strategy-status-controls";
 import WebhookPanel from "@/components/webhook-panel";
+import { Layers } from "lucide-react";
+import PageHeader from "@/components/ui/page-header";
+import StatusBadge from "@/components/ui/status-badge";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -97,22 +100,22 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
 
   return (
     <div>
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-brand-navy">{strategy.name}</h1>
-          <p className="mt-1 text-sm text-brand-navy/60">
-            {strategy.instrument.symbol} — {strategy.instrument.name}
-            {" · "}
-            <span className={strategy.direction === "SHORT" ? "font-medium text-brand-sell" : "font-medium text-brand-buy"}>
-              {strategy.direction === "SHORT" ? "Short" : "Long"}
-            </span>
-          </p>
-        </div>
-        <StrategyStatusControls strategyId={strategy.id} status={strategy.status} />
-      </div>
+      <PageHeader
+        eyebrow="Strategy"
+        title={strategy.name}
+        icon={Layers}
+        description={
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="font-medium text-brand-navy">{strategy.instrument.symbol}</span>
+            <span>— {strategy.instrument.name}</span>
+            <StatusBadge status={strategy.direction === "SHORT" ? "SHORT" : "LONG"} />
+          </span>
+        }
+        actions={<StrategyStatusControls strategyId={strategy.id} status={strategy.status} />}
+      />
 
       {!isWebhook && (
-        <p className="mt-1 text-xs text-brand-navy/40">
+        <p className="-mt-2 text-xs text-brand-navy/45">
           Data: {marketDataProvider.name}
           {!marketDataProvider.isOfficial && " (interim feed, not an official NSE/BSE source)"}
           {" · "}Daily bars, not real-time · signals shown are a preview of where this
@@ -136,11 +139,11 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
             }))}
           />
         ) : fetchError ? (
-          <div className="rounded-2xl border border-black/5 bg-white p-4">
+          <div className="surface p-4">
             <p className="py-16 text-center text-sm text-brand-sell">{fetchError}</p>
           </div>
         ) : (
-          <div className="rounded-2xl border border-black/5 bg-white p-4">
+          <div className="surface p-4">
             <CandlestickChart candles={candles} overlays={overlays} markers={signals} />
           </div>
         )}

@@ -1,10 +1,10 @@
 import Link from "next/link";
-import Image from "next/image";
+import Agent2D from "@/components/robot/agent-2d";
 
 export default function NotFound() {
   return (
     <div className="mx-auto flex max-w-xl flex-col items-center px-4 py-24 text-center">
-      <Image src="/brand/icon-mark.png" alt="" width={96} height={96} className="opacity-80" />
+      <Agent2D pose="thinking" size={130} />
       <h1 className="mt-6 text-3xl font-bold text-brand-navy">Page not found</h1>
       <p className="mt-3 text-brand-navy/70">
         The page you&rsquo;re looking for doesn&rsquo;t exist or may have

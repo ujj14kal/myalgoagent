@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { HeartPulse } from "lucide-react";
 import type { HealthAlert } from "@/lib/health";
 import { setPaperSessionStatus, stopDuplicateSessionsAction } from "@/lib/paper-actions";
 
@@ -76,7 +77,7 @@ function AlertRow({ alert }: { alert: HealthAlert }) {
   }
 
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-black/5 bg-white p-3">
+    <div className="flex items-start gap-3 rounded-xl border border-black/5 bg-brand-bg/50 p-3">
       <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${style.dot}`} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -126,12 +127,14 @@ function AlertRow({ alert }: { alert: HealthAlert }) {
 export default function HealthPanel({ alerts }: { alerts: HealthAlert[] }) {
   if (alerts.length === 0) {
     return (
-      <div className="rounded-2xl border border-black/5 bg-white p-5">
-        <div className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-brand-buy" />
-          <p className="text-sm font-semibold text-brand-navy">All clear</p>
+      <div className="surface flex items-center gap-3 p-5">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-buy/10 text-brand-buy">
+          <HeartPulse size={19} />
+        </span>
+        <div>
+          <p className="text-sm font-semibold text-brand-navy">Health · all clear</p>
+          <p className="text-xs text-brand-navy/50">No risk, redundancy, or sync issues found right now.</p>
         </div>
-        <p className="mt-1 text-xs text-brand-navy/50">No risk, redundancy, or sync issues found right now.</p>
       </div>
     );
   }
@@ -139,9 +142,14 @@ export default function HealthPanel({ alerts }: { alerts: HealthAlert[] }) {
   const criticalCount = alerts.filter((a) => a.severity === "CRITICAL").length;
 
   return (
-    <div className="rounded-2xl border border-black/5 bg-white p-5">
+    <div className={`surface p-5 ${criticalCount > 0 ? "ring-1 ring-brand-sell/25" : ""}`}>
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-brand-navy">Health</p>
+        <div className="flex items-center gap-2.5">
+          <span className={`flex h-8 w-8 items-center justify-center rounded-xl ${criticalCount > 0 ? "bg-brand-sell/10 text-brand-sell" : "bg-brand-gold/15 text-[#8a7437]"}`}>
+            <HeartPulse size={16} />
+          </span>
+          <p className="text-sm font-semibold text-brand-navy">Health</p>
+        </div>
         {criticalCount > 0 && (
           <span className="rounded-full bg-brand-sell/10 px-2 py-0.5 text-xs font-semibold text-brand-sell">
             {criticalCount} critical

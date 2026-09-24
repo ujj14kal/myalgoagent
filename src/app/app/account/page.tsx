@@ -7,6 +7,8 @@ import SignOutOthersButton from "@/components/sign-out-others-button";
 import DangerZone from "@/components/danger-zone";
 import ConnectedAccounts from "@/components/connected-accounts";
 import { getLinkedProviders } from "@/lib/account-links";
+import { UserRound } from "lucide-react";
+import PageHeader from "@/components/ui/page-header";
 
 const OAUTH_PROVIDERS = ["google"];
 
@@ -30,13 +32,12 @@ export default async function AccountPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-brand-navy">Account</h1>
-      <p className="mt-1 text-sm text-brand-navy/50">Manage your profile and account security.</p>
+      <PageHeader title="Account" icon={UserRound} description={<>Manage your profile and account security.</>} />
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <div className="grid gap-6 md:grid-cols-2">
-            <section className="rounded-2xl border border-black/5 bg-white p-6">
+            <section className="surface p-6">
               <h2 className="text-sm font-semibold text-brand-navy">Profile</h2>
               <p className="mt-1 text-xs text-brand-navy/50">{user.email}</p>
               <div className="mt-4">
@@ -51,7 +52,7 @@ export default async function AccountPage() {
               </div>
             </section>
 
-            <section className="rounded-2xl border border-black/5 bg-white p-6">
+            <section className="surface p-6">
               <h2 className="text-sm font-semibold text-brand-navy">
                 {user.passwordHash ? "Change password" : "Set a password"}
               </h2>
@@ -67,7 +68,7 @@ export default async function AccountPage() {
           </div>
 
           <div className="grid gap-6 md:grid-cols-2">
-            <section className="rounded-2xl border border-black/5 bg-white p-6">
+            <section className="surface p-6">
               <h2 className="text-sm font-semibold text-brand-navy">Sessions</h2>
               <p className="mt-1 text-xs text-brand-navy/50">
                 Signed in as {user.name ?? user.email} on this device.
@@ -90,7 +91,7 @@ export default async function AccountPage() {
               </div>
             </section>
 
-            <section className="rounded-2xl border border-black/5 bg-white p-6">
+            <section className="surface p-6">
               <h2 className="text-sm font-semibold text-brand-navy">Connected accounts</h2>
               <p className="mt-1 text-xs text-brand-navy/50">
                 Sign in with more than one method, or disconnect one you no longer use.
@@ -101,7 +102,7 @@ export default async function AccountPage() {
             </section>
           </div>
 
-          <section className="rounded-2xl border border-black/5 bg-white p-6">
+          <section className="surface p-6">
             <h2 className="text-sm font-semibold text-brand-navy">Your data</h2>
             <p className="mt-1 text-xs text-brand-navy/50">
               Download everything associated with your account — profile, strategies, backtests, paper sessions,
@@ -121,7 +122,7 @@ export default async function AccountPage() {
         </div>
 
         <div className="sticky top-6 h-fit">
-          <section className="rounded-2xl border border-black/5 bg-white p-6">
+          <section className="surface p-6">
             <h2 className="text-sm font-semibold text-brand-navy">Account summary</h2>
             <dl className="mt-4 space-y-3 text-sm">
               <div className="flex items-center justify-between">

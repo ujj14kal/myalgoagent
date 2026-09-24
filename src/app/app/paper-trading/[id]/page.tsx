@@ -6,6 +6,12 @@ import CandlestickChart from "@/components/candlestick-chart";
 import PaperSessionControls from "@/components/paper-session-controls";
 import { describePositionSizing } from "@/lib/position-sizing";
 import type { Signal } from "@/lib/strategy";
+import { Activity, Banknote, BriefcaseBusiness, CandlestickChart as CandleIcon, ListOrdered, PieChart, TrendingUp } from "lucide-react";
+import PageHeader from "@/components/ui/page-header";
+import StatCard from "@/components/ui/stat-card";
+import StatusBadge from "@/components/ui/status-badge";
+import { Card, CardHeader } from "@/components/ui/card";
+import { formatINR, formatPct, formatPrice, formatSignedINR, toneOf, TONE_TEXT } from "@/lib/format";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -54,84 +60,77 @@ export default async function PaperSessionDetailPage({ params }: { params: Promi
   const equity = paperSession.cash + unrealizedGain;
   const pnl = equity - paperSession.startingCapital;
   const pnlPct = (pnl / paperSession.startingCapital) * 100;
+  // Cash not tied up in the open position, so the cards add up to equity.
+  const availableCash = !inPosition ? paperSession.cash : paperSession.direction === "SHORT" ? paperSession.cash + entryPrice * quantity : paperSession.cash - entryPrice * quantity;
+  const signedPosition = paperSession.direction === "SHORT" ? -positionValue : positionValue;
 
   return (
     <div>
-      <div className="rounded-xl bg-brand-gold/15 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-brand-navy/70">
-        Paper Trading — simulated using end-of-day data, not real-time. Not real money.
+      <PageHeader
+        eyebrow="Paper session"
+        title={paperSession.strategyName}
+        icon={Activity}
+        description={
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="font-medium text-brand-navy">{paperSession.instrumentSymbol}</span>
+            <StatusBadge status={paperSession.status} />
+            <StatusBadge status={paperSession.direction === "SHORT" ? "SHORT" : "LONG"} />
+            <span>· {describePositionSizing(paperSession.positionSizingMode, paperSession.positionSizingValue)}</span>
+          </span>
+        }
+        actions={<PaperSessionControls sessionId={paperSession.id} status={paperSession.status} />}
+      />
+
+      <p className="mb-4 flex items-center gap-2 rounded-xl border border-brand-gold/30 bg-brand-gold/[0.08] px-4 py-2.5 text-xs font-medium text-brand-navy/70">
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-gold" />
+        Simulated with end-of-day data, not real-time — no real money is involved.
+      </p>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard label="Available cash" value={formatINR(availableCash)} icon={Banknote} />
+        <StatCard label="Position value" value={formatINR(signedPosition)} icon={BriefcaseBusiness} sub={inPosition ? `${quantity} @ ₹${formatPrice(entryPrice)}` : "No open position"} />
+        <StatCard label="Equity" value={formatINR(equity)} icon={PieChart} sub={`Started with ${formatINR(paperSession.startingCapital)}`} />
+        <StatCard label="P&L" value={formatPct(pnlPct)} tone={toneOf(pnlPct)} icon={TrendingUp} sub={formatSignedINR(pnl)} />
       </div>
 
-      <div className="mt-4 flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-brand-navy">{paperSession.strategyName}</h1>
-          <p className="mt-1 text-sm text-brand-navy/60">
-            {paperSession.instrumentSymbol} ·{" "}
-            <span className={paperSession.direction === "SHORT" ? "font-medium text-brand-sell" : "font-medium text-brand-buy"}>
-              {paperSession.direction === "SHORT" ? "Short" : "Long"}
-            </span>{" "}
-            · Sizing: {describePositionSizing(paperSession.positionSizingMode, paperSession.positionSizingValue)}
-          </p>
+      <Card className="mt-6 p-5">
+        <CardHeader title="Price chart" subtitle="Last 3 months · entries and exits marked" icon={CandleIcon} />
+        <div className="mt-4">
+          {fetchError ? <p className="py-16 text-center text-sm text-brand-sell">{fetchError}</p> : <CandlestickChart candles={candles} markers={markers} />}
         </div>
-        <PaperSessionControls sessionId={paperSession.id} status={paperSession.status} />
-      </div>
+      </Card>
 
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-2xl border border-black/5 bg-white p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Cash</p>
-          <p className="mt-2 text-xl font-bold text-brand-navy">₹{paperSession.cash.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</p>
+      <div className="mt-6">
+        <div className="mb-3 flex items-center gap-2">
+          <ListOrdered size={16} className="text-brand-primary" />
+          <h2 className="text-sm font-semibold text-brand-navy">Order history</h2>
+          <span className="rounded-full bg-brand-navy/[0.06] px-2 py-0.5 text-xs font-semibold text-brand-navy/55">{paperSession.orders.length}</span>
         </div>
-        <div className="rounded-2xl border border-black/5 bg-white p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Position value</p>
-          <p className="mt-2 text-xl font-bold text-brand-navy">₹{positionValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</p>
-        </div>
-        <div className="rounded-2xl border border-black/5 bg-white p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Equity</p>
-          <p className="mt-2 text-xl font-bold text-brand-navy">₹{equity.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</p>
-        </div>
-        <div className="rounded-2xl border border-black/5 bg-white p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">P&amp;L</p>
-          <p className={`mt-2 text-xl font-bold ${pnlPct >= 0 ? "text-brand-buy" : "text-brand-sell"}`}>
-            {pnlPct >= 0 ? "+" : ""}
-            {pnlPct.toFixed(2)}%
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-8">
-        {fetchError ? (
-          <div className="rounded-2xl border border-black/5 bg-white p-4">
-            <p className="py-16 text-center text-sm text-brand-sell">{fetchError}</p>
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-black/5 bg-white p-4">
-            <CandlestickChart candles={candles} markers={markers} />
-          </div>
-        )}
-      </div>
-
-      <div className="mt-8">
-        <p className="mb-2 text-sm font-semibold text-brand-navy">Order history</p>
-        <div className="overflow-x-auto rounded-2xl border border-black/5 bg-white">
-          <table className="w-full text-left text-sm">
+        <div className="overflow-x-auto surface">
+          <table className="data-table">
             <thead>
-              <tr className="border-b border-black/5 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
-                <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3">Side</th>
-                <th className="px-4 py-3">Price</th>
-                <th className="px-4 py-3">Qty</th>
-                <th className="px-4 py-3">Fees</th>
-                <th className="px-4 py-3">Net P&amp;L</th>
+              <tr>
+                <th>Date</th>
+                <th>Side</th>
+                <th className="num-cell">Price</th>
+                <th className="num-cell">Qty</th>
+                <th className="num-cell">Fees</th>
+                <th className="num-cell">Net P&amp;L</th>
               </tr>
             </thead>
             <tbody>
               {paperSession.orders.map((o) => (
-                <tr key={o.id} className="border-b border-black/5 last:border-0">
-                  <td className="px-4 py-2">{new Date(o.time * 1000).toLocaleDateString("en-IN")}</td>
-                  <td className={`px-4 py-2 font-medium ${o.side === "BUY" ? "text-brand-buy" : "text-brand-sell"}`}>{o.side}</td>
-                  <td className="px-4 py-2">₹{o.price.toFixed(2)}</td>
-                  <td className="px-4 py-2">{o.quantity}</td>
-                  <td className="px-4 py-2">₹{o.fees.toFixed(2)}</td>
-                  <td className="px-4 py-2">{o.netPnl !== null ? `₹${o.netPnl.toFixed(2)}` : "—"}</td>
+                <tr key={o.id}>
+                  <td>{new Date(o.time * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}</td>
+                  <td>
+                    <StatusBadge status={o.side} />
+                  </td>
+                  <td className="num-cell">₹{formatPrice(o.price)}</td>
+                  <td className="num-cell">{o.quantity}</td>
+                  <td className="num-cell text-brand-navy/60">₹{formatPrice(o.fees)}</td>
+                  <td className={`num-cell font-semibold ${o.netPnl !== null ? TONE_TEXT[toneOf(o.netPnl)] : "text-brand-navy/40"}`}>
+                    {o.netPnl !== null ? formatSignedINR(o.netPnl, 2) : "—"}
+                  </td>
                 </tr>
               ))}
               {paperSession.orders.length === 0 && (

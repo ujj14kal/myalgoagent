@@ -104,10 +104,6 @@ body {
   from { opacity: 0; transform: scale(0.92); }
   to { opacity: 1; transform: scale(1); }
 }
-@keyframes eye-blink {
-  0%, 92%, 100% { transform: scaleY(1); }
-  96% { transform: scaleY(0.1); }
-}
 @keyframes brand-spin {
   to { transform: rotate(360deg); }
 }
@@ -127,7 +123,6 @@ body {
   .animate-fade-in { animation: fade-in 0.5s ease both; }
   .animate-slide-up { animation: slide-up 0.5s ease both; }
   .animate-scale-in { animation: scale-in 0.35s ease both; }
-  .robot-eye { animation: eye-blink 4.5s ease-in-out infinite; transform-origin: center; }
 }
 
 /* Hidden-until-revealed state only applies once the `js` class proves
@@ -143,4 +138,107 @@ body {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* ───────────────────────── App design system ─────────────────────────
+   One set of surfaces, shadows and motion used by every /app page, so the
+   whole product reads as one designed system instead of page-by-page. */
+:root {
+  --shadow-card: 0 1px 2px rgba(14, 27, 45, 0.04), 0 8px 24px -12px rgba(14, 27, 45, 0.12);
+  --shadow-card-hover: 0 2px 4px rgba(14, 27, 45, 0.05), 0 18px 36px -16px rgba(71, 24, 152, 0.28);
+}
+
+.surface {
+  background: #ffffff;
+  border: 1px solid rgba(14, 27, 45, 0.06);
+  border-radius: 1.25rem;
+  box-shadow: var(--shadow-card);
+}
+.surface-interactive {
+  transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+.surface-interactive:hover {
+  box-shadow: var(--shadow-card-hover);
+  border-color: rgba(71, 24, 152, 0.25);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .surface-interactive:hover { transform: translateY(-2px); }
+}
+
+.app-sidebar-bg {
+  background:
+    radial-gradient(120% 55% at 0% 0%, rgba(71, 24, 152, 0.75), transparent 62%),
+    radial-gradient(80% 45% at 100% 100%, rgba(189, 163, 96, 0.12), transparent 60%),
+    linear-gradient(180deg, #16123a, var(--brand-navy));
+}
+
+/* Ambient page backdrop: a soft brand-tinted glow at the top of the content
+   area. Desktop only — phones get the plain background (cheaper to paint). */
+.app-canvas { background: var(--brand-bg); }
+@media (min-width: 1024px) {
+  .app-canvas {
+    background:
+      radial-gradient(900px 380px at 12% -8%, rgba(106, 53, 194, 0.10), transparent 70%),
+      radial-gradient(700px 320px at 92% -6%, rgba(70, 111, 255, 0.08), transparent 70%),
+      var(--brand-bg);
+  }
+}
+
+.num { font-variant-numeric: tabular-nums; }
+
+/* Skeleton shimmer for loading states */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgba(14, 27, 45, 0.06);
+  border-radius: 0.75rem;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  }
+}
+@keyframes skeleton-shimmer {
+  to { transform: translateX(100%); }
+}
+
+/* Brief tint when a live figure changes — the value itself never animates,
+   so a money figure is always readable as its true value. */
+@keyframes value-flash-up {
+  0% { background-color: rgba(0, 168, 62, 0.18); }
+  100% { background-color: transparent; }
+}
+@keyframes value-flash-down {
+  0% { background-color: rgba(214, 0, 0, 0.14); }
+  100% { background-color: transparent; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .flash-up { animation: value-flash-up 1.2s ease-out; }
+  .flash-down { animation: value-flash-down 1.2s ease-out; }
+}
+
+/* Shared data-table look for every list of orders, positions, sessions. */
+@layer components {
+  .data-table { width: 100%; text-align: left; font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+  .data-table thead th {
+    background: rgba(247, 249, 252, 0.8);
+    padding: 0.7rem 1rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(14, 27, 45, 0.45);
+    white-space: nowrap;
+    border-bottom: 1px solid rgba(14, 27, 45, 0.06);
+  }
+  .data-table tbody td { padding: 0.8rem 1rem; border-bottom: 1px solid rgba(14, 27, 45, 0.05); white-space: nowrap; color: var(--brand-navy); }
+  .data-table tbody tr:last-child td { border-bottom: 0; }
+  .data-table tbody tr { transition: background-color 0.15s ease; }
+  .data-table tbody tr:hover { background: rgba(71, 24, 152, 0.025); }
+  .data-table .num-cell { text-align: right; }
 }

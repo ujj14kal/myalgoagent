@@ -7,26 +7,35 @@ import CandlestickChart from "@/components/candlestick-chart";
 import EquityCurveChart from "@/components/equity-curve-chart";
 import { describePositionSizing } from "@/lib/position-sizing";
 import type { Signal } from "@/lib/strategy";
+import { CandlestickChart as CandleIcon, FlaskConical, LineChart, ListOrdered } from "lucide-react";
+import PageHeader from "@/components/ui/page-header";
+import StatCard from "@/components/ui/stat-card";
+import StatusBadge from "@/components/ui/status-badge";
+import { Card, CardHeader } from "@/components/ui/card";
+import { formatINR, formatPct, formatPrice, formatSignedINR, toneOf, TONE_TEXT } from "@/lib/format";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   return { title: `Backtest ${id}`, robots: { index: false } };
 }
 
+// `signed`: the figure is itself a gain or loss, so it's colored by sign.
+// Win rate, profit factor, Sharpe and trade count are not — they stay neutral.
 const METRIC_TILES = [
-  { key: "totalReturnPct" as const, label: "Total return", format: "pct" },
-  { key: "cagrPct" as const, label: "CAGR", format: "pct" },
-  { key: "winRatePct" as const, label: "Win rate", format: "pct" },
-  { key: "profitFactor" as const, label: "Profit factor", format: "num" },
-  { key: "maxDrawdownPct" as const, label: "Max drawdown", format: "pct" },
-  { key: "sharpeRatio" as const, label: "Sharpe ratio", format: "num" },
-  { key: "expectancy" as const, label: "Expectancy (₹/trade)", format: "money" },
-  { key: "tradeCount" as const, label: "Trades", format: "int" },
+  { key: "totalReturnPct" as const, label: "Total return", format: "pct", signed: true },
+  { key: "cagrPct" as const, label: "CAGR", format: "pct", signed: true },
+  { key: "winRatePct" as const, label: "Win rate", format: "plainpct", signed: false },
+  { key: "profitFactor" as const, label: "Profit factor", format: "num", signed: false },
+  { key: "maxDrawdownPct" as const, label: "Max drawdown", format: "pct", signed: true },
+  { key: "sharpeRatio" as const, label: "Sharpe ratio", format: "num", signed: false },
+  { key: "expectancy" as const, label: "Expectancy / trade", format: "money", signed: true },
+  { key: "tradeCount" as const, label: "Trades", format: "int", signed: false },
 ];
 
 function formatValue(value: number, format: string) {
-  if (format === "pct") return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
-  if (format === "money") return `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+  if (format === "pct") return formatPct(value);
+  if (format === "plainpct") return `${value.toFixed(1)}%`;
+  if (format === "money") return formatSignedINR(value);
   if (format === "int") return value.toString();
   return value.toFixed(2);
 }
@@ -58,94 +67,86 @@ export default async function BacktestDetailPage({ params }: { params: Promise<{
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-brand-navy">{run.strategyName}</h1>
-      <p className="mt-1 text-sm text-brand-navy/60">
-        {run.instrumentSymbol} ·{" "}
-        <span className={run.direction === "SHORT" ? "font-medium text-brand-sell" : "font-medium text-brand-buy"}>
-          {run.direction === "SHORT" ? "Short" : "Long"}
-        </span>{" "}
-        · {run.range} · started with ₹{run.startingCapital.toLocaleString("en-IN")} ·
-        Sizing: {describePositionSizing(run.positionSizingMode, run.positionSizingValue)}
-      </p>
-      <p className="mt-1 text-xs text-brand-navy/40">
-        Data: {marketDataProvider.name}
-        {!marketDataProvider.isOfficial && " (interim feed, not an official NSE/BSE source)"}
-        {" · "}Backtested against historical data — past performance does not guarantee future results.
-      </p>
+      <PageHeader
+        eyebrow="Backtest result"
+        title={run.strategyName}
+        icon={FlaskConical}
+        description={
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="font-medium text-brand-navy">{run.instrumentSymbol}</span>
+            <StatusBadge status={run.direction === "SHORT" ? "SHORT" : "LONG"} />
+            <span>· {run.range} · started with {formatINR(run.startingCapital)} · {describePositionSizing(run.positionSizingMode, run.positionSizingValue)}</span>
+          </span>
+        }
+      />
 
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {METRIC_TILES.map((tile) => (
-          <div key={tile.key} className="rounded-2xl border border-black/5 bg-white p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">{tile.label}</p>
-            <p
-              className={`mt-2 text-xl font-bold ${
-                tile.format === "pct" || tile.format === "money"
-                  ? run[tile.key] >= 0
-                    ? "text-brand-buy"
-                    : "text-brand-sell"
-                  : "text-brand-navy"
-              }`}
-            >
-              {formatValue(run[tile.key], tile.format)}
-            </p>
-          </div>
+          <StatCard
+            key={tile.key}
+            label={tile.label}
+            value={formatValue(run[tile.key], tile.format)}
+            tone={tile.signed ? toneOf(run[tile.key]) : undefined}
+          />
         ))}
       </div>
+      <p className="mt-3 text-xs text-brand-navy/45">
+        Data: {marketDataProvider.name}
+        {!marketDataProvider.isOfficial && " (interim feed, not an official NSE/BSE source)"} · Backtested against historical data — past
+        performance does not guarantee future results.
+      </p>
 
-      <div className="mt-8">
-        <p className="mb-2 text-sm font-semibold text-brand-navy">Equity curve</p>
-        <div className="rounded-2xl border border-black/5 bg-white p-4">
+      <Card className="mt-6 p-5">
+        <CardHeader title="Equity curve" icon={LineChart} />
+        <div className="mt-4">
           <EquityCurveChart points={equityCurve} />
         </div>
-      </div>
+      </Card>
 
-      <div className="mt-8">
-        <p className="mb-2 text-sm font-semibold text-brand-navy">Price chart with executed trades</p>
-        {fetchError ? (
-          <div className="rounded-2xl border border-black/5 bg-white p-4">
-            <p className="py-16 text-center text-sm text-brand-sell">{fetchError}</p>
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-black/5 bg-white p-4">
-            <CandlestickChart candles={candles} markers={markers} />
-          </div>
-        )}
-      </div>
+      <Card className="mt-6 p-5">
+        <CardHeader title="Price chart with executed trades" icon={CandleIcon} />
+        <div className="mt-4">
+          {fetchError ? <p className="py-16 text-center text-sm text-brand-sell">{fetchError}</p> : <CandlestickChart candles={candles} markers={markers} />}
+        </div>
+      </Card>
 
-      <div className="mt-8">
-        <p className="mb-2 text-sm font-semibold text-brand-navy">Trade ledger</p>
-        <div className="overflow-x-auto rounded-2xl border border-black/5 bg-white">
-          <table className="w-full text-left text-sm">
+      <div className="mt-6">
+        <div className="mb-3 flex items-center gap-2">
+          <ListOrdered size={16} className="text-brand-primary" />
+          <h2 className="text-sm font-semibold text-brand-navy">Trade ledger</h2>
+          <span className="rounded-full bg-brand-navy/[0.06] px-2 py-0.5 text-xs font-semibold text-brand-navy/55">{run.trades.length}</span>
+        </div>
+        <div className="overflow-x-auto surface">
+          <table className="data-table">
             <thead>
-              <tr className="border-b border-black/5 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
-                <th className="px-4 py-3">Entry</th>
-                <th className="px-4 py-3">Exit</th>
-                <th className="px-4 py-3">Qty</th>
-                <th className="px-4 py-3">Entry price</th>
-                <th className="px-4 py-3">Exit price</th>
-                <th className="px-4 py-3">Net P&amp;L</th>
-                <th className="px-4 py-3">P&amp;L %</th>
-                <th className="px-4 py-3">Bars held</th>
+              <tr>
+                <th>Entry</th>
+                <th>Exit</th>
+                <th className="num-cell">Qty</th>
+                <th className="num-cell">Entry price</th>
+                <th className="num-cell">Exit price</th>
+                <th className="num-cell">Net P&amp;L</th>
+                <th className="num-cell">P&amp;L %</th>
+                <th className="num-cell">Bars held</th>
               </tr>
             </thead>
             <tbody>
-              {run.trades.map((t) => (
-                <tr key={t.id} className="border-b border-black/5 last:border-0">
-                  <td className="px-4 py-2">{new Date(t.entryTime * 1000).toLocaleDateString("en-IN")}</td>
-                  <td className="px-4 py-2">{new Date(t.exitTime * 1000).toLocaleDateString("en-IN")}</td>
-                  <td className="px-4 py-2">{t.quantity}</td>
-                  <td className="px-4 py-2">₹{t.entryPrice.toFixed(2)}</td>
-                  <td className="px-4 py-2">₹{t.exitPrice.toFixed(2)}</td>
-                  <td className={`px-4 py-2 font-medium ${t.netPnl >= 0 ? "text-brand-buy" : "text-brand-sell"}`}>
-                    ₹{t.netPnl.toFixed(2)}
-                  </td>
-                  <td className={`px-4 py-2 ${t.netPnlPct >= 0 ? "text-brand-buy" : "text-brand-sell"}`}>
-                    {t.netPnlPct >= 0 ? "+" : ""}
-                    {t.netPnlPct.toFixed(2)}%
-                  </td>
-                  <td className="px-4 py-2">{t.holdingBars}</td>
-                </tr>
-              ))}
+              {run.trades.map((t) => {
+                const tone = toneOf(t.netPnl);
+                const d = (sec: number) => new Date(sec * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "2-digit", timeZone: "Asia/Kolkata" });
+                return (
+                  <tr key={t.id}>
+                    <td>{d(t.entryTime)}</td>
+                    <td>{d(t.exitTime)}</td>
+                    <td className="num-cell">{t.quantity}</td>
+                    <td className="num-cell">₹{formatPrice(t.entryPrice)}</td>
+                    <td className="num-cell">₹{formatPrice(t.exitPrice)}</td>
+                    <td className={`num-cell font-semibold ${TONE_TEXT[tone]}`}>{formatSignedINR(t.netPnl, 2)}</td>
+                    <td className={`num-cell ${TONE_TEXT[tone]}`}>{formatPct(t.netPnlPct)}</td>
+                    <td className="num-cell text-brand-navy/60">{t.holdingBars}</td>
+                  </tr>
+                );
+              })}
               {run.trades.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-8 text-center text-sm text-brand-navy/50">

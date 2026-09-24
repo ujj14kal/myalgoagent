@@ -2,12 +2,17 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { Plus, Search, Trash2 } from "lucide-react";
 import { addToWatchlist, removeFromWatchlist } from "@/lib/watchlist-actions";
+import EmptyState from "@/components/empty-state";
+import { formatPct, formatPrice, toneOf, TONE_TEXT } from "@/lib/format";
 
 interface WatchlistItem {
   id: string;
   symbol: string;
   name: string;
+  close: number | null;
+  changePct: number | null;
 }
 
 interface InstrumentOption {
@@ -54,26 +59,30 @@ export default function WatchlistManager({
   return (
     <div>
       <div className="relative max-w-md">
+        <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-navy/35" />
         <input
-          type="text"
+          type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Add an instrument to your watchlist..."
-          className="w-full rounded-lg border border-brand-navy/15 px-4 py-2 text-sm outline-none focus:border-brand-primary"
+          placeholder="Add an instrument — search by symbol or name…"
+          aria-label="Search instruments to add"
+          className="w-full rounded-xl border border-brand-navy/10 bg-white py-2.5 pl-10 pr-4 text-sm shadow-sm outline-none transition focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/10"
         />
         {suggestions.length > 0 && (
-          <div className="absolute z-10 mt-1 w-full rounded-lg border border-black/10 bg-white shadow-lg">
+          <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-black/[0.06] bg-white shadow-[var(--shadow-card-hover)]">
             {suggestions.map((i) => (
               <button
                 key={i.id}
+                type="button"
                 onClick={() => {
                   run(() => addToWatchlist(i.id));
                   setQuery("");
                 }}
-                className="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:bg-brand-bg"
+                className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-brand-primary/[0.04]"
               >
-                <span className="font-medium text-brand-navy">{i.symbol}</span>
-                <span className="text-brand-navy/50">{i.name}</span>
+                <Plus size={15} className="shrink-0 text-brand-primary" />
+                <span className="font-semibold text-brand-navy">{i.symbol}</span>
+                <span className="truncate text-brand-navy/50">{i.name}</span>
               </button>
             ))}
           </div>
@@ -82,32 +91,41 @@ export default function WatchlistManager({
 
       {error && <p className="mt-3 text-sm text-brand-sell">{error}</p>}
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {watchlistItems.map((w) => (
-          <div
-            key={w.id}
-            className="flex items-start justify-between rounded-xl border border-black/5 bg-white p-4"
-          >
-            <Link href={`/app/instruments/${encodeURIComponent(w.symbol)}`}>
-              <p className="text-sm font-semibold text-brand-navy">{w.symbol}</p>
-              <p className="mt-1 text-xs text-brand-navy/60">{w.name}</p>
-            </Link>
-            <button
-              onClick={() => run(() => removeFromWatchlist(w.id))}
-              disabled={isPending}
-              className="text-xs text-brand-navy/40 hover:text-brand-sell"
-              aria-label={`Remove ${w.symbol} from watchlist`}
-            >
-              Remove
-            </button>
-          </div>
-        ))}
-        {watchlistItems.length === 0 && (
-          <p className="col-span-full text-sm text-brand-navy/50">
-            Your watchlist is empty. Search above to add instruments.
-          </p>
-        )}
-      </div>
+      {watchlistItems.length === 0 ? (
+        <div className="mt-6">
+          <EmptyState pose="point" title="Your watchlist is empty." description="Search above to add the instruments you want to keep an eye on." />
+        </div>
+      ) : (
+        <ul className="surface mt-6 divide-y divide-black/[0.05] overflow-hidden">
+          {watchlistItems.map((w) => {
+            const tone = w.changePct !== null ? toneOf(w.changePct) : "flat";
+            return (
+              <li key={w.id} className="group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-brand-primary/[0.02] sm:px-5">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-primary/[0.07] text-xs font-bold text-brand-primary">
+                  {w.symbol.replace(/\.NS$|\.BO$/, "").slice(0, 3)}
+                </span>
+                <Link href={`/app/instruments/${encodeURIComponent(w.symbol)}`} className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-brand-navy hover:text-brand-primary">{w.symbol}</span>
+                  <span className="block truncate text-xs text-brand-navy/55">{w.name}</span>
+                </Link>
+                <div className="text-right">
+                  <p className="num text-sm font-semibold text-brand-navy">{w.close !== null ? `₹${formatPrice(w.close)}` : "—"}</p>
+                  <p className={`num text-xs font-semibold ${TONE_TEXT[tone]}`}>{w.changePct !== null ? formatPct(w.changePct) : "No quote"}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => run(() => removeFromWatchlist(w.id))}
+                  disabled={isPending}
+                  className="ml-1 rounded-lg p-2 text-brand-navy/30 transition-colors hover:bg-brand-sell/10 hover:text-brand-sell disabled:opacity-40"
+                  aria-label={`Remove ${w.symbol} from watchlist`}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

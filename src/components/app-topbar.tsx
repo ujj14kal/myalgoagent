@@ -1,57 +1,57 @@
 import Link from "next/link";
+import { Bell, LogOut } from "lucide-react";
 import { signOut } from "@/lib/auth";
 import MobileNavDrawer from "@/components/mobile-nav-drawer";
+import TopbarTitle from "@/components/topbar-title";
 import { avatarInitials } from "@/lib/avatar";
 
 export default function AppTopbar({
   user,
   unreadCount = 0,
+  agentName,
+  liveSessions,
 }: {
   user: { name?: string | null; email?: string | null; image?: string | null };
   unreadCount?: number;
+  agentName: string;
+  liveSessions: number;
 }) {
   const displayName = user.name ?? user.email ?? "";
   const initials = avatarInitials(user.name, user.email);
 
   return (
-    <header className="flex h-16 items-center border-b border-black/5 bg-white px-4 md:px-6">
-      <MobileNavDrawer />
-      {/* `ml-auto` (not `justify-between` on the header) keeps this group
-          pinned right regardless of whether MobileNavDrawer renders
-          anything — its own wrapper is `md:hidden`, so on desktop it's a
-          zero-width flex item and `justify-between` on the header would
-          have nothing to balance against, collapsing this whole group to
-          the left edge instead of the right. */}
-      <div className="ml-auto flex items-center gap-3 sm:gap-4">
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-black/[0.06] bg-white/80 px-4 backdrop-blur-xl supports-[backdrop-filter]:bg-white/65 md:px-6">
+      <MobileNavDrawer agentName={agentName} liveSessions={liveSessions} />
+      <TopbarTitle />
+      <div className="ml-auto flex items-center gap-2 sm:gap-3">
         <Link
           href="/app/notifications"
           data-tour="notifications-bell"
-          className="relative text-brand-navy/60 hover:text-brand-primary"
-          aria-label="Notifications"
+          className="relative flex h-9 w-9 items-center justify-center rounded-xl text-brand-navy/60 transition-colors hover:bg-brand-primary/5 hover:text-brand-primary"
+          aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
-            <path d="M12 2a6 6 0 0 0-6 6v3.28a2 2 0 0 1-.53 1.36L4 14.5A1 1 0 0 0 4.74 16h14.52a1 1 0 0 0 .74-1.5l-1.47-1.86A2 2 0 0 1 18 11.28V8a6 6 0 0 0-6-6Zm0 20a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Z" />
-          </svg>
+          <Bell size={19} />
           {unreadCount > 0 && (
-            <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-sell px-1 text-[10px] font-bold text-white">
+            <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-sell px-1 text-[10px] font-bold text-white ring-2 ring-white">
               {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}
         </Link>
 
-        <div className="hidden h-6 w-px bg-black/10 sm:block" />
-
-        <div className="hidden items-center gap-2 sm:flex">
+        <Link
+          href="/app/account"
+          className="hidden items-center gap-2 rounded-full py-1 pl-1 pr-3 transition-colors hover:bg-brand-primary/5 sm:flex"
+        >
           {user.image ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={user.image} alt="" className="h-8 w-8 rounded-full object-cover" />
+            <img src={user.image} alt="" className="h-8 w-8 rounded-full object-cover ring-2 ring-white" />
           ) : (
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-primary/10 text-xs font-semibold text-brand-primary">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-primary to-brand-primary-light text-xs font-semibold text-white">
               {initials}
             </span>
           )}
           <span className="max-w-[12rem] truncate text-sm font-medium text-brand-navy">{displayName}</span>
-        </div>
+        </Link>
 
         <form
           action={async () => {
@@ -61,9 +61,10 @@ export default function AppTopbar({
         >
           <button
             type="submit"
-            className="rounded-full border border-brand-navy/15 px-4 py-1.5 text-xs font-semibold text-brand-navy hover:border-brand-primary hover:text-brand-primary"
+            className="flex items-center gap-1.5 rounded-full border border-brand-navy/10 bg-white px-3.5 py-1.5 text-xs font-semibold text-brand-navy/80 transition-colors hover:border-brand-primary/40 hover:text-brand-primary"
           >
-            Sign out
+            <LogOut size={13} />
+            <span className="hidden sm:inline">Sign out</span>
           </button>
         </form>
       </div>

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { Layers, Plus } from "lucide-react";
+import PageHeader from "@/components/ui/page-header";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import EmptyState from "@/components/empty-state";
@@ -26,23 +28,19 @@ export default async function StrategiesPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-brand-navy">Strategies</h1>
-          <p className="mt-2 text-sm text-brand-navy/60">
-            Build rule-based strategies visually or with code, and preview
-            exactly where they would have signalled on real historical data.
-            Draft and Active are set automatically — a strategy becomes
-            Active the moment you actually put it to work in paper trading.
-          </p>
-        </div>
-        <Link
-          href="/app/strategies/new"
-          className="shrink-0 rounded-full bg-brand-primary px-5 py-2 text-sm font-medium text-white hover:bg-brand-primary-light"
-        >
-          New Strategy
-        </Link>
-      </div>
+      <PageHeader
+        title="Strategies"
+        icon={Layers}
+        description="Build rule-based strategies visually or with code. Draft and Active are set automatically — a strategy becomes Active the moment you put it to work in paper trading."
+        actions={
+          <Link
+            href="/app/strategies/new"
+            className="inline-flex items-center gap-1.5 rounded-full bg-brand-primary px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_20px_-10px_rgba(71,24,152,0.8)] hover:bg-brand-primary-light"
+          >
+            <Plus size={16} /> New strategy
+          </Link>
+        }
+      />
 
       {strategies.length === 0 ? (
         <div className="mt-8">

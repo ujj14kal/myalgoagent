@@ -19,7 +19,7 @@ export default function DraftAutoSaveToast({
     <div
       role="status"
       aria-live="polite"
-      className="fixed right-4 top-4 z-[60] w-full max-w-sm rounded-2xl border border-black/5 bg-white p-4 shadow-xl sm:right-6 sm:top-6"
+      className="fixed right-4 top-4 z-[60] w-full max-w-sm surface p-4 shadow-xl sm:right-6 sm:top-6"
     >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-gold/15 text-brand-gold">

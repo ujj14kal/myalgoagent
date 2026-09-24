@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { MessageSquareText } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { submitFeedbackAction } from "@/lib/feedback-actions";
 
@@ -36,8 +37,9 @@ export default function FeedbackWidget() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full rounded-full bg-brand-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-primary-light"
+        className="flex w-full items-center justify-center gap-2 rounded-full bg-brand-primary-light px-4 py-2.5 text-sm font-semibold text-white ring-1 ring-white/15 transition-colors hover:bg-brand-primary"
       >
+        <MessageSquareText size={15} />
         Feedback
       </button>
 

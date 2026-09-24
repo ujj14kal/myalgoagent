@@ -64,7 +64,7 @@ export default function BacktestRunForm({ strategies }: { strategies: StrategyOp
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-2xl border border-black/5 bg-white p-5">
+    <form onSubmit={handleSubmit} className="surface p-5">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <div className="lg:col-span-2">
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Strategy</label>

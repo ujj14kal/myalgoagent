@@ -2,6 +2,11 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { getPaperSessionRows, summarizePortfolio } from "@/lib/portfolio";
 import EmptyState from "@/components/empty-state";
+import { Banknote, BriefcaseBusiness, PieChart, TrendingUp, Wallet } from "lucide-react";
+import PageHeader from "@/components/ui/page-header";
+import StatCard from "@/components/ui/stat-card";
+import StatusBadge from "@/components/ui/status-badge";
+import { formatINR, formatPct, toneOf, TONE_TEXT } from "@/lib/format";
 
 export const metadata = { title: "Portfolio", robots: { index: false } };
 
@@ -14,31 +19,13 @@ export default async function PortfolioPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-brand-navy">Portfolio</h1>
-      <p className="mt-2 text-sm text-brand-navy/60">
-        Aggregated across all your paper trading sessions — not yet connected to a real broker.
-      </p>
+      <PageHeader title="Portfolio" icon={Wallet} description={<>Aggregated across all your paper trading sessions — not yet connected to a real broker.</>} />
 
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-2xl border border-black/5 bg-white p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Available cash</p>
-          <p className="mt-2 text-xl font-bold text-brand-navy">₹{totalCash.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</p>
-        </div>
-        <div className="rounded-2xl border border-black/5 bg-white p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Position value</p>
-          <p className="mt-2 text-xl font-bold text-brand-navy">₹{totalPositionValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</p>
-        </div>
-        <div className="rounded-2xl border border-black/5 bg-white p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Total equity</p>
-          <p className="mt-2 text-xl font-bold text-brand-navy">₹{totalEquity.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</p>
-        </div>
-        <div className="rounded-2xl border border-black/5 bg-white p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Overall P&amp;L</p>
-          <p className={`mt-2 text-xl font-bold ${totalPnlPct >= 0 ? "text-brand-buy" : "text-brand-sell"}`}>
-            {totalPnlPct >= 0 ? "+" : ""}
-            {totalPnlPct.toFixed(2)}%
-          </p>
-        </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard label="Available cash" value={formatINR(totalCash)} icon={Banknote} sub="Not tied up in open positions" />
+        <StatCard label="Position value" value={formatINR(totalPositionValue)} icon={BriefcaseBusiness} sub="At last close" />
+        <StatCard label="Total equity" value={formatINR(totalEquity)} icon={PieChart} sub="Cash + positions" />
+        <StatCard label="Overall P&L" value={formatPct(totalPnlPct)} tone={toneOf(totalPnlPct)} icon={TrendingUp} sub="Since each session started" />
       </div>
 
       {rows.length === 0 ? (
@@ -46,32 +33,31 @@ export default async function PortfolioPage() {
           <EmptyState pose="idle" title="No paper trading sessions yet." description="Your combined portfolio across all sessions will show up here once you start one." ctaLabel="Go to Paper Trading" ctaHref="/app/paper-trading" />
         </div>
       ) : (
-        <div className="mt-8 overflow-x-auto rounded-2xl border border-black/5 bg-white">
-          <table className="w-full text-left text-sm">
+        <div className="mt-6 overflow-x-auto surface">
+          <table className="data-table">
             <thead>
-              <tr className="border-b border-black/5 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
-                <th className="px-4 py-3">Session</th>
-                <th className="px-4 py-3">Instrument</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Equity</th>
-                <th className="px-4 py-3">P&amp;L</th>
+              <tr>
+                <th>Session</th>
+                <th>Instrument</th>
+                <th>Status</th>
+                <th className="num-cell">Equity</th>
+                <th className="num-cell">P&amp;L</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.session.id} className="border-b border-black/5 last:border-0">
-                  <td className="px-4 py-2">
-                    <Link href={`/app/paper-trading/${r.session.id}`} className="text-brand-primary hover:underline">
+                <tr key={r.session.id}>
+                  <td>
+                    <Link href={`/app/paper-trading/${r.session.id}`} className="font-medium text-brand-primary hover:underline">
                       {r.session.strategyName}
                     </Link>
                   </td>
-                  <td className="px-4 py-2">{r.session.instrumentSymbol}</td>
-                  <td className="px-4 py-2">{r.session.status}</td>
-                  <td className="px-4 py-2">₹{r.equity.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</td>
-                  <td className={`px-4 py-2 font-medium ${r.pnlPct >= 0 ? "text-brand-buy" : "text-brand-sell"}`}>
-                    {r.pnlPct >= 0 ? "+" : ""}
-                    {r.pnlPct.toFixed(2)}%
+                  <td className="font-medium">{r.session.instrumentSymbol}</td>
+                  <td>
+                    <StatusBadge status={r.session.status} />
                   </td>
+                  <td className="num-cell">{formatINR(r.equity)}</td>
+                  <td className={`num-cell font-semibold ${TONE_TEXT[toneOf(r.pnlPct)]}`}>{formatPct(r.pnlPct)}</td>
                 </tr>
               ))}
             </tbody>

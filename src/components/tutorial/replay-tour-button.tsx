@@ -1,5 +1,6 @@
 "use client";
 
+import { RotateCcw } from "lucide-react";
 import { useTutorial } from "./tutorial-provider";
 
 export default function ReplayTourButton({ className = "" }: { className?: string }) {
@@ -8,14 +9,10 @@ export default function ReplayTourButton({ className = "" }: { className?: strin
     <button
       type="button"
       onClick={startTour}
-      aria-label="Replay product tour"
-      title="Replay product tour"
-      className={`text-brand-navy/60 hover:text-brand-primary ${className}`}
+      className={`inline-flex items-center gap-2 rounded-full border border-brand-primary/25 px-4 py-2 text-sm font-semibold text-brand-primary transition-colors hover:bg-brand-primary/5 ${className}`}
     >
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-        <polyline points="23 4 23 10 17 10" />
-      </svg>
+      <RotateCcw size={15} />
+      Replay the tour
     </button>
   );
 }
