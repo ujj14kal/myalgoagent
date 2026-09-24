@@ -175,7 +175,7 @@ export function ProposalCard({
   onReview: () => void;
 }) {
   const status: Record<ProposalStatus, { label: string; cls: string }> = {
-    pending: { label: "Ready for review", cls: "bg-brand-gold/15 text-[#8a7437]" },
+    pending: { label: "To review", cls: "bg-brand-gold/15 text-[#8a7437]" },
     confirmed: { label: "Done", cls: "bg-brand-buy/10 text-brand-buy" },
     rejected: { label: "Rejected", cls: "bg-brand-navy/5 text-brand-navy/50" },
   };
@@ -189,9 +189,9 @@ export function ProposalCard({
     >
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-primary/10 text-brand-primary">{ICONS[proposal.kind]}</span>
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className="text-[13px] font-semibold text-brand-navy">{PROPOSAL_TITLES[proposal.kind]}</span>
-          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${s.cls}`}>{s.label}</span>
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="whitespace-nowrap text-[13px] font-semibold text-brand-navy">{PROPOSAL_TITLES[proposal.kind]}</span>
+          <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${s.cls}`}>{s.label}</span>
         </span>
         <span className="block truncate text-xs text-brand-navy/60">{proposalSummary(proposal)}</span>
       </span>
