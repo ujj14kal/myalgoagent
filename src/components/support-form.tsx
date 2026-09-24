@@ -73,7 +73,7 @@ export default function SupportForm({ initialEmail }: { initialEmail: string }) 
   }
 
   return (
-    <form onSubmit={handleFormSubmit} className="space-y-4 surface p-6">
+    <form onSubmit={handleFormSubmit} className="space-y-4">
       <div>
         <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Your email</label>
         <input

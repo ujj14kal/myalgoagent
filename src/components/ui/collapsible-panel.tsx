@@ -2,19 +2,21 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ChevronDown, type LucideIcon } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 
 /** A card whose body opens on demand — keeps secondary forms out of the way. */
 export default function CollapsiblePanel({
   title,
   subtitle,
-  icon: Icon,
+  icon,
   defaultOpen = false,
   children,
 }: {
   title: string;
   subtitle?: string;
-  icon?: LucideIcon;
+  /** A rendered element (e.g. <Plus size={17} />), not a component: this is a
+   * Client Component, and a Server Component can't pass it a function. */
+  icon?: React.ReactNode;
   defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
@@ -28,11 +30,7 @@ export default function CollapsiblePanel({
         className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-brand-primary/[0.02]"
       >
         <span className="flex items-center gap-3">
-          {Icon && (
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-primary text-white">
-              <Icon size={17} />
-            </span>
-          )}
+          {icon && <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-primary text-white">{icon}</span>}
           <span>
             <span className="block text-sm font-semibold text-brand-navy">{title}</span>
             {subtitle && <span className="block text-xs text-brand-navy/50">{subtitle}</span>}

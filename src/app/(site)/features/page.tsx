@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Activity, Bell, FlaskConical, Layers, Radio, ShieldCheck, Sparkles } from "lucide-react";
 import PageHeader from "@/components/page-header";
 import { Breadcrumbs } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
@@ -14,6 +15,7 @@ export const metadata: Metadata = pageMetadata({
 const groups = [
   {
     title: "Strategy Builder",
+    icon: Layers,
     items: [
       "No-code visual builder with AND/OR condition groups",
       "Entry and exit conditions, long and short support where the market allows it",
@@ -25,6 +27,7 @@ const groups = [
   },
   {
     title: "Technical Indicators",
+    icon: Activity,
     items: [
       "Moving averages: SMA, EMA, WMA",
       "RSI, MACD, Bollinger Bands, ATR",
@@ -35,6 +38,7 @@ const groups = [
   },
   {
     title: "Backtesting & Analytics",
+    icon: FlaskConical,
     items: [
       "Configurable date range, timeframe, starting capital, brokerage, fees and slippage",
       "Total return, CAGR, win rate, profit factor, max drawdown, Sharpe/Sortino, expectancy",
@@ -44,6 +48,7 @@ const groups = [
   },
   {
     title: "Paper & Live Trading",
+    icon: Radio,
     items: [
       "Paper trading with virtual capital and simulated fills",
       "Live trading via supported broker APIs, with explicit user authorization",
@@ -53,6 +58,7 @@ const groups = [
   },
   {
     title: "Risk Management",
+    icon: ShieldCheck,
     items: [
       "Maximum daily loss, position size and portfolio exposure limits",
       "Per-strategy capital allocation and maximum trades per day",
@@ -62,6 +68,7 @@ const groups = [
   },
   {
     title: "Monitoring & Reporting",
+    icon: Bell,
     items: [
       "Alerts for signals, fills, rejections and risk-limit breaches",
       "Portfolio, order and position dashboards",
@@ -71,6 +78,7 @@ const groups = [
   },
   {
     title: "AI Strategy Assistant",
+    icon: Sparkles,
     comingSoon: true,
     items: [
       "Describe a strategy in plain English and get a built, validated strategy back",
@@ -93,13 +101,15 @@ export default function FeaturesPage() {
       <PageHeader eyebrow="Features" title="Everything the platform is built to do" description="A structured feature set covering strategy creation, testing, execution and risk control." />
       <Reveal>
         <div className="mx-auto grid max-w-5xl gap-6 px-4 py-14 sm:grid-cols-2">
-          {groups.map((g, i) => (
-            <div key={g.title} className="rounded-2xl border border-black/5 bg-white p-6 transition-shadow hover:shadow-lg">
-              <span className={`inline-block h-2 w-2 rounded-full ${i % 2 === 0 ? "bg-brand-gold" : "bg-brand-blue"}`} />
-              <div className="mt-3 flex items-center gap-2.5">
+          {groups.map((g) => (
+            <div key={g.title} className="surface surface-interactive p-6">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-primary/[0.08] text-brand-primary">
+                <g.icon size={19} />
+              </span>
+              <div className="mt-4 flex items-center gap-2.5">
                 <h2 className="text-lg font-semibold text-brand-navy">{g.title}</h2>
                 {g.comingSoon && (
-                  <span className="rounded-full bg-brand-gold/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-gold">
+                  <span className="rounded-full bg-brand-gold/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#8a7437]">
                     Coming soon
                   </span>
                 )}
@@ -107,7 +117,7 @@ export default function FeaturesPage() {
               <ul className="mt-3 space-y-2 text-sm leading-relaxed text-brand-navy/70">
                 {g.items.map((i2) => (
                   <li key={i2} className="flex gap-2">
-                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-brand-navy/30" />
+                    <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-brand-primary/50" />
                     <span>{i2}</span>
                   </li>
                 ))}

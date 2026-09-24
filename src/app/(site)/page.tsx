@@ -183,7 +183,7 @@ export default function Home() {
           </div>
           <ol className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {workflow.map((s) => (
-              <li key={s.step} className="hover-lift group rounded-2xl border border-black/5 bg-white p-6">
+              <li key={s.step} className="surface surface-interactive group p-6">
                 <div className="flex items-center justify-between">
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-gold/15 text-sm font-bold text-brand-gold">
                     {s.step}

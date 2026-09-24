@@ -64,7 +64,7 @@ export default async function PaperTradingPage() {
       <CollapsiblePanel
         title="Start a new paper session"
         subtitle="Pick a strategy and virtual capital — no real money involved"
-        icon={Plus}
+        icon={<Plus size={17} />}
         defaultOpen={sessions.length === 0}
       >
         <PaperSessionForm
