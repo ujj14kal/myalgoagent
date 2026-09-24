@@ -4,7 +4,10 @@ import type { PaperSession } from "@prisma/client";
 
 export type PaperSessionRow = {
   session: PaperSession;
+  /** Current market value of the open position (always positive — used for exposure). */
   positionValue: number;
+  /** Cash not tied up in the open position, so availableCash + position = equity. */
+  availableCash: number;
   equity: number;
   pnl: number;
   pnlPct: number;
@@ -18,27 +21,40 @@ export async function getPaperSessionRows(userId: string): Promise<PaperSessionR
 
   return Promise.all(
     sessions.map(async (s) => {
+      // `cash` is never debited when a position opens — it only moves on
+      // realized P&L at close (see the paper trading engine). So equity is
+      // cash + UNREALIZED gain, not cash + the position's full market value;
+      // adding the whole value double-counted the entry cost as profit and
+      // showed e.g. +97% on a position that was actually down ~1%. Same
+      // formula as the paper-trading list and the risk kill-switch check.
       let positionValue = 0;
-      if (s.positionQuantity !== null) {
-        let latestClose = s.positionEntryPrice ?? 0;
+      let unrealizedGain = 0;
+      let availableCash = s.cash;
+      if (s.positionQuantity !== null && s.positionEntryPrice !== null) {
+        let latestClose = s.positionEntryPrice;
         try {
           const candles = await marketDataProvider.getHistoricalCandles(s.instrumentSymbol, "1mo", "1d");
           if (candles.length > 0) latestClose = candles.at(-1)!.close;
         } catch {
-          // fall back to entry price if the live quote can't be fetched
+          // fall back to entry price (zero unrealized gain) if the quote can't be fetched
         }
-        positionValue = latestClose * s.positionQuantity;
+        const qty = s.positionQuantity;
+        const isShort = s.direction === "SHORT";
+        positionValue = latestClose * qty;
+        unrealizedGain = (isShort ? s.positionEntryPrice - latestClose : latestClose - s.positionEntryPrice) * qty;
+        // A long ties up its cost; a short has received its sale proceeds.
+        availableCash = isShort ? s.cash + s.positionEntryPrice * qty : s.cash - s.positionEntryPrice * qty;
       }
-      const equity = s.cash + positionValue;
+      const equity = s.cash + unrealizedGain;
       const pnl = equity - s.startingCapital;
       const pnlPct = s.startingCapital > 0 ? (pnl / s.startingCapital) * 100 : 0;
-      return { session: s, positionValue, equity, pnl, pnlPct };
+      return { session: s, positionValue, availableCash, equity, pnl, pnlPct };
     }),
   );
 }
 
 export function summarizePortfolio(rows: PaperSessionRow[]) {
-  const totalCash = rows.reduce((sum, r) => sum + r.session.cash, 0);
+  const totalCash = rows.reduce((sum, r) => sum + r.availableCash, 0);
   const totalPositionValue = rows.reduce((sum, r) => sum + r.positionValue, 0);
   const totalEquity = rows.reduce((sum, r) => sum + r.equity, 0);
   const totalStarting = rows.reduce((sum, r) => sum + r.session.startingCapital, 0);

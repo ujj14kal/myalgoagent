@@ -21,7 +21,7 @@ export default async function PortfolioPage() {
 
       <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-2xl border border-black/5 bg-white p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Cash</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Available cash</p>
           <p className="mt-2 text-xl font-bold text-brand-navy">₹{totalCash.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</p>
         </div>
         <div className="rounded-2xl border border-black/5 bg-white p-5">
