@@ -107,9 +107,12 @@ export default function Home() {
           </div>
 
           <div className="relative [animation:scale-in_0.7s_ease_0.15s_both]">
-            {/* The agent, reading the backtest it just ran — desktop only, so
-                phones keep a light, fast hero. */}
-            <div className="pointer-events-none absolute -left-16 -bottom-10 z-10 hidden lg:block">
+            {/* The agent, pointing at the backtest it just ran. It stands fully
+                outside the card (only its fingertip reaches the edge) so it never
+                covers the chart — and only on wide screens, where the gap between
+                the text column and the card has room for it. Phones keep a light,
+                fast hero. */}
+            <div className="pointer-events-none absolute right-full -mr-4 -bottom-14 z-10 hidden xl:block">
               <Agent2D pose="point" size={150} className="drop-shadow-[0_18px_30px_rgba(14,27,45,0.25)]" />
             </div>
             <div className="hover-lift overflow-hidden rounded-2xl border border-white/10 bg-brand-navy text-white shadow-2xl shadow-brand-navy/20">

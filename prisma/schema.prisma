@@ -52,6 +52,7 @@ model User {
   passwordResetTokens PasswordResetToken[]
   feedback            Feedback[]
   supportCases        SupportCase[]
+  agentConversations  AgentConversation[]
 }
 
 enum OtpPurpose {
@@ -471,4 +472,46 @@ model Notification {
   createdAt      DateTime         @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Conversations with the user's own agent (the AI assistant). Stored in
+// India (this RDS instance); only the text of each exchange is sent to AWS
+// Bedrock for processing. Deleted with the account via the cascade.
+model AgentConversation {
+  id        String         @id @default(cuid())
+  userId    String
+  title     String         @default("New conversation")
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  messages  AgentMessage[]
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, updatedAt])
+}
+
+enum AgentMessageRole {
+  USER
+  ASSISTANT
+}
+
+model AgentMessage {
+  id             String           @id @default(cuid())
+  conversationId String
+  role           AgentMessageRole
+  content        String
+  // Which Bedrock model answered, and what it cost in tokens — lets usage
+  // and spend be reported per user without asking AWS.
+  model          String?
+  inputTokens    Int?
+  outputTokens   Int?
+  latencyMs      Int?
+  // True when the Bedrock guardrail blocked or rewrote the exchange (e.g. a
+  // request for buy/sell advice).
+  guardrailHit   Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+
+  conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
 }

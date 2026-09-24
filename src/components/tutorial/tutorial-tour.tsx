@@ -21,13 +21,27 @@ const PAD = 8;
 const GAP = 16;
 const EDGE = 16;
 
-function measure(selector: string | null): Rect | null {
+/**
+ * The first match that's actually on screen. Elements hidden by a responsive
+ * `display:none` (e.g. the sidebar below md) still match but have no box, and
+ * some targets exist twice — the agent's home is the sidebar button on
+ * desktop and a floating button on phones.
+ */
+function findVisible(selector: string | null): HTMLElement | null {
   if (!selector) return null;
-  const el = document.querySelector(selector);
-  // An element hidden by a responsive `display:none` (e.g. the sidebar
-  // below the md breakpoint) still matches but has no box — treat it as
-  // "not found" so the step falls back to a centered card.
-  if (!el || (el as HTMLElement).offsetParent === null) return null;
+  for (const el of document.querySelectorAll<HTMLElement>(selector)) {
+    if (el.offsetParent !== null || getComputedStyle(el).position === "fixed") {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) return el;
+    }
+  }
+  return null;
+}
+
+function measure(selector: string | null): Rect | null {
+  // No visible target → the step falls back to a centered card.
+  const el = findVisible(selector);
+  if (!el) return null;
   const r = el.getBoundingClientRect();
   if (r.width === 0 && r.height === 0) return null;
   return { top: r.top - PAD, left: r.left - PAD, width: r.width + PAD * 2, height: r.height + PAD * 2 };
@@ -84,7 +98,7 @@ export default function TutorialTour({
 
   useEffect(() => {
     if (!open || !step) return;
-    const el = step.target ? document.querySelector(step.target) : null;
+    const el = findVisible(step.target);
     // Tall targets (the sidebar) are already on screen; scrolling them into
     // view would only scroll the sidebar's own nav list out of place.
     if (el && el.getBoundingClientRect().height < window.innerHeight * 0.6) {
@@ -134,6 +148,8 @@ export default function TutorialTour({
 
   if (!open || !step) return null;
 
+  const pointsLeft = !!(rect && pos && rect.left + rect.width / 2 < pos.left);
+
   const card = (
     <motion.div
       ref={cardRef}
@@ -145,7 +161,10 @@ export default function TutorialTour({
       style={rect ? { position: "absolute", top: pos?.top ?? -9999, left: pos?.left ?? -9999 } : undefined}
     >
       <div className="flex items-start gap-3">
-        <Agent2D pose={step.pose ?? "talk"} size={72} trackCursor={false} className="-my-2 shrink-0" />
+        {/* Mirrored when the target is to the card's left, so a pointing agent points at it. */}
+        <span data-tour-agent className="-my-2 shrink-0" style={pointsLeft ? { transform: "scaleX(-1)" } : undefined}>
+          <Agent2D pose={step.pose ?? "talk"} size={72} trackCursor={false} />
+        </span>
         <div className="min-w-0 pt-1">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-gold">
             {agentName} · {stepIndex + 1} of {steps.length}

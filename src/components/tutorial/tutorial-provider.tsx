@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import TutorialTour, { type TourStep } from "./tutorial-tour";
 import { setAgentNameAction, completeTutorialAction } from "@/lib/agent-actions";
 import { DEFAULT_AGENT_NAME } from "@/lib/agent-constants";
+import { useAgentChat } from "@/components/agent-chat/agent-chat-provider";
 
 const STEPS: TourStep[] = [
   {
@@ -57,11 +58,13 @@ const STEPS: TourStep[] = [
     body: "Set a max-loss limit and I enforce it server-side — even if a strategy or a bug tries to ignore it. That's the part most hobby bots skip.",
   },
   {
-    id: "finish",
-    target: null,
-    pose: "happy",
-    title: "That's it — you're set",
-    body: "You can replay this tour any time from Agent Settings. I'll keep an eye on things from the sidebar — now let's build something.",
+    // Last stop: where the agent lives. On "Let's go" it hops into this
+    // button (see finish below), so users learn where to find it.
+    id: "home",
+    target: '[data-tour="agent-home"]',
+    pose: "beam",
+    title: "If you ever need me, I live right here",
+    body: "Ask me anything — how something works, what an indicator means, or help turning an idea into rules you can backtest. I explain, you decide: I never give buy or sell calls. You can replay this tour any time from Agent Settings.",
   },
 ];
 
@@ -102,6 +105,16 @@ export default function TutorialProvider({
   const close = async () => {
     setOpen(false);
     if (!tutorialCompleted) await completeTutorialAction();
+  };
+
+  const { flyHome } = useAgentChat();
+  // Finishing (not skipping) ends with the agent hopping from the tour card
+  // into its home button — measured before the tour unmounts.
+  const finish = async () => {
+    const agentEl = document.querySelector("[data-tour-agent]");
+    const r = agentEl?.getBoundingClientRect();
+    await close();
+    flyHome(r ? { left: r.left, top: r.top, width: r.width, height: r.height } : null);
   };
 
   const submitName = async () => {
@@ -149,7 +162,7 @@ export default function TutorialProvider({
         onNext={() => setStepIndex((i) => Math.min(i + 1, STEPS.length - 1))}
         onBack={() => setStepIndex((i) => Math.max(i - 1, 0))}
         onSkip={close}
-        onFinish={close}
+        onFinish={finish}
       />
     </TutorialContext.Provider>
   );

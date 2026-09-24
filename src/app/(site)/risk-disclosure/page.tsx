@@ -36,6 +36,7 @@ const sections: LegalSection[] = [
     title: "No investment advice",
     paragraphs: [
       "MyAlgoAgent provides software tools for building, testing and operating trading strategies. Nothing on this platform constitutes personalized investment advice, a recommendation to buy or sell any security, or a guarantee of profit. AI-generated content is informational only.",
+      "Your in-app agent is an AI assistant: it explains the platform and trading concepts and can draft strategy rules for you to review, test and decide on yourself. It does not tell you what to buy or sell, does not predict prices or returns, never acts without your confirmation, and — like any AI — can be wrong. Always review what it drafts before using it.",
     ],
   },
   {

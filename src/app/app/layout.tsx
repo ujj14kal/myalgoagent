@@ -5,6 +5,8 @@ import AppSidebar from "@/components/app-sidebar";
 import AppTopbar from "@/components/app-topbar";
 import TutorialProvider from "@/components/tutorial/tutorial-provider";
 import AgentToastProvider from "@/components/agent-toast/agent-toast-provider";
+import AgentChatProvider from "@/components/agent-chat/agent-chat-provider";
+import AgentChatButton from "@/components/agent-chat/agent-chat-button";
 import { DEFAULT_AGENT_NAME } from "@/lib/agent-constants";
 
 export const metadata = {
@@ -33,6 +35,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const agentName = dbUser.agentName ?? DEFAULT_AGENT_NAME;
 
   return (
+    <AgentChatProvider agentName={agentName}>
     <TutorialProvider initialAgentName={dbUser.agentName} tutorialCompleted={!!dbUser.tutorialCompletedAt}>
       <AgentToastProvider agentName={agentName}>
         <div className="app-canvas flex min-h-screen">
@@ -40,7 +43,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <div className="flex min-w-0 flex-1 flex-col">
             <AppTopbar user={session.user} unreadCount={unreadCount} agentName={agentName} liveSessions={liveSessions} />
             <main className="mx-auto w-full max-w-[1400px] flex-1 p-4 md:p-6 lg:p-8">{children}</main>
-            <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-black/5 px-6 py-3 text-xs text-brand-navy/40">
+            <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-black/5 px-6 pb-20 pt-3 text-xs text-brand-navy/40 md:py-3">
               <span>© {new Date().getFullYear()} MyAlgoAgent™, a product of Shagoon Softech Pvt. Ltd.</span>
               <span className="flex items-center gap-3">
                 <a href="/terms" className="hover:text-brand-primary">Terms</a>
@@ -50,7 +53,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </footer>
           </div>
         </div>
+        {/* Phones have no sidebar, so the agent lives in a floating button. */}
+        <AgentChatButton variant="fab" />
       </AgentToastProvider>
     </TutorialProvider>
+    </AgentChatProvider>
   );
 }

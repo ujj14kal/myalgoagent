@@ -28,7 +28,7 @@ async function buildExport() {
   // this a handful of times, ever.
   await enforceRateLimit(`account-export:${userId}`, 5, 10 * 60_000);
 
-  const [user, watchlistItems, strategies, backtestRuns, paperSessions, riskSettings, riskEvents, notifications, feedback, supportCases] =
+  const [user, watchlistItems, strategies, backtestRuns, paperSessions, riskSettings, riskEvents, notifications, feedback, supportCases, agentConversations] =
     await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
@@ -51,6 +51,10 @@ async function buildExport() {
       prisma.notification.findMany({ where: { userId } }),
       prisma.feedback.findMany({ where: { userId } }),
       prisma.supportCase.findMany({ where: { userId } }),
+      prisma.agentConversation.findMany({
+        where: { userId },
+        include: { messages: { select: { role: true, content: true, createdAt: true }, orderBy: { createdAt: "asc" } } },
+      }),
     ]);
 
   if (!user) {
@@ -69,6 +73,7 @@ async function buildExport() {
     notifications,
     feedback,
     supportCases,
+    agentConversations,
   };
 
   const filename = `myalgoagent-data-${new Date().toISOString().slice(0, 10)}.json`;

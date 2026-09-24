@@ -104,7 +104,7 @@ export default function AgentToastProvider({
   return (
     <AgentToastContext.Provider value={api}>
       {children}
-      <div className="pointer-events-none fixed bottom-4 right-4 z-[70] flex w-[min(90vw,340px)] flex-col gap-3">
+      <div className="pointer-events-none fixed bottom-20 right-4 z-[70] md:bottom-4 flex w-[min(90vw,340px)] flex-col gap-3">
         <AnimatePresence initial={false}>
           {toasts.map((t) => {
             const style = SEVERITY[t.severity];

@@ -82,7 +82,7 @@ export default function MobileNavDrawer({ agentName, liveSessions }: { agentName
                 <AppNavList layoutId="drawer-active" onNavigate={() => setOpen(false)} />
               </div>
               <div className="shrink-0 space-y-3 border-t border-white/10 p-3">
-                <AgentStatusCard agentName={agentName} liveSessions={liveSessions} />
+                <AgentStatusCard agentName={agentName} liveSessions={liveSessions} onAsk={() => setOpen(false)} />
                 <FeedbackWidget />
               </div>
             </motion.aside>

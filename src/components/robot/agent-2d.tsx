@@ -11,6 +11,7 @@ export type AgentPose =
   | "alert"
   | "sleep"
   | "happy"
+  | "beam"
   | "sad"
   | "thinking"
   | "working"
@@ -33,6 +34,7 @@ const LIGHT: Record<AgentPose, string> = {
   point: "#466fff",
   talk: "#466fff",
   happy: "#00a83e",
+  beam: "#00a83e",
   thinking: "#bda360",
   alert: "#d60000",
   sad: "#466fff",
@@ -48,6 +50,7 @@ const LABEL: Record<AgentPose, string> = {
   point: "pointing",
   talk: "talking",
   happy: "celebrating",
+  beam: "pointing happily",
   thinking: "inspecting",
   alert: "raising a warning",
   sad: "disappointed",
@@ -70,6 +73,7 @@ const HANDS: Record<AgentPose, { l: Pt[]; r: Pt[]; dur?: number }> = {
   // Kept inside the head-and-ears width (x 36–204) so the reach never
   // pokes past the silhouette or the viewBox.
   point: { l: [REST_L], r: [[186, 162]] },
+  beam: { l: [REST_L], r: [[186, 162]] },
   talk: { l: [REST_L], r: [[196, 180], [204, 160], [196, 180]], dur: 1.1 },
   happy: { l: [[38, 118], [30, 108], [38, 118]], r: [[202, 118], [210, 108], [202, 118]], dur: 0.7 },
   thinking: { l: [REST_L], r: [[160, 124]] },
@@ -123,7 +127,7 @@ function Eyes({ pose, blink }: { pose: AgentPose; blink: boolean }) {
     [98, 92],
     [142, 92],
   ];
-  if (pose === "happy") {
+  if (pose === "happy" || pose === "beam") {
     return (
       <>
         {eyes.map(([x, y]) => (
@@ -184,6 +188,7 @@ function ChestScreen({ pose, color, reduce }: { pose: AgentPose; color: string; 
         </motion.g>
       );
     case "happy":
+    case "beam":
     case "guarding":
       return <path d="M108 193 L116 201 L133 184" stroke={color} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" fill="none" />;
     case "thinking":
@@ -299,9 +304,9 @@ function Props({ pose, color, reduce, uid }: { pose: AgentPose; color: string; r
           <path d="M172 204 L181 213 L197 195" stroke="#00a83e" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
         </motion.g>
       )}
-      {pose === "point" && (
+      {(pose === "point" || pose === "beam") && (
         <motion.g key="finger" {...pop}>
-          <rect x="192" y="158" width="12" height="8" rx="4" fill={VIOLET_LIGHT} />
+          <rect x="192" y="157.5" width="13" height="9" rx="4.5" fill={`url(#${uid}-hand)`} stroke="rgba(71,24,152,0.18)" strokeWidth="1" />
         </motion.g>
       )}
     </AnimatePresence>
@@ -507,7 +512,7 @@ export default function Agent2D({
           <motion.g style={{ x: lookX, y: lookY }}>
             <AnimatePresence mode="wait" initial={false}>
               <motion.g
-                key={pose === "happy" || pose === "sleep" ? pose : "open"}
+                key={pose === "happy" || pose === "beam" ? "happy" : pose === "sleep" ? "sleep" : "open"}
                 initial={reduce ? false : { scale: 0.6 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.6, transition: { duration: 0.12 } }}
@@ -531,7 +536,7 @@ export default function Agent2D({
                 style={{ transformBox: "fill-box", transformOrigin: "center" }}
               />
             )}
-            {pose === "happy" && <path d="M108 116 Q120 128 132 116" stroke={VIOLET} strokeWidth="5" strokeLinecap="round" fill="none" />}
+            {(pose === "happy" || pose === "beam") && <path d="M108 116 Q120 128 132 116" stroke={VIOLET} strokeWidth="5" strokeLinecap="round" fill="none" />}
           </motion.g>
         </motion.g>
 
@@ -547,7 +552,7 @@ export default function Agent2D({
 
       {/* mood extras */}
       <AnimatePresence>
-        {pose === "happy" &&
+        {(pose === "happy" || pose === "beam") &&
           [
             { x: 26, y: 60, c: "#bda360", d: 0 },
             { x: 214, y: 40, c: "#466fff", d: 0.3 },
