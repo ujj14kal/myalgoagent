@@ -18,10 +18,7 @@ import { Layers } from "lucide-react";
 import PageHeader from "@/components/ui/page-header";
 import StatusBadge from "@/components/ui/status-badge";
 
-export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  return { title: `Strategy ${id}`, robots: { index: false } };
-}
+export const metadata = { title: "Strategy", robots: { index: false } };
 
 const OVERLAY_COLORS = ["#bda360", "#466fff", "#6a35c2", "#0e1b2d"];
 

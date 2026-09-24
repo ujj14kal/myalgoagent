@@ -13,10 +13,7 @@ import StatusBadge from "@/components/ui/status-badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { formatINR, formatPct, formatPrice, formatSignedINR, toneOf, TONE_TEXT } from "@/lib/format";
 
-export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  return { title: `Paper Session ${id}`, robots: { index: false } };
-}
+export const metadata = { title: "Paper Session", robots: { index: false } };
 
 export default async function PaperSessionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

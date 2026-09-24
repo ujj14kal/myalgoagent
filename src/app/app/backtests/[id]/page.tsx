@@ -14,10 +14,7 @@ import StatusBadge from "@/components/ui/status-badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { formatINR, formatPct, formatPrice, formatSignedINR, toneOf, TONE_TEXT } from "@/lib/format";
 
-export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  return { title: `Backtest ${id}`, robots: { index: false } };
-}
+export const metadata = { title: "Backtest", robots: { index: false } };
 
 // `signed`: the figure is itself a gain or loss, so it's colored by sign.
 // Win rate, profit factor, Sharpe and trade count are not — they stay neutral.
