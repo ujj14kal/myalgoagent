@@ -67,6 +67,8 @@ async function main() {
   // --user email: run with the production tools against that account (read-only; proposals are never confirmed).
   const userIdx = args.indexOf("--user");
   const email = userIdx >= 0 ? args.splice(userIdx, 2)[1] : null;
+  const voiceIdx = args.indexOf("--voice");
+  if (voiceIdx >= 0) args.splice(voiceIdx, 1);
   const models = args.length ? args : [AI_MODELS.main];
   let runTool: ToolRunner | undefined;
   if (email) {
@@ -75,7 +77,7 @@ async function main() {
     if (!user) throw new Error(`No user ${email}`);
     runTool = (name, a) => runAgentTool(user.id, name, a);
   }
-  const system = buildSystemPrompt("Mr. Agent");
+  const system = buildSystemPrompt("Mr. Agent", undefined, { voice: voiceIdx >= 0 });
   const all: Record<string, Row[]> = {};
 
   for (const model of models) {

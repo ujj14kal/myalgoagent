@@ -14,7 +14,7 @@ const toBytes = (d: SourceData): string | Uint8Array =>
   typeof d === "string" ? d : ArrayBuffer.isView(d) ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength) : new Uint8Array(d);
 
 /** SHA-256 / HMAC for the SigV4 signer, on Node's built-in crypto. */
-class Sha256 {
+export class Sha256 {
   private h;
   constructor(secret?: SourceData) {
     this.h = secret ? createHmac("sha256", toBytes(secret)) : createHash("sha256");

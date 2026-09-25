@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Activity,
+  AudioLines,
   ArrowRight,
   ArrowUp,
   Check,
@@ -16,11 +17,14 @@ import {
   Layers,
   Maximize2,
   MessageSquare,
+  Mic,
   Minimize2,
   Plus,
   ThumbsDown,
   ThumbsUp,
   TrendingDown,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 import BodyPortal from "@/components/ui/body-portal";
@@ -38,6 +42,8 @@ import {
 import { parseReplyBlocks, parseReplyLinks } from "@/lib/ai/links";
 import type { AgentProposal, ProposalStatus } from "@/lib/ai/proposals";
 import { ProposalCard, ProposalReviewModal } from "./proposal-review";
+import VoiceMode from "./voice-mode";
+import { speakMessage, startListening, stopSpeaking, unlockAudio, voiceSupported, type Listener } from "./voice-client";
 
 const STARTERS = [
   { text: "How do I build my first strategy?", icon: <Layers size={15} /> },
@@ -214,6 +220,33 @@ function HeaderButton({
   );
 }
 
+/** 🔊 under a reply — reads it aloud in the agent's voice; tap again to stop. */
+function ReadAloud({ messageId }: { messageId: string }) {
+  const [state, setState] = useState<"idle" | "loading" | "playing">("idle");
+  const toggle = () => {
+    if (state !== "idle") return stopSpeaking();
+    setState("loading");
+    speakMessage(messageId, { onStart: () => setState("playing"), onEnd: () => setState("idle") });
+  };
+  useEffect(() => () => {
+    if (state !== "idle") stopSpeaking();
+  });
+  return (
+    <motion.button
+      type="button"
+      onClick={toggle}
+      aria-label={state === "idle" ? "Read aloud" : "Stop reading"}
+      title={state === "idle" ? "Read aloud" : "Stop reading"}
+      whileTap={{ scale: 0.85 }}
+      className={`flex h-6 w-6 items-center justify-center rounded-md transition-colors ${
+        state === "idle" ? "text-brand-navy/30 hover:bg-brand-navy/5 hover:text-brand-navy/70" : "bg-brand-primary/10 text-brand-primary"
+      }`}
+    >
+      {state === "idle" ? <Volume2 size={12} /> : state === "loading" ? <Volume2 size={12} className="animate-pulse" /> : <VolumeX size={12} />}
+    </motion.button>
+  );
+}
+
 /** 👍 / 👎 under a reply — saved instantly, click again to undo. */
 function RateReply({ messageId, initial }: { messageId: string; initial: 1 | -1 | null }) {
   const [rating, setRating] = useState<1 | -1 | null>(initial);
@@ -249,6 +282,7 @@ function RateReply({ messageId, initial }: { messageId: string; initial: 1 | -1 
   );
   return (
     <div className="mt-1 flex items-center gap-0.5 pl-[42px]">
+      <ReadAloud messageId={messageId} />
       {btn(1, "Helpful", <ThumbsUp size={12} />)}
       {btn(-1, "Not helpful", <ThumbsDown size={12} />)}
       <AnimatePresence>
@@ -375,6 +409,65 @@ export default function AgentChatPanel({
   const pendingSeq = useRef(0);
   const [reviewing, setReviewing] = useState<{ messageId: string; proposal: AgentProposal } | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [voiceOn, setVoiceOn] = useState(false);
+  const [dictating, setDictating] = useState(false);
+  const dictation = useRef<Listener | null>(null);
+  const canVoice = typeof window !== "undefined" && voiceSupported();
+
+  const stopDictation = () => {
+    dictation.current?.stop();
+    dictation.current = null;
+    setDictating(false);
+  };
+
+  // Voice ends with the chat: the next time it opens, it starts in text.
+  useEffect(() => {
+    if (open) return;
+    const t = setTimeout(() => {
+      setVoiceOn(false);
+      dictation.current?.stop();
+      dictation.current = null;
+      setDictating(false);
+      stopSpeaking();
+    }, 0);
+    return () => clearTimeout(t);
+  }, [open]);
+
+  /** Mic in the message box: speech is typed into the box; you review and send it. */
+  const toggleDictation = async () => {
+    if (dictating) return stopDictation();
+    setError(null);
+    const base = draft.trim();
+    let quiet: ReturnType<typeof setTimeout> | null = null;
+    setDictating(true);
+    try {
+      dictation.current = await startListening({
+        onTranscript: (text, final) => {
+          setDraft(`${base ? `${base} ` : ""}${text}`.slice(0, MAX_CHARS));
+          if (quiet) clearTimeout(quiet);
+          // Stop by itself after a few seconds of quiet following a finished phrase.
+          if (final) quiet = setTimeout(stopDictation, 3000);
+        },
+        onError: (m) => setError(m),
+        onEnd: () => {
+          dictation.current = null;
+          setDictating(false);
+          inputRef.current?.focus();
+        },
+      });
+    } catch (err) {
+      setDictating(false);
+      setError(err instanceof Error ? err.message : "Voice input isn't available right now.");
+    }
+  };
+
+  const startVoice = () => {
+    unlockAudio(); // inside the click, so browsers allow the replies to play
+    stopDictation();
+    setView("chat");
+    setError(null);
+    setVoiceOn(true);
+  };
 
   // Restore the remembered layout when the chat opens.
   useEffect(() => {
@@ -481,9 +574,10 @@ export default function AgentChatPanel({
     ? "wave"
     : "idle";
 
-  const send = (text: string, fresh = false) => {
+  const send = (text: string, fresh = false, voice = false) => {
     const trimmed = text.trim();
     if (!trimmed || isPending) return;
+    if (dictation.current) stopDictation();
     const convoId = fresh ? null : conversationId;
     if (fresh) {
       setConversationId(null);
@@ -504,10 +598,10 @@ export default function AgentChatPanel({
     setMessages((m) => [...m, optimistic]);
     startTransition(async () => {
       try {
-        const res = await sendAgentMessage({ conversationId: convoId, text: trimmed });
+        const res = await sendAgentMessage({ conversationId: convoId, text: trimmed, voice });
         if (!res.ok) {
           setMessages((m) => m.filter((x) => x.id !== optimistic.id));
-          setDraft(trimmed);
+          if (!voice) setDraft(trimmed);
           setError(res.error);
           return;
         }
@@ -620,7 +714,7 @@ export default function AgentChatPanel({
 
               <div className="flex min-w-0 flex-1 flex-col">
               {/* header */}
-              <div className={`app-sidebar-bg relative flex shrink-0 items-center gap-3 overflow-hidden px-4 py-3.5 text-white ${expanded ? "" : "sm:rounded-tl-3xl"}`}>
+              <div className={`app-sidebar-bg relative flex shrink-0 items-center gap-3 overflow-clip px-4 py-3.5 text-white ${expanded ? "" : "sm:rounded-tl-3xl"}`}>
                 <span aria-hidden className="pointer-events-none absolute -right-10 -top-16 h-40 w-40 rounded-full bg-brand-primary-light/30 blur-2xl" />
                 <motion.span
                   className="relative"
@@ -659,6 +753,11 @@ export default function AgentChatPanel({
                   <HeaderButton label="New conversation" onClick={newChat} className={expanded ? "md:hidden" : ""}>
                     <Plus size={18} />
                   </HeaderButton>
+                  {canVoice && (
+                    <HeaderButton label={voiceOn ? "Back to typing" : "Voice mode"} active={voiceOn} onClick={voiceOn ? () => setVoiceOn(false) : startVoice}>
+                      <AudioLines size={17} />
+                    </HeaderButton>
+                  )}
                   <HeaderButton label={expanded ? "Exit full screen" : "Full screen"} onClick={toggleExpanded} className="hidden sm:flex">
                     {expanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                   </HeaderButton>
@@ -668,6 +767,18 @@ export default function AgentChatPanel({
                 </div>
               </div>
 
+              {voiceOn ? (
+                <VoiceMode
+                  agentName={agentName}
+                  onSend={(t) => send(t, false, true)}
+                  isPending={isPending}
+                  lastReply={messages.filter((m) => m.role === "assistant").at(-1) ?? null}
+                  reviewOpen={!!reviewing}
+                  sendError={error}
+                  onExit={() => setVoiceOn(false)}
+                />
+              ) : (
+              <>
               {/* body */}
               <div className={`min-h-0 flex-1 overflow-y-auto px-4 py-5 [scrollbar-width:thin] ${expanded ? "sm:px-8 sm:py-8" : ""}`} aria-live="polite">
                 <div className={expanded ? "mx-auto w-full max-w-3xl" : ""}>
@@ -835,10 +946,25 @@ export default function AgentChatPanel({
                       }
                     }}
                     rows={1}
-                    placeholder={`Message ${agentName}…`}
+                    placeholder={dictating ? "Listening… speak now" : `Message ${agentName}…`}
                     aria-label={`Message ${agentName}`}
                     className="max-h-32 min-h-[40px] flex-1 resize-none bg-transparent px-2.5 py-2 text-sm text-brand-navy outline-none placeholder:text-brand-navy/40 [field-sizing:content]"
                   />
+                  {canVoice && (
+                    <motion.button
+                      type="button"
+                      onClick={toggleDictation}
+                      aria-label={dictating ? "Stop dictation" : "Speak your message"}
+                      title={dictating ? "Stop dictation" : "Speak your message"}
+                      whileTap={{ scale: 0.88 }}
+                      className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                        dictating ? "bg-brand-sell/10 text-brand-sell" : "text-brand-navy/45 hover:bg-brand-navy/5 hover:text-brand-primary"
+                      }`}
+                    >
+                      {dictating && <span aria-hidden className="absolute inset-0 animate-ping rounded-xl bg-brand-sell/15" />}
+                      <Mic size={17} className="relative" />
+                    </motion.button>
+                  )}
                   <motion.button
                     type="submit"
                     disabled={!draft.trim() || isPending}
@@ -856,6 +982,8 @@ export default function AgentChatPanel({
                 </p>
                 </div>
               </div>
+              </>
+              )}
               </div>
             </motion.aside>
           </div>

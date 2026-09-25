@@ -47,3 +47,26 @@ export const AI_LIMITS = {
 /** Shown when the guardrail or the advice safety net stops a reply (same text as the guardrail's own block message). */
 export const AI_BLOCKED_REPLY =
   "I'm not able to help with that. I don't recommend what to buy, sell or hold, select stocks, or predict prices or returns. I can, however, help you turn your idea into clear rules and backtest it, so you can see how it would have performed on historical data.";
+
+/**
+ * Voice (Amazon Polly + Amazon Transcribe). Generative voices aren't offered in
+ * Mumbai, so the natural voice comes from Singapore, with Mumbai's neural voice
+ * as the fallback. Limits keep a runaway loop from running up the bill.
+ */
+export const AI_VOICE = {
+  voiceId: "Kajal", // Indian English
+  primary: { region: "ap-southeast-1", engine: "generative" as const },
+  fallback: { region: "ap-south-1", engine: "neural" as const },
+  transcribeRegion: "ap-south-1",
+  languageCode: "en-IN",
+  /** Transcribe custom vocabulary (Mumbai): stock names, indicator acronyms, trading terms. */
+  vocabularyName: "myalgoagent-trading-en-in",
+  sampleRate: 16000,
+  /** Spoken replies per user per day. */
+  speakPerDay: 150,
+  /** Listening sessions (one per question) per user per day, and per minute. */
+  listenPerDay: 200,
+  listenPerMinute: 12,
+  /** Longest a single listening session may run, in seconds (enforced in the browser). */
+  maxListenSeconds: 60,
+};

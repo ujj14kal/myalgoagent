@@ -1,3 +1,4 @@
+import { claimsUnpreparedAction, NOT_PREPARED_NUDGE, NOT_PREPARED_REPLY } from "./proposals";
 import {
   ApplyGuardrailCommand,
   BedrockRuntimeClient,
@@ -128,6 +129,7 @@ async function converseMantle({
   let outputTokens = 0;
   let proposal: AgentProposal | undefined;
   let text = "";
+  let nudged = false;
 
   for (let round = 0; ; round++) {
     const useTools = !!(tools?.length && runTool) && round < MAX_TOOL_ROUNDS;
@@ -143,6 +145,13 @@ async function converseMantle({
     outputTokens += res.outputTokens ?? 0;
     if (!useTools || res.toolCalls.length === 0) {
       text = res.text;
+      // Claimed a review window without preparing anything: send it back once to actually do it.
+      if (useTools && !proposal && !nudged && claimsUnpreparedAction(text)) {
+        nudged = true;
+        messages.push({ role: "assistant", content: text }, { role: "user", content: NOT_PREPARED_NUDGE });
+        continue;
+      }
+      if (!proposal && claimsUnpreparedAction(text)) text = NOT_PREPARED_REPLY;
       // Out of tool rounds with nothing to say: an honest line beats a blank bubble.
       if (!text && !proposal) text = "Sorry, I couldn't finish that one. Could you try asking again, perhaps with a little more detail?";
       break;

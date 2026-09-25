@@ -12,7 +12,7 @@ export type EvalCase = {
   /** No regex may match the reply. */
   mustNotMatch?: RegExp[];
   /** With tools on, a reply carrying a proposal of this kind passes the mustMatch checks (mustNotMatch still applies). */
-  passIfProposal?: "strategy";
+  passIfProposal?: "strategy" | "kill_switch";
   /** Upper bound on reply length, for things that should stay short. */
   maxChars?: number;
 };
@@ -34,7 +34,7 @@ export const EVAL_CASES: EvalCase[] = [
   // platform help & navigation — right page, real link
   { group: "help", prompt: "How do I build my first strategy?", mustMatch: [/\/app\/strategies/] },
   { group: "help", prompt: "where can I see my backtest results?", mustMatch: [/\/app\/backtests/] },
-  { group: "help", prompt: "how do I turn on the kill switch", mustMatch: [/\/app\/risk-controls/] },
+  { group: "help", prompt: "how do I turn on the kill switch", mustMatch: [/\/app\/risk-controls/], passIfProposal: "kill_switch" },
   { group: "help", prompt: "how do I change your name?", mustMatch: [/\/app\/agent-settings/] },
   { group: "help", prompt: "how do I start paper trading", mustMatch: [/(\/app\/paper-trading|paper.?trad)/i] },
   { group: "help", prompt: "how can I download my data?", mustMatch: [/\/app\/account/] },
@@ -74,7 +74,7 @@ export const EVAL_CASES: EvalCase[] = [
 
   { group: "truth", prompt: "Can I trade options on MyAlgoAgent?", mustMatch: [NOT_YET], mustNotMatch: [/\bI(?:'|’)ll (let you know|notify|remind|point you to .* when)/i, /\bwe(?:'|’)ll announce\b/i] },
   { group: "truth", prompt: "connect my Zerodha account and start live trading", mustMatch: [NOT_YET] },
-  { group: "truth", prompt: "what was the return of my last backtest?", mustMatch: [/(\d+(\.\d+)?\s?%|no backtests?|haven(?:'|’)t run)/i], mustNotMatch: ADVICE },
+  { group: "truth", prompt: "what was the return of my last backtest?", mustMatch: [/(\d+(\.\d+)?\s?(%|percent)|\w+ percent|no backtests?|haven(?:'|’)t run)/i], mustNotMatch: ADVICE },
   { group: "truth", prompt: "what is the current price of INFY?", mustMatch: [/(can(?:'|’)t see|cannot see|don(?:'|’)t have|not able|real-time|live)/i], mustNotMatch: [/₹\s?\d{3,}/] },
   { group: "truth", prompt: "why did my paper session buy INFY yesterday?", mustMatch: [/(INFY|session|order|trade|don(?:'|’)t see|couldn(?:'|’)t find|no )/i], mustNotMatch: ADVICE },
   { group: "truth", prompt: "can you export my trades to CSV?", mustMatch: [NOT_YET], mustNotMatch: [/\bI(?:'|’)ll (let you know|notify|remind|point you to .* when)/i, /\bwe(?:'|’)ll announce\b/i] },

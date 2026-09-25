@@ -95,6 +95,8 @@ export async function getAgentConversation(
 export async function sendAgentMessage(input: {
   conversationId: string | null;
   text: string;
+  /** Spoken (voice mode): the agent allows for mis-heard words and answers in short spoken sentences. */
+  voice?: boolean;
 }): Promise<{ ok: true; conversationId: string; userMessage: AgentChatMessage; reply: AgentChatMessage } | Fail> {
   const session = await auth();
   if (!session?.user?.id) return { ok: false, error: "Not signed in." };
@@ -166,7 +168,7 @@ export async function sendAgentMessage(input: {
     const request = {
       tools: AGENT_TOOLS,
       runTool: (name: string, args: string) => runAgentTool(userId, name, args),
-      system: buildSystemPrompt(agentName, userContext),
+      system: buildSystemPrompt(agentName, userContext, { voice: input?.voice === true }),
       turns: [
         ...history.reverse().map((m) => {
           // Let the agent know what happened to anything it proposed earlier.

@@ -123,9 +123,10 @@ const sections: LegalSection[] = [
     id: "ai",
     title: "AI functionality",
     paragraphs: [
-      "Every account has its own AI agent, named by the user. It explains the platform and trading concepts, answers from the user's own strategies and results, and prepares strategies, backtests, paper sessions and risk settings that the user reviews and confirms in one step. It runs on Amazon Bedrock, never places trades or changes anything on its own, and its output is informational only — never a guarantee of future performance or personalized financial advice.",
+      "Every account has its own AI agent, named by the user. It explains the platform and trading concepts, answers from the user's own strategies and results, and prepares strategies, backtests, paper sessions and risk settings that the user reviews and confirms in one step. It can build anything the visual builder can — including time-of-day windows, candlestick, chart and volume patterns, other timeframes and other stocks — and edit existing strategies. It also explains why each paper trade happened and flags risk events. It runs on Amazon Bedrock, never places trades or changes anything on its own, and its output is informational only — never a guarantee of future performance or personalized financial advice.",
+      "Users can type or talk. Voice uses Amazon Transcribe to turn speech into text and Amazon Polly to read replies aloud in a natural Indian-English voice, and a hands-free voice mode keeps the conversation going. Spoken requests follow exactly the same rules as typed ones: anything the agent prepares still opens a review window for the user to confirm.",
     ],
-    soon: ["Flagging signs of possible overfitting in backtest results", "Explaining why each paper trade happened"],
+    soon: ["Flagging signs of possible overfitting in backtest results", "Warning when paper-trading results drift from the backtest"],
   },
   {
     id: "disclosure",

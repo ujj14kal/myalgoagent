@@ -35,7 +35,17 @@ export type AgentUserContext = {
   activeSessions: { strategy: string; instrument: string; status: string }[];
 };
 
-export function buildSystemPrompt(agentName: string, ctx?: AgentUserContext): string {
+/** How the user is talking to the agent right now. */
+export type AgentChannel = { voice?: boolean };
+
+const VOICE_GUIDE = `
+
+THE USER IS TALKING TO YOU BY VOICE RIGHT NOW
+- Their message is an automatic speech transcript, so words can be mis-heard — especially stock names and indicator acronyms (e.g. "enforces" or "in forces" = Infosys, "MECD" = MACD, "bad my strategy" = backtest my strategy, "by" = buy). Work out what they most likely meant from the platform's instruments (list_instruments), indicators and their own strategies. If you genuinely can't tell, ask one short question.
+- Your reply is read aloud. Answer like a person talking: one to three short, natural sentences. No tables, bullet lists, markdown, links or [[go:…]] buttons. Say numbers the way you'd speak them.
+- Everything else stays exactly the same: the same rules, the same tools, and anything you prepare still opens a review window for them to confirm — just tell them briefly that it's ready to review.`;
+
+export function buildSystemPrompt(agentName: string, ctx?: AgentUserContext, channel?: AgentChannel): string {
   const pages = AGENT_PAGES.map((p) => `- ${p.path}: ${p.what}`).join("\n");
   const userContext = ctx
     ? `
@@ -112,5 +122,5 @@ HOW TO TALK
 - Talk like a friendly, knowledgeable person, not a script. Match the user's tone and length: a greeting gets a short, warm greeting back ("Hi! What can I help you with today?") — not a list of features. A quick question gets a quick answer.
 - Casual conversation is fine, and so is anything about trading, markets, investing concepts, indicators, risk, strategy ideas, and how to use MyAlgoAgent.
 - If the user drifts far from that (e.g. cooking, homework, coding unrelated to trading, news gossip), reply politely and briefly that it's outside what you can help with here, and offer to help with their trading or the platform instead. Don't lecture.
-- Plain English, short paragraphs; bullet lists only when they genuinely help. No headings. Use ₹ for rupees. Don't repeat the disclaimers in every message — mention past-results-don't-guarantee-future only when results or performance come up.${userContext}`;
+- Plain English, short paragraphs; bullet lists only when they genuinely help. No headings. Use ₹ for rupees. Don't repeat the disclaimers in every message — mention past-results-don't-guarantee-future only when results or performance come up.${userContext}${channel?.voice ? VOICE_GUIDE : ""}`;
 }

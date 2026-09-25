@@ -95,13 +95,17 @@ const groups: Group[] = [
     title: "Your AI agent",
     icon: Sparkles,
     items: [
-      "Ask anything about the platform, indicators or risk in plain English — it explains and points you to the right page",
+      "Ask anything about trading, indicators, risk or the platform in plain English — it explains and points you to the right page",
+      "Talk instead of typing: dictate a message, have any reply read aloud in a natural Indian-English voice, or use hands-free voice mode — with the same rules and review step as typed chat",
       "Describe a strategy and it builds and checks it for you, then opens a review — confirm and it's created",
-      "Prepares backtests, paper sessions, loss limits, the kill switch and watchlist changes the same way — you just review and confirm",
+      "Builds anything the strategy builder can: every indicator, time-of-day windows, candlestick, chart and volume patterns, other timeframes and other stocks — and edits your existing strategies",
+      "Prepares backtests, paper sessions, loss limits, the kill switch and watchlist changes the same way — you just review and confirm, and it takes you to the result",
       "Answers from your own data: your strategies, backtest results, paper sessions and risk settings",
+      "Explains why each paper trade happened and flags risk events as they occur",
+      "Chat in a side panel or full screen, with all your past conversations",
       "Uses the same validator as the builder, never gives buy or sell calls, and never acts without your confirmation",
     ],
-    soon: ["Explains why each paper trade happened and flags risk events as they occur"],
+    soon: ["Warns when paper-trading results drift from the backtest", "A daily digest of your sessions"],
   },
 ];
 

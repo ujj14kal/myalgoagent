@@ -38,13 +38,26 @@ async function main() {
   const args = process.argv.slice(2);
   const only = args.includes("--only") ? args[args.indexOf("--only") + 1] : null;
   const email = args.find((a) => a.includes("@"));
+  // (--voice adds transcript-style cases and the voice system prompt)
   const user = await prisma.user.findFirst({ where: email ? { email } : { strategies: { some: {} } }, select: { id: true, agentName: true } });
   if (!user) throw new Error("No user found");
   const strategies = await prisma.strategy.findMany({ where: { userId: user.id, status: { notIn: ["DELETED", "ARCHIVED"] } }, include: { instrument: true }, take: 20 });
-  const system = buildSystemPrompt(user.agentName ?? "Mr. Agent", {
-    strategies: strategies.map((s) => ({ name: s.name, instrument: s.instrument.symbol, status: s.status })),
-    activeSessions: [],
-  });
+  const voice = args.includes("--voice");
+  const system = buildSystemPrompt(
+    user.agentName ?? "Mr. Agent",
+    {
+      strategies: strategies.map((s) => ({ name: s.name, instrument: s.instrument.symbol, status: s.status })),
+      activeSessions: [],
+    },
+    { voice }
+  );
+  if (voice) {
+    // Real Transcribe output from scripts/voice-roundtrip.ts — mis-heard words included.
+    CASES.push(
+      { name: "voice: misheard stock", ask: "Create a strategy on enforces that buys at 9:15 and exits at 9:30.", expect: (p, j) => need(!!strat(p) && j.includes("INFY") && j.includes('"TIME_WINDOW"'), "maps 'enforces' to INFY with time windows") },
+      { name: "voice: misheard indicator", ask: "By HDFC Bank when RSI crosses above 30 and MECD is positive, exit when RSI goes above 70.", expect: (p, j) => need(!!strat(p) && j.includes("HDFCBANK") && j.includes("MACD"), "maps MECD to MACD") },
+    );
+  }
 
   // A strategy that's valid as saved (has an exit rule or a risk leg), so an edit can pass validation.
   const editable = strategies.find((s) => s.mode !== "WEBHOOK" && (s.stopLossEnabled || s.targetEnabled || s.trailingSlEnabled || !isNeverExitCondition(s.exitCondition as unknown as ConditionNode)));

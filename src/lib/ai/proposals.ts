@@ -158,6 +158,20 @@ export function proposalReadyLine(p: AgentProposal): string {
   return `${PROPOSAL_TITLES[p.kind]} — ready for your review. Check the details, change anything you like, and confirm.`;
 }
 
+/** A reply that says something is prepared / waiting for review. */
+const CLAIMS_PREPARED =
+  /\b(ready (for (you|your)( to)? review|to review)|review window|(i(?:'|’)ve|i have) (prepared|drafted|set up|created|put together|lined up|queued)|(prepared|drafted) (a|an|the|your) (new )?(strategy|backtest|session|paper|change|update|limit|watchlist))/i;
+
+/** True when the agent claims it prepared something but no proposal exists — it must not say that. */
+export function claimsUnpreparedAction(text: string): boolean {
+  return CLAIMS_PREPARED.test(text);
+}
+
+export const NOT_PREPARED_NUDGE =
+  "You said something is prepared or ready to review, but you did not call a propose_* tool, so nothing was prepared and no review window is open. Call the right propose_* tool now. If you need information from the user first, ask them instead — and don't say anything is ready.";
+
+export const NOT_PREPARED_REPLY = "I wasn't able to prepare that just now. Could you tell me once more exactly what you'd like me to set up?";
+
 export function honestProposalReply(text: string, p: AgentProposal): string {
   return !text.trim() || ALREADY_DONE.test(text) ? proposalReadyLine(p) : text;
 }

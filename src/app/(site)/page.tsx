@@ -35,7 +35,7 @@ const faqs = [
   { q: "How is live trading authorized?", a: "Live trading is coming soon. When it launches, you’ll connect a supported broker and explicitly authorize execution. You can disconnect the broker or use the kill switch at any time." },
 ];
 
-function Icon({ name, size = 18 }: { name: "radio" | "braces" | "chart" | "layers" | "shield" | "route" | "check" | "arrow" | "gauge" | "lock" | "stop"; size?: number }) {
+function Icon({ name, size = 18 }: { name: "radio" | "braces" | "chart" | "layers" | "shield" | "route" | "check" | "arrow" | "gauge" | "lock" | "stop" | "mic"; size?: number }) {
   const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   switch (name) {
     case "radio":
@@ -56,6 +56,8 @@ function Icon({ name, size = 18 }: { name: "radio" | "braces" | "chart" | "layer
       return <svg {...common}><path d="M5 12h14M13 6l6 6-6 6" /></svg>;
     case "gauge":
       return <svg {...common}><path d="M12 12l4-4" /><path d="M4 15a8 8 0 1 1 16 0" /></svg>;
+    case "mic":
+      return <svg {...common}><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>;
     case "lock":
       return <svg {...common}><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>;
     case "stop":
@@ -218,7 +220,7 @@ export default function Home() {
                 </span>
               </div>
               <h2 className="mt-2 text-3xl font-bold text-brand-navy">
-                Describe it in plain English. Your agent builds it — you confirm.
+                Type it or say it. Your agent builds it — you confirm.
               </h2>
               <p className="mt-4 text-brand-navy/70">
                 Tell your agent what you want and it prepares it for you — a
@@ -227,6 +229,13 @@ export default function Home() {
                 the exact same building blocks as the rest of the platform.
                 You review every detail and confirm; nothing happens without
                 you.
+              </p>
+              <p className="mt-3 text-brand-navy/70">
+                Talk to it like you would to a person: dictate a message, hear
+                replies in a natural Indian-English voice, or switch on
+                hands-free voice mode. It understands time-of-day rules,
+                candlestick and chart patterns, other timeframes and other
+                stocks — everything the builder can do.
               </p>
               <p className="mt-3 text-brand-navy/70">
                 Every AI-generated strategy runs through the same feasibility
@@ -244,8 +253,13 @@ export default function Home() {
                   <Icon name="braces" size={16} />
                   Your agent
                 </span>
-                <span className="rounded-full bg-brand-gold/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-gold">
-                  Example
+                <span className="flex items-center gap-2">
+                  <span className="flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/75">
+                    <Icon name="mic" size={11} /> Voice or text
+                  </span>
+                  <span className="rounded-full bg-brand-gold/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-gold">
+                    Example
+                  </span>
                 </span>
               </div>
               <div className="space-y-4 px-6 py-6">
