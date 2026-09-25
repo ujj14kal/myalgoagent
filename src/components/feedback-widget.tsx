@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MessageSquareText } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { submitFeedbackAction } from "@/lib/feedback-actions";
+import BodyPortal from "@/components/ui/body-portal";
 
 export default function FeedbackWidget() {
   const pathname = usePathname();
@@ -32,6 +33,18 @@ export default function FeedbackWidget() {
     setError(null);
   }
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      setStatus("idle");
+      setError(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
   return (
     <>
       <button
@@ -44,8 +57,11 @@ export default function FeedbackWidget() {
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-end justify-end bg-black/20 p-6 sm:items-center sm:justify-center">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+        // Rendered at <body> level: inside the sidebar (backdrop-filter) a fixed overlay
+        // would be sized to the sidebar, get clipped and let the page (e.g. charts) show through.
+        <BodyPortal>
+        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-brand-navy/30 p-4 backdrop-blur-[2px] sm:items-center" onClick={close}>
+          <div role="dialog" aria-modal="true" aria-label="Send feedback" onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
             {status === "sent" ? (
               <>
                 <p className="text-sm font-semibold text-brand-navy">Thanks for the feedback!</p>
@@ -63,12 +79,12 @@ export default function FeedbackWidget() {
                 <p className="text-sm font-semibold text-brand-navy">Send feedback</p>
                 <p className="mt-1 text-xs text-brand-navy/50">About this page: {pathname}</p>
                 <textarea
-                  required
+                  autoFocus
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   rows={4}
                   placeholder="What's working, what's not, what would help..."
-                  className="mt-3 w-full rounded-lg border border-brand-navy/15 px-3 py-2 text-sm outline-none focus:border-brand-primary"
+                  className="mt-3 w-full resize-none rounded-lg border border-brand-navy/15 px-3 py-2 text-sm text-brand-navy outline-none placeholder:text-brand-navy/40 focus:border-brand-primary focus:shadow-[0_0_0_3px_rgba(71,24,152,0.1)]"
                 />
                 {error && <p className="mt-2 text-xs text-brand-sell">{error}</p>}
                 <div className="mt-3 flex justify-end gap-2">
@@ -77,7 +93,7 @@ export default function FeedbackWidget() {
                   </button>
                   <button
                     type="submit"
-                    disabled={status === "submitting"}
+                    disabled={status === "submitting" || !message.trim()}
                     className="rounded-full bg-brand-primary px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
                   >
                     {status === "submitting" ? "Sending…" : "Send"}
@@ -87,6 +103,7 @@ export default function FeedbackWidget() {
             )}
           </div>
         </div>
+        </BodyPortal>
       )}
     </>
   );

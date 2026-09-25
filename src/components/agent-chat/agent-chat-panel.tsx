@@ -4,7 +4,25 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { Activity, ArrowRight, ArrowUp, Check, ClipboardList, Copy, FlaskConical, History, Layers, Plus, ThumbsDown, ThumbsUp, TrendingDown, X } from "lucide-react";
+import {
+  Activity,
+  ArrowRight,
+  ArrowUp,
+  Check,
+  ClipboardList,
+  Copy,
+  FlaskConical,
+  History,
+  Layers,
+  Maximize2,
+  MessageSquare,
+  Minimize2,
+  Plus,
+  ThumbsDown,
+  ThumbsUp,
+  TrendingDown,
+  X,
+} from "lucide-react";
 import BodyPortal from "@/components/ui/body-portal";
 import AgentAvatar from "@/components/ui/agent-avatar";
 import Agent2D from "@/components/robot/agent-2d";
@@ -29,6 +47,16 @@ const STARTERS = [
 ];
 
 const MAX_CHARS = 2000;
+
+// Full-screen chat is a per-browser preference (like ChatGPT / Claude remembering the layout).
+const EXPANDED_KEY = "agent-chat-expanded";
+function readExpanded(): boolean {
+  try {
+    return localStorage.getItem(EXPANDED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 /** Renders one line of a reply: **bold** and allow-listed in-app links. */
 function Inline({ text, onNavigate }: { text: string; onNavigate: () => void }) {
@@ -163,11 +191,13 @@ function HeaderButton({
   label,
   active = false,
   onClick,
+  className = "",
   children,
 }: {
   label: string;
   active?: boolean;
   onClick: () => void;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -175,8 +205,9 @@ function HeaderButton({
       type="button"
       onClick={onClick}
       aria-label={label}
+      title={label}
       whileTap={{ scale: 0.9 }}
-      className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-white/10 hover:text-white ${active ? "bg-white/15 text-white" : "text-white/65"}`}
+      className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-white/10 hover:text-white ${active ? "bg-white/15 text-white" : "text-white/65"} ${className}`}
     >
       {children}
     </motion.button>
@@ -343,6 +374,36 @@ export default function AgentChatPanel({
   const endRef = useRef<HTMLDivElement>(null);
   const pendingSeq = useRef(0);
   const [reviewing, setReviewing] = useState<{ messageId: string; proposal: AgentProposal } | null>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  // Restore the remembered layout when the chat opens.
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(() => setExpanded(readExpanded()), 0);
+    return () => clearTimeout(t);
+  }, [open]);
+
+  const toggleExpanded = () => {
+    const next = !expanded;
+    setExpanded(next);
+    try {
+      localStorage.setItem(EXPANDED_KEY, next ? "1" : "0");
+    } catch {
+      /* private mode — still works for this visit */
+    }
+    setTimeout(() => inputRef.current?.focus(), 320);
+  };
+
+  // Full screen shows past conversations in a sidebar, so keep that list fresh.
+  const refreshHistory = () => listAgentConversations().then((res) => res.ok && setHistory(res.conversations));
+  useEffect(() => {
+    if (!open || !expanded) return;
+    let cancelled = false;
+    listAgentConversations().then((res) => !cancelled && res.ok && setHistory(res.conversations));
+    return () => {
+      cancelled = true;
+    };
+  }, [open, expanded, conversationId]);
 
   // Any navigation (a link in a reply, or a confirmed action landing on its
   // result page) closes the chat so the page is visible.
@@ -477,7 +538,7 @@ export default function AgentChatPanel({
 
   const showHistory = () => {
     setView("history");
-    listAgentConversations().then((res) => res.ok && setHistory(res.conversations));
+    refreshHistory();
   };
 
   const openConversation = (id: string) => {
@@ -505,14 +566,61 @@ export default function AgentChatPanel({
               exit={{ opacity: 0 }}
             />
             <motion.aside
-              className="absolute inset-y-0 right-0 flex w-full flex-col bg-brand-bg shadow-2xl sm:w-[420px] sm:rounded-l-3xl"
+              className={`absolute inset-y-0 right-0 flex w-full bg-brand-bg shadow-2xl transition-[width,border-radius] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                expanded ? "sm:w-full sm:rounded-none" : "sm:w-[420px] sm:rounded-l-3xl"
+              }`}
               initial={{ x: "100%" }}
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
               transition={{ type: "spring", stiffness: 380, damping: 40 }}
             >
+              {/* full screen: past conversations, like ChatGPT / Claude */}
+              <AnimatePresence initial={false}>
+                {expanded && (
+                  <motion.nav
+                    key="sidebar"
+                    aria-label="Conversations"
+                    initial={{ opacity: 0, x: -16 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    // Leaves at once on collapse so it never squeezes the narrowing panel.
+                    exit={{ opacity: 0, transition: { duration: 0 } }}
+                    transition={{ duration: 0.22, delay: 0.08 }}
+                    className="app-sidebar-bg hidden w-64 shrink-0 flex-col text-white md:flex"
+                  >
+                    <div className="p-3">
+                      <button
+                        type="button"
+                        onClick={newChat}
+                        className="flex w-full items-center gap-2 rounded-xl bg-white/10 px-3 py-2.5 text-sm font-semibold text-white ring-1 ring-white/10 transition-colors hover:bg-white/15"
+                      >
+                        <Plus size={16} /> New chat
+                      </button>
+                    </div>
+                    <p className="px-4 pb-1.5 pt-2 text-[10.5px] font-semibold uppercase tracking-wider text-white/40">Recent</p>
+                    <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-3 [scrollbar-width:thin]">
+                      {history.length === 0 && <li className="px-3 py-2 text-xs text-white/45">No conversations yet.</li>}
+                      {history.map((c) => (
+                        <li key={c.id}>
+                          <button
+                            type="button"
+                            onClick={() => openConversation(c.id)}
+                            className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition-colors ${
+                              c.id === conversationId ? "bg-white/15 text-white" : "text-white/70 hover:bg-white/[0.07] hover:text-white"
+                            }`}
+                          >
+                            <MessageSquare size={14} className="shrink-0 opacity-60" />
+                            <span className="truncate">{c.title}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </motion.nav>
+                )}
+              </AnimatePresence>
+
+              <div className="flex min-w-0 flex-1 flex-col">
               {/* header */}
-              <div className="app-sidebar-bg relative flex shrink-0 items-center gap-3 overflow-hidden px-4 py-3.5 text-white sm:rounded-tl-3xl">
+              <div className={`app-sidebar-bg relative flex shrink-0 items-center gap-3 overflow-hidden px-4 py-3.5 text-white ${expanded ? "" : "sm:rounded-tl-3xl"}`}>
                 <span aria-hidden className="pointer-events-none absolute -right-10 -top-16 h-40 w-40 rounded-full bg-brand-primary-light/30 blur-2xl" />
                 <motion.span
                   className="relative"
@@ -544,11 +652,15 @@ export default function AgentChatPanel({
                     label={view === "history" ? "Back to chat" : "Past conversations"}
                     active={view === "history"}
                     onClick={view === "history" ? () => setView("chat") : showHistory}
+                    className={expanded ? "md:hidden" : ""}
                   >
                     <History size={17} />
                   </HeaderButton>
-                  <HeaderButton label="New conversation" onClick={newChat}>
+                  <HeaderButton label="New conversation" onClick={newChat} className={expanded ? "md:hidden" : ""}>
                     <Plus size={18} />
+                  </HeaderButton>
+                  <HeaderButton label={expanded ? "Exit full screen" : "Full screen"} onClick={toggleExpanded} className="hidden sm:flex">
+                    {expanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                   </HeaderButton>
                   <HeaderButton label="Close chat" onClick={onClose}>
                     <X size={18} />
@@ -557,7 +669,8 @@ export default function AgentChatPanel({
               </div>
 
               {/* body */}
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 [scrollbar-width:thin]" aria-live="polite">
+              <div className={`min-h-0 flex-1 overflow-y-auto px-4 py-5 [scrollbar-width:thin] ${expanded ? "sm:px-8 sm:py-8" : ""}`} aria-live="polite">
+                <div className={expanded ? "mx-auto w-full max-w-3xl" : ""}>
                 <AnimatePresence mode="wait" initial={false}>
                   {view === "history" ? (
                     <motion.div key="history" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }} transition={{ duration: 0.2 }}>
@@ -590,11 +703,11 @@ export default function AgentChatPanel({
                         <Agent2D pose="wave" size={112} trackCursor={false} className="relative" />
                       </div>
                       <p className="mt-1 text-lg font-bold text-brand-navy">Hi, I&rsquo;m {agentName}</p>
-                      <p className="mt-1.5 max-w-xs text-sm leading-relaxed text-brand-navy/60">
+                      <p className={`mt-1.5 text-sm ${expanded ? "max-w-md" : "max-w-xs"} leading-relaxed text-brand-navy/60`}>
                         Ask me how any part of the platform works, what an indicator means, or how to turn an idea into rules you can backtest.
                       </p>
                       <p className="mb-2.5 mt-6 self-start text-[11px] font-semibold uppercase tracking-wider text-brand-navy/40">Try asking</p>
-                      <div className="grid w-full gap-2">
+                      <div className={`grid w-full gap-2 ${expanded ? "sm:grid-cols-2" : ""}`}>
                         {STARTERS.map((st, i) => (
                           <motion.button
                             key={st.text}
@@ -684,11 +797,13 @@ export default function AgentChatPanel({
                     </motion.ul>
                   )}
                 </AnimatePresence>
+                </div>
                 <div ref={endRef} />
               </div>
 
               {/* composer */}
-              <div className="shrink-0 border-t border-black/5 bg-white/90 px-4 pb-4 pt-3 backdrop-blur">
+              <div className={`shrink-0 border-t border-black/5 bg-white/90 px-4 pb-4 pt-3 backdrop-blur ${expanded ? "sm:border-t-0 sm:bg-transparent sm:px-8 sm:pb-6" : ""}`}>
+                <div className={expanded ? "mx-auto w-full max-w-3xl" : ""}>
                 <AnimatePresence>
                   {error && (
                     <motion.p
@@ -739,6 +854,8 @@ export default function AgentChatPanel({
                   Responses are AI-generated and may contain errors. They are not investment advice, and past performance does not
                   guarantee future results.
                 </p>
+                </div>
+              </div>
               </div>
             </motion.aside>
           </div>
