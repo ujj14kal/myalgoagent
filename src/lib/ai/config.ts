@@ -34,6 +34,8 @@ export const AI_LIMITS = {
   maxUserChars: 2000,
   /** Cap on each reply, in tokens — keeps cost and latency bounded. */
   maxOutputTokens: 900,
+  /** Tool rounds write whole strategies as JSON (plus the model's reasoning) — they need more room. */
+  maxToolTokens: 3000,
   /** How many earlier messages of the conversation are sent as context. */
   historyMessages: 12,
   perMinute: 20,

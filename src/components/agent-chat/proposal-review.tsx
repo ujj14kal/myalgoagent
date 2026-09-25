@@ -13,6 +13,7 @@ import {
   Layers,
   ListChecks,
   OctagonX,
+  PencilLine,
   PlayCircle,
   RefreshCw,
   ShieldCheck,
@@ -22,7 +23,8 @@ import BodyPortal from "@/components/ui/body-portal";
 import Agent2D from "@/components/robot/agent-2d";
 import { NEW_STRATEGY_ID, PROPOSAL_TITLES, toStrategyInput, type AgentProposal, type PlanStep, type ProposalStatus } from "@/lib/ai/proposals";
 import { listInstrumentsForReview, setProposalStatus } from "@/lib/agent-chat-actions";
-import { createStrategy, createStrategyForAgent, archiveStrategyAction } from "@/lib/strategy-actions";
+import { createStrategy, createStrategyForAgent, archiveStrategyAction, updateStrategy } from "@/lib/strategy-actions";
+import ConditionGroupEditor, { defaultComparison } from "@/components/condition-group-editor";
 import { runBacktestAction, runBacktestForAgent } from "@/lib/backtest-actions";
 import { setPaperSessionStatus, startPaperSession, startPaperSessionForAgent, syncPaperSessionAction } from "@/lib/paper-actions";
 import { toggleKillSwitch, updateRiskSettings } from "@/lib/risk-actions";
@@ -38,6 +40,7 @@ const ICONS: Record<AgentProposal["kind"], React.ReactNode> = {
   watchlist_remove: <BookmarkMinus size={16} />,
   paper_control: <RefreshCw size={16} />,
   strategy_archive: <Archive size={16} />,
+  strategy_update: <PencilLine size={16} />,
   plan: <ListChecks size={16} />,
 };
 
@@ -67,6 +70,8 @@ export function proposalSummary(p: AgentProposal): string {
       return `${PAPER_VERB[p.draft.action]} · ${p.draft.strategyName} (${p.draft.instrumentSymbol})`;
     case "strategy_archive":
       return p.draft.strategyName;
+    case "strategy_update":
+      return `${p.draft.name}${p.draft.instrumentSymbol ? ` · ${p.draft.instrumentSymbol}` : ""}`;
     case "plan":
       return p.steps.map((st) => STEP_TITLES[st.kind]).join(" → ");
   }
@@ -92,6 +97,8 @@ function confirmLabel(p: AgentProposal): string {
       return PAPER_VERB[p.draft.action];
     case "strategy_archive":
       return "Archive";
+    case "strategy_update":
+      return "Save changes";
     case "plan":
       return `Run all ${p.steps.length} steps`;
   }
@@ -163,6 +170,13 @@ async function execute(p: AgentProposal, instrumentId: string | null, go: (path:
           : await setPaperSessionStatus(sessionId, action === "pause" ? "PAUSED" : action === "resume" ? "ACTIVE" : "STOPPED");
       if (res?.error) return res.error;
       go(`/app/paper-trading/${sessionId}`);
+      return null;
+    }
+    case "strategy_update": {
+      if (!instrumentId) return "Pick an instrument for this strategy.";
+      const res = await updateStrategy(p.strategyId, toStrategyInput(p.draft, instrumentId));
+      if (res?.error) return readableError(res.error);
+      go(`/app/strategies/${p.strategyId}`);
       return null;
     }
     case "strategy_archive": {
@@ -379,12 +393,47 @@ function StrategyFields({
           ))}
         </div>
       </Field>
-      <Field label="Entry — when to open a position">
-        <textarea value={draft.entrySource} onChange={(e) => set("entrySource", e.target.value)} rows={2} className={`${inputCls} resize-none font-mono text-[13px]`} />
-      </Field>
-      <Field label="Exit — when to close it">
-        <textarea value={draft.exitSource} onChange={(e) => set("exitSource", e.target.value)} rows={2} className={`${inputCls} resize-none font-mono text-[13px]`} />
-      </Field>
+      {draft.entryCondition ? (
+        <>
+          <div>
+            <span className={labelCls}>Entry — when to open a position</span>
+            <ConditionGroupEditor node={draft.entryCondition} onChange={(n) => set("entryCondition", n)} instruments={instruments} />
+          </div>
+          <div>
+            <span className={labelCls}>Exit — when to close it</span>
+            {draft.exitCondition ? (
+              <>
+                <ConditionGroupEditor node={draft.exitCondition} onChange={(n) => set("exitCondition", n)} instruments={instruments} />
+                <button type="button" onClick={() => set("exitCondition", null)} className="mt-1.5 text-xs font-medium text-brand-navy/55 hover:text-brand-sell">
+                  − Remove condition-based exit
+                </button>
+              </>
+            ) : (
+              <p className="rounded-lg bg-brand-bg px-3 py-2 text-xs text-brand-navy/60 ring-1 ring-black/5">
+                No condition-based exit — positions close on the stop-loss, take-profit or trailing stop below.{" "}
+                <button
+                  type="button"
+                  onClick={() => set("exitCondition", { kind: "group", op: "AND", children: [defaultComparison()] })}
+                  className="font-semibold text-brand-primary hover:underline"
+                >
+                  Add one
+                </button>
+              </p>
+            )}
+          </div>
+        </>
+      ) : draft.webhook ? (
+        <Statement>Entries and exits come from your TradingView alerts; they don&apos;t change here.</Statement>
+      ) : (
+        <>
+          <Field label="Entry — when to open a position">
+            <textarea value={draft.entrySource ?? ""} onChange={(e) => set("entrySource", e.target.value)} rows={2} className={`${inputCls} resize-none font-mono text-[13px]`} />
+          </Field>
+          <Field label="Exit — when to close it">
+            <textarea value={draft.exitSource ?? ""} onChange={(e) => set("exitSource", e.target.value)} rows={2} className={`${inputCls} resize-none font-mono text-[13px]`} />
+          </Field>
+        </>
+      )}
       <div>
         <span className={labelCls}>Risk rules</span>
         <div className="space-y-2 rounded-xl bg-brand-bg p-3 ring-1 ring-black/5">
@@ -412,6 +461,9 @@ function StrategyFields({
           </Field>
         )}
       </div>
+      <Field label="Max entries per position (pyramiding)" className="sm:w-1/2">
+        <NumberInput value={draft.maxPyramidEntries ?? 1} step="1" onChange={(v) => set("maxPyramidEntries", v == null ? 1 : Math.max(1, Math.floor(v)))} />
+      </Field>
     </div>
   );
 }
@@ -455,6 +507,7 @@ function ProposalFields({
 }) {
   switch (p.kind) {
     case "strategy":
+    case "strategy_update":
       return <StrategyFields draft={p.draft} onChange={(draft) => onChange({ ...p, draft })} instrumentId={instrumentId} onInstrument={onInstrument} />;
     case "backtest":
       return (
@@ -582,8 +635,8 @@ export function ProposalReviewModal({
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState<AgentProposal>(proposal);
-  const firstStrategy = proposal.kind === "strategy" ? proposal : proposal.kind === "plan" ? proposal.steps.find((st) => st.kind === "strategy") : undefined;
-  const [instrumentId, setInstrumentId] = useState<string | null>(firstStrategy?.kind === "strategy" ? firstStrategy.draft.instrumentId : null);
+  const firstStrategy = proposal.kind === "strategy" || proposal.kind === "strategy_update" ? proposal : proposal.kind === "plan" ? proposal.steps.find((st) => st.kind === "strategy") : undefined;
+  const [instrumentId, setInstrumentId] = useState<string | null>(firstStrategy && "instrumentId" in firstStrategy.draft ? firstStrategy.draft.instrumentId : null);
   const [stepStates, setStepStates] = useState<StepState[]>(proposal.kind === "plan" ? proposal.steps.map(() => "waiting") : []);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();

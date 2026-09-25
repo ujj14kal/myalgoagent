@@ -1,4 +1,5 @@
 import type { StrategyInput } from "@/lib/strategy-actions";
+import { NEVER_EXIT_CONDITION, type ConditionNode } from "@/lib/strategy/types";
 
 // An action the agent has prepared for the user to review. Stored on the
 // agent's reply (AgentMessage.proposal) so it survives reloads; the status
@@ -20,8 +21,16 @@ export type AgentProposal =
         instrumentId: string | null;
         instrumentSymbol: string | null;
         direction: "LONG" | "SHORT";
-        entrySource: string;
-        exitSource: string;
+        /** The rules as the builder's condition tree (everything the visual builder can express). */
+        entryCondition?: ConditionNode;
+        /** null = no rule-based exit; the stop-loss / take-profit / trailing stop close positions. */
+        exitCondition?: ConditionNode | null;
+        /** Older drafts stored strategy-language text instead. */
+        entrySource?: string;
+        exitSource?: string;
+        maxPyramidEntries?: number;
+        /** TradingView-webhook strategy — rules come from alerts, not conditions. */
+        webhook?: boolean;
         stopLoss: RiskLegDraft;
         target: RiskLegDraft;
         trailingSl: RiskLegDraft;
@@ -84,6 +93,13 @@ export type AgentProposal =
     }
   | { kind: "strategy_archive"; status: ProposalStatus; resultId?: string; draft: { strategyId: string; strategyName: string } }
   | {
+      kind: "strategy_update";
+      status: ProposalStatus;
+      resultId?: string;
+      strategyId: string;
+      draft: Extract<AgentProposal, { kind: "strategy" }>["draft"];
+    }
+  | {
       // Several steps in one review, run in order — e.g. create a strategy, backtest it, paper trade it.
       kind: "plan";
       status: ProposalStatus;
@@ -107,6 +123,7 @@ export const PROPOSAL_TITLES: Record<AgentProposal["kind"], string> = {
   watchlist_remove: "Remove from watchlist",
   paper_control: "Paper session",
   strategy_archive: "Archive strategy",
+  strategy_update: "Update strategy",
   plan: "Multi-step plan",
 };
 
@@ -115,20 +132,22 @@ export function toStrategyInput(
   d: Extract<AgentProposal, { kind: "strategy" }>["draft"],
   instrumentId: string
 ): StrategyInput {
-  return {
+  const common = {
     name: d.name,
     instrumentId,
-    mode: "CODE",
     direction: d.direction,
-    entrySource: d.entrySource,
-    exitSource: d.exitSource,
     positionSizingMode: d.positionSizingMode,
     positionSizingValue: d.positionSizingValue,
     stopLoss: d.stopLoss,
     target: d.target,
     trailingSl: d.trailingSl,
-    maxPyramidEntries: 1,
+    maxPyramidEntries: d.maxPyramidEntries && d.maxPyramidEntries > 0 ? Math.floor(d.maxPyramidEntries) : 1,
   };
+  if (d.webhook) return { ...common, mode: "WEBHOOK" };
+  if (d.entryCondition) {
+    return { ...common, mode: "NO_CODE", entryCondition: d.entryCondition, exitCondition: d.exitCondition ?? NEVER_EXIT_CONDITION };
+  }
+  return { ...common, mode: "CODE", entrySource: d.entrySource ?? "", exitSource: d.exitSource ?? "" };
 }
 
 // Phrases that claim a prepared action already happened. It only happens when

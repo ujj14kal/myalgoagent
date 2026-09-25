@@ -134,7 +134,7 @@ async function converseMantle({
     const res = await mantleChat({
       model: model.slice(MANTLE_PREFIX.length),
       messages,
-      maxTokens: AI_LIMITS.maxOutputTokens,
+      maxTokens: useTools ? AI_LIMITS.maxToolTokens : AI_LIMITS.maxOutputTokens,
       temperature: 0.3,
       tools: useTools ? tools : undefined,
       signal,
@@ -143,6 +143,8 @@ async function converseMantle({
     outputTokens += res.outputTokens ?? 0;
     if (!useTools || res.toolCalls.length === 0) {
       text = res.text;
+      // Out of tool rounds with nothing to say: an honest line beats a blank bubble.
+      if (!text && !proposal) text = "Sorry, I couldn't finish that one. Could you try asking again, perhaps with a little more detail?";
       break;
     }
     messages.push({ role: "assistant", content: res.text || null, tool_calls: res.toolCalls });

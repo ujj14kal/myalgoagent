@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { HeartPulse } from "lucide-react";
+import { HeartPulse, X } from "lucide-react";
+import BodyPortal from "@/components/ui/body-portal";
 import type { HealthAlert } from "@/lib/health";
 import { setPaperSessionStatus, stopDuplicateSessionsAction } from "@/lib/paper-actions";
 
@@ -32,7 +33,7 @@ function ConfirmDialog({
   pending: boolean;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-end bg-black/20 p-6 sm:items-center sm:justify-center">
+    <div className="fixed inset-0 z-[60] flex items-end justify-end bg-black/20 p-6 sm:items-center sm:justify-center">
       <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
         <p className="text-sm font-semibold text-brand-navy">{title}</p>
         <p className="mt-2 text-xs text-brand-navy/60">{description}</p>
@@ -139,7 +140,25 @@ export default function HealthPanel({ alerts }: { alerts: HealthAlert[] }) {
     );
   }
 
+  return <HealthList alerts={alerts} />;
+}
+
+/** Alerts shown in the card before "See all" — keeps the column no taller than the chart beside it. */
+const VISIBLE_ALERTS = 2;
+
+function HealthList({ alerts }: { alerts: HealthAlert[] }) {
+  const [showAll, setShowAll] = useState(false);
   const criticalCount = alerts.filter((a) => a.severity === "CRITICAL").length;
+  // Most urgent first, so the card always shows what matters.
+  const sorted = [...alerts].sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "CRITICAL" ? -1 : 1));
+  const hidden = sorted.length - VISIBLE_ALERTS;
+
+  useEffect(() => {
+    if (!showAll) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setShowAll(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showAll]);
 
   return (
     <div className={`surface p-5 ${criticalCount > 0 ? "ring-1 ring-brand-sell/25" : ""}`}>
@@ -157,10 +176,46 @@ export default function HealthPanel({ alerts }: { alerts: HealthAlert[] }) {
         )}
       </div>
       <div className="mt-3 space-y-2">
-        {alerts.map((alert) => (
+        {sorted.slice(0, VISIBLE_ALERTS).map((alert) => (
           <AlertRow key={alert.id} alert={alert} />
         ))}
       </div>
+      {hidden > 0 && (
+        <button type="button" onClick={() => setShowAll(true)} className="mt-3 text-xs font-semibold text-brand-primary hover:underline">
+          See all {sorted.length} →
+        </button>
+      )}
+
+      {showAll && (
+        <BodyPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-navy/30 p-4 backdrop-blur-[2px]" onClick={() => setShowAll(false)}>
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="All health alerts"
+              onClick={(e) => e.stopPropagation()}
+              className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl"
+            >
+              <div className="flex items-center justify-between border-b border-black/5 px-5 py-4">
+                <div className="flex items-center gap-2.5">
+                  <span className={`flex h-8 w-8 items-center justify-center rounded-xl ${criticalCount > 0 ? "bg-brand-sell/10 text-brand-sell" : "bg-brand-gold/15 text-[#8a7437]"}`}>
+                    <HeartPulse size={16} />
+                  </span>
+                  <p className="text-sm font-semibold text-brand-navy">Health · {sorted.length} items</p>
+                </div>
+                <button type="button" onClick={() => setShowAll(false)} aria-label="Close" className="rounded-lg p-1.5 text-brand-navy/50 hover:bg-brand-bg hover:text-brand-navy">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="space-y-2 overflow-y-auto p-5">
+                {sorted.map((alert) => (
+                  <AlertRow key={alert.id} alert={alert} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </BodyPortal>
+      )}
     </div>
   );
 }

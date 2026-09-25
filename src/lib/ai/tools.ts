@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/prisma";
-import { INDICATOR_CATALOG } from "@/lib/strategy/indicator-catalog";
 import { getPaperSessionRows, summarizePortfolio } from "@/lib/portfolio";
 import { compile } from "@/lib/strategy-compile";
+import { isNeverExitCondition, type ConditionNode } from "@/lib/strategy/types";
+import { conditionToText } from "@/lib/strategy/format";
+import { CONDITION_REFERENCE, toConditionNode } from "./conditions";
 import type { MantleTool } from "./mantle";
 import { NEW_STRATEGY_ID, toStrategyInput, type AgentProposal, type PlanStep, type RiskUnitName, type SizingModeName } from "./proposals";
 
@@ -10,13 +12,7 @@ import { NEW_STRATEGY_ID, toStrategyInput, type AgentProposal, type PlanStep, ty
 // action and hand it to the chat as a proposal, which the user reviews in a
 // modal and confirms (or edits / rejects). Every query is scoped to userId.
 
-const DSL_REFERENCE = [
-  "Conditions use the platform's strategy language:",
-  "- values: close, open, high, low, volume, numbers, or an indicator call with ALL its settings in brackets, e.g. rsi(14), sma(20), ema(50), vwap(), macdline(12,26,9)",
-  "- comparisons: > < >= <= == crossesAbove crossesBelow",
-  "- combine with and / or / not and brackets, e.g. (rsi(14) < 30) and (close > sma(200))",
-  "- indicators (name(settings)): " + INDICATOR_CATALOG.map((d) => `${d.dslName}(${d.paramLabels.join(", ")})`).join(", "),
-].join("\n");
+
 
 const backtestStepSchema = {
   type: "object",
@@ -54,7 +50,7 @@ export const AGENT_TOOLS: MantleTool[] = [
     type: "function",
     function: {
       name: "get_my_strategies",
-      description: "List the user's strategies (name, instrument, status, direction).",
+      description: "List the user's strategies: name, instrument, status, direction, and their entry/exit rules and risk settings in plain words.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -103,16 +99,17 @@ export const AGENT_TOOLS: MantleTool[] = [
     function: {
       name: "propose_strategy",
       description:
-        "Prepare a new strategy for the user to review and confirm in a pop-up (nothing is saved until they confirm). Use whenever the user describes a strategy or asks you to build/create one. " +
-        DSL_REFERENCE,
+        "Prepare a new strategy for the user to review and confirm in a pop-up (nothing is saved until they confirm). Use whenever the user describes a strategy or asks you to build/create one. It can express everything the visual builder can.\n" +
+        CONDITION_REFERENCE,
       parameters: {
         type: "object",
         properties: {
           name: { type: "string" },
           instrument_symbol: { type: "string", description: "NSE symbol like RELIANCE.NS; omit if the user didn't say" },
           direction: { type: "string", enum: ["LONG", "SHORT"] },
-          entry: { type: "string", description: "Entry condition in the strategy language" },
-          exit: { type: "string", description: "Exit condition in the strategy language" },
+          entry: { anyOf: [{ type: "string" }, { type: "object" }], description: "Entry condition (see CONDITIONS)" },
+          exit: { anyOf: [{ type: "string" }, { type: "object" }, { type: "null" }], description: "Exit condition (see CONDITIONS); null = no rule-based exit (needs a stop-loss, take-profit or trailing stop)" },
+          max_entries: { type: "number", description: "Max entries per position (pyramiding); default 1" },
           stop_loss: riskLegSchema,
           take_profit: riskLegSchema,
           trailing_stop: riskLegSchema,
@@ -127,7 +124,7 @@ export const AGENT_TOOLS: MantleTool[] = [
           also_backtest: backtestStepSchema,
           also_paper_trade: paperStepSchema,
         },
-        required: ["name", "direction", "entry", "exit"],
+        required: ["name", "direction", "entry"],
       },
     },
   },
@@ -219,6 +216,39 @@ export const AGENT_TOOLS: MantleTool[] = [
           action: { type: "string", enum: ["sync", "pause", "resume", "stop"] },
         },
         required: ["session", "action"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "propose_strategy_update",
+      description:
+        "Prepare changes to one of the user's existing strategies (rules, risk rules, sizing, name, instrument, direction, max entries) for them to review and confirm. Pass only what changes; everything else stays as saved. Use the same CONDITIONS format as propose_strategy for entry/exit; a new entry/exit replaces the old one entirely.",
+      parameters: {
+        type: "object",
+        properties: {
+          strategy: { type: "string", description: "The strategy's current name (or id)" },
+          new_name: { type: "string" },
+          instrument_symbol: { type: "string" },
+          direction: { type: "string", enum: ["LONG", "SHORT"] },
+          entry: { anyOf: [{ type: "string" }, { type: "object" }], description: "Replaces the whole entry rule" },
+          exit: { anyOf: [{ type: "string" }, { type: "object" }, { type: "null" }], description: "Replaces the whole exit rule; null removes it" },
+          add_to_entry: { anyOf: [{ type: "string" }, { type: "object" }], description: "A condition that must ALSO be true to enter — kept together with the saved entry rule (e.g. a time window filter). No need to know the saved rule." },
+          add_to_exit: { anyOf: [{ type: "string" }, { type: "object" }], description: "An extra condition that ALSO closes the position (OR-ed with the saved exit rule)." },
+          stop_loss: { anyOf: [riskLegSchema, { type: "null" }], description: "null removes it" },
+          take_profit: { anyOf: [riskLegSchema, { type: "null" }], description: "null removes it" },
+          trailing_stop: { anyOf: [riskLegSchema, { type: "null" }], description: "null removes it" },
+          position_sizing: {
+            type: "object",
+            properties: {
+              mode: { type: "string", enum: ["FULL_CAPITAL", "FIXED_QUANTITY", "FIXED_CAPITAL", "PERCENT_OF_CAPITAL"] },
+              value: { type: "number" },
+            },
+          },
+          max_entries: { type: "number" },
+        },
+        required: ["strategy"],
       },
     },
   },
@@ -336,36 +366,86 @@ function withFollowUps(first: PlanStep, ref: StrategyRef, a: Record<string, unkn
   return steps.length === 1 ? { proposal: first, steps: 1 } : { proposal: { kind: "plan", status: "pending", steps }, steps: steps.length };
 }
 
+/** The validator's collected-issues JSON (or a plain message) as one readable sentence for the agent. */
+function readableIssues(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  try {
+    const issues = JSON.parse(msg) as { section?: string; message?: string }[];
+    if (Array.isArray(issues)) return issues.map((i) => `${i.section ? `[${i.section}] ` : ""}${i.message}`).join(" ");
+  } catch {
+    /* plain message */
+  }
+  return msg;
+}
+
+type StrategyDraft = Extract<AgentProposal, { kind: "strategy" }>["draft"];
+
+const hasRiskLeg = (d: StrategyDraft) => d.stopLoss.enabled || d.target.enabled || d.trailingSl.enabled;
+
+function sizingFrom(v: unknown, fallback?: { mode: SizingModeName; value: number | null }) {
+  const sizing = asObject(v);
+  if (!sizing) return fallback ?? { mode: "FULL_CAPITAL" as SizingModeName, value: null };
+  const mode: SizingModeName =
+    sizing.mode === "FIXED_QUANTITY" || sizing.mode === "FIXED_CAPITAL" || sizing.mode === "PERCENT_OF_CAPITAL" ? sizing.mode : "FULL_CAPITAL";
+  return { mode, value: mode === "FULL_CAPITAL" ? null : num(sizing.value) ?? null };
+}
+
+/** Parses entry/exit; "exit": null / "none" means no rule-based exit. Throws readable errors. */
+function rulesFrom(a: Record<string, unknown>, needEntry: boolean): { entry?: ConditionNode; exit?: ConditionNode | null } {
+  const out: { entry?: ConditionNode; exit?: ConditionNode | null } = {};
+  if (a.entry !== undefined && a.entry !== "") out.entry = toConditionNode(a.entry, "entry");
+  else if (needEntry) throw new Error("entry: an entry condition is required.");
+  if ("exit" in a) {
+    const x = a.exit;
+    out.exit = x === null || x === "" || (typeof x === "string" && /^(none|null|no exit)$/i.test(x.trim())) ? null : toConditionNode(x, "exit");
+  }
+  return out;
+}
+
+async function validateDraft(draft: StrategyDraft, webhook = false): Promise<string | null> {
+  if (!webhook && draft.entryCondition && draft.exitCondition === null && !hasRiskLeg(draft)) {
+    return "With no rule-based exit, the strategy needs a stop-loss, take-profit or trailing stop — otherwise a position could never close.";
+  }
+  try {
+    const input = toStrategyInput(draft, draft.instrumentId ?? "pending");
+    await compile(webhook ? { ...input, mode: "WEBHOOK" } : input);
+    return null;
+  } catch (err) {
+    return readableIssues(err);
+  }
+}
+
 async function proposeStrategy(userId: string, a: Record<string, unknown>): Promise<ToolOutcome> {
   const instrument = str(a.instrument_symbol) ? await findInstrument(str(a.instrument_symbol)) : null;
   if (str(a.instrument_symbol) && !instrument) {
     return { result: { error: `Unknown instrument "${str(a.instrument_symbol)}". Call list_instruments and use an exact symbol, or omit it so the user picks one.` } };
   }
-  const sizing = (a.position_sizing ?? {}) as { mode?: unknown; value?: unknown };
-  const mode: SizingModeName =
-    sizing.mode === "FIXED_QUANTITY" || sizing.mode === "FIXED_CAPITAL" || sizing.mode === "PERCENT_OF_CAPITAL" ? sizing.mode : "FULL_CAPITAL";
-  const draft = {
+  let rules;
+  try {
+    rules = rulesFrom(a, true);
+  } catch (err) {
+    return { result: { error: `${readableIssues(err)} Fix it and call propose_strategy again.` } };
+  }
+  const sizing = sizingFrom(a.position_sizing);
+  const draft: StrategyDraft = {
     name: await uniqueStrategyName(userId, str(a.name)),
     instrumentId: instrument?.id ?? null,
     instrumentSymbol: instrument?.symbol ?? null,
-    direction: a.direction === "SHORT" ? ("SHORT" as const) : ("LONG" as const),
-    entrySource: str(a.entry),
-    exitSource: str(a.exit),
+    direction: a.direction === "SHORT" ? "SHORT" : "LONG",
+    entryCondition: rules.entry,
+    exitCondition: rules.exit === undefined ? null : rules.exit,
     stopLoss: leg(a.stop_loss),
     target: leg(a.take_profit),
     trailingSl: leg(a.trailing_stop),
-    positionSizingMode: mode,
-    positionSizingValue: mode === "FULL_CAPITAL" ? null : num(sizing.value) ?? null,
+    positionSizingMode: sizing.mode,
+    positionSizingValue: sizing.value,
+    maxPyramidEntries: Math.max(1, Math.floor(num(a.max_entries) ?? 1)),
   };
 
   // Same validator as the builder. Instrument isn't needed to check the rules,
   // so a placeholder stands in when the user hasn't picked one yet.
-  try {
-    await compile(toStrategyInput(draft, draft.instrumentId ?? "pending"));
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "invalid strategy";
-    return { result: { error: `The strategy didn't pass validation: ${msg}. Fix it and call propose_strategy again.` } };
-  }
+  const problem = await validateDraft(draft);
+  if (problem) return { result: { error: `The strategy didn't pass validation: ${problem} Fix it and call propose_strategy again.` } };
 
   const planned = withFollowUps(
     { kind: "strategy", status: "pending", draft },
@@ -376,10 +456,87 @@ async function proposeStrategy(userId: string, a: Record<string, unknown>): Prom
     result: {
       ok: true,
       steps: planned.steps,
+      entry: conditionToText(draft.entryCondition!),
+      exit: draft.exitCondition ? conditionToText(draft.exitCondition) : "no rule-based exit",
       note: "A review window is now open for the user. Briefly tell them what you prepared (and the follow-up steps, if any); do not repeat every field. Don't claim anything is done — they confirm it.",
       needsInstrument: !draft.instrumentId,
     },
     proposal: planned.proposal,
+  };
+}
+
+/** Edits an existing strategy: starts from what's saved, applies only the requested changes. */
+async function proposeStrategyUpdate(userId: string, a: Record<string, unknown>): Promise<ToolOutcome> {
+  const found = await findStrategy(userId, str(a.strategy));
+  if (!found) return { result: { error: `No strategy matches "${str(a.strategy)}". Ask the user which strategy they mean.` } };
+  if ("ambiguous" in found) return ambiguityResult(found.ambiguous);
+  const s = await prisma.strategy.findUnique({ where: { id: found.id }, include: { instrument: true } });
+  if (!s) return { result: { error: "That strategy no longer exists." } };
+  const webhook = s.mode === "WEBHOOK";
+
+  let rules;
+  try {
+    rules = rulesFrom(a, false);
+  } catch (err) {
+    return { result: { error: `${readableIssues(err)} Fix it and call propose_strategy_update again.` } };
+  }
+  let addEntry: ConditionNode | undefined;
+  let addExit: ConditionNode | undefined;
+  try {
+    if (a.add_to_entry != null && a.add_to_entry !== "") addEntry = toConditionNode(a.add_to_entry, "add_to_entry");
+    if (a.add_to_exit != null && a.add_to_exit !== "") addExit = toConditionNode(a.add_to_exit, "add_to_exit");
+  } catch (err) {
+    return { result: { error: `${readableIssues(err)} Fix it and call propose_strategy_update again.` } };
+  }
+  if (webhook && (rules.entry || rules.exit !== undefined || addEntry || addExit)) {
+    return { result: { error: "This strategy is TradingView-webhook driven — its entries and exits come from TradingView alerts, so its rules can't be changed here. Risk rules, sizing, name and direction can." } };
+  }
+  const instrument = str(a.instrument_symbol) ? await findInstrument(str(a.instrument_symbol)) : s.instrument;
+  if (!instrument) return { result: { error: `Unknown instrument "${str(a.instrument_symbol)}". Call list_instruments.` } };
+
+  // Code-mode strategies store the compiled tree too, so extending their rules works the same way.
+  const savedEntry = s.entryCondition as unknown as ConditionNode;
+  const savedExitRaw = s.exitCondition as unknown as ConditionNode;
+  const savedExit = isNeverExitCondition(savedExitRaw) ? null : savedExitRaw;
+  const baseEntry = rules.entry ?? savedEntry;
+  const baseExit = rules.exit !== undefined ? rules.exit : savedExit;
+  const nextEntry = addEntry ? { kind: "group" as const, op: "AND" as const, children: [addEntry, baseEntry] } : baseEntry;
+  const nextExit = addExit ? (baseExit ? { kind: "group" as const, op: "OR" as const, children: [baseExit, addExit] } : addExit) : baseExit;
+  const rulesChanged = rules.entry !== undefined || rules.exit !== undefined || !!addEntry || !!addExit;
+  const legFrom = (enabled: boolean, unit: RiskUnitName | null, value: number | null) =>
+    enabled && unit && value != null ? { enabled: true, unit, value } : { enabled: false, unit: "PERCENT" as RiskUnitName, value: 0 };
+  const pickLeg = (key: string, saved: ReturnType<typeof legFrom>) =>
+    key in a ? (a[key] === null ? { enabled: false, unit: "PERCENT" as RiskUnitName, value: 0 } : leg(a[key])) : saved;
+  const sizing = sizingFrom(a.position_sizing, { mode: s.positionSizingMode, value: s.positionSizingValue });
+  const newName = str(a.new_name);
+
+  const draft: StrategyDraft = {
+    name: newName || s.name,
+    instrumentId: instrument.id,
+    instrumentSymbol: instrument.symbol,
+    direction: a.direction === "SHORT" || a.direction === "LONG" ? a.direction : s.direction,
+    // Code-mode strategies keep their code unless the rules change; changed rules are saved as builder conditions.
+    ...(s.mode === "CODE" && !rulesChanged
+      ? { entrySource: s.entrySource ?? "", exitSource: s.exitSource ?? "" }
+      : { entryCondition: nextEntry, exitCondition: nextExit }),
+    stopLoss: pickLeg("stop_loss", legFrom(s.stopLossEnabled, s.stopLossUnit, s.stopLossValue)),
+    target: pickLeg("take_profit", legFrom(s.targetEnabled, s.targetUnit, s.targetValue)),
+    trailingSl: pickLeg("trailing_stop", legFrom(s.trailingSlEnabled, s.trailingSlUnit, s.trailingSlValue)),
+    positionSizingMode: sizing.mode,
+    positionSizingValue: sizing.value,
+    maxPyramidEntries: Math.max(1, Math.floor(num(a.max_entries) ?? s.maxPyramidEntries)),
+    ...(webhook ? { webhook: true } : {}),
+  };
+  if (newName && newName.toLowerCase() !== s.name.toLowerCase()) {
+    const taken = await prisma.strategy.findFirst({ where: { userId, nameNormalized: newName.toLowerCase(), NOT: { id: s.id } }, select: { id: true } });
+    if (taken) return { result: { error: `The user already has a strategy called "${newName}". Ask for a different name.` } };
+  }
+  const problem = await validateDraft(draft, webhook);
+  if (problem) return { result: { error: `The change didn't pass validation: ${problem} Fix it and call propose_strategy_update again.` } };
+
+  return {
+    result: { ok: true, note: "A review window is open showing the updated strategy. Summarise what changes in one or two sentences." },
+    proposal: { kind: "strategy_update", status: "pending", strategyId: s.id, draft },
   };
 }
 
@@ -397,9 +554,35 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
         where: { userId, status: { not: "DELETED" } },
         orderBy: { updatedAt: "desc" },
         take: 25,
-        select: { id: true, name: true, status: true, direction: true, mode: true, instrument: { select: { symbol: true } } },
+        include: { instrument: { select: { symbol: true } } },
       });
-      return { result: rows.map((r) => ({ id: r.id, name: r.name, instrument: r.instrument.symbol, status: r.status, direction: r.direction, mode: r.mode })) };
+      const rule = (n: unknown) => {
+        const node = n as ConditionNode | null;
+        if (!node || isNeverExitCondition(node)) return "none";
+        try {
+          return conditionToText(node);
+        } catch {
+          return "unreadable";
+        }
+      };
+      const legText = (on: boolean, unit: string | null, value: number | null) => (on && value != null ? `${value} ${unit === "PERCENT" ? "%" : unit === "POINTS" ? "points" : "× ATR"}` : "off");
+      return {
+        result: rows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          instrument: r.instrument.symbol,
+          status: r.status,
+          direction: r.direction,
+          mode: r.mode,
+          entry: r.mode === "WEBHOOK" ? "TradingView alerts" : rule(r.entryCondition),
+          exit: r.mode === "WEBHOOK" ? "TradingView alerts" : rule(r.exitCondition),
+          stopLoss: legText(r.stopLossEnabled, r.stopLossUnit, r.stopLossValue),
+          takeProfit: legText(r.targetEnabled, r.targetUnit, r.targetValue),
+          trailingStop: legText(r.trailingSlEnabled, r.trailingSlUnit, r.trailingSlValue),
+          sizing: r.positionSizingMode + (r.positionSizingValue != null ? ` ${r.positionSizingValue}` : ""),
+          maxEntries: r.maxPyramidEntries,
+        })),
+      };
     }
     case "get_my_backtests": {
       const limit = Math.min(Math.max(num(a.limit) ?? 5, 1), 10);
@@ -455,6 +638,8 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
     }
     case "propose_strategy":
       return proposeStrategy(userId, a);
+    case "propose_strategy_update":
+      return proposeStrategyUpdate(userId, a);
     case "propose_backtest":
     case "propose_paper_session": {
       const strategy = await findStrategy(userId, str(a.strategy));
