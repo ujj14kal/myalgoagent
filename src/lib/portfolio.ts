@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { marketDataProvider } from "@/lib/market-data";
+import { marketDataFor } from "@/lib/market-data";
 import type { PaperSession } from "@prisma/client";
 
 export type PaperSessionRow = {
@@ -33,7 +33,7 @@ export async function getPaperSessionRows(userId: string): Promise<PaperSessionR
       if (s.positionQuantity !== null && s.positionEntryPrice !== null) {
         let latestClose = s.positionEntryPrice;
         try {
-          const candles = await marketDataProvider.getHistoricalCandles(s.instrumentSymbol, "1mo", "1d");
+          const candles = await marketDataFor(userId, "trading").getHistoricalCandles(s.instrumentSymbol, "1mo", "1d");
           if (candles.length > 0) latestClose = candles.at(-1)!.close;
         } catch {
           // fall back to entry price (zero unrealized gain) if the quote can't be fetched

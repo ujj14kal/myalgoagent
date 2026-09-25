@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { marketDataProvider } from "@/lib/market-data";
+import { marketDataFor } from "@/lib/market-data";
 import EmptyState from "@/components/empty-state";
 import { BriefcaseBusiness } from "lucide-react";
 import PageHeader from "@/components/ui/page-header";
@@ -12,6 +12,7 @@ export const metadata = { title: "Positions", robots: { index: false } };
 
 export default async function PositionsPage() {
   const session = await auth();
+  const market = marketDataFor(session?.user?.id, "trading");
   if (!session?.user?.id) return null;
 
   const sessions = await prisma.paperSession.findMany({
@@ -23,7 +24,7 @@ export default async function PositionsPage() {
     sessions.map(async (s) => {
       let latestClose = s.positionEntryPrice ?? 0;
       try {
-        const candles = await marketDataProvider.getHistoricalCandles(s.instrumentSymbol, "1mo", "1d");
+        const candles = await market.getHistoricalCandles(s.instrumentSymbol, "1mo", "1d");
         if (candles.length > 0) latestClose = candles.at(-1)!.close;
       } catch {
         // fall back to entry price if the live quote can't be fetched

@@ -1,4 +1,4 @@
-import { marketDataProvider } from "@/lib/market-data";
+import type { MarketDataProvider } from "@/lib/market-data";
 import { evaluateConditionsPerBar } from "@/lib/strategy";
 import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
 import { fetchAuxCandles } from "@/lib/strategy-aux-data";
@@ -95,9 +95,9 @@ export interface SyncResult {
  * need history before the "new" bars to be correct); only bars after
  * `lastSyncedTime` are actually acted on.
  */
-export async function syncPaperSession(session: PaperSessionState, allowNewEntries: boolean): Promise<SyncResult> {
-  const candles = await marketDataProvider.getHistoricalCandles(session.instrumentSymbol, "3mo", "1d");
-  const aux = await fetchAuxCandles(session.entryCondition, session.exitCondition, session.instrumentSymbol, "3mo", "1d");
+export async function syncPaperSession(session: PaperSessionState, allowNewEntries: boolean, market: MarketDataProvider): Promise<SyncResult> {
+  const candles = await market.getHistoricalCandles(session.instrumentSymbol, "3mo", "1d");
+  const aux = await fetchAuxCandles(session.entryCondition, session.exitCondition, session.instrumentSymbol, "3mo", "1d", market);
 
   const { entry, exit } = evaluateConditionsPerBar(candles, session.entryCondition, session.exitCondition, aux);
 

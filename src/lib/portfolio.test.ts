@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const findMany = vi.fn();
 const getHistoricalCandles = vi.fn();
 vi.mock("@/lib/prisma", () => ({ prisma: { paperSession: { findMany: (...a: unknown[]) => findMany(...a) } } }));
-vi.mock("@/lib/market-data", () => ({ marketDataProvider: { getHistoricalCandles: (...a: unknown[]) => getHistoricalCandles(...a) } }));
+vi.mock("@/lib/market-data", () => ({ marketDataFor: () => ({ getHistoricalCandles: (...a: unknown[]) => getHistoricalCandles(...a) }) }));
 
 import { getPaperSessionRows, summarizePortfolio } from "@/lib/portfolio";
 

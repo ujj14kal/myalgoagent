@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { marketDataProvider } from "@/lib/market-data";
+import { marketDataFor } from "@/lib/market-data";
 import {
   evaluateStrategy,
   collectConditionOperands,
@@ -25,6 +25,7 @@ const OVERLAY_COLORS = ["#bda360", "#466fff", "#6a35c2", "#0e1b2d"];
 export default async function StrategyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await auth();
+  const market = marketDataFor(session?.user?.id, "view");
   if (!session?.user?.id) return null;
 
   const [strategy, instruments] = await Promise.all([
@@ -51,11 +52,11 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
       })
     : [];
 
-  let candles: Awaited<ReturnType<typeof marketDataProvider.getHistoricalCandles>> = [];
+  let candles: Awaited<ReturnType<typeof market.getHistoricalCandles>> = [];
   let fetchError: string | null = null;
   if (!isWebhook) {
     try {
-      candles = await marketDataProvider.getHistoricalCandles(strategy.instrument.symbol, "6mo", "1d");
+      candles = await market.getHistoricalCandles(strategy.instrument.symbol, "6mo", "1d");
     } catch (err) {
       fetchError = err instanceof Error ? err.message : "Failed to load market data";
     }
@@ -68,7 +69,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
   // evaluate to "unknown data" and be treated as false).
   const aux =
     !isWebhook && candles.length > 0
-      ? await fetchAuxCandles(entryCondition, exitCondition, strategy.instrument.symbol, "6mo", "1d")
+      ? await fetchAuxCandles(entryCondition, exitCondition, strategy.instrument.symbol, "6mo", "1d", market)
       : new Map();
 
   // A webhook-mode strategy has no real condition tree (see
@@ -113,8 +114,8 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
 
       {!isWebhook && (
         <p className="-mt-2 text-xs text-brand-navy/45">
-          Data: {marketDataProvider.name}
-          {!marketDataProvider.isOfficial && " (interim feed, not an official NSE/BSE source)"}
+          Data: {market.name}
+          {!market.isOfficial && " (interim feed, not an official NSE/BSE source)"}
           {" · "}Daily bars, not real-time · signals shown are a preview of where this
           strategy would have triggered, not a backtest of P&amp;L.
         </p>

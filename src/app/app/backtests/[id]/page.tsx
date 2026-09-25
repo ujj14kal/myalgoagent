@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { marketDataProvider } from "@/lib/market-data";
+import { marketDataFor } from "@/lib/market-data";
 import type { CandleRange } from "@/lib/market-data";
 import CandlestickChart from "@/components/candlestick-chart";
 import EquityCurveChart from "@/components/equity-curve-chart";
@@ -40,6 +40,7 @@ function formatValue(value: number, format: string) {
 export default async function BacktestDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await auth();
+  const market = marketDataFor(session?.user?.id, "view");
   if (!session?.user?.id) return null;
 
   const run = await prisma.backtestRun.findFirst({
@@ -48,10 +49,10 @@ export default async function BacktestDetailPage({ params }: { params: Promise<{
   });
   if (!run) notFound();
 
-  let candles: Awaited<ReturnType<typeof marketDataProvider.getHistoricalCandles>> = [];
+  let candles: Awaited<ReturnType<typeof market.getHistoricalCandles>> = [];
   let fetchError: string | null = null;
   try {
-    candles = await marketDataProvider.getHistoricalCandles(run.instrumentSymbol, run.range as CandleRange, "1d");
+    candles = await market.getHistoricalCandles(run.instrumentSymbol, run.range as CandleRange, "1d");
   } catch (err) {
     fetchError = err instanceof Error ? err.message : "Failed to load market data";
   }
@@ -88,8 +89,8 @@ export default async function BacktestDetailPage({ params }: { params: Promise<{
         ))}
       </div>
       <p className="mt-3 text-xs text-brand-navy/45">
-        Data: {marketDataProvider.name}
-        {!marketDataProvider.isOfficial && " (interim feed, not an official NSE/BSE source)"} · Backtested against historical data — past
+        Data: {market.name}
+        {!market.isOfficial && " (interim feed, not an official NSE/BSE source)"} · Backtested against historical data — past
         performance does not guarantee future results.
       </p>
 

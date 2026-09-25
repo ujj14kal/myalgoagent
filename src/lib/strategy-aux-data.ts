@@ -1,5 +1,5 @@
-import { marketDataProvider, clampRangeForInterval } from "@/lib/market-data";
-import type { CandleRange, CandleInterval } from "@/lib/market-data";
+import { clampRangeForInterval } from "@/lib/market-data";
+import type { CandleRange, CandleInterval, MarketDataProvider } from "@/lib/market-data";
 import { collectAuxRequirements, auxKey } from "@/lib/strategy";
 import type { ConditionNode, AuxCandleMap } from "@/lib/strategy";
 
@@ -16,6 +16,7 @@ export async function fetchAuxCandles(
   baseSymbol: string,
   baseRange: CandleRange,
   baseInterval: CandleInterval,
+  market: MarketDataProvider,
 ): Promise<AuxCandleMap> {
   const requirements = collectAuxRequirements(entryCondition, exitCondition);
   const aux: AuxCandleMap = new Map();
@@ -31,7 +32,7 @@ export async function fetchAuxCandles(
       // the whole condition to a fetch error.
       const range = clampRangeForInterval(baseRange, interval);
       try {
-        const candles = await marketDataProvider.getHistoricalCandles(symbol, range, interval);
+        const candles = await market.getHistoricalCandles(symbol, range, interval);
         aux.set(auxKey(req.instrumentSymbol, req.timeframe), candles);
       } catch {
         // Leave this override unset — buildSeries treats a missing aux

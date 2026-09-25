@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { marketDataProvider, VALID_RANGES, VALID_INTERVALS, isValidCombo } from "@/lib/market-data";
+import { marketDataFor, VALID_RANGES, VALID_INTERVALS, isValidCombo } from "@/lib/market-data";
 import type { CandleInterval, CandleRange } from "@/lib/market-data";
 import { enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { logError } from "@/lib/logger";
@@ -11,6 +11,7 @@ export async function GET(
   { params }: { params: Promise<{ symbol: string }> },
 ) {
   const session = await auth();
+  const market = marketDataFor(session?.user?.id, "view");
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -57,10 +58,10 @@ export async function GET(
   }
 
   try {
-    const candles = await marketDataProvider.getHistoricalCandles(symbol, range, interval);
+    const candles = await market.getHistoricalCandles(symbol, range, interval);
     return NextResponse.json({
       symbol,
-      provider: { name: marketDataProvider.name, isOfficial: marketDataProvider.isOfficial },
+      provider: { name: market.name, isOfficial: market.isOfficial },
       candles,
     });
   } catch (error) {

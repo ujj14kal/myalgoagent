@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { marketDataProvider } from "@/lib/market-data";
+import { marketDataFor, type MarketDataProvider } from "@/lib/market-data";
 import { evaluateRisk } from "@/lib/risk/evaluate";
 import { computeQuantity, resolveRiskLevels, type PositionSizing, type RiskManagementConfig } from "@/lib/trading-engine/step";
 import type { PaperSession } from "@prisma/client";
@@ -34,10 +34,10 @@ function riskManagementFromSession(session: PaperSession): RiskManagementConfig 
  * subsequent "Sync now"; an intraday timestamp there would never match and
  * would permanently break that session's EOD sync.
  */
-async function fetchFillPriceAndDayTime(symbol: string): Promise<{ price: number; dayTime: number }> {
+async function fetchFillPriceAndDayTime(symbol: string, market: MarketDataProvider): Promise<{ price: number; dayTime: number }> {
   const [intraday, daily] = await Promise.all([
-    marketDataProvider.getHistoricalCandles(symbol, "1d", "1m"),
-    marketDataProvider.getHistoricalCandles(symbol, "5d", "1d"),
+    market.getHistoricalCandles(symbol, "1d", "1m"),
+    market.getHistoricalCandles(symbol, "5d", "1d"),
   ]);
   const latestIntraday = intraday.at(-1);
   const latestDaily = daily.at(-1);
@@ -99,7 +99,7 @@ export async function applyWebhookSignal(session: PaperSession, action: WebhookA
     return { executed: false, error: "Blocked by risk kill switch / limit" };
   }
 
-  const { price, dayTime } = await fetchFillPriceAndDayTime(session.instrumentSymbol);
+  const { price, dayTime } = await fetchFillPriceAndDayTime(session.instrumentSymbol, marketDataFor(session.userId, "trading"));
   const positionSizing: PositionSizing = { mode: session.positionSizingMode, value: session.positionSizingValue };
 
   if (opensPosition) {

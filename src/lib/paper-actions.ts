@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { marketDataProvider } from "@/lib/market-data";
+import { marketDataFor } from "@/lib/market-data";
 import { syncPaperSession } from "@/lib/paper/sync";
 import { evaluateRisk } from "@/lib/risk/evaluate";
 import { enforceRateLimit } from "@/lib/rate-limit";
@@ -64,7 +64,7 @@ async function startPaperSessionCore(userId: string, input: StartPaperSessionInp
     // shouldn't be startable even via a stale/direct request.
     if (strategy.status === "DELETED") throw new Error("This strategy has been deleted");
 
-    const candles = await marketDataProvider.getHistoricalCandles(strategy.instrument.symbol, "1mo", "1d");
+    const candles = await marketDataFor(userId, "trading").getHistoricalCandles(strategy.instrument.symbol, "1mo", "1d");
     if (candles.length === 0) throw new Error("No historical data available for this instrument");
     const latestTime = candles.at(-1)!.time;
 
@@ -150,6 +150,7 @@ async function syncPaperSessionInner(id: string, userId: string): Promise<PaperA
   await enforceRateLimit(`paper-sync:${userId}`, 20, 60_000);
 
   const paperSession = await prisma.paperSession.findFirst({ where: { id, userId } });
+  const market = marketDataFor(userId, "trading");
   if (!paperSession) throw new Error("Paper session not found");
   if (paperSession.status !== "ACTIVE") throw new Error("This session is not active");
 
@@ -184,7 +185,7 @@ async function syncPaperSessionInner(id: string, userId: string): Promise<PaperA
   // price, mirroring the detail page's calculation.
   let priorEquity = paperSession.cash;
   if (paperSession.positionEntryPrice !== null && paperSession.positionQuantity !== null) {
-    const recentCandles = await marketDataProvider.getHistoricalCandles(paperSession.instrumentSymbol, "5d", "1d");
+    const recentCandles = await market.getHistoricalCandles(paperSession.instrumentSymbol, "5d", "1d");
     const latestClose = recentCandles.at(-1)?.close ?? paperSession.positionEntryPrice;
     const unrealizedGain =
       (paperSession.direction === "SHORT" ? paperSession.positionEntryPrice - latestClose : latestClose - paperSession.positionEntryPrice) *
@@ -234,6 +235,7 @@ async function syncPaperSessionInner(id: string, userId: string): Promise<PaperA
       lastSyncedTime: paperSession.lastSyncedTime,
     },
     preCheck.allowNewEntries,
+    market,
   );
 
   const postCheck = evaluateRisk(

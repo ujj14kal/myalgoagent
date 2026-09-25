@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { marketDataProvider } from "@/lib/market-data";
+import { marketDataFor } from "@/lib/market-data";
 import { activateStrategyIfDraft } from "@/lib/strategy-actions";
 import type { Strategy, PaperSession } from "@prisma/client";
 
@@ -33,7 +33,7 @@ export async function getOrCreateActivePaperSession(
     return existing;
   }
 
-  const candles = await marketDataProvider.getHistoricalCandles(strategy.instrument.symbol, "1mo", "1d");
+  const candles = await marketDataFor(strategy.userId, "trading").getHistoricalCandles(strategy.instrument.symbol, "1mo", "1d");
   const latestTime = candles.at(-1)?.time ?? Math.floor(Date.now() / 1000);
 
   return prisma.paperSession.create({

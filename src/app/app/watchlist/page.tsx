@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { marketDataProvider } from "@/lib/market-data";
+import { marketDataFor } from "@/lib/market-data";
 import WatchlistManager from "@/components/watchlist-manager";
 import { Star } from "lucide-react";
 import PageHeader from "@/components/ui/page-header";
@@ -9,6 +9,7 @@ export const metadata = { title: "Watchlist", robots: { index: false } };
 
 export default async function WatchlistPage() {
   const session = await auth();
+  const market = marketDataFor(session?.user?.id, "view");
   if (!session?.user?.id) return null;
 
   const [watchlistItems, allInstruments] = await Promise.all([
@@ -29,7 +30,7 @@ export default async function WatchlistPage() {
   await Promise.all(
     watchlistItems.map(async (w) => {
       try {
-        const candles = await marketDataProvider.getHistoricalCandles(w.instrument.symbol, "5d", "1d");
+        const candles = await market.getHistoricalCandles(w.instrument.symbol, "5d", "1d");
         const last = candles.at(-1);
         const prev = candles.at(-2);
         if (last) quotes.set(w.instrument.symbol, { close: last.close, change: prev ? ((last.close - prev.close) / prev.close) * 100 : null });

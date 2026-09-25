@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { marketDataProvider, type CandleRange } from "@/lib/market-data";
+import { marketDataFor, type CandleRange } from "@/lib/market-data";
 import { runBacktest } from "@/lib/backtest/run";
 import { fetchAuxCandles } from "@/lib/strategy-aux-data";
 import { enforceRateLimit } from "@/lib/rate-limit";
@@ -67,13 +67,14 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
         : null,
     };
 
-    const candles = await marketDataProvider.getHistoricalCandles(strategy.instrument.symbol, input.range, "1d");
+    const market = marketDataFor(userId, "backtest");
+    const candles = await market.getHistoricalCandles(strategy.instrument.symbol, input.range, "1d");
     if (candles.length === 0) throw new Error("No historical data available for this instrument");
 
     const entryCondition = strategy.entryCondition as unknown as ConditionNode;
     const exitCondition = strategy.exitCondition as unknown as ConditionNode;
 
-    const aux = await fetchAuxCandles(entryCondition, exitCondition, strategy.instrument.symbol, input.range, "1d");
+    const aux = await fetchAuxCandles(entryCondition, exitCondition, strategy.instrument.symbol, input.range, "1d", market);
 
     const result = runBacktest(
       candles,

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { marketDataProvider } from "@/lib/market-data";
+import { marketDataFor } from "@/lib/market-data";
 import CandlestickChart from "@/components/candlestick-chart";
 import PaperSessionControls from "@/components/paper-session-controls";
 import { describePositionSizing } from "@/lib/position-sizing";
@@ -18,6 +18,7 @@ export const metadata = { title: "Paper Session", robots: { index: false } };
 export default async function PaperSessionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await auth();
+  const market = marketDataFor(session?.user?.id, "trading");
   if (!session?.user?.id) return null;
 
   const paperSession = await prisma.paperSession.findFirst({
@@ -26,10 +27,10 @@ export default async function PaperSessionDetailPage({ params }: { params: Promi
   });
   if (!paperSession) notFound();
 
-  let candles: Awaited<ReturnType<typeof marketDataProvider.getHistoricalCandles>> = [];
+  let candles: Awaited<ReturnType<typeof market.getHistoricalCandles>> = [];
   let fetchError: string | null = null;
   try {
-    candles = await marketDataProvider.getHistoricalCandles(paperSession.instrumentSymbol, "3mo", "1d");
+    candles = await market.getHistoricalCandles(paperSession.instrumentSymbol, "3mo", "1d");
   } catch (err) {
     fetchError = err instanceof Error ? err.message : "Failed to load market data";
   }

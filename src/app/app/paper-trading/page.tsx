@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { marketDataProvider } from "@/lib/market-data";
+import { marketDataFor } from "@/lib/market-data";
 import PaperSessionForm from "@/components/paper-session-form";
 import EmptyState from "@/components/empty-state";
 import { Activity, History, Plus, Radio } from "lucide-react";
@@ -15,6 +15,7 @@ export const metadata = { title: "Paper Trading", robots: { index: false } };
 
 export default async function PaperTradingPage() {
   const session = await auth();
+  const market = marketDataFor(session?.user?.id, "trading");
   if (!session?.user?.id) return null;
 
   const [strategies, sessions] = await Promise.all([
@@ -46,7 +47,7 @@ export default async function PaperTradingPage() {
   await Promise.all(
     inPositionSymbols.map(async (symbol) => {
       try {
-        const candles = await marketDataProvider.getHistoricalCandles(symbol, "5d", "1d");
+        const candles = await market.getHistoricalCandles(symbol, "5d", "1d");
         const latest = candles.at(-1)?.close;
         if (latest !== undefined) latestCloseBySymbol.set(symbol, latest);
       } catch {

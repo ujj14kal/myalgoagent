@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { marketDataProvider } from "@/lib/market-data";
+import { marketDataFor } from "@/lib/market-data";
 import InstrumentChartPanel from "@/components/instrument-chart-panel";
 import SymbolSwitcher from "@/components/symbol-switcher";
 import type { ChartType } from "@/components/candlestick-chart";
@@ -24,6 +24,7 @@ export default async function InstrumentDetailPage({
   const symbol = decodeURIComponent(rawSymbol);
 
   const session = await auth();
+  const market = marketDataFor(session?.user?.id, "view");
   const instrument = await prisma.instrument.findUnique({ where: { symbol } });
   if (!instrument) {
     notFound();
@@ -38,10 +39,10 @@ export default async function InstrumentDetailPage({
       : null,
   ]);
 
-  let candles: Awaited<ReturnType<typeof marketDataProvider.getHistoricalCandles>> = [];
+  let candles: Awaited<ReturnType<typeof market.getHistoricalCandles>> = [];
   let fetchError: string | null = null;
   try {
-    candles = await marketDataProvider.getHistoricalCandles(symbol, "6mo", "1d");
+    candles = await market.getHistoricalCandles(symbol, "6mo", "1d");
   } catch (err) {
     fetchError = err instanceof Error ? err.message : "Failed to load market data";
   }
@@ -104,8 +105,8 @@ export default async function InstrumentDetailPage({
       </div>
 
       <p className="mt-3 text-xs text-brand-navy/45">
-        Data: {marketDataProvider.name}
-        {!marketDataProvider.isOfficial && " (interim feed, not an official NSE/BSE source)"}
+        Data: {market.name}
+        {!market.isOfficial && " (interim feed, not an official NSE/BSE source)"}
         {" · "}Delayed, not real-time · bar size set by the interval selected below
       </p>
 
