@@ -43,6 +43,11 @@ export const INDICATOR_CATALOG: IndicatorDef[] = [
   { kind: "PIVOT_S1", dslName: "pivots1", label: "Pivot S1", paramLabels: [], defaults: [] },
   { kind: "PIVOT_S2", dslName: "pivots2", label: "Pivot S2", paramLabels: [], defaults: [] },
   { kind: "PIVOT_S3", dslName: "pivots3", label: "Pivot S3", paramLabels: [], defaults: [] },
+  // Swing-based levels (see lib/support-resistance.ts): Strength = bars either side
+  // that confirm a swing low/high, Touches = swings needed to form a level,
+  // Zone % = how close prices must be to count as the same level.
+  { kind: "SUPPORT", dslName: "support", label: "Support level", paramLabels: ["Strength", "Touches", "Zone %"], defaults: [5, 2, 1] },
+  { kind: "RESISTANCE", dslName: "resistance", label: "Resistance level", paramLabels: ["Strength", "Touches", "Zone %"], defaults: [5, 2, 1] },
   { kind: "PSAR", dslName: "parabolicsar", label: "Parabolic SAR", paramLabels: ["Step", "Max"], defaults: [0.02, 0.2] },
   { kind: "SUPERTREND", dslName: "supertrend", label: "Supertrend", paramLabels: ["Period", "Multiplier"], defaults: [10, 3] },
   { kind: "WILLIAMS_R", dslName: "williamsr", label: "Williams %R", paramLabels: ["Period"], defaults: [14] },

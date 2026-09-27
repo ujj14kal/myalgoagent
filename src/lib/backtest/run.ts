@@ -8,6 +8,7 @@ import {
   markToMarket,
   type EngineState,
   type EngineTrade,
+  type ExitReason,
   type PositionSizing,
   type RiskManagementConfig,
   type StrategyDirection,
@@ -30,7 +31,8 @@ function usesAtr(rm: RiskManagementConfig | undefined): boolean {
   return [rm.stopLoss, rm.target, rm.trailingSl].some((leg) => leg?.enabled && leg.unit === "ATR_MULTIPLE");
 }
 
-export type BacktestTradeResult = EngineTrade;
+/** A closed trade, plus why it closed ("end_of_data" = still open when the data ran out). */
+export type BacktestTradeResult = EngineTrade & { exitReason?: ExitReason | "end_of_data" };
 
 export interface EquityPoint {
   time: number;
@@ -152,7 +154,7 @@ export function runBacktest(
   for (let i = 0; i < candles.length; i++) {
     const stepped = stepBar(candles, i, entry[i], exit[i], state, engineConfig);
     state = stepped.state;
-    if (stepped.trade) trades.push(stepped.trade);
+    if (stepped.trade) trades.push({ ...stepped.trade, exitReason: stepped.exitReason });
 
     equityCurve.push({ time: candles[i].time, equity: markToMarket(candles, i, state, config.direction) });
   }
@@ -161,7 +163,7 @@ export function runBacktest(
     const lastIdx = candles.length - 1;
     const closed = forceClose(candles, lastIdx, state, engineConfig);
     state = closed.state;
-    if (closed.trade) trades.push(closed.trade);
+    if (closed.trade) trades.push({ ...closed.trade, exitReason: "end_of_data" });
     if (equityCurve.length > 0) equityCurve[equityCurve.length - 1] = { time: candles[lastIdx].time, equity: state.cash };
   }
 

@@ -65,3 +65,14 @@ describe("toConditionNode", () => {
     expect(checkConditionFeasibility(node, "entry").length).toBeGreaterThan(0);
   });
 });
+
+describe("support / resistance for the agent", () => {
+  it("builds a candle pattern that only counts at support", () => {
+    expect(valid({ candle_pattern: "hammer", at_level: "support" })).toMatchObject({ signal: { family: "CANDLE_PATTERN", pattern: "HAMMER", atLevel: "SUPPORT" } });
+    expect(valid({ candle_pattern: "hammer", at_level: "anywhere" }).kind).toBe("signal");
+    expect(() => toConditionNode({ candle_pattern: "hammer", at_level: "sideways" })).toThrow(/at_level/);
+  });
+  it("uses support and resistance as price-scale indicators", () => {
+    expect(valid({ left: "close", op: "crosses_above", right: { indicator: "resistance" } })).toMatchObject({ right: { type: "RESISTANCE", params: [5, 2, 1] } });
+  });
+});

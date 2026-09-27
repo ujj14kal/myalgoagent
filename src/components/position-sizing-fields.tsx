@@ -2,18 +2,27 @@
 
 import type { PositionSizingMode } from "@/lib/trading-engine/step";
 
-const MODES: { value: PositionSizingMode; label: string }[] = [
-  { value: "FULL_CAPITAL", label: "Full capital per trade" },
-  { value: "FIXED_QUANTITY", label: "Fixed quantity" },
-  { value: "FIXED_CAPITAL", label: "Fixed capital (₹)" },
-  { value: "PERCENT_OF_CAPITAL", label: "% of capital" },
+// How much to buy or sell on each entry. Quantity comes first — it's how most
+// traders think about an order ("buy 25 shares").
+const MODES: { value: PositionSizingMode; label: string; hint: string }[] = [
+  { value: "FIXED_QUANTITY", label: "Quantity", hint: "A fixed number of shares every trade." },
+  { value: "FIXED_CAPITAL", label: "Amount (₹)", hint: "A fixed rupee amount every trade — the number of shares follows the price." },
+  { value: "PERCENT_OF_CAPITAL", label: "% of capital", hint: "A share of the account's current capital every trade." },
+  { value: "FULL_CAPITAL", label: "Full capital", hint: "All available capital every trade." },
 ];
 
-const VALUE_CONFIG: Record<PositionSizingMode, { label: string; placeholder: string; step: number } | null> = {
+const VALUE_CONFIG: Record<PositionSizingMode, { label: string; placeholder: string; step: number; suffix: string } | null> = {
   FULL_CAPITAL: null,
-  FIXED_QUANTITY: { label: "Shares per trade", placeholder: "e.g. 10", step: 1 },
-  FIXED_CAPITAL: { label: "₹ per trade", placeholder: "e.g. 20000", step: 100 },
-  PERCENT_OF_CAPITAL: { label: "% per trade", placeholder: "e.g. 25", step: 1 },
+  FIXED_QUANTITY: { label: "Shares per trade", placeholder: "e.g. 10", step: 1, suffix: "shares" },
+  FIXED_CAPITAL: { label: "Amount per trade", placeholder: "e.g. 20000", step: 100, suffix: "₹" },
+  PERCENT_OF_CAPITAL: { label: "Share of capital per trade", placeholder: "e.g. 25", step: 1, suffix: "%" },
+};
+
+const DEFAULT_VALUE: Record<PositionSizingMode, number | null> = {
+  FULL_CAPITAL: null,
+  FIXED_QUANTITY: 1,
+  FIXED_CAPITAL: 10000,
+  PERCENT_OF_CAPITAL: 25,
 };
 
 export default function PositionSizingFields({
@@ -28,41 +37,47 @@ export default function PositionSizingFields({
   onValueChange: (value: number | null) => void;
 }) {
   const valueConfig = VALUE_CONFIG[mode];
+  const active = MODES.find((m) => m.value === mode);
 
   return (
-    <>
-      <div>
-        <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Position sizing</label>
-        <select
-          value={mode}
-          onChange={(e) => {
-            const nextMode = e.target.value as PositionSizingMode;
-            onModeChange(nextMode);
-            if (nextMode === "FULL_CAPITAL") onValueChange(null);
-          }}
-          className="w-full rounded-lg border border-brand-navy/15 px-3 py-2 text-sm outline-none focus:border-brand-primary"
-        >
-          {MODES.map((m) => (
-            <option key={m.value} value={m.value}>
-              {m.label}
-            </option>
-          ))}
-        </select>
+    <div>
+      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Position size</label>
+      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Position size">
+        {MODES.map((m) => (
+          <button
+            key={m.value}
+            type="button"
+            role="radio"
+            aria-checked={mode === m.value}
+            onClick={() => {
+              if (m.value === mode) return;
+              onModeChange(m.value);
+              onValueChange(DEFAULT_VALUE[m.value]);
+            }}
+            className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+              mode === m.value ? "border-brand-primary bg-brand-primary text-white" : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
       </div>
       {valueConfig && (
-        <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">{valueConfig.label}</label>
+        <div className="mt-2.5 flex max-w-xs items-center gap-2">
           <input
             type="number"
             min={0}
             step={valueConfig.step}
             placeholder={valueConfig.placeholder}
             value={value ?? ""}
+            aria-label={valueConfig.label}
             onChange={(e) => onValueChange(e.target.value ? Number(e.target.value) : null)}
             className="w-full rounded-lg border border-brand-navy/15 px-3 py-2 text-sm outline-none focus:border-brand-primary"
           />
+          <span className="shrink-0 text-sm text-brand-navy/50">{valueConfig.suffix}</span>
         </div>
       )}
-    </>
+      {active && <p className="mt-1.5 text-xs text-brand-navy/40">{active.hint}</p>}
+    </div>
   );
 }

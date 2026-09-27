@@ -28,6 +28,7 @@ import {
   envelope,
   standardDeviation,
 } from "@/lib/indicators";
+import { supportResistance } from "@/lib/support-resistance";
 import type { IndicatorKind } from "./types";
 
 /** Single dispatch point from a DSL/visual-builder indicator + its numeric
@@ -96,6 +97,10 @@ export function computeIndicatorSeries(candles: Candle[], type: IndicatorKind, p
       return pivotPoints(candles).s2;
     case "PIVOT_S3":
       return pivotPoints(candles).s3;
+    case "SUPPORT":
+      return supportResistance(candles, params[0], params[1], params[2]).support;
+    case "RESISTANCE":
+      return supportResistance(candles, params[0], params[1], params[2]).resistance;
     case "PSAR":
       return parabolicSar(candles, params[0], params[1]);
     case "SUPERTREND":

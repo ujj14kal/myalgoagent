@@ -8,6 +8,10 @@ import StrategyCodeEditor from "@/components/strategy-code-editor";
 import PositionSizingFields from "@/components/position-sizing-fields";
 import RiskManagementFields, { type RiskLegState } from "@/components/risk-management-fields";
 import DraftAutoSaveToast from "@/components/draft-autosave-toast";
+import CandlePatternIllustration from "@/components/candle-pattern-illustration";
+import StrategyPreview from "@/components/strategy-preview";
+import { CANDLE_PATTERN_BY_KIND } from "@/lib/strategy/candle-pattern-catalog";
+import type { CandlePatternKind } from "@/lib/candle-patterns";
 import { createStrategy, updateStrategy, autoSaveDraftStrategy, type StrategyInput } from "@/lib/strategy-actions";
 import { NEVER_EXIT_CONDITION, isNeverExitCondition, type FeasibilitySection } from "@/lib/strategy/types";
 import { consumeDraftReminderSkip, setDraftReminderSkipCount } from "@/lib/draft-reminder";
@@ -50,8 +54,50 @@ function toRiskLegState(enabled: boolean, unit: RiskUnit | null, value: number |
   return { enabled, unit: unit ?? "PERCENT", value: value ?? fallback };
 }
 
+/** Every distinct candle pattern (and where it must form) used anywhere in a condition tree. */
+function collectCandlePatterns(node: ConditionNode, out: { pattern: CandlePatternKind; atLevel?: "SUPPORT" | "RESISTANCE" }[] = []) {
+  if (node.kind === "group") node.children.forEach((c) => collectCandlePatterns(c, out));
+  else if (node.kind === "not") collectCandlePatterns(node.child, out);
+  else if (node.kind === "signal" && node.signal.family === "CANDLE_PATTERN") {
+    const { pattern, atLevel } = node.signal;
+    if (!out.some((p) => p.pattern === pattern && p.atLevel === atLevel)) out.push({ pattern, atLevel });
+  }
+  return out;
+}
+
+/** One numbered step of the builder — the form reads top to bottom. */
+function BuilderSection({
+  step,
+  title,
+  subtitle,
+  action,
+  sectionRef,
+  children,
+}: {
+  step: number;
+  title: string;
+  subtitle?: string;
+  action?: React.ReactNode;
+  sectionRef?: React.RefObject<HTMLDivElement | null>;
+  children: React.ReactNode;
+}) {
+  return (
+    <section ref={sectionRef} className="surface p-4 sm:p-5">
+      <div className="mb-4 flex items-start gap-3">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-primary text-xs font-bold text-white">{step}</span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-brand-navy">{title}</p>
+          {subtitle && <p className="text-xs text-brand-navy/50">{subtitle}</p>}
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 function wrapInGroup(node: ConditionNode): ConditionNode {
-  return { kind: "group", op: "AND", children: [node] };
+  return node.kind === "group" ? node : { kind: "group", op: "AND", children: [node] };
 }
 
 /** Advanced -> Simple is lossy if the tree doesn't already fit one
@@ -229,10 +275,7 @@ export default function StrategyBuilderForm({
 
   const entryRef = useRef<HTMLDivElement>(null);
   const exitRef = useRef<HTMLDivElement>(null);
-  // Risk fields render in one of two places depending on mode (inside the
-  // Exit card for NO_CODE/CODE, inside the Webhook card for WEBHOOK) — only
-  // one is ever mounted at a time, so both wrappers can safely share this
-  // one ref.
+  // The Risk management section (same place in every mode).
   const riskRef = useRef<HTMLDivElement>(null);
   const positionSizingRef = useRef<HTMLDivElement>(null);
 
@@ -326,45 +369,50 @@ export default function StrategyBuilderForm({
     }
   }
 
+  const usedCandlePatterns =
+    mode === "NO_CODE" ? collectCandlePatterns(exitConditionOpen ? exitCondition : NEVER_EXIT_CONDITION, collectCandlePatterns(entryCondition)) : [];
+
   return (
     <>
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-[2fr_2fr_1fr]">
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
-              Strategy name
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              className="w-full rounded-lg border border-brand-navy/15 px-4 py-2 text-sm outline-none focus:border-brand-primary"
-              placeholder="e.g. SMA/EMA crossover"
-            />
+      <form onSubmit={handleSubmit} className="mx-auto max-w-4xl space-y-5">
+        <div className="surface p-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
+                Strategy name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                className="w-full rounded-lg border border-brand-navy/15 px-4 py-2 text-sm outline-none focus:border-brand-primary"
+                placeholder="e.g. SMA/EMA crossover"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
+                Instrument
+              </label>
+              <select
+                value={instrumentId}
+                onChange={(e) => setInstrumentId(e.target.value)}
+                required
+                className="w-full rounded-lg border border-brand-navy/15 px-4 py-2 text-sm outline-none focus:border-brand-primary"
+              >
+                {instruments.map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {i.symbol} — {i.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
-              Instrument
-            </label>
-            <select
-              value={instrumentId}
-              onChange={(e) => setInstrumentId(e.target.value)}
-              required
-              className="w-full rounded-lg border border-brand-navy/15 px-4 py-2 text-sm outline-none focus:border-brand-primary"
-            >
-              {instruments.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.symbol} — {i.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
+          <div className="mt-4">
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
               Build with
             </label>
-            <div className="flex overflow-hidden rounded-full border border-brand-navy/15 w-fit">
+            <div className="flex w-fit overflow-hidden rounded-full border border-brand-navy/15">
               {(["NO_CODE", "CODE", "WEBHOOK"] as const).map((m) => (
                 <button
                   key={m}
@@ -381,14 +429,13 @@ export default function StrategyBuilderForm({
           </div>
         </div>
 
-        <div ref={positionSizingRef} className="surface p-4">
-          <p className="mb-2 text-sm font-semibold text-brand-navy">Direction, position sizing &amp; pyramiding</p>
-          <div className="grid gap-4 sm:grid-cols-4">
+        <BuilderSection step={1} title="Position" subtitle="Which way to trade and how much" sectionRef={positionSizingRef}>
+          <div className="space-y-5">
             <div>
               <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
                 Direction
               </label>
-              <div className="flex overflow-hidden rounded-full border border-brand-navy/15 w-fit">
+              <div className="flex w-fit overflow-hidden rounded-full border border-brand-navy/15">
                 {(["LONG", "SHORT"] as const).map((d) => (
                   <button
                     key={d}
@@ -418,7 +465,7 @@ export default function StrategyBuilderForm({
               onModeChange={setPositionSizingMode}
               onValueChange={setPositionSizingValue}
             />
-            <div>
+            <div className="max-w-xs">
               <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
                 Max entries per position
               </label>
@@ -430,49 +477,36 @@ export default function StrategyBuilderForm({
                 onChange={(e) => setMaxPyramidEntries(Math.max(1, Number(e.target.value)))}
                 className="w-full rounded-lg border border-brand-navy/15 px-3 py-2 text-sm outline-none focus:border-brand-primary"
               />
+              <p className="mt-1.5 text-xs text-brand-navy/40">1 = a single entry. Higher lets the strategy add to an open position (pyramiding).</p>
             </div>
           </div>
-        </div>
+        </BuilderSection>
 
         {mode === "WEBHOOK" ? (
-          <div className="surface p-4">
-            <p className="text-sm font-semibold text-brand-navy">Webhook-triggered strategy</p>
-            <p className="mt-1 text-sm text-brand-navy/60">
+          <BuilderSection step={2} title="Entry & exit" subtitle="Triggered by your TradingView alerts">
+            <p className="text-sm text-brand-navy/60">
               Trades are triggered by an external TradingView alert, not by conditions you build here — there&apos;s
-              no entry/exit condition tree to configure. Stop-loss, target, and trailing stop below still apply to
-              every position this strategy opens.
+              no entry/exit condition tree to configure. The risk rules below still apply to every position this strategy opens.
             </p>
-            <div ref={riskRef} className="mt-3 rounded-xl border border-brand-primary/20 bg-brand-primary/5 p-3">
-              <RiskManagementFields
-                stopLoss={stopLoss}
-                target={target}
-                trailingSl={trailingSl}
-                onStopLossChange={setStopLoss}
-                onTargetChange={setTarget}
-                onTrailingSlChange={setTrailingSl}
-              />
-            </div>
-            {strategyId ? (
-              <p className="mt-3 text-xs text-brand-navy/40">
-                Save your changes, then set up the webhook URL below.
-              </p>
-            ) : (
-              <p className="mt-3 text-xs text-brand-navy/40">
-                Create the strategy first — the webhook URL is generated on its detail page.
-              </p>
-            )}
-          </div>
+            <p className="mt-3 text-xs text-brand-navy/40">
+              {strategyId ? "Save your changes, then set up the webhook URL below." : "Create the strategy first — the webhook URL is generated on its detail page."}
+            </p>
+          </BuilderSection>
         ) : (
-          <div className="grid gap-6 xl:grid-cols-2">
-            <div ref={entryRef} className="surface p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-sm font-semibold text-brand-navy">Entry condition</p>
-                {mode === "NO_CODE" && (
+          <>
+            <BuilderSection
+              step={2}
+              title="Entry condition"
+              subtitle="When to open a position"
+              sectionRef={entryRef}
+              action={
+                mode === "NO_CODE" ? (
                   <button type="button" onClick={toggleEntryMode} className="text-xs font-medium text-brand-primary hover:underline">
                     {entryMode === "SIMPLE" ? "Switch to Advanced" : "Switch to Simple"}
                   </button>
-                )}
-              </div>
+                ) : null
+              }
+            >
               {mode === "NO_CODE" ? (
                 entryMode === "SIMPLE" ? (
                   <SimpleConditionPicker node={entryCondition} onChange={setEntryCondition} instruments={instruments} categories={ALL_CATEGORIES} />
@@ -482,57 +516,86 @@ export default function StrategyBuilderForm({
               ) : (
                 <StrategyCodeEditor label="Entry" value={entrySource} onChange={setEntrySource} />
               )}
-            </div>
+            </BuilderSection>
 
-            <div ref={exitRef} className="surface p-4">
-              <p className="mb-2 text-sm font-semibold text-brand-navy">Exit condition</p>
-
-              <div ref={riskRef} className="rounded-xl border border-brand-primary/20 bg-brand-primary/5 p-3">
-                <RiskManagementFields
-                  stopLoss={stopLoss}
-                  target={target}
-                  trailingSl={trailingSl}
-                  onStopLossChange={setStopLoss}
-                  onTargetChange={setTarget}
-                  onTrailingSlChange={setTrailingSl}
-                />
-              </div>
-
+            <BuilderSection
+              step={3}
+              title="Exit condition"
+              subtitle="Optional — a rule that closes the position"
+              sectionRef={exitRef}
+              action={
+                mode === "NO_CODE" && exitConditionOpen ? (
+                  <button type="button" onClick={toggleExitMode} className="text-xs font-medium text-brand-primary hover:underline">
+                    {exitMode === "SIMPLE" ? "Switch to Advanced" : "Switch to Simple"}
+                  </button>
+                ) : null
+              }
+            >
               {mode === "NO_CODE" ? (
-                <div className="mt-3">
+                <>
+                  {exitConditionOpen ? (
+                    exitMode === "SIMPLE" ? (
+                      <SimpleConditionPicker node={exitCondition} onChange={setExitCondition} instruments={instruments} categories={ALL_CATEGORIES} />
+                    ) : (
+                      <ConditionGroupEditor node={exitCondition} onChange={setExitCondition} instruments={instruments} />
+                    )
+                  ) : (
+                    <p className="text-sm text-brand-navy/55">
+                      No exit rule — positions close on the stop-loss, take-profit or trailing stop in Risk management.
+                    </p>
+                  )}
                   <button
                     type="button"
                     onClick={() => setExitConditionOpen((v) => !v)}
-                    className="text-xs font-medium text-brand-navy/60 hover:text-brand-primary"
+                    className="mt-3 text-xs font-semibold text-brand-primary hover:underline"
                   >
-                    {exitConditionOpen ? "− Remove condition-based exit" : "+ Add a condition-based exit"}
+                    {exitConditionOpen ? "− Remove exit rule" : "+ Add an exit rule"}
                   </button>
-                  {exitConditionOpen && (
-                    <div className="mt-2">
-                      <div className="mb-2 flex items-center justify-end">
-                        <button type="button" onClick={toggleExitMode} className="text-xs font-medium text-brand-primary hover:underline">
-                          {exitMode === "SIMPLE" ? "Switch to Advanced" : "Switch to Simple"}
-                        </button>
-                      </div>
-                      {exitMode === "SIMPLE" ? (
-                        <SimpleConditionPicker node={exitCondition} onChange={setExitCondition} instruments={instruments} categories={ALL_CATEGORIES} />
-                      ) : (
-                        <ConditionGroupEditor node={exitCondition} onChange={setExitCondition} instruments={instruments} />
-                      )}
-                    </div>
-                  )}
-                  <p className="mt-2 text-xs text-brand-navy/40">
-                    A stop-loss/target/trailing stop above and a condition-based exit here both stay active if
-                    configured — whichever triggers first closes the position.
-                  </p>
-                </div>
+                </>
               ) : (
-                <div className="mt-3">
-                  <StrategyCodeEditor label="Exit" value={exitSource} onChange={setExitSource} />
-                </div>
+                <StrategyCodeEditor label="Exit" value={exitSource} onChange={setExitSource} />
               )}
+            </BuilderSection>
+          </>
+        )}
+
+        <BuilderSection step={mode === "WEBHOOK" ? 3 : 4} title="Risk management" subtitle="Stop-loss, take-profit and trailing stop" sectionRef={riskRef}>
+          <RiskManagementFields
+            stopLoss={stopLoss}
+            target={target}
+            trailingSl={trailingSl}
+            onStopLossChange={setStopLoss}
+            onTargetChange={setTarget}
+            onTrailingSlChange={setTrailingSl}
+          />
+          {mode !== "WEBHOOK" && (
+            <p className="mt-3 text-xs text-brand-navy/40">
+              These and the exit rule all stay active — whichever triggers first closes the position.
+            </p>
+          )}
+        </BuilderSection>
+
+        {mode === "NO_CODE" && usedCandlePatterns.length > 0 && (
+          <BuilderSection step={5} title="Candle patterns in this strategy" subtitle="What each selected pattern looks like">
+            <div className="grid gap-3 lg:grid-cols-2">
+              {usedCandlePatterns.map((p) => (
+                <div key={`${p.pattern}:${p.atLevel ?? ""}`}>
+                  <p className="mb-1.5 text-xs font-semibold text-brand-navy/70">{CANDLE_PATTERN_BY_KIND.get(p.pattern)?.label ?? p.pattern}</p>
+                  <CandlePatternIllustration pattern={p.pattern} atLevel={p.atLevel} />
+                </div>
+              ))}
             </div>
-          </div>
+          </BuilderSection>
+        )}
+
+        {mode !== "WEBHOOK" && (
+          <BuilderSection
+            step={mode === "NO_CODE" && usedCandlePatterns.length > 0 ? 6 : 5}
+            title="See it in action"
+            subtitle="Where this strategy would have entered and exited recently"
+          >
+            <StrategyPreview buildInput={buildInput} direction={direction} />
+          </BuilderSection>
         )}
 
         <button

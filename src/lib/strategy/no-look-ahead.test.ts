@@ -4,6 +4,8 @@ import { computeChartPatternSeries } from "@/lib/chart-patterns";
 import { computeCandlePatternSeries } from "@/lib/candle-patterns";
 import type { Candle } from "@/lib/market-data";
 import type { ConditionNode } from "@/lib/strategy/types";
+import { INDICATOR_CATALOG } from "@/lib/strategy/indicator-catalog";
+import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
 
 /**
  * These tests verify a structural, no-look-ahead PROPERTY of the signal
@@ -161,6 +163,19 @@ describe("no-look-ahead: computeChartPatternSeries (swing-point-based patterns)"
       expect(truncatedSeries, `pattern ${pattern} leaked future information`).toEqual(
         fullSeries.slice(0, TRUNCATE_AT),
       );
+    }
+  });
+});
+
+describe("no-look-ahead: every indicator in the catalogue", () => {
+  it("each indicator's values are stable under truncation (covers new indicators automatically)", () => {
+    const full = generateCandles(FULL_LENGTH);
+    const truncated = full.slice(0, TRUNCATE_AT);
+    for (const def of INDICATOR_CATALOG) {
+      const fullSeries = new Map(computeIndicatorSeries(full, def.kind, def.defaults).map((p) => [p.time, p.value]));
+      for (const p of computeIndicatorSeries(truncated, def.kind, def.defaults)) {
+        expect(fullSeries.get(p.time), `${def.kind} at ${p.time}`).toBeCloseTo(p.value, 8);
+      }
     }
   });
 });

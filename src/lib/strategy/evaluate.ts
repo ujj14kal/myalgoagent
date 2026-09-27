@@ -5,6 +5,7 @@ import { alignToBase, alignSignalToBase } from "./timeframe-align";
 import { computeCandlePatternSeries } from "@/lib/candle-patterns";
 import { computeChartPatternSeries } from "@/lib/chart-patterns";
 import { computeVolumePatternSeries } from "@/lib/volume-patterns";
+import { atLevelSeries } from "@/lib/support-resistance";
 import type { BooleanSignalKind, ComparisonOperator, ConditionNode, Operand } from "./types";
 import type { Signal } from "./types";
 
@@ -148,7 +149,7 @@ function signalKey(signal: BooleanSignalKind): string {
     case "TIME_WINDOW":
       return `TIME_WINDOW:${signal.startMinute}-${signal.endMinute}`;
     case "CANDLE_PATTERN":
-      return `CANDLE_PATTERN:${signal.pattern}:${timeframe ?? ""}`;
+      return `CANDLE_PATTERN:${signal.pattern}:${timeframe ?? ""}:${signal.atLevel ?? ""}`;
     case "CHART_PATTERN":
       return `CHART_PATTERN:${signal.pattern}:${timeframe ?? ""}`;
     case "VOLUME_PATTERN":
@@ -160,8 +161,13 @@ function detectPattern(candles: Candle[], signal: BooleanSignalKind): boolean[] 
   switch (signal.family) {
     case "TIME_WINDOW":
       return computeTimeWindowSeries(candles, signal.startMinute, signal.endMinute);
-    case "CANDLE_PATTERN":
-      return computeCandlePatternSeries(candles, signal.pattern);
+    case "CANDLE_PATTERN": {
+      const pattern = computeCandlePatternSeries(candles, signal.pattern);
+      if (!signal.atLevel) return pattern;
+      // Same candles, same bar: the pattern AND the candle sitting at the level.
+      const at = atLevelSeries(candles, signal.atLevel);
+      return pattern.map((p, i) => p && at[i]);
+    }
     case "CHART_PATTERN":
       return computeChartPatternSeries(candles, signal.pattern);
     case "VOLUME_PATTERN":

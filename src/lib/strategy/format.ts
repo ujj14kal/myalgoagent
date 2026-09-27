@@ -42,7 +42,7 @@ function signalToText(s: BooleanSignalKind): string {
     case "TIME_WINDOW":
       return `time between ${clock(s.startMinute)} and ${clock(s.endMinute)}`;
     case "CANDLE_PATTERN":
-      return `${humanize(s.pattern)} candle${suffix(s)}`;
+      return `${humanize(s.pattern)} candle${s.atLevel ? ` at ${s.atLevel === "SUPPORT" ? "support" : "resistance"}` : ""}${suffix(s)}`;
     case "CHART_PATTERN":
       return `${humanize(s.pattern)} pattern${suffix(s)}`;
     case "VOLUME_PATTERN":

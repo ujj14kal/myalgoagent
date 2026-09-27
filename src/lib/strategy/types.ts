@@ -47,7 +47,9 @@ export type IndicatorKind =
   | "KELTNER_LOWER"
   | "ENVELOPE_UPPER"
   | "ENVELOPE_LOWER"
-  | "STDDEV";
+  | "STDDEV"
+  | "SUPPORT"
+  | "RESISTANCE";
 
 export type PriceField = "OPEN" | "HIGH" | "LOW" | "CLOSE" | "VOLUME";
 export type ComparisonOperator = "GT" | "LT" | "GTE" | "LTE" | "EQ" | "CROSSES_ABOVE" | "CROSSES_BELOW";
@@ -73,7 +75,9 @@ export type Operand =
 // same convention as the operand-level timeframe override.
 export type BooleanSignalKind =
   | { family: "TIME_WINDOW"; startMinute: number; endMinute: number }
-  | { family: "CANDLE_PATTERN"; pattern: CandlePatternKind; timeframe?: CandleInterval }
+  // `atLevel`: only count the pattern when the candle is at a support (or
+  // resistance) level — see lib/support-resistance.ts. Omitted = anywhere.
+  | { family: "CANDLE_PATTERN"; pattern: CandlePatternKind; timeframe?: CandleInterval; atLevel?: "SUPPORT" | "RESISTANCE" }
   | { family: "CHART_PATTERN"; pattern: ChartPatternKind; timeframe?: CandleInterval }
   | { family: "VOLUME_PATTERN"; pattern: VolumePatternKind; timeframe?: CandleInterval };
 

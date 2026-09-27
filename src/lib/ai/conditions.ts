@@ -139,7 +139,13 @@ export function toConditionNode(v: unknown, where = "condition"): ConditionNode 
   }
   const tf = timeframeOf(v.timeframe, where);
   if ("candle_pattern" in v) {
-    return { kind: "signal", signal: { family: "CANDLE_PATTERN", pattern: pattern(CANDLES, v.candle_pattern, "candle", where) as never, ...(tf ? { timeframe: tf } : {}) } };
+    const at = String(v.at_level ?? v.atLevel ?? "").trim().toUpperCase();
+    if (at && at !== "SUPPORT" && at !== "RESISTANCE" && at !== "ANYWHERE") throw new Error(`${where}: at_level must be "support", "resistance" or "anywhere".`);
+    const atLevel = at === "SUPPORT" || at === "RESISTANCE" ? at : undefined;
+    return {
+      kind: "signal",
+      signal: { family: "CANDLE_PATTERN", pattern: pattern(CANDLES, v.candle_pattern, "candle", where) as never, ...(tf ? { timeframe: tf } : {}), ...(atLevel ? { atLevel } : {}) },
+    };
   }
   if ("chart_pattern" in v) {
     return { kind: "signal", signal: { family: "CHART_PATTERN", pattern: pattern(CHARTS, v.chart_pattern, "chart", where) as never, ...(tf ? { timeframe: tf } : {}) } };
@@ -177,7 +183,8 @@ export const CONDITION_REFERENCE = [
   `- candle pattern: {"candle_pattern":"HAMMER"} — ${CANDLE_PATTERN_CATALOG.map((p) => p.kind).join(", ")}`,
   `- chart pattern: {"chart_pattern":"DOUBLE_BOTTOM"} — ${CHART_PATTERN_CATALOG.map((p) => p.kind).join(", ")}`,
   `- volume pattern: {"volume_pattern":"VOLUME_SPIKE"} — ${VOLUME_PATTERN_CATALOG.map((p) => p.kind).join(", ")}`,
-  '  Patterns can add "timeframe" to detect on another chart. Patterns and time windows are true/false conditions — never compare them to a value.',
+  '  Patterns can add "timeframe" to detect on another chart. A candle pattern can add "at_level": "support" or "resistance" to count only when the candle forms at that level (omit = anywhere). Whenever the user wants a pattern "at", "near" or "on" support/resistance, use at_level — never build your own close-vs-support comparison for it (that checks something different). Patterns and time windows are true/false conditions — never compare them to a value.',
+  '- support / resistance levels are indicators on the price scale: {"indicator":"support"} is the nearest support level below price (swing lows that price bounced from), {"indicator":"resistance"} the nearest level above (swing highs price failed to break). Compare them with price, e.g. close crosses_above resistance (breakout), close < support (breakdown).',
   "- indicators and their settings: " + INDICATOR_CATALOG.map((d) => `${d.dslName}(${d.paramLabels.join(", ") || "no settings"})`).join(", "),
   "RULES THE VALIDATOR ENFORCES (follow them; if it still rejects, fix and retry):",
   `- These have their own scale, unrelated to price: ${oscillators.join(", ")}. Compare them only to a fixed number (rsi(14) > 70, rsi crosses_above 30) or to their own partner: ${pairs.join("; ")}. Never compare them to price or a moving average.`,

@@ -85,9 +85,6 @@ export default function RiskManagementFields({
 }) {
   return (
     <div>
-      <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
-        Risk management
-      </label>
       <div className="grid gap-3 sm:grid-cols-3">
         <RiskLegRow
           label="Stop loss"

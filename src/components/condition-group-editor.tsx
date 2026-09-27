@@ -7,6 +7,7 @@ import { CHART_PATTERN_CATALOG } from "@/lib/strategy/chart-pattern-catalog";
 import { VOLUME_PATTERN_CATALOG } from "@/lib/strategy/volume-pattern-catalog";
 import { INTERVALS } from "@/lib/market-data";
 import type { CandleInterval } from "@/lib/market-data";
+import CandlePatternIllustration from "@/components/candle-pattern-illustration";
 
 export interface InstrumentOption {
   id: string;
@@ -95,15 +96,22 @@ function timeInputToMinutes(value: string): number {
   return h * 60 + m;
 }
 
+/** The strategy's own chart — patterns with no timeframe of their own are read on it. */
+const BASE_TIMEFRAME: CandleInterval = "1d";
+
 function TimeframeSelect({ value, onChange }: { value: CandleInterval | undefined; onChange: (v: CandleInterval | undefined) => void }) {
+  // No "Same as chart" option: the strategy chart is shown as the timeframe it
+  // actually is, and choosing it stores no override (so saved strategies are unchanged).
   return (
     <select
       className={`${inputClass} text-brand-navy/60`}
-      value={value ?? ""}
+      value={value ?? BASE_TIMEFRAME}
       title="Detect on this timeframe"
-      onChange={(e) => onChange((e.target.value || undefined) as CandleInterval | undefined)}
+      onChange={(e) => {
+        const v = e.target.value as CandleInterval;
+        onChange(v === BASE_TIMEFRAME ? undefined : v);
+      }}
     >
-      <option value="">Same as chart</option>
       {INTERVALS.map((iv) => (
         <option key={iv.value} value={iv.value}>
           {iv.label} chart
@@ -165,14 +173,13 @@ function SignalEditor({
     const groupLabel = { 1: "Single candle", 2: "Double candle", 3: "Triple candle" } as const;
 
     return (
-      <div className="flex flex-wrap items-center gap-2 rounded-lg bg-brand-bg p-2">
+      <div className="space-y-2 rounded-lg bg-brand-bg p-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium text-brand-navy/60">Candle pattern is</span>
         <select
           className={inputClass}
           value={signal.pattern}
-          onChange={(e) =>
-            onChange({ kind: "signal", signal: { family: "CANDLE_PATTERN", pattern: e.target.value as never, timeframe: signal.timeframe } })
-          }
+          onChange={(e) => onChange({ kind: "signal", signal: { ...signal, pattern: e.target.value as never } })}
         >
           {([1, 2, 3] as const).map((count) => (
             <optgroup key={count} label={groupLabel[count]}>
@@ -188,9 +195,24 @@ function SignalEditor({
           value={signal.timeframe}
           onChange={(timeframe) => onChange({ kind: "signal", signal: { ...signal, timeframe } })}
         />
+        <select
+          className={`${inputClass} text-brand-navy/70`}
+          value={signal.atLevel ?? ""}
+          title="Where the pattern must form"
+          onChange={(e) => {
+            const atLevel = (e.target.value || undefined) as "SUPPORT" | "RESISTANCE" | undefined;
+            onChange({ kind: "signal", signal: { ...signal, atLevel } });
+          }}
+        >
+          <option value="">Anywhere</option>
+          <option value="SUPPORT">At a support level</option>
+          <option value="RESISTANCE">At a resistance level</option>
+        </select>
         <button type="button" onClick={onRemove} className="ml-auto text-xs text-brand-navy/40 hover:text-brand-sell">
           Remove
         </button>
+      </div>
+      <CandlePatternIllustration pattern={signal.pattern} atLevel={signal.atLevel} />
       </div>
     );
   }
@@ -351,21 +373,7 @@ function OperandEditor({
 
       {overridable && (
         <>
-          <select
-            className={`${inputClass} text-brand-navy/60`}
-            value={overridable.timeframe ?? ""}
-            title="Timeframe"
-            onChange={(e) =>
-              onChange({ ...overridable, timeframe: (e.target.value || undefined) as CandleInterval | undefined })
-            }
-          >
-            <option value="">Same as chart</option>
-            {INTERVALS.map((iv) => (
-              <option key={iv.value} value={iv.value}>
-                {iv.label} chart
-              </option>
-            ))}
-          </select>
+          <TimeframeSelect value={overridable.timeframe} onChange={(timeframe) => onChange({ ...overridable, timeframe })} />
           <select
             className={`${inputClass} text-brand-navy/60`}
             value={overridable.instrumentSymbol ?? ""}

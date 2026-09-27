@@ -60,16 +60,19 @@ export function classifyCategory(node: ConditionNode): ConditionCategory | null 
 }
 
 /** True when a saved condition tree fits the Simple-mode shape: a bare
- * comparison/signal, or a single-child AND/OR group wrapping one. Anything
- * else (multiple children, NOT, nested groups) needs Advanced mode. */
+ * comparison/signal, or an AND/OR group of one or two of them ("Match both /
+ * Match any"). Anything else (three or more, NOT, nested groups) needs
+ * Advanced mode. */
 export function fitsSimpleMode(node: ConditionNode): boolean {
   if (classifyCategory(node) !== null) return true;
-  if (node.kind === "group" && node.children.length === 1) return classifyCategory(node.children[0]) !== null;
+  if (node.kind === "group" && node.children.length >= 1 && node.children.length <= 2) {
+    return node.children.every((c) => classifyCategory(c) !== null);
+  }
   return false;
 }
 
-/** Unwraps a tree that `fitsSimpleMode` into the single node Simple mode
- * edits directly. */
+/** Unwraps a tree that `fitsSimpleMode` into what Simple mode edits: a single
+ * condition, or a two-condition group. */
 export function unwrapForSimpleMode(node: ConditionNode): ConditionNode {
   if (node.kind === "group" && node.children.length === 1) return node.children[0];
   return node;
@@ -93,6 +96,64 @@ export default function SimpleConditionPicker({
   onChange: (n: ConditionNode) => void;
   instruments: InstrumentOption[];
   categories?: ConditionCategory[];
+}) {
+  // Two conditions: "Match both" (AND) or "Match any" (OR).
+  if (node.kind === "group" && node.children.length === 2) {
+    const [first, second] = node.children;
+    const setChild = (i: 0 | 1, child: ConditionNode) =>
+      onChange({ ...node, children: i === 0 ? [child, second] : [first, child] });
+    return (
+      <div className="space-y-3">
+        <SingleCondition node={first} onChange={(n) => setChild(0, n)} instruments={instruments} categories={categories} />
+        <div className="flex items-center gap-2">
+          <span className="h-px flex-1 bg-brand-navy/10" />
+          <div className="flex overflow-hidden rounded-full border border-brand-navy/15">
+            {(["AND", "OR"] as const).map((op) => (
+              <button
+                key={op}
+                type="button"
+                onClick={() => onChange({ ...node, op })}
+                className={`px-3 py-1 text-xs font-semibold ${node.op === op ? "bg-brand-primary text-white" : "text-brand-navy/60 hover:bg-brand-bg"}`}
+              >
+                {op === "AND" ? "Match both" : "Match any"}
+              </button>
+            ))}
+          </div>
+          <span className="h-px flex-1 bg-brand-navy/10" />
+        </div>
+        <SingleCondition node={second} onChange={(n) => setChild(1, n)} instruments={instruments} categories={categories} />
+        <button type="button" onClick={() => onChange(first)} className="text-xs font-medium text-brand-navy/50 hover:text-brand-sell">
+          − Remove second condition
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <SingleCondition node={node} onChange={onChange} instruments={instruments} categories={categories} />
+      <button
+        type="button"
+        onClick={() => onChange({ kind: "group", op: "AND", children: [node, defaultComparison()] })}
+        className="text-xs font-semibold text-brand-primary hover:underline"
+      >
+        + Add condition
+      </button>
+    </div>
+  );
+}
+
+/** One condition: pick its kind (indicator, time, pattern…), then configure it. */
+function SingleCondition({
+  node,
+  onChange,
+  instruments,
+  categories,
+}: {
+  node: ConditionNode;
+  onChange: (n: ConditionNode) => void;
+  instruments: InstrumentOption[];
+  categories: ConditionCategory[];
 }) {
   const active = classifyCategory(node) ?? "INDICATOR";
 

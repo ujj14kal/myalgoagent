@@ -47,11 +47,14 @@ const sections: LegalSection[] = [
     title: "Strategy builder",
     body: (
       <p className="mt-3 text-sm leading-relaxed text-brand-navy/70">
-        A no-code interface for composing entry and exit conditions from
-        technical indicators (moving averages, RSI, MACD, Bollinger
-        Bands, VWAP, ATR and others), price action, volume and time-based
-        rules, combined with AND/OR logic — or write the same rules as
-        code, in a purpose-built DSL. See{" "}
+        A step-by-step, no-code builder — position, entry, optional exit
+        and risk management — for composing conditions from technical
+        indicators (moving averages, RSI, MACD, Bollinger Bands, VWAP, ATR,
+        support and resistance levels and others), candlestick, chart and
+        volume patterns, price action and time-based rules, combined with
+        AND/OR logic — or write the same rules as code, in a
+        purpose-built DSL. Before saving, a demo chart shows where the
+        strategy would have entered and exited on recent data. See{" "}
         <Link href="/features" className="text-brand-primary underline">Features</Link>.
       </p>
     ),
