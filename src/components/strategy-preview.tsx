@@ -106,16 +106,16 @@ export function PreviewResultView({ preview, direction }: { preview: Preview; di
                       <ArrowUpRight size={15} className="mt-0.5 shrink-0 text-brand-buy" />
                       <span>
                         <strong className="font-semibold text-brand-navy">{buyWord}</strong> {t.quantity} on {day(t.entryTime)} at {inr(t.entryPrice)}, because{" "}
-                        <span className="font-medium text-brand-navy">{preview.entryRule}</span>.
+                        <span className="font-medium text-brand-navy">{t.entryReason}</span>.
                       </span>
                     </p>
                     <p className="mt-1 flex items-start gap-2 text-brand-navy/80">
                       <ArrowDownRight size={15} className="mt-0.5 shrink-0 text-brand-sell" />
                       <span>
                         <strong className="font-semibold text-brand-navy">{sellWord}</strong> on {day(t.exitTime)} at {inr(t.exitPrice)}, because {EXIT_REASON[t.exitReason ?? "exit_rule"]}
-                        {t.exitReason === "exit_rule" && preview.exitRule ? (
+                        {t.exitReason === "exit_rule" && (t.exitRuleReason ?? preview.exitRule) ? (
                           <>
-                            {" "}(<span className="font-medium text-brand-navy">{preview.exitRule}</span>)
+                            {" "}(<span className="font-medium text-brand-navy">{t.exitRuleReason ?? preview.exitRule}</span>)
                           </>
                         ) : null}
                         .{" "}

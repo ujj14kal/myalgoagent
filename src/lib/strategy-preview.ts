@@ -5,7 +5,8 @@ import { marketDataFor, type Candle } from "@/lib/market-data";
 import { fetchAuxCandles } from "@/lib/strategy-aux-data";
 import { runBacktest, type BacktestTradeResult } from "@/lib/backtest/run";
 import { conditionToText } from "@/lib/strategy/format";
-import { isNeverExitCondition, type ConditionNode } from "@/lib/strategy/types";
+import { NEVER_EXIT_CONDITION, isNeverExitCondition, type ConditionNode } from "@/lib/strategy/types";
+import { evaluateConditionsPerBar, type AuxCandleMap } from "@/lib/strategy/evaluate";
 import { INDICATOR_CATALOG } from "@/lib/strategy/indicator-catalog";
 import type { StrategyInput } from "@/lib/strategy-actions";
 
@@ -15,7 +16,12 @@ import type { StrategyInput } from "@/lib/strategy-actions";
 
 const PREVIEW = { range: "6mo" as const, capital: 100_000, brokeragePercent: 0.03, slippagePercent: 0.05 };
 
-export type PreviewTrade = Pick<BacktestTradeResult, "entryTime" | "entryPrice" | "exitTime" | "exitPrice" | "quantity" | "netPnl" | "netPnlPct" | "exitReason">;
+export type PreviewTrade = Pick<BacktestTradeResult, "entryTime" | "entryPrice" | "exitTime" | "exitPrice" | "quantity" | "netPnl" | "netPnlPct" | "exitReason"> & {
+  /** The part of the entry rule that was true (for "A or B" rules, just the part that fired). */
+  entryReason: string;
+  /** Same for a rule-based exit. */
+  exitRuleReason?: string;
+};
 
 export type StrategyPreview = {
   symbol: string;
@@ -40,6 +46,20 @@ function readableRule(node: ConditionNode): string {
       const label = LABEL_BY_DSL.get(name);
       return label ? `${label}(${args.replace(/,/g, ", ")})` : m;
     });
+}
+
+/**
+ * Why a rule fired on a given candle, in words. For an OR group only the parts
+ * that were actually true are named; for anything else the whole rule is.
+ */
+function firedParts(node: ConditionNode, candles: Candle[], aux: AuxCandleMap): (barIdx: number) => string {
+  const whole = readableRule(node);
+  if (node.kind !== "group" || node.op !== "OR" || node.children.length < 2) return () => whole;
+  const parts = node.children.map((child) => ({ text: readableRule(child), series: evaluateConditionsPerBar(candles, child, NEVER_EXIT_CONDITION, aux).entry }));
+  return (barIdx) => {
+    const hit = parts.filter((p) => p.series[barIdx]).map((p) => p.text);
+    return hit.length ? hit.join(" and ") : whole;
+  };
 }
 
 export type PreviewResult = { ok: true; preview: StrategyPreview } | { ok: false; error: string };
@@ -87,21 +107,29 @@ export async function computeStrategyPreview(userId: string | null, input: Strat
       aux,
     );
 
+    const entryWhy = firedParts(compiled.entryCondition, candles, aux);
+    const exitWhy = isNeverExitCondition(compiled.exitCondition) ? null : firedParts(compiled.exitCondition, candles, aux);
     return {
       ok: true,
       preview: {
         symbol: instrument.symbol,
         candles,
-        trades: result.trades.map(({ entryTime, entryPrice, exitTime, exitPrice, quantity, netPnl, netPnlPct, exitReason }) => ({
-          entryTime,
-          entryPrice,
-          exitTime,
-          exitPrice,
-          quantity,
-          netPnl,
-          netPnlPct,
-          exitReason,
-        })),
+        trades: result.trades.map(({ entryTime, entryPrice, exitTime, exitPrice, quantity, netPnl, netPnlPct, exitReason }) => {
+          // Fills happen at the next candle's open, so the rule was true on the candle before.
+          const signalBar = (t: number) => candles.findIndex((c) => c.time === t) - 1;
+          return {
+            entryTime,
+            entryPrice,
+            exitTime,
+            exitPrice,
+            quantity,
+            netPnl,
+            netPnlPct,
+            exitReason,
+            entryReason: entryWhy(signalBar(entryTime)),
+            ...(exitReason === "exit_rule" && exitWhy ? { exitRuleReason: exitWhy(signalBar(exitTime)) } : {}),
+          };
+        }),
         entryRule: readableRule(compiled.entryCondition),
         exitRule: isNeverExitCondition(compiled.exitCondition) ? null : readableRule(compiled.exitCondition),
         totalReturnPct: result.metrics.totalReturnPct,
