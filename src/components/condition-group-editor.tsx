@@ -9,6 +9,7 @@ import { VOLUME_PATTERN_CATALOG } from "@/lib/strategy/volume-pattern-catalog";
 import { INTERVALS } from "@/lib/market-data";
 import type { CandleInterval } from "@/lib/market-data";
 import CandlePatternIllustration from "@/components/candle-pattern-illustration";
+import ChartPatternIllustration from "@/components/chart-pattern-illustration";
 
 export interface InstrumentOption {
   id: string;
@@ -274,7 +275,8 @@ function SignalEditor({
 
   if (signal.family === "CHART_PATTERN") {
     return (
-      <div className="flex flex-wrap items-center gap-2 rounded-lg bg-brand-bg p-2">
+      <div className="space-y-2 rounded-lg bg-brand-bg p-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium text-brand-navy/60">Chart pattern is</span>
         <select
           className={inputClass}
@@ -296,6 +298,8 @@ function SignalEditor({
         <button type="button" onClick={onRemove} className="ml-auto text-xs text-brand-navy/40 hover:text-brand-sell">
           Remove
         </button>
+      </div>
+      <ChartPatternIllustration pattern={signal.pattern} />
       </div>
     );
   }

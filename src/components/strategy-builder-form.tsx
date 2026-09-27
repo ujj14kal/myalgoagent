@@ -13,6 +13,9 @@ import CandlePatternIllustration from "@/components/candle-pattern-illustration"
 import StrategyPreview from "@/components/strategy-preview";
 import { CANDLE_PATTERN_BY_KIND } from "@/lib/strategy/candle-pattern-catalog";
 import type { CandlePatternKind } from "@/lib/candle-patterns";
+import type { ChartPatternKind } from "@/lib/chart-patterns";
+import ChartPatternIllustration from "@/components/chart-pattern-illustration";
+import { CHART_PATTERN_BY_KIND } from "@/lib/strategy/chart-pattern-catalog";
 import { DEFAULT_SQUARE_OFF_MINUTE, STRATEGY_TIMEFRAMES, defaultProduct } from "@/lib/strategy/session";
 import { createStrategy, updateStrategy, autoSaveDraftStrategy, type StrategyInput } from "@/lib/strategy-actions";
 import { NEVER_EXIT_CONDITION, isNeverExitCondition, type FeasibilitySection } from "@/lib/strategy/types";
@@ -56,13 +59,22 @@ function toRiskLegState(enabled: boolean, unit: RiskUnit | null, value: number |
   return { enabled, unit: unit ?? "PERCENT", value: value ?? fallback };
 }
 
-/** Every distinct candle pattern (and where it must form) used anywhere in a condition tree. */
-function collectCandlePatterns(node: ConditionNode, out: { pattern: CandlePatternKind; atLevel?: "SUPPORT" | "RESISTANCE" }[] = []) {
-  if (node.kind === "group") node.children.forEach((c) => collectCandlePatterns(c, out));
-  else if (node.kind === "not") collectCandlePatterns(node.child, out);
-  else if (node.kind === "signal" && node.signal.family === "CANDLE_PATTERN") {
-    const { pattern, atLevel } = node.signal;
-    if (!out.some((p) => p.pattern === pattern && p.atLevel === atLevel)) out.push({ pattern, atLevel });
+type UsedPattern =
+  | { family: "CANDLE_PATTERN"; pattern: CandlePatternKind; atLevel?: "SUPPORT" | "RESISTANCE" }
+  | { family: "CHART_PATTERN"; pattern: ChartPatternKind };
+
+/** Every distinct candle and chart pattern used anywhere in a condition tree. */
+function collectPatterns(node: ConditionNode, out: UsedPattern[] = []) {
+  if (node.kind === "group") node.children.forEach((c) => collectPatterns(c, out));
+  else if (node.kind === "not") collectPatterns(node.child, out);
+  else if (node.kind === "signal") {
+    const sig = node.signal;
+    if (sig.family === "CANDLE_PATTERN" && !out.some((p) => p.family === "CANDLE_PATTERN" && p.pattern === sig.pattern && p.atLevel === sig.atLevel)) {
+      out.push({ family: "CANDLE_PATTERN", pattern: sig.pattern, atLevel: sig.atLevel });
+    }
+    if (sig.family === "CHART_PATTERN" && !out.some((p) => p.family === "CHART_PATTERN" && p.pattern === sig.pattern)) {
+      out.push({ family: "CHART_PATTERN", pattern: sig.pattern });
+    }
   }
   return out;
 }
@@ -484,8 +496,7 @@ export default function StrategyBuilderForm({
     }
   }
 
-  const usedCandlePatterns =
-    mode === "NO_CODE" ? collectCandlePatterns(exitConditionOpen ? exitCondition : NEVER_EXIT_CONDITION, collectCandlePatterns(entryCondition)) : [];
+  const usedPatterns = mode === "NO_CODE" ? collectPatterns(exitConditionOpen ? exitCondition : NEVER_EXIT_CONDITION, collectPatterns(entryCondition)) : [];
 
   return (
     <>
@@ -816,22 +827,29 @@ export default function StrategyBuilderForm({
           )}
         </BuilderSection>
 
-        {mode === "NO_CODE" && usedCandlePatterns.length > 0 && (
-          <BuilderSection step={5} title="Candle patterns in this strategy" subtitle="What each selected pattern looks like">
+        {mode === "NO_CODE" && usedPatterns.length > 0 && (
+          <BuilderSection step={5} title="Patterns in this strategy" subtitle="What each selected candle and chart pattern looks like, and when it fires">
             <div className="grid gap-3 lg:grid-cols-2">
-              {usedCandlePatterns.map((p) => (
-                <div key={`${p.pattern}:${p.atLevel ?? ""}`}>
-                  <p className="mb-1.5 text-xs font-semibold text-brand-navy/70">{CANDLE_PATTERN_BY_KIND.get(p.pattern)?.label ?? p.pattern}</p>
-                  <CandlePatternIllustration pattern={p.pattern} atLevel={p.atLevel} />
-                </div>
-              ))}
+              {usedPatterns.map((p) =>
+                p.family === "CANDLE_PATTERN" ? (
+                  <div key={`c:${p.pattern}:${p.atLevel ?? ""}`}>
+                    <p className="mb-1.5 text-xs font-semibold text-brand-navy/70">{CANDLE_PATTERN_BY_KIND.get(p.pattern)?.label ?? p.pattern} · candle pattern</p>
+                    <CandlePatternIllustration pattern={p.pattern} atLevel={p.atLevel} />
+                  </div>
+                ) : (
+                  <div key={`g:${p.pattern}`}>
+                    <p className="mb-1.5 text-xs font-semibold text-brand-navy/70">{CHART_PATTERN_BY_KIND.get(p.pattern)?.label ?? p.pattern} · chart pattern</p>
+                    <ChartPatternIllustration pattern={p.pattern} />
+                  </div>
+                ),
+              )}
             </div>
           </BuilderSection>
         )}
 
         {mode !== "WEBHOOK" && (
           <BuilderSection
-            step={mode === "NO_CODE" && usedCandlePatterns.length > 0 ? 6 : 5}
+            step={mode === "NO_CODE" && usedPatterns.length > 0 ? 6 : 5}
             title="See it in action"
             subtitle="Where this strategy would have entered and exited recently"
           >
