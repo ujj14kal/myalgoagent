@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, useState } from "react";
 import type { ComparisonOperator, ConditionNode, IndicatorKind, Operand, PriceField } from "@/lib/strategy";
 import { INDICATOR_CATALOG, INDICATOR_BY_KIND, operandsScaleCompatible } from "@/lib/strategy/indicator-catalog";
 import { CANDLE_PATTERN_CATALOG } from "@/lib/strategy/candle-pattern-catalog";
@@ -10,6 +10,9 @@ import { INTERVALS } from "@/lib/market-data";
 import type { CandleInterval } from "@/lib/market-data";
 import CandlePatternIllustration from "@/components/candle-pattern-illustration";
 import ChartPatternIllustration from "@/components/chart-pattern-illustration";
+import VolumePatternIllustration from "@/components/volume-pattern-illustration";
+import IndicatorIllustration from "@/components/indicator-illustration";
+import TimeWindowStrip from "@/components/time-window-strip";
 
 export interface InstrumentOption {
   id: string;
@@ -141,7 +144,8 @@ function SignalEditor({
   if (signal.family === "TIME_WINDOW" && purpose === "exit") {
     // "Exit at 15:15" = true from that time until the close.
     return (
-      <div className="flex flex-wrap items-center gap-2 rounded-lg bg-brand-bg p-2">
+      <div className="space-y-1 rounded-lg bg-brand-bg p-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium text-brand-navy/60">Exit time: close the position at</span>
         <input
           type="time"
@@ -154,12 +158,15 @@ function SignalEditor({
           Remove
         </button>
       </div>
+      <TimeWindowStrip startMinute={signal.startMinute} endMinute={signal.endMinute} kind="exit" />
+      </div>
     );
   }
 
   if (signal.family === "TIME_WINDOW") {
     return (
-      <div className="flex flex-wrap items-center gap-2 rounded-lg bg-brand-bg p-2">
+      <div className="space-y-1 rounded-lg bg-brand-bg p-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium text-brand-navy/60">{purpose === "entry" ? "Entry time: enter between" : "Time is between"}</span>
         <input
           type="time"
@@ -188,6 +195,8 @@ function SignalEditor({
         <button type="button" onClick={onRemove} className="ml-auto text-xs text-brand-navy/40 hover:text-brand-sell">
           Remove
         </button>
+      </div>
+      <TimeWindowStrip startMinute={signal.startMinute} endMinute={signal.endMinute} />
       </div>
     );
   }
@@ -306,7 +315,8 @@ function SignalEditor({
 
   if (signal.family === "VOLUME_PATTERN") {
     return (
-      <div className="flex flex-wrap items-center gap-2 rounded-lg bg-brand-bg p-2">
+      <div className="space-y-2 rounded-lg bg-brand-bg p-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium text-brand-navy/60">Volume pattern is</span>
         <select
           className={inputClass}
@@ -328,6 +338,8 @@ function SignalEditor({
         <button type="button" onClick={onRemove} className="ml-auto text-xs text-brand-navy/40 hover:text-brand-sell">
           Remove
         </button>
+      </div>
+      <VolumePatternIllustration pattern={signal.pattern} />
       </div>
     );
   }
@@ -480,8 +492,12 @@ function ComparisonEditor({
     onChange({ ...node, left, right });
   }
 
+  const indicators = [node.left, node.right].filter((o): o is Extract<Operand, { kind: "indicator" }> => o.kind === "indicator");
+  const unique = indicators.filter((o, i) => indicators.findIndex((x) => x.type === o.type) === i);
+
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg bg-brand-bg p-2">
+    <div className="rounded-lg bg-brand-bg p-2">
+    <div className="flex flex-wrap items-center gap-2">
       <OperandEditor value={node.left} onChange={handleLeftChange} instruments={instruments} other={node.right} />
       <select
         className={inputClass}
@@ -498,6 +514,28 @@ function ComparisonEditor({
       <button type="button" onClick={onRemove} className="ml-auto text-xs text-brand-navy/40 hover:text-brand-sell">
         Remove
       </button>
+    </div>
+    {unique.length > 0 && <IndicatorPictures operands={unique} />}
+    </div>
+  );
+}
+
+/** "What does RSI look like?" — pictures of the indicators in a comparison, on demand. */
+function IndicatorPictures({ operands }: { operands: Extract<Operand, { kind: "indicator" }>[] }) {
+  const [open, setOpen] = useState(false);
+  const names = operands.map((o) => INDICATOR_BY_KIND.get(o.type)?.label ?? o.type).join(" and ");
+  return (
+    <div className="mt-1.5">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="text-[11px] font-semibold text-brand-primary hover:underline">
+        {open ? `Hide the picture${operands.length > 1 ? "s" : ""}` : `What does ${names} look like?`}
+      </button>
+      {open && (
+        <div className="mt-1.5 grid gap-2 lg:grid-cols-2">
+          {operands.map((o) => (
+            <IndicatorIllustration key={o.type} kind={o.type} params={o.params} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

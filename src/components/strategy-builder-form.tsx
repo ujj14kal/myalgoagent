@@ -15,6 +15,12 @@ import { CANDLE_PATTERN_BY_KIND } from "@/lib/strategy/candle-pattern-catalog";
 import type { CandlePatternKind } from "@/lib/candle-patterns";
 import type { ChartPatternKind } from "@/lib/chart-patterns";
 import ChartPatternIllustration from "@/components/chart-pattern-illustration";
+import VolumePatternIllustration from "@/components/volume-pattern-illustration";
+import IndicatorIllustration from "@/components/indicator-illustration";
+import type { VolumePatternKind } from "@/lib/volume-patterns";
+import type { IndicatorKind } from "@/lib/strategy/types";
+import { VOLUME_PATTERN_BY_KIND } from "@/lib/strategy/volume-pattern-catalog";
+import { INDICATOR_BY_KIND } from "@/lib/strategy/indicator-catalog";
 import { CHART_PATTERN_BY_KIND } from "@/lib/strategy/chart-pattern-catalog";
 import { DEFAULT_SQUARE_OFF_MINUTE, STRATEGY_TIMEFRAMES, defaultProduct } from "@/lib/strategy/session";
 import { createStrategy, updateStrategy, autoSaveDraftStrategy, type StrategyInput } from "@/lib/strategy-actions";
@@ -61,19 +67,30 @@ function toRiskLegState(enabled: boolean, unit: RiskUnit | null, value: number |
 
 type UsedPattern =
   | { family: "CANDLE_PATTERN"; pattern: CandlePatternKind; atLevel?: "SUPPORT" | "RESISTANCE" }
-  | { family: "CHART_PATTERN"; pattern: ChartPatternKind };
+  | { family: "CHART_PATTERN"; pattern: ChartPatternKind }
+  | { family: "VOLUME_PATTERN"; pattern: VolumePatternKind }
+  | { family: "INDICATOR"; pattern: IndicatorKind; params: number[] };
 
-/** Every distinct candle and chart pattern used anywhere in a condition tree. */
+/** Every distinct pattern and indicator used anywhere in a condition tree. */
 function collectPatterns(node: ConditionNode, out: UsedPattern[] = []) {
   if (node.kind === "group") node.children.forEach((c) => collectPatterns(c, out));
   else if (node.kind === "not") collectPatterns(node.child, out);
-  else if (node.kind === "signal") {
+  else if (node.kind === "comparison") {
+    for (const o of [node.left, node.right]) {
+      if (o.kind === "indicator" && !out.some((p) => p.family === "INDICATOR" && p.pattern === o.type)) {
+        out.push({ family: "INDICATOR", pattern: o.type, params: o.params });
+      }
+    }
+  } else if (node.kind === "signal") {
     const sig = node.signal;
     if (sig.family === "CANDLE_PATTERN" && !out.some((p) => p.family === "CANDLE_PATTERN" && p.pattern === sig.pattern && p.atLevel === sig.atLevel)) {
       out.push({ family: "CANDLE_PATTERN", pattern: sig.pattern, atLevel: sig.atLevel });
     }
     if (sig.family === "CHART_PATTERN" && !out.some((p) => p.family === "CHART_PATTERN" && p.pattern === sig.pattern)) {
       out.push({ family: "CHART_PATTERN", pattern: sig.pattern });
+    }
+    if (sig.family === "VOLUME_PATTERN" && !out.some((p) => p.family === "VOLUME_PATTERN" && p.pattern === sig.pattern)) {
+      out.push({ family: "VOLUME_PATTERN", pattern: sig.pattern });
     }
   }
   return out;
@@ -828,7 +845,7 @@ export default function StrategyBuilderForm({
         </BuilderSection>
 
         {mode === "NO_CODE" && usedPatterns.length > 0 && (
-          <BuilderSection step={5} title="Patterns in this strategy" subtitle="What each selected candle and chart pattern looks like, and when it fires">
+          <BuilderSection step={5} title="What's in this strategy" subtitle="What each indicator and pattern in your rules looks like, and when it fires">
             <div className="grid gap-3 lg:grid-cols-2">
               {usedPatterns.map((p) =>
                 p.family === "CANDLE_PATTERN" ? (
@@ -836,10 +853,20 @@ export default function StrategyBuilderForm({
                     <p className="mb-1.5 text-xs font-semibold text-brand-navy/70">{CANDLE_PATTERN_BY_KIND.get(p.pattern)?.label ?? p.pattern} · candle pattern</p>
                     <CandlePatternIllustration pattern={p.pattern} atLevel={p.atLevel} />
                   </div>
-                ) : (
+                ) : p.family === "CHART_PATTERN" ? (
                   <div key={`g:${p.pattern}`}>
                     <p className="mb-1.5 text-xs font-semibold text-brand-navy/70">{CHART_PATTERN_BY_KIND.get(p.pattern)?.label ?? p.pattern} · chart pattern</p>
                     <ChartPatternIllustration pattern={p.pattern} />
+                  </div>
+                ) : p.family === "VOLUME_PATTERN" ? (
+                  <div key={`v:${p.pattern}`}>
+                    <p className="mb-1.5 text-xs font-semibold text-brand-navy/70">{VOLUME_PATTERN_BY_KIND.get(p.pattern)?.label ?? p.pattern} · volume pattern</p>
+                    <VolumePatternIllustration pattern={p.pattern} />
+                  </div>
+                ) : (
+                  <div key={`i:${p.pattern}`}>
+                    <p className="mb-1.5 text-xs font-semibold text-brand-navy/70">{INDICATOR_BY_KIND.get(p.pattern)?.label ?? p.pattern} · indicator</p>
+                    <IndicatorIllustration kind={p.pattern} params={p.params} />
                   </div>
                 ),
               )}
