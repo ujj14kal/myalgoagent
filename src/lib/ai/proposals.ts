@@ -33,6 +33,10 @@ export type AgentProposal =
         timeframe?: string;
         noEntryAfterMinute?: number | null;
         squareOffMinute?: number | null;
+        productType?: string;
+        orderType?: string;
+        limitMode?: string | null;
+        limitValue?: number | null;
         /** TradingView-webhook strategy — rules come from alerts, not conditions. */
         webhook?: boolean;
         stopLoss: RiskLegDraft;
@@ -149,6 +153,10 @@ export function toStrategyInput(
     timeframe: d.timeframe ?? "1d",
     noEntryAfterMinute: d.noEntryAfterMinute ?? null,
     squareOffMinute: d.squareOffMinute ?? null,
+    productType: d.productType,
+    orderType: d.orderType ?? "MARKET",
+    limitMode: d.limitMode ?? null,
+    limitValue: d.limitValue ?? null,
   };
   if (d.webhook) return { ...common, mode: "WEBHOOK" };
   if (d.entryCondition) {

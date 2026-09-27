@@ -239,6 +239,13 @@ model Strategy {
   // IST minute of day: no new entries at/after it; open positions squared off at it.
   noEntryAfterMinute  Int?
   squareOffMinute     Int?
+  // INTRADAY (squared off the same day) or DELIVERY (may be held overnight, long only).
+  productType         String             @default("DELIVERY")
+  // Entry orders: MARKET (next candle's open) or LIMIT (a DAY order at a % from the
+  // signal price, or a fixed ₹ price).
+  orderType           String             @default("MARKET")
+  limitMode           String?
+  limitValue          Float?
   status              StrategyStatus     @default(DRAFT)
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
@@ -293,6 +300,13 @@ model BacktestRun {
   // IST minute of day: no new entries at/after it; open positions squared off at it.
   noEntryAfterMinute  Int?
   squareOffMinute     Int?
+  // INTRADAY (squared off the same day) or DELIVERY (may be held overnight, long only).
+  productType         String             @default("DELIVERY")
+  // Entry orders: MARKET (next candle's open) or LIMIT (a DAY order at a % from the
+  // signal price, or a fixed ₹ price).
+  orderType           String             @default("MARKET")
+  limitMode           String?
+  limitValue          Float?
   range               String
   entryCondition      Json
   exitCondition       Json
@@ -370,6 +384,17 @@ model PaperSession {
   // IST minute of day: no new entries at/after it; open positions squared off at it.
   noEntryAfterMinute  Int?
   squareOffMinute     Int?
+  // INTRADAY (squared off the same day) or DELIVERY (may be held overnight, long only).
+  productType         String             @default("DELIVERY")
+  // Entry orders: MARKET (next candle's open) or LIMIT (a DAY order at a % from the
+  // signal price, or a fixed ₹ price).
+  orderType           String             @default("MARKET")
+  limitMode           String?
+  limitValue          Float?
+  // A resting limit entry order carried between syncs.
+  pendingLimitPrice      Float?
+  pendingLimitExpiresDay Int?
+  pendingLimitFromTime   Int?
   // Alert-only sessions detect and notify on entry/exit signals without
   // ever placing an order or touching cash/position state.
   alertOnly                Boolean            @default(false)

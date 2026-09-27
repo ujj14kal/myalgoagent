@@ -13,7 +13,7 @@ import CandlePatternIllustration from "@/components/candle-pattern-illustration"
 import StrategyPreview from "@/components/strategy-preview";
 import { CANDLE_PATTERN_BY_KIND } from "@/lib/strategy/candle-pattern-catalog";
 import type { CandlePatternKind } from "@/lib/candle-patterns";
-import { DEFAULT_SQUARE_OFF_MINUTE, STRATEGY_TIMEFRAMES } from "@/lib/strategy/session";
+import { DEFAULT_SQUARE_OFF_MINUTE, STRATEGY_TIMEFRAMES, defaultProduct } from "@/lib/strategy/session";
 import { createStrategy, updateStrategy, autoSaveDraftStrategy, type StrategyInput } from "@/lib/strategy-actions";
 import { NEVER_EXIT_CONDITION, isNeverExitCondition, type FeasibilitySection } from "@/lib/strategy/types";
 import { consumeDraftReminderSkip, setDraftReminderSkipCount } from "@/lib/draft-reminder";
@@ -133,6 +133,48 @@ interface StrategyInitial {
   timeframe?: string;
   noEntryAfterMinute?: number | null;
   squareOffMinute?: number | null;
+  productType?: string;
+  orderType?: string;
+  limitMode?: string | null;
+  limitValue?: number | null;
+}
+
+/** A row of pill buttons for one choice. */
+function PillChoice<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: { value: T; label: string; disabled?: boolean; note?: string }[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">{label}</label>
+      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={label}>
+        {options.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={value === o.value}
+            disabled={o.disabled}
+            title={o.note}
+            onClick={() => onChange(o.value)}
+            className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+              value === o.value ? "border-brand-primary bg-brand-primary text-white" : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
+            }`}
+          >
+            {o.label}
+            {o.note && <span className="ml-1 font-normal opacity-70">· {o.note}</span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 const minutesToTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
@@ -221,6 +263,19 @@ export default function StrategyBuilderForm({
     initial ? (initial.squareOffMinute ?? null) : DEFAULT_SQUARE_OFF_MINUTE,
   );
   const intraday = timeframe !== "1d";
+  const [productType, setProductType] = useState<"INTRADAY" | "DELIVERY">(
+    initial?.productType === "INTRADAY" || initial?.productType === "DELIVERY" ? initial.productType : defaultProduct(initial?.timeframe ?? "1d"),
+  );
+  const [orderType, setOrderType] = useState<"MARKET" | "LIMIT">(initial?.orderType === "LIMIT" ? "LIMIT" : "MARKET");
+  const [limitMode, setLimitMode] = useState<"PERCENT" | "PRICE">(initial?.limitMode === "PRICE" ? "PRICE" : "PERCENT");
+  const [limitValue, setLimitValue] = useState<number | null>(initial?.limitValue ?? 0.2);
+
+  /** Daily candles can only be Delivery; moving to an intraday timeframe suggests Intraday. */
+  function chooseTimeframe(tf: string) {
+    if (tf === "1d") setProductType("DELIVERY");
+    else if (timeframe === "1d") setProductType("INTRADAY");
+    setTimeframe(tf);
+  }
   const [stopLoss, setStopLoss] = useState<RiskLegState>(
     toRiskLegState(initial?.stopLossEnabled ?? false, initial?.stopLossUnit ?? null, initial?.stopLossValue ?? null, 2),
   );
@@ -365,7 +420,11 @@ export default function StrategyBuilderForm({
       maxPyramidEntries,
       timeframe,
       noEntryAfterMinute: intraday ? noEntryAfterMinute : null,
-      squareOffMinute: intraday ? squareOffMinute : null,
+      squareOffMinute: intraday && productType === "INTRADAY" ? squareOffMinute : null,
+      productType,
+      orderType,
+      limitMode: orderType === "LIMIT" ? limitMode : null,
+      limitValue: orderType === "LIMIT" ? limitValue : null,
     };
   }
   useEffect(() => {
@@ -528,7 +587,7 @@ export default function StrategyBuilderForm({
                       type="button"
                       role="radio"
                       aria-checked={timeframe === t.value}
-                      onClick={() => setTimeframe(t.value)}
+                      onClick={() => chooseTimeframe(t.value)}
                       className={`min-w-[44px] rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
                         timeframe === t.value ? "border-brand-primary bg-brand-primary text-white" : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
                       }`}
@@ -544,6 +603,81 @@ export default function StrategyBuilderForm({
                       } for backtests on the current data source.`
                     : "Checks the rules once per day, on each daily candle."}
                 </p>
+              </div>
+            )}
+            {mode !== "WEBHOOK" && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <PillChoice
+                    label="Product"
+                    value={productType}
+                    onChange={(v) => setProductType(v as "INTRADAY" | "DELIVERY")}
+                    options={[
+                      { value: "INTRADAY", label: "Intraday", disabled: !intraday, note: !intraday ? "needs 1m–4H" : undefined },
+                      { value: "DELIVERY", label: "Delivery" },
+                      { value: "MTF" as "DELIVERY", label: "MTF", disabled: true, note: "coming soon" },
+                    ]}
+                  />
+                  <p className="mt-1.5 text-xs text-brand-navy/40">
+                    {productType === "INTRADAY"
+                      ? "Squared off the same day — never held overnight."
+                      : "Can be held overnight. Long only: short positions can't be carried overnight in the cash market."}
+                  </p>
+                  {productType === "DELIVERY" && direction === "SHORT" && (
+                    <p className="mt-1.5 text-xs font-medium text-brand-sell">Delivery can&apos;t be short — choose Intraday or Buy (Long).</p>
+                  )}
+                </div>
+                <div>
+                  <PillChoice
+                    label="Entry order"
+                    value={orderType}
+                    onChange={(v) => setOrderType(v)}
+                    options={[
+                      { value: "MARKET", label: "At market" },
+                      { value: "LIMIT", label: "Limit" },
+                    ]}
+                  />
+                  {orderType === "MARKET" ? (
+                    <p className="mt-1.5 text-xs text-brand-navy/40">Fills at the next candle&apos;s open after the entry rule fires.</p>
+                  ) : (
+                    <div className="mt-2 space-y-2">
+                      <div className="flex w-fit overflow-hidden rounded-full border border-brand-navy/15">
+                        {(["PERCENT", "PRICE"] as const).map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => {
+                              setLimitMode(m);
+                              setLimitValue(m === "PERCENT" ? 0.2 : null);
+                            }}
+                            className={`px-3 py-1 text-xs font-medium ${limitMode === m ? "bg-brand-primary text-white" : "text-brand-navy/60 hover:bg-brand-bg"}`}
+                          >
+                            {m === "PERCENT" ? "% from signal price" : "Fixed price (₹)"}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex max-w-xs items-center gap-2">
+                        {limitMode === "PRICE" && <span className="text-sm text-brand-navy/50">₹</span>}
+                        <input
+                          type="number"
+                          min={0}
+                          step={limitMode === "PERCENT" ? 0.05 : 0.05}
+                          value={limitValue ?? ""}
+                          aria-label={limitMode === "PERCENT" ? "Limit, % from the signal price" : "Limit price in rupees"}
+                          onChange={(e) => setLimitValue(e.target.value === "" ? null : Number(e.target.value))}
+                          className="w-full rounded-lg border border-brand-navy/15 px-3 py-2 text-sm outline-none focus:border-brand-primary"
+                        />
+                        {limitMode === "PERCENT" && <span className="text-sm text-brand-navy/50">%</span>}
+                      </div>
+                      <p className="text-xs text-brand-navy/40">
+                        {limitMode === "PERCENT"
+                          ? `A ${direction === "LONG" ? "buy" : "sell"} limit ${direction === "LONG" ? "below" : "above"} the signal candle's close by this much.`
+                          : `A ${direction === "LONG" ? "buy" : "sell"} limit at this exact price.`}{" "}
+                        It fills when price reaches it (or better) and is cancelled at the end of the day if it doesn&apos;t. Exits stay at market.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
             <PositionSizingFields
@@ -664,6 +798,7 @@ export default function StrategyBuilderForm({
                 fallback={14 * 60 + 30}
                 onChange={setNoEntryAfterMinute}
               />
+              {productType === "INTRADAY" && (
               <SessionTimeField
                 label="Square off at"
                 hint="Open positions close at this time. Intraday positions are never carried overnight."
@@ -671,6 +806,7 @@ export default function StrategyBuilderForm({
                 fallback={DEFAULT_SQUARE_OFF_MINUTE}
                 onChange={setSquareOffMinute}
               />
+              )}
             </div>
           )}
           {mode !== "WEBHOOK" && (

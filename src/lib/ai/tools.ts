@@ -112,6 +112,10 @@ export const AGENT_TOOLS: MantleTool[] = [
           max_entries: { type: "number", description: "Max entries per position (pyramiding); default 1" },
           timeframe: { type: "string", enum: ["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d"], description: "Candle timeframe the strategy runs on. Use an intraday one (1m–4h) whenever the rules involve times of day; default 1d." },
           no_entry_after: { type: ["string", "null"], description: "Intraday only: no new entries at/after this IST time, e.g. \"14:30\"" },
+          product: { type: "string", enum: ["intraday", "delivery"], description: "Intraday (squared off the same day; needs a 1m–4h timeframe; required for short selling) or delivery (may be held overnight, long only). Default: intraday for intraday timeframes, delivery for 1d. MTF isn't available yet." },
+          order_type: { type: "string", enum: ["market", "limit"], description: "Entry order type; default market" },
+          limit_percent: { type: "number", description: "Limit entries: % better than the signal candle's close (buy below / short above), e.g. 0.2" },
+          limit_price: { type: "number", description: "Limit entries: a fixed ₹ price instead of a %" },
           square_off_at: { type: ["string", "null"], description: "Intraday only: close open positions at this IST time, e.g. \"15:20\" (default 15:20 for intraday; positions are never carried overnight)" },
           stop_loss: riskLegSchema,
           take_profit: riskLegSchema,
@@ -252,6 +256,10 @@ export const AGENT_TOOLS: MantleTool[] = [
           max_entries: { type: "number" },
           timeframe: { type: "string", enum: ["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d"], description: "Candle timeframe the strategy runs on. Use an intraday one (1m–4h) whenever the rules involve times of day; default 1d." },
           no_entry_after: { type: ["string", "null"], description: "Intraday only: no new entries at/after this IST time, e.g. \"14:30\"" },
+          product: { type: "string", enum: ["intraday", "delivery"], description: "Intraday (squared off the same day; needs a 1m–4h timeframe; required for short selling) or delivery (may be held overnight, long only). Default: intraday for intraday timeframes, delivery for 1d. MTF isn't available yet." },
+          order_type: { type: "string", enum: ["market", "limit"], description: "Entry order type; default market" },
+          limit_percent: { type: "number", description: "Limit entries: % better than the signal candle's close (buy below / short above), e.g. 0.2" },
+          limit_price: { type: "number", description: "Limit entries: a fixed ₹ price instead of a %" },
           square_off_at: { type: ["string", "null"], description: "Intraday only: close open positions at this IST time, e.g. \"15:20\" (default 15:20 for intraday; positions are never carried overnight)" },
         },
         required: ["strategy"],
@@ -408,6 +416,24 @@ function clockArg(v: unknown): number | null | undefined {
 }
 
 const STRATEGY_TF = ["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d"];
+
+/** product / order_type / limit_* arguments → the saved order fields (undefined = unchanged). */
+function orderArgs(a: Record<string, unknown>) {
+  const out: { productType?: string; orderType?: string; limitMode?: string | null; limitValue?: number | null } = {};
+  const product = String(a.product ?? "").toLowerCase();
+  if (product === "mtf") throw new Error("MTF (margin) orders aren't available yet — they'll come with broker integration. Use intraday or delivery.");
+  if (product === "intraday" || product === "delivery") out.productType = product.toUpperCase();
+  const pct = num(a.limit_percent);
+  const price = num(a.limit_price);
+  const type = String(a.order_type ?? "").toLowerCase();
+  if (type === "market") Object.assign(out, { orderType: "MARKET", limitMode: null, limitValue: null });
+  if (type === "limit" || pct !== undefined || price !== undefined) {
+    if (price !== undefined) Object.assign(out, { orderType: "LIMIT", limitMode: "PRICE", limitValue: price });
+    else if (pct !== undefined) Object.assign(out, { orderType: "LIMIT", limitMode: "PERCENT", limitValue: pct });
+    else throw new Error("A limit order needs limit_percent (e.g. 0.2) or limit_price (in ₹).");
+  }
+  return out;
+}
 function timeframeArg(v: unknown): string | undefined {
   if (v === undefined || v === null || v === "") return undefined;
   const tf = String(v).toLowerCase().replace(/^1h$/, "60m");
@@ -457,7 +483,17 @@ async function proposeStrategy(userId: string, a: Record<string, unknown>): Prom
     const intraday = timeframe !== "1d";
     const noEntry = clockArg(a.no_entry_after);
     const squareOff = clockArg(a.square_off_at);
-    session = { timeframe, noEntryAfterMinute: intraday ? noEntry ?? null : null, squareOffMinute: intraday ? (squareOff === undefined ? 15 * 60 + 20 : squareOff) : null };
+    const order = orderArgs(a);
+    const productType = order.productType ?? (intraday ? "INTRADAY" : "DELIVERY");
+    session = {
+      timeframe,
+      noEntryAfterMinute: intraday ? noEntry ?? null : null,
+      squareOffMinute: intraday && productType === "INTRADAY" ? (squareOff === undefined ? 15 * 60 + 20 : squareOff) : null,
+      productType,
+      orderType: order.orderType ?? "MARKET",
+      limitMode: order.limitMode ?? null,
+      limitValue: order.limitValue ?? null,
+    };
   } catch (err) {
     return { result: { error: `${readableIssues(err)} Fix it and call propose_strategy again.` } };
   }
@@ -551,7 +587,12 @@ async function proposeStrategyUpdate(userId: string, a: Record<string, unknown>)
     const intraday = timeframe !== "1d";
     const noEntry = clockArg(a.no_entry_after);
     const squareOff = clockArg(a.square_off_at);
+    const order = orderArgs(a);
     updSession = {
+      productType: order.productType ?? (a.timeframe !== undefined && timeframe !== s.timeframe ? (intraday ? "INTRADAY" : "DELIVERY") : s.productType),
+      orderType: order.orderType ?? s.orderType,
+      limitMode: order.orderType !== undefined ? order.limitMode ?? null : s.limitMode,
+      limitValue: order.orderType !== undefined ? order.limitValue ?? null : s.limitValue,
       timeframe,
       noEntryAfterMinute: intraday ? (noEntry === undefined ? s.noEntryAfterMinute : noEntry) : null,
       squareOffMinute: intraday ? (squareOff === undefined ? (s.squareOffMinute ?? (s.timeframe === "1d" ? 15 * 60 + 20 : null)) : squareOff) : null,
@@ -635,6 +676,8 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
           timeframe: r.timeframe,
           noEntryAfter: r.noEntryAfterMinute,
           squareOffAt: r.squareOffMinute,
+          product: r.productType,
+          entryOrder: r.orderType === "LIMIT" ? `limit ${r.limitMode === "PRICE" ? `₹${r.limitValue}` : `${r.limitValue}% from signal price`}` : "market",
         })),
       };
     }

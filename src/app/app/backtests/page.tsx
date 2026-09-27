@@ -52,6 +52,10 @@ export default async function BacktestsPage() {
             timeframe: s.timeframe,
             noEntryAfterMinute: s.noEntryAfterMinute,
             squareOffMinute: s.squareOffMinute,
+            productType: s.productType,
+            orderType: s.orderType,
+            limitMode: s.limitMode,
+            limitValue: s.limitValue,
           }))}
         />
       </div>

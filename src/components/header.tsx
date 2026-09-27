@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Logo from "@/components/logo";
 import SiteMobileMenu from "@/components/site-mobile-menu";
+import SiteNavLinks from "@/components/site-nav-links";
 
 const links = [
   { href: "/product", label: "Product" },
@@ -17,11 +18,7 @@ export default function Header() {
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
         <Logo />
         <nav aria-label="Primary" className="hidden items-center gap-7 md:flex">
-          {links.map((l) => (
-            <Link key={l.href} href={l.href} className="text-sm font-medium text-brand-navy/70 transition-colors hover:text-brand-primary">
-              {l.label}
-            </Link>
-          ))}
+          <SiteNavLinks links={links} />
         </nav>
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           <Link href="/login" className="hidden text-sm font-semibold text-brand-navy/80 hover:text-brand-primary md:inline">

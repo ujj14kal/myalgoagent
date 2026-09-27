@@ -48,6 +48,9 @@ export function explainPaperOrder(o: NewPaperOrder, c: ExplainContext): string {
 
   switch (o.reason) {
     case "entry_rule":
+      if (o.viaLimit) {
+        return `${head} — your entry rule (${clip(c.entryRule)}) fired, and your limit order filled on ${day(o.time)} at ${inr(o.price)} (your limit or better).`;
+      }
       return `${head} — your entry rule (${clip(c.entryRule)}) was true at the close on ${day(o.signalTime)}, so it filled at the next open.`;
     case "pyramid":
       return `${head} — your entry rule fired again on ${day(o.signalTime)} while the position was open, so it added to it.`;

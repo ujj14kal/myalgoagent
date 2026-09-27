@@ -480,6 +480,7 @@ function StrategyFields({
               onChange({
                 ...draft,
                 timeframe,
+                productType: intraday ? draft.productType ?? "INTRADAY" : "DELIVERY",
                 noEntryAfterMinute: intraday ? draft.noEntryAfterMinute ?? null : null,
                 squareOffMinute: intraday ? draft.squareOffMinute ?? DEFAULT_SQUARE_OFF_MINUTE : null,
               });
@@ -512,6 +513,46 @@ function StrategyFields({
               />
             </Field>
           </>
+        )}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Field label="Product">
+          <select
+            value={draft.productType ?? ((draft.timeframe ?? "1d") === "1d" ? "DELIVERY" : "INTRADAY")}
+            onChange={(e) => set("productType", e.target.value)}
+            className={inputCls}
+          >
+            <option value="INTRADAY" disabled={(draft.timeframe ?? "1d") === "1d"}>
+              Intraday
+            </option>
+            <option value="DELIVERY">Delivery</option>
+            <option value="MTF" disabled>
+              MTF (coming soon)
+            </option>
+          </select>
+        </Field>
+        <Field label="Entry order">
+          <select
+            value={draft.orderType === "LIMIT" ? (draft.limitMode === "PRICE" ? "PRICE" : "PERCENT") : "MARKET"}
+            onChange={(e) => {
+              const v = e.target.value;
+              onChange(
+                v === "MARKET"
+                  ? { ...draft, orderType: "MARKET", limitMode: null, limitValue: null }
+                  : { ...draft, orderType: "LIMIT", limitMode: v, limitValue: v === "PERCENT" ? draft.limitValue ?? 0.2 : null },
+              );
+            }}
+            className={inputCls}
+          >
+            <option value="MARKET">At market</option>
+            <option value="PERCENT">Limit, % from signal price</option>
+            <option value="PRICE">Limit, fixed price (₹)</option>
+          </select>
+        </Field>
+        {draft.orderType === "LIMIT" && (
+          <Field label={draft.limitMode === "PRICE" ? "Limit price (₹)" : "Limit (%)"}>
+            <NumberInput value={draft.limitValue ?? null} onChange={(v) => set("limitValue", v)} />
+          </Field>
         )}
       </div>
       <Field label="Max entries per position (pyramiding)" className="sm:w-1/2">

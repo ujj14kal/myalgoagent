@@ -14,6 +14,7 @@ import {
   type RiskManagementConfig,
   type StrategyDirection,
   type IntradaySession,
+  type EntryOrder,
 } from "@/lib/trading-engine/step";
 
 const DEFAULT_ATR_PERIOD = 14;
@@ -27,6 +28,7 @@ export interface BacktestConfig {
   maxPyramidEntries?: number;
   direction?: StrategyDirection;
   session?: IntradaySession;
+  entryOrder?: EntryOrder;
 }
 
 function usesAtr(rm: RiskManagementConfig | undefined): boolean {
@@ -160,6 +162,7 @@ export function runBacktest(
     maxPyramidEntries: config.maxPyramidEntries,
     direction: config.direction,
     session: config.session,
+    entryOrder: config.entryOrder,
   };
 
   const trades: BacktestTradeResult[] = [];

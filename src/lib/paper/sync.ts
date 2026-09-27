@@ -1,5 +1,5 @@
 import type { CandleInterval, MarketDataProvider } from "@/lib/market-data";
-import { engineSession, paperSyncRange } from "@/lib/strategy/session";
+import { engineEntryOrder, engineSession, paperSyncRange } from "@/lib/strategy/session";
 import { evaluateConditionsPerBar } from "@/lib/strategy";
 import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
 import { fetchAuxCandles } from "@/lib/strategy-aux-data";
@@ -32,6 +32,14 @@ export interface PaperSessionState {
   timeframe?: string;
   noEntryAfterMinute?: number | null;
   squareOffMinute?: number | null;
+  productType?: string;
+  orderType?: string;
+  limitMode?: string | null;
+  limitValue?: number | null;
+  /** A resting limit entry order from the previous sync, if any. */
+  pendingLimitPrice?: number | null;
+  pendingLimitExpiresDay?: number | null;
+  pendingLimitFromTime?: number | null;
   // When true, entry/exit signals are detected and reported but never
   // acted on — no order is placed, cash/position never change. Lets a
   // user watch a strategy's signals fire before trusting it with money.
@@ -64,6 +72,8 @@ export interface NewPaperOrder {
   reason: "entry_rule" | "pyramid" | ExitReason;
   /** The bar whose close triggered it (rule-based fills happen at the next bar's open). */
   signalTime: number;
+  /** An entry filled by a limit order (at the limit or better), not at market. */
+  viaLimit?: boolean;
 }
 
 export interface SignalAlert {
@@ -86,6 +96,8 @@ export interface SyncResult {
     pyramidCount: number;
   } | null;
   lastSyncedTime: number | null;
+  /** A limit entry order still resting at the end of this sync (saved for the next one). */
+  pendingEntry: { limitPrice: number; expiresDay: number; fromTime: number } | null;
   suppressedEntrySignal: boolean;
   sizeTooSmall: boolean;
   equity: number;
@@ -123,6 +135,7 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
       cash: session.cash,
       position: null,
       lastSyncedTime,
+      pendingEntry: null,
       suppressedEntrySignal: false,
       sizeTooSmall: false,
       equity: session.cash,
@@ -153,6 +166,10 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
             pyramidCount: session.positionPyramidCount ?? 1,
           }
         : null,
+    pendingEntry:
+      session.pendingLimitPrice != null && session.pendingLimitExpiresDay != null && session.pendingLimitFromTime != null
+        ? { limitPrice: session.pendingLimitPrice, expiresDay: session.pendingLimitExpiresDay, fromTime: session.pendingLimitFromTime }
+        : null,
   };
 
   let atrByTime: Map<number, number> | null = null;
@@ -171,9 +188,10 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
     maxPyramidEntries: session.maxPyramidEntries ?? DEFAULT_MAX_PYRAMID_ENTRIES,
     direction: session.direction,
     session: engineSession(
-      { timeframe, noEntryAfterMinute: session.noEntryAfterMinute ?? null, squareOffMinute: session.squareOffMinute ?? null },
+      { timeframe, noEntryAfterMinute: session.noEntryAfterMinute ?? null, squareOffMinute: session.squareOffMinute ?? null, productType: session.productType },
       session.entryCondition,
     ),
+    entryOrder: engineEntryOrder({ orderType: session.orderType ?? "MARKET", limitMode: session.limitMode ?? null, limitValue: session.limitValue ?? null }),
   };
   // A long opens with a BUY and closes with a SELL; a short is the mirror.
   const openSide = session.direction === "SHORT" ? "SELL" : "BUY";
@@ -218,6 +236,7 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
         netPnl: null,
         reason: "entry_rule",
         signalTime: candles[i].time,
+        viaLimit: engineConfig.entryOrder?.type === "LIMIT",
       });
     } else if (!wasFlat && state.position && state.position.quantity > prevQuantity) {
       // A pyramid add — reconstruct this leg's own fill price from the
@@ -256,6 +275,7 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
         }
       : null,
     lastSyncedTime,
+    pendingEntry: state.pendingEntry ?? null,
     suppressedEntrySignal,
     sizeTooSmall,
     equity: candles.length > 0 ? markToMarket(candles, candles.length - 1, state, session.direction) : state.cash,

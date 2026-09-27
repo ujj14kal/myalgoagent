@@ -33,6 +33,12 @@ export interface StrategyInput {
   noEntryAfterMinute?: number | null;
   /** Intraday only (IST minute of day): open positions are closed at it. */
   squareOffMinute?: number | null;
+  /** INTRADAY or DELIVERY (MTF: later, per broker); omitted = from the timeframe. */
+  productType?: string;
+  /** MARKET (default) or LIMIT; a limit is a % from the signal price or a fixed ₹ price. */
+  orderType?: string;
+  limitMode?: string | null;
+  limitValue?: number | null;
 }
 
 function riskFields(input: StrategyInput) {

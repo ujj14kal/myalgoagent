@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/logger";
 import { compile } from "@/lib/strategy-compile";
 import { isIntraday, marketDataFor, type Candle } from "@/lib/market-data";
-import { STRATEGY_TIMEFRAMES, engineSession, normalizeSession, rangeFor } from "@/lib/strategy/session";
+import { STRATEGY_TIMEFRAMES, engineEntryOrder, engineSession, normalizeSession, rangeFor } from "@/lib/strategy/session";
 import { fetchAuxCandles } from "@/lib/strategy-aux-data";
 import { runBacktest, type BacktestTradeResult } from "@/lib/backtest/run";
 import { conditionToText } from "@/lib/strategy/format";
@@ -37,6 +37,7 @@ export type StrategyPreview = {
   timeframeLabel: string;
   periodLabel: string;
   intraday: boolean;
+  entryOrderLabel: string;
 };
 
 const PERIOD_LABEL: Partial<Record<string, string>> = { "1d": "1 day", "5d": "5 days", "1mo": "1 month", "3mo": "3 months", "6mo": "6 months", "1y": "1 year" };
@@ -116,6 +117,7 @@ export async function computeStrategyPreview(userId: string | null, input: Strat
         maxPyramidEntries: input.maxPyramidEntries,
         direction: input.direction,
         session: engineSession(session, compiled.entryCondition),
+        entryOrder: engineEntryOrder(session),
       },
       aux,
     );
@@ -152,6 +154,12 @@ export async function computeStrategyPreview(userId: string | null, input: Strat
         timeframeLabel: STRATEGY_TIMEFRAMES.find((t) => t.value === timeframe)?.label ?? timeframe,
         periodLabel: PERIOD_LABEL[range] ?? range,
         intraday: isIntraday(timeframe),
+        entryOrderLabel:
+          session.orderType === "LIMIT" && session.limitValue != null
+            ? session.limitMode === "PRICE"
+              ? `limit orders at ₹${session.limitValue}`
+              : `limit orders ${session.limitValue}% from the signal price`
+            : "market orders",
       },
     };
   } catch (err) {

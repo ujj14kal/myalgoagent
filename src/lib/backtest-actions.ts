@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { marketDataFor, type CandleInterval, type CandleRange } from "@/lib/market-data";
-import { engineSession, rangeFor } from "@/lib/strategy/session";
+import { engineEntryOrder, engineSession, rangeFor } from "@/lib/strategy/session";
 import { runBacktest } from "@/lib/backtest/run";
 import { fetchAuxCandles } from "@/lib/strategy-aux-data";
 import { enforceRateLimit } from "@/lib/rate-limit";
@@ -94,6 +94,7 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
         maxPyramidEntries: strategy.maxPyramidEntries,
         direction: strategy.direction,
         session: engineSession(strategy, entryCondition),
+        entryOrder: engineEntryOrder(strategy),
       },
       aux,
     );
@@ -124,6 +125,10 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
         timeframe: strategy.timeframe,
         noEntryAfterMinute: strategy.noEntryAfterMinute,
         squareOffMinute: strategy.squareOffMinute,
+        productType: strategy.productType,
+        orderType: strategy.orderType,
+        limitMode: strategy.limitMode,
+        limitValue: strategy.limitValue,
         entryCondition: entryCondition as unknown as Prisma.InputJsonValue,
         exitCondition: exitCondition as unknown as Prisma.InputJsonValue,
         totalReturnPct: result.metrics.totalReturnPct,

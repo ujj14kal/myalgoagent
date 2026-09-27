@@ -16,6 +16,10 @@ export interface StrategyExecutionConfig {
   timeframe?: string;
   noEntryAfterMinute?: number | null;
   squareOffMinute?: number | null;
+  productType?: string;
+  orderType?: string;
+  limitMode?: string | null;
+  limitValue?: number | null;
 }
 
 const TIMEFRAME_LABEL: Record<string, string> = { "1m": "1-minute", "3m": "3-minute", "5m": "5-minute", "15m": "15-minute", "30m": "30-minute", "60m": "1-hour", "4h": "4-hour", "1d": "daily" };
@@ -46,6 +50,10 @@ const SIZING_LABEL: Record<PositionSizingMode, string> = {
 export function describeExecutionConfig(config: StrategyExecutionConfig): string {
   const parts: string[] = [];
   if (config.timeframe) parts.push(`${TIMEFRAME_LABEL[config.timeframe] ?? config.timeframe} candles`);
+  if (config.productType) parts.push(config.productType === "INTRADAY" ? "intraday" : "delivery");
+  if (config.orderType === "LIMIT" && config.limitValue != null) {
+    parts.push(config.limitMode === "PRICE" ? `limit entry at ₹${config.limitValue}` : `limit entry ${config.limitValue}% from the signal price`);
+  }
 
   const sizing = SIZING_LABEL[config.positionSizingMode];
   parts.push(

@@ -34,10 +34,12 @@ const groups: Group[] = [
       "Candlestick, chart and volume patterns, each shown with a picture of what it looks like — and candle patterns that only count at a support or resistance level",
       "Stop-loss, take-profit and trailing-stop rules",
       "Position sizing by quantity, rupee amount, percentage of capital or full capital",
+      "Entry orders at market or as a limit order — a % from the signal price or a fixed ₹ price — valid for the day",
+      "Intraday or Delivery products: intraday positions are squared off the same day; delivery can be held overnight (long only)",
       "See it in action: a chart of where your strategy would have entered and exited recently, and why — before you save it",
       "Human-readable strategy summaries",
     ],
-    soon: ["Risk-per-trade position sizing", "Cooldown periods and maximum trade limits"],
+    soon: ["MTF (margin) orders, with each broker's own terms", "Risk-per-trade position sizing", "Cooldown periods and maximum trade limits"],
   },
   {
     title: "Technical Indicators",

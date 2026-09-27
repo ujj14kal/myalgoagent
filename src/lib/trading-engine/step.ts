@@ -25,6 +25,34 @@ export interface EnginePosition {
 export interface EngineState {
   cash: number;
   position: EnginePosition | null;
+  /** A resting limit entry order waiting to fill (a broker DAY order). */
+  pendingEntry?: PendingEntry | null;
+}
+
+export interface PendingEntry {
+  limitPrice: number;
+  /** IST day number after which the order is cancelled (DAY validity). */
+  expiresDay: number;
+  /** Candles starting before this time were already checked against the order. */
+  fromTime: number;
+}
+
+/** How entries are placed: at market (next candle's open) or as a limit order. */
+export type EntryOrder =
+  | { type: "MARKET" }
+  | { type: "LIMIT"; mode: "PERCENT" | "PRICE"; value: number };
+
+/** The limit price for an entry signalled at `signalClose`: a % better than it, or a fixed price. */
+export function limitPriceFor(order: Extract<EntryOrder, { type: "LIMIT" }>, signalClose: number, direction: StrategyDirection): number {
+  if (order.mode === "PRICE") return order.value;
+  // A buy limit sits below the price, a sell (short) limit above it.
+  return signalClose * (1 + (direction === "SHORT" ? 1 : -1) * (order.value / 100));
+}
+
+/** Did this candle trade at the limit or better? If so, at what price (the open, if it gapped through). */
+function limitFill(bar: Candle, limit: number, direction: StrategyDirection): number | null {
+  if (direction === "SHORT") return bar.high >= limit ? Math.max(bar.open, limit) : null;
+  return bar.low <= limit ? Math.min(bar.open, limit) : null;
 }
 
 export type PositionSizingMode = "FULL_CAPITAL" | "FIXED_QUANTITY" | "FIXED_CAPITAL" | "PERCENT_OF_CAPITAL";
@@ -82,6 +110,8 @@ export interface EngineConfig {
   // Intraday session rules (IST minutes of the day), only set for strategies
   // on an intraday timeframe. Omitted = no time-of-day rules (daily strategies).
   session?: IntradaySession;
+  /** Omitted = market orders (fill at the next candle's open). */
+  entryOrder?: EntryOrder;
 }
 
 export interface IntradaySession {
@@ -95,6 +125,12 @@ export interface IntradaySession {
    * never cross a day boundary.
    */
   allowOpeningEntry?: boolean;
+  /**
+   * Intraday product: square off by the day's last candle and never open a
+   * position on a different day from its signal. Delivery on an intraday
+   * timeframe leaves this off (positions may be held overnight).
+   */
+  flatOvernight?: boolean;
 }
 
 function sameIstDay(a: Candle, b: Candle | undefined): boolean {
@@ -106,8 +142,14 @@ function entryAllowed(session: IntradaySession | undefined, bar: Candle, nextBar
   if (!session) return true;
   // An intraday position never opens on a different day from its signal —
   // unless the strategy's entry time explicitly targets the open.
-  if (!sameIstDay(bar, nextBar) && !session.allowOpeningEntry) return false;
-  const fillMinute = istDayAndMinute(nextBar.time).minute;
+  if (session.flatOvernight && !sameIstDay(bar, nextBar) && !session.allowOpeningEntry) return false;
+  return fillTimeAllowed(session, nextBar);
+}
+
+/** May an entry fill on this candle under the session's time rules? */
+function fillTimeAllowed(session: IntradaySession | undefined, fillBar: Candle): boolean {
+  if (!session) return true;
+  const fillMinute = istDayAndMinute(fillBar.time).minute;
   if (session.noEntryAfterMinute != null && fillMinute >= session.noEntryAfterMinute) return false;
   if (session.squareOffMinute != null && fillMinute >= session.squareOffMinute) return false;
   return true;
@@ -294,14 +336,17 @@ export function stepBar(
     // Intraday: never carry a position overnight. The data may end before the
     // square-off time (Yahoo's last NSE candle is 15:15), so the day's last
     // candle always closes it, at its close.
-    if (session && nextBar && !sameIstDay(bar, nextBar)) {
+    if (session?.flatOvernight && nextBar && !sameIstDay(bar, nextBar)) {
       const trade = closeTrade(candles, pos, i, closeFillPrice(bar.close), config.brokeragePercent, direction);
       return { state: { cash: state.cash + trade.netPnl, position: null }, trade, exitReason: "square_off" };
     }
 
     const maxPyramidEntries = config.maxPyramidEntries ?? 1;
     if (entrySignal && nextBar && pos.pyramidCount < maxPyramidEntries && entryAllowed(session, bar, nextBar)) {
-      const fillPrice = openFillPrice(nextBar.open);
+      // A limit add is only good for the next candle (it doesn't rest while a position is open).
+      const order = config.entryOrder;
+      const fillPrice = order?.type === "LIMIT" ? limitFill(nextBar, limitPriceFor(order, bar.close, direction), direction) : openFillPrice(nextBar.open);
+      if (fillPrice === null) return { state: { ...state, position: { ...pos, favorableExtreme } } };
       const addQuantity = computeQuantity(state.cash, fillPrice, config.positionSizing);
       if (addQuantity > 0) {
         const totalQuantity = pos.quantity + addQuantity;
@@ -328,28 +373,52 @@ export function stepBar(
     return { state: { ...state, position: { ...pos, favorableExtreme } } };
   }
 
-  if (entrySignal && nextBar && entryAllowed(config.session, candles[i], nextBar)) {
-    const fillPrice = openFillPrice(nextBar.open);
+  /** Opens a position at `fillIdx` for `fillPrice`, or reports that the size came out as zero. */
+  const open = (fillIdx: number, fillPrice: number) => {
     const quantity = computeQuantity(state.cash, fillPrice, config.positionSizing);
-    if (quantity > 0) {
-      const atr = config.atrAtEntry?.(i + 1);
-      const { stopLossPrice, targetPrice } = resolveRiskLevels(config.riskManagement, fillPrice, atr, direction);
+    if (quantity <= 0) return { state: { ...state, pendingEntry: null }, sizeTooSmall: true };
+    const atr = config.atrAtEntry?.(fillIdx);
+    const { stopLossPrice, targetPrice } = resolveRiskLevels(config.riskManagement, fillPrice, atr, direction);
+    return {
+      state: {
+        cash: state.cash,
+        pendingEntry: null,
+        position: { entryIdx: fillIdx, entryPrice: fillPrice, quantity, favorableExtreme: fillPrice, stopLossPrice, targetPrice, pyramidCount: 1 },
+      },
+    };
+  };
+
+  // A resting limit order: fills on this candle if it traded at the limit, or
+  // expires at the end of its day. New signals are ignored while it rests.
+  const pending = state.pendingEntry;
+  if (pending && candles[i].time >= pending.fromTime) {
+    const bar = candles[i];
+    if (istDayAndMinute(bar.time).day > pending.expiresDay) {
+      state = { ...state, pendingEntry: null };
+    } else {
+      const price = fillTimeAllowed(config.session, bar) ? limitFill(bar, pending.limitPrice, direction) : null;
+      if (price !== null) return open(i, price);
+      return { state };
+    }
+  } else if (pending) {
+    return { state };
+  }
+
+  if (entrySignal && nextBar && entryAllowed(config.session, candles[i], nextBar)) {
+    const order = config.entryOrder;
+    if (order?.type === "LIMIT") {
+      const limit = limitPriceFor(order, candles[i].close, direction);
+      const price = limitFill(nextBar, limit, direction);
+      if (price !== null) return open(i + 1, price);
+      // Not reached on the next candle: rest as a DAY order until it fills or the day ends.
       return {
         state: {
           ...state,
-          position: {
-            entryIdx: i + 1,
-            entryPrice: fillPrice,
-            quantity,
-            favorableExtreme: fillPrice,
-            stopLossPrice,
-            targetPrice,
-            pyramidCount: 1,
-          },
+          pendingEntry: { limitPrice: limit, expiresDay: istDayAndMinute(nextBar.time).day, fromTime: candles[i + 2]?.time ?? nextBar.time + 1 },
         },
       };
     }
-    return { state, sizeTooSmall: true };
+    return open(i + 1, openFillPrice(nextBar.open));
   }
 
   return { state };

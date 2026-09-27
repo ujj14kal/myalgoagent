@@ -1,5 +1,5 @@
 import { clampRangeForInterval, isIntraday, type CandleInterval, type CandleRange } from "@/lib/market-data";
-import type { IntradaySession } from "@/lib/trading-engine/step";
+import type { EntryOrder, IntradaySession } from "@/lib/trading-engine/step";
 import type { ConditionNode, FeasibilityIssue } from "./types";
 
 // A strategy's timeframe and intraday session rules, in one place, so saving,
@@ -22,18 +22,61 @@ export const SESSION_CLOSE_MINUTE = 15 * 60 + 30; // 15:30 IST
 /** Brokers typically auto-square-off intraday positions around 15:20. */
 export const DEFAULT_SQUARE_OFF_MINUTE = 15 * 60 + 20;
 
-export type SessionSettings = { timeframe: CandleInterval; noEntryAfterMinute: number | null; squareOffMinute: number | null };
+/** INTRADAY = squared off the same day; DELIVERY = may be held overnight (long only). MTF: coming later, per broker. */
+export type ProductType = "INTRADAY" | "DELIVERY";
+export type OrderType = "MARKET" | "LIMIT";
+export type LimitMode = "PERCENT" | "PRICE";
 
-/** What gets saved: daily (and webhook) strategies never carry session rules. */
-export function normalizeSession(input: {
+export type SessionSettings = {
+  timeframe: CandleInterval;
+  noEntryAfterMinute: number | null;
+  squareOffMinute: number | null;
+  productType: ProductType;
+  orderType: OrderType;
+  limitMode: LimitMode | null;
+  limitValue: number | null;
+};
+
+type SessionInput = {
   mode?: string;
   timeframe?: string | null;
   noEntryAfterMinute?: number | null;
   squareOffMinute?: number | null;
-}): SessionSettings {
+  productType?: string | null;
+  orderType?: string | null;
+  limitMode?: string | null;
+  limitValue?: number | null;
+};
+
+/** The product a strategy gets when none is chosen: intraday timeframes → Intraday, daily → Delivery. */
+export function defaultProduct(timeframe: string): ProductType {
+  return isIntraday(timeframe as CandleInterval) ? "INTRADAY" : "DELIVERY";
+}
+
+/**
+ * What gets saved. Daily and webhook strategies carry no time-of-day rules;
+ * only Intraday products square off; a market order carries no limit.
+ */
+export function normalizeSession(input: SessionInput): SessionSettings {
   const tf = (input.mode === "WEBHOOK" ? "1d" : input.timeframe || "1d") as CandleInterval;
-  if (!isIntraday(tf)) return { timeframe: tf, noEntryAfterMinute: null, squareOffMinute: null };
-  return { timeframe: tf, noEntryAfterMinute: input.noEntryAfterMinute ?? null, squareOffMinute: input.squareOffMinute ?? null };
+  const intradayTf = isIntraday(tf);
+  const productType: ProductType = input.productType === "INTRADAY" || input.productType === "DELIVERY" ? input.productType : defaultProduct(tf);
+  const orderType: OrderType = input.mode !== "WEBHOOK" && input.orderType === "LIMIT" ? "LIMIT" : "MARKET";
+  return {
+    timeframe: tf,
+    noEntryAfterMinute: intradayTf ? input.noEntryAfterMinute ?? null : null,
+    squareOffMinute: intradayTf && productType === "INTRADAY" ? input.squareOffMinute ?? null : null,
+    productType,
+    orderType,
+    limitMode: orderType === "LIMIT" ? (input.limitMode === "PRICE" ? "PRICE" : "PERCENT") : null,
+    limitValue: orderType === "LIMIT" ? input.limitValue ?? null : null,
+  };
+}
+
+/** The engine's entry order config. */
+export function engineEntryOrder(s: { orderType: string; limitMode: string | null; limitValue: number | null }): EntryOrder {
+  if (s.orderType !== "LIMIT" || s.limitValue == null) return { type: "MARKET" };
+  return { type: "LIMIT", mode: s.limitMode === "PRICE" ? "PRICE" : "PERCENT", value: s.limitValue };
 }
 
 /** Does the entry rule have a time window that starts at the market open ("enter at 09:15")? */
@@ -53,11 +96,17 @@ function entryTargetsOpen(node: ConditionNode | undefined): boolean {
 
 /** The engine's session config — undefined for daily strategies (no time-of-day rules). */
 export function engineSession(
-  s: { timeframe: string; noEntryAfterMinute: number | null; squareOffMinute: number | null },
+  s: { timeframe: string; noEntryAfterMinute: number | null; squareOffMinute: number | null; productType?: string | null },
   entryCondition?: ConditionNode,
 ): IntradaySession | undefined {
   if (!isIntraday(s.timeframe as CandleInterval)) return undefined;
-  return { noEntryAfterMinute: s.noEntryAfterMinute, squareOffMinute: s.squareOffMinute, allowOpeningEntry: entryTargetsOpen(entryCondition) };
+  const intradayProduct = (s.productType ?? defaultProduct(s.timeframe)) === "INTRADAY";
+  return {
+    noEntryAfterMinute: s.noEntryAfterMinute,
+    squareOffMinute: intradayProduct ? s.squareOffMinute : null,
+    allowOpeningEntry: entryTargetsOpen(entryCondition),
+    flatOvernight: intradayProduct,
+  };
 }
 
 /** The history window used for a run on this timeframe (limited by what the data source keeps). */
@@ -87,7 +136,7 @@ function usesTimeOfDay(node: ConditionNode): boolean {
 
 /** Rules about the timeframe and session times that no condition-tree walk can catch on its own. */
 export function checkSessionFeasibility(
-  s: SessionSettings & { valid: boolean },
+  s: SessionSettings & { valid: boolean; direction?: string; requestedProduct?: string | null },
   entry: ConditionNode | null,
   exit: ConditionNode | null,
 ): FeasibilityIssue[] {
@@ -106,6 +155,23 @@ export function checkSessionFeasibility(
   if (s.noEntryAfterMinute !== null && s.squareOffMinute !== null && s.noEntryAfterMinute > s.squareOffMinute) {
     issues.push({ section: "risk", message: "The last entry time is after the square-off time, so those entries would close immediately. Set it earlier." });
   }
+  if (s.requestedProduct === "MTF") {
+    issues.push({ section: "positionSizing", message: "MTF (margin) orders are coming soon — terms differ by broker, so they'll arrive with broker integration. Choose Intraday or Delivery for now." });
+  }
+  if (s.productType === "INTRADAY" && !isIntraday(s.timeframe)) {
+    issues.push({ section: "positionSizing", message: "An Intraday product needs an intraday timeframe (1m to 4H) so positions can be squared off the same day. Choose a shorter timeframe, or Delivery." });
+  }
+  if (s.productType === "DELIVERY" && s.direction === "SHORT") {
+    issues.push({ section: "positionSizing", message: "Short positions can't be held overnight in the cash market, so Delivery is long-only. Choose Intraday (on an intraday timeframe) to trade short." });
+  }
+  if (s.orderType === "LIMIT") {
+    const v = s.limitValue;
+    if (v == null || !Number.isFinite(v) || v <= 0) {
+      issues.push({ section: "positionSizing", message: "Enter the limit: a % away from the signal price, or a price in ₹." });
+    } else if (s.limitMode === "PERCENT" && v > 20) {
+      issues.push({ section: "positionSizing", message: "A limit more than 20% away from the signal price would almost never fill. Use a smaller %." });
+    }
+  }
   if (!isIntraday(s.timeframe)) {
     if (entry && usesTimeOfDay(entry)) {
       issues.push({ section: "entry", message: "Time-of-day rules need an intraday timeframe (1m to 4H) — on daily candles every candle covers the whole day. Change the timeframe in Position." });
@@ -117,8 +183,8 @@ export function checkSessionFeasibility(
   return issues;
 }
 
-/** Validates a raw timeframe string against the allowed list. */
-export function sessionFromInput(input: { mode?: string; timeframe?: string | null; noEntryAfterMinute?: number | null; squareOffMinute?: number | null }) {
+/** Normalised settings plus what's needed to validate them (the raw timeframe/product, the direction). */
+export function sessionFromInput(input: SessionInput & { direction?: string }) {
   const valid = input.timeframe == null || input.timeframe === "" || STRATEGY_TIMEFRAMES.some((t) => t.value === input.timeframe);
-  return { ...normalizeSession(input), valid };
+  return { ...normalizeSession(input), valid, direction: input.direction, requestedProduct: input.productType ?? null };
 }

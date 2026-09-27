@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { isActiveLink } from "@/components/site-nav-links";
 import { AnimatePresence, motion } from "motion/react";
 import BodyPortal from "@/components/ui/body-portal";
 import { ArrowRight, Menu, X } from "lucide-react";
@@ -52,8 +53,9 @@ export default function SiteMobileMenu({ links }: { links: { href: string; label
                   key={l.href}
                   href={l.href}
                   onClick={() => setOpenOn(null)}
-                  className={`flex items-center justify-between border-b border-black/5 py-4 text-base font-semibold ${
-                    pathname === l.href ? "text-brand-primary" : "text-brand-navy"
+                  aria-current={isActiveLink(pathname, l.href) ? "page" : undefined}
+                  className={`flex items-center justify-between border-b border-black/5 py-4 text-base ${
+                    isActiveLink(pathname, l.href) ? "font-bold text-brand-primary underline decoration-2 underline-offset-[6px]" : "font-semibold text-brand-navy"
                   }`}
                 >
                   {l.label}

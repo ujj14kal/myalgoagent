@@ -141,7 +141,7 @@ export function PreviewResultView({ preview, direction }: { preview: Preview; di
           )}
 
           <p className="text-[11px] text-brand-navy/45">
-            Demo on {preview.periodLabel} of {preview.dataSource} {preview.timeframeLabel} candles with ₹1,00,000, 0.03% brokerage and 0.05% slippage. Past results don&apos;t guarantee future results. Run a
+            Demo on {preview.periodLabel} of {preview.dataSource} {preview.timeframeLabel} candles, entries by {preview.entryOrderLabel}, with ₹1,00,000, 0.03% brokerage and 0.05% slippage. Past results don&apos;t guarantee future results. Run a
             full backtest after saving for complete metrics.
           </p>
         </div>

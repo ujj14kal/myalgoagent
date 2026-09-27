@@ -179,6 +179,10 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
               timeframe: strategy.timeframe,
               noEntryAfterMinute: strategy.noEntryAfterMinute,
               squareOffMinute: strategy.squareOffMinute,
+              productType: strategy.productType,
+              orderType: strategy.orderType,
+              limitMode: strategy.limitMode,
+              limitValue: strategy.limitValue,
             }}
           />
         </div>
