@@ -28,7 +28,7 @@ async function buildExport() {
   // this a handful of times, ever.
   await enforceRateLimit(`account-export:${userId}`, 5, 10 * 60_000);
 
-  const [user, watchlistItems, strategies, backtestRuns, paperSessions, riskSettings, riskEvents, notifications, feedback, supportCases, agentConversations] =
+  const [user, watchlistItems, strategies, backtestRuns, paperSessions, riskSettings, riskEvents, notifications, feedback, supportCases, agentConversations, brokerConnections] =
     await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
@@ -55,6 +55,11 @@ async function buildExport() {
         where: { userId },
         include: { messages: { select: { role: true, content: true, createdAt: true }, orderBy: { createdAt: "asc" } } },
       }),
+      // Which brokers are linked — never the encrypted keys or tokens themselves.
+      prisma.brokerConnection.findMany({
+        where: { userId },
+        select: { broker: true, status: true, apiKeyHint: true, brokerClientId: true, accountName: true, connectedAt: true, tokenExpiresAt: true, lastCheckedAt: true, createdAt: true },
+      }),
     ]);
 
   if (!user) {
@@ -74,6 +79,7 @@ async function buildExport() {
     feedback,
     supportCases,
     agentConversations,
+    brokerConnections,
   };
 
   const filename = `myalgoagent-data-${new Date().toISOString().slice(0, 10)}.json`;

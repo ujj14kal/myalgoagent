@@ -23,7 +23,7 @@ const sections: LegalSection[] = [
     paragraphs: [
       "Account information you provide directly: name and email address when you create an account, any profile information you choose to add, and communications you send us such as support requests.",
       "Usage and device information: pages visited, features used, device and browser type, approximate location derived from IP address (for security and fraud prevention, not precise geolocation), and log data such as timestamps, referring URLs and error reports.",
-      "Trading configuration and platform data: strategies, backtest settings, risk limits, and (only with your explicit authorization) broker-connection metadata needed to synchronize orders and positions. We never store your broker account password — broker connections use that broker's own secure API authorization flow.",
+      "Trading configuration and platform data: strategies, backtest settings, risk limits, and — only if you connect a broker — the API key and secret of the API app you created at your broker, that day's session token, and the broker client ID and account name your broker returns (all keys and tokens encrypted). We never receive or store your broker account password, PIN or 2FA codes — you enter those only on your broker's own login page.",
     ],
   },
   {
@@ -51,7 +51,7 @@ const sections: LegalSection[] = [
     id: "storage",
     title: "How we store and protect your information",
     paragraphs: [
-      "Account and platform data is stored in a managed PostgreSQL database hosted on Amazon Web Services (AWS) infrastructure, protected in transit with TLS/SSL encryption. Sensitive credentials, including any broker API keys, are handled through dedicated secret-management infrastructure, separate from general application data, and are never exposed to client-side/browser code. Access to production data is restricted to what is operationally necessary.",
+      "Account and platform data is stored in a managed PostgreSQL database hosted on Amazon Web Services (AWS) infrastructure, protected in transit with TLS/SSL encryption. Broker API keys, secrets and session tokens you connect are encrypted (AES-256) before storage with a key held separately from the database, and are never exposed to client-side/browser code. We never receive your broker password, PIN or 2FA codes — those are entered only on your broker\u2019s own page. Access to production data is restricted to what is operationally necessary.",
     ],
   },
   {

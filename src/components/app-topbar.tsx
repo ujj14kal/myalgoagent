@@ -24,14 +24,12 @@ export default function AppTopbar({
       <MobileNavDrawer agentName={agentName} liveSessions={liveSessions} />
       <TopbarTitle />
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
-        {/* Broker integration isn't live yet — this opens the Broker Connections page, which says so. */}
         <Link
           href="/app/broker-connections"
           className="hidden items-center gap-1.5 rounded-full bg-brand-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-[0_4px_12px_-6px_rgba(71,24,152,0.7)] transition-colors hover:bg-brand-primary-light md:flex"
         >
           <Link2 size={13} />
           Connect broker
-          <span className="rounded-full bg-white/20 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide">Soon</span>
         </Link>
         <Link
           href="/app/notifications"

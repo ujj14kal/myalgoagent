@@ -67,9 +67,13 @@ const groups: Group[] = [
   {
     title: "Paper & Live Trading",
     icon: Radio,
-    items: ["Paper trading with virtual capital and simulated fills on the strategy's own candles — daily or intraday — updated each time you sync"],
+    items: [
+      "Paper trading with virtual capital and simulated fills on the strategy's own candles — daily or intraday — updated each time you sync",
+      "Broker connections for Dhan, Zerodha, Upstox, Fyers and Angel One — your own API key, encrypted, verified on connect",
+    ],
     soon: [
-      "Live trading via supported broker APIs, with explicit user authorization",
+      "Live trading via your connected broker, with explicit user authorization",
+      "Groww, ICICI Direct, Kotak Neo, 5paisa and Alice Blue connections",
       "Order lifecycle tracking: pending, submitted, filled, rejected, cancelled",
       "Position and P&L reconciliation with the connected broker",
     ],

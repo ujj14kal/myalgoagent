@@ -53,6 +53,7 @@ model User {
   feedback            Feedback[]
   supportCases        SupportCase[]
   agentConversations  AgentConversation[]
+  brokerConnections   BrokerConnection[]
 }
 
 enum OtpPurpose {
@@ -562,4 +563,45 @@ model AgentMessage {
   conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId, createdAt])
+}
+
+enum BrokerConnectionStatus {
+  KEYS_SAVED // API key/secret stored, broker login not completed yet
+  CONNECTED
+  ERROR
+}
+
+// A user's link to their own broker account through the broker's official
+// API (users bring their own API app — MyAlgoAgent is not an algo vendor).
+// Every secret column holds AES-256-GCM ciphertext (src/lib/brokers/crypto.ts)
+// bound to this user + broker; nothing here is ever sent to the browser.
+model BrokerConnection {
+  id     String                 @id @default(cuid())
+  userId String
+  broker String // catalog id: "dhan", "zerodha", "upstox", "fyers", "angelone"
+  status BrokerConnectionStatus @default(KEYS_SAVED)
+
+  apiKeyEnc      String
+  apiSecretEnc   String?
+  apiKeyHint     String // last 4 characters, for display
+  brokerClientId String? // the user's client/user ID at the broker (not secret)
+
+  accessTokenEnc String?
+  tokenExpiresAt DateTime?
+  accountName    String?
+  connectedAt    DateTime?
+
+  // One pending broker login at a time: the callback must match this state
+  // and arrive within a few minutes of the login being started.
+  pendingState     String?
+  pendingStartedAt DateTime?
+
+  lastError     String?
+  lastCheckedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, broker])
 }

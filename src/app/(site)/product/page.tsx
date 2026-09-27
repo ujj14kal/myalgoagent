@@ -91,12 +91,12 @@ const sections: LegalSection[] = [
     comingSoon: true,
     body: (
       <p className="mt-3 text-sm leading-relaxed text-brand-navy/70">
-        Live trading requires the user to explicitly connect a supported
-        broker account and confirm risk settings before any strategy can
-        place real orders. The platform does not custody funds; it
-        connects to broker APIs on the user&rsquo;s behalf, with
-        credentials handled through secure secret management rather than
-        stored in application code. See{" "}
+        Users can already connect their own Dhan, Zerodha, Upstox, Fyers
+        or Angel One account through the broker&rsquo;s official API, with
+        their API keys encrypted on our servers. Live trading will require
+        that connection plus confirmed risk settings before any strategy
+        can place real orders. The platform does not custody funds; it
+        connects to broker APIs on the user&rsquo;s behalf. See{" "}
         <Link href="/live-trading" className="text-brand-primary underline">Live Trading</Link>.
       </p>
     ),

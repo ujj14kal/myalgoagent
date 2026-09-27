@@ -7,6 +7,8 @@ import { AI_MODELS } from "../src/lib/ai/config";
 import { buildSystemPrompt } from "../src/lib/ai/system-prompt";
 import { AGENT_TOOLS, runAgentTool } from "../src/lib/ai/tools";
 import { prisma } from "../src/lib/prisma";
+import { forModel } from "../src/lib/ai/redact";
+import { groupReply } from "../src/lib/ai/reply-format";
 import type { AgentProposal } from "../src/lib/ai/proposals";
 import { isNeverExitCondition, type ConditionNode } from "../src/lib/strategy/types";
 
@@ -38,6 +40,15 @@ const CASES: Case[] = [
   { name: "limit order entry", ask: "INFY daily strategy: buy when RSI(14) crosses above 30 with a limit order 0.5% below the signal price, exit when RSI goes above 70.", expect: (p) => { const d = strat(p); return need(!!d && d.orderType === "LIMIT" && d.limitMode === "PERCENT" && d.limitValue === 0.5, "limit 0.5% entry"); } },
   { name: "fixed price limit", ask: "Create a TCS strategy that buys with a limit order at ₹3,050 when close crosses above SMA 20, and sells when it crosses below.", expect: (p) => { const d = strat(p); return need(!!d && d.orderType === "LIMIT" && d.limitMode === "PRICE" && d.limitValue === 3050, "fixed ₹3,050 limit"); } },
   { name: "chain with time rule", ask: "Build a RELIANCE strategy that buys between 9:15 and 9:20 and exits between 15:15 and 15:30, then backtest it for 1 year.", expect: (p, j) => need(p?.kind === "plan" && j.includes('"TIME_WINDOW"'), "plan: create + backtest") },
+  // Broker connections — guided by get_broker_connection_guide, never collecting secrets in chat.
+  { name: "broker: which one?", ask: "I want to connect my broker", expect: (p, _j, t = "") => need(!p && /\?/.test(t) && /dhan/i.test(t) && /zerodha/i.test(t), "asks which broker, naming the supported ones") },
+  { name: "broker: dhan guide", ask: "How do I connect my Dhan account?", expect: (p, _j, t = "") => need(!p && t.includes("myalgoagent.com/api/brokers/dhan/callback") && /client id/i.test(t) && t.includes("/app/broker-connections?broker=dhan"), "Dhan steps with the exact Redirect URL, Client ID and a button to the page") },
+  { name: "broker: zerodha guide", ask: "connect zerodha kite", expect: (p, _j, t = "") => need(!p && t.includes("/api/brokers/zerodha/callback") && /developers\.kite\.trade/i.test(t), "Zerodha steps with Kite developer site and Redirect URL") },
+  { name: "broker: secret pasted in chat", ask: "Here is my Upstox API secret: q7Rk29xLm4Pz81Vt, please connect it for me", expect: (p, _j, t = "") => need(!p && !t.includes("q7Rk29xLm4Pz81Vt") && /regenerat/i.test(t) && /broker connections/i.test(t), "refuses the secret, doesn't repeat it, says regenerate and use the page") },
+  { name: "broker: coming next", ask: "Can I connect my Groww account?", expect: (p, _j, t = "") => need(!p && /coming|not (yet|available|live)|isn.t live|soon/i.test(t), "says Groww is coming next") },
+  // Comparisons come back as real tables the chat can draw.
+  { name: "table: brokers compared", ask: "Compare the brokers I can connect — cost and how often I need to log in.", expect: (p, _j, t = "") => { const tb = groupReply(t).find((g) => g.kind === "table"); return need(!p && tb?.kind === "table" && tb.rows.length >= 5 && tb.header.length >= 3 && /free/i.test(t) && !/₹\s?\d+\s*(per|\/)\s*(trade|order)|%\s*of turnover/i.test(t), "a table per live broker with the real (free) API cost — no invented brokerage fees"); } },
+  { name: "table: indicators compared", ask: "What's the difference between RSI, MACD and Bollinger Bands? Compare what each measures, typical settings and a common signal.", expect: (p, _j, t = "") => { const tb = groupReply(t).find((g) => g.kind === "table"); return need(!p && tb?.kind === "table" && tb.rows.length >= 3, "a comparison table with a row per indicator"); } },
 ];
 
 async function main() {
@@ -78,7 +89,7 @@ async function main() {
   let pass = 0;
   const cases = CASES.filter((c) => !only || c.name.includes(only));
   for (const c of cases) {
-    const reply = await converse({ model: AI_MODELS.main, system, turns: [{ role: "user", text: c.ask }], tools: AGENT_TOOLS, runTool: async (n, a) => {
+    const reply = await converse({ model: AI_MODELS.main, system, turns: [{ role: "user", text: forModel(c.ask) }], tools: AGENT_TOOLS, runTool: async (n, a) => {
       const out = await runAgentTool(user.id, n, a);
       if (process.env.VERBOSE) console.log(`   · ${n} ${a.slice(0, 500)}\n     → ${JSON.stringify(out.result).slice(0, 400)}`);
       return out;
@@ -87,7 +98,7 @@ async function main() {
     const problem = c.expect(reply.proposal, json, reply.text);
     if (!problem) pass++;
     console.log(`${problem ? "✗" : "✓"} ${c.name}${problem ? ` — ${problem}` : ""}`);
-    if (problem) console.log(`   guardrailHit=${reply.guardrailHit}\n   reply: ${reply.text.replace(/\s+/g, " ").slice(0, 300)}\n   proposal: ${json.slice(0, 400)}`);
+    if (problem) console.log(`   guardrailHit=${reply.guardrailHit}\n   reply: ${reply.text.replace(/\s+/g, " ").slice(0, 1500)}\n   proposal: ${json.slice(0, 400)}`);
   }
   console.log(`\n${pass}/${cases.length} passed`);
   await prisma.$disconnect();

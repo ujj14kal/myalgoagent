@@ -1,4 +1,7 @@
 import { prisma } from "@/lib/prisma";
+import { BROKERS, brokerById, callbackUrl } from "@/lib/brokers/catalog";
+import { decodeFailure, describeFailure } from "@/lib/brokers/failures";
+import { callbackOrigin } from "@/lib/brokers/service";
 import { getPaperSessionRows, summarizePortfolio } from "@/lib/portfolio";
 import { compile } from "@/lib/strategy-compile";
 import { isNeverExitCondition, type ConditionNode } from "@/lib/strategy/types";
@@ -84,6 +87,18 @@ export const AGENT_TOOLS: MantleTool[] = [
       name: "get_recent_events",
       description: "The user's recent notifications: paper fills (with the rule that caused each), signals, risk events and stopped sessions. Use to explain what happened or give a summary of recent activity.",
       parameters: { type: "object", properties: { days: { type: "number", description: "Look-back in days, 1-30, default 7" } } },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_broker_connection_guide",
+      description:
+        "How to connect a broker account, personalised: the exact steps for that broker, the Redirect URL to paste, which keys are needed, cost and daily-login rules, plus the user's current connection status and the plain-English reason if their last attempt failed. Call without a broker to get the list of brokers and which ones this user has already linked.",
+      parameters: {
+        type: "object",
+        properties: { broker: { type: "string", description: "dhan, zerodha, upstox, fyers, angelone, groww, icicidirect, kotak, 5paisa or aliceblue (optional)" } },
+      },
     },
   },
   {
@@ -632,6 +647,73 @@ async function proposeStrategyUpdate(userId: string, a: Record<string, unknown>)
   };
 }
 
+const BROKER_ALIASES: Record<string, string> = { "angel one": "angelone", angel: "angelone", kite: "zerodha", "icici direct": "icicidirect", icici: "icicidirect", "kotak neo": "kotak", "alice blue": "aliceblue", dhanhq: "dhan" };
+
+const CONNECTION_STATE_TEXT = {
+  connected: "connected, with today's session active",
+  expired: "connected before, but today's session has ended — they only need to click “Log in for today”",
+  keys_saved: "keys saved, but the broker login wasn't completed",
+  error: "the last attempt failed",
+} as const;
+
+async function brokerGuide(userId: string, rawBroker?: string) {
+  let rows: { broker: string; status: string; tokenExpiresAt: Date | null; accountName: string | null; brokerClientId: string | null; lastError: string | null }[] = [];
+  try {
+    rows = await prisma.brokerConnection.findMany({
+      where: { userId },
+      select: { broker: true, status: true, tokenExpiresAt: true, accountName: true, brokerClientId: true, lastError: true },
+    });
+  } catch {
+    // Table not created yet on this environment — the guides still apply.
+  }
+  const now = new Date();
+  const stateOf = (r: (typeof rows)[number]) =>
+    r.status === "CONNECTED" ? (r.tokenExpiresAt && r.tokenExpiresAt > now ? "connected" : "expired") : r.status === "ERROR" ? "error" : "keys_saved";
+  const origin = callbackOrigin();
+
+  const key = rawBroker?.trim().toLowerCase();
+  const info = key ? (brokerById(key) ?? brokerById(BROKER_ALIASES[key] ?? "") ?? BROKERS.find((b) => b.name.toLowerCase() === key)) : undefined;
+
+  if (!info) {
+    return {
+      ...(key ? { note: `“${rawBroker}” isn't one of the brokers MyAlgoAgent supports yet.` } : {}),
+      liveNow: BROKERS.filter((b) => b.availability === "live").map((b) => ({ broker: b.name, apiCost: b.apiCost, dailyLogin: b.session, keysNeeded: b.fields.map((f) => f.label) })),
+      costNote: "Connecting through MyAlgoAgent is free — these are the brokers' own API prices. Brokerage per trade is separate, set by the user's broker plan, and not known here.",
+      comingNext: BROKERS.filter((b) => b.availability === "next").map((b) => b.name),
+      yourConnections: rows.map((r) => ({ broker: brokerById(r.broker)?.name ?? r.broker, status: CONNECTION_STATE_TEXT[stateOf(r)] })),
+      page: "/app/broker-connections",
+      howToUse: "Ask which broker they use (one question) unless they've said, then call this tool again with that broker.",
+    };
+  }
+
+  const row = rows.find((r) => r.broker === info.id);
+  const failure = row?.lastError ? decodeFailure(row.lastError) : null;
+  const explained = failure ? describeFailure(failure, info.name) : null;
+  const redirectUrl = callbackUrl(origin, info.id);
+  return {
+    broker: info.name,
+    availableNow: info.availability === "live",
+    page: `/app/broker-connections?broker=${info.id}`,
+    yourStatus: row
+      ? {
+          state: CONNECTION_STATE_TEXT[stateOf(row)],
+          account: row.accountName ?? undefined,
+          clientId: row.brokerClientId ?? undefined,
+          ...(explained && stateOf(row) !== "connected" ? { lastProblem: explained.title, why: explained.reason, fix: explained.steps, brokerSaid: failure?.detail } : {}),
+        }
+      : "not connected yet",
+    createAppAt: info.portal.label,
+    steps: info.steps.map((s) => (s === "PASTE_CALLBACK" ? `In the ${info.callbackFieldName} field paste exactly ${redirectUrl} (https, no slash at the end, no spaces).` : s)),
+    redirectUrl,
+    keysToPasteOnOurPage: info.fields.map((f) => f.label),
+    cost: info.cost,
+    apiCost: info.apiCost,
+    dailyLogin: info.session,
+    notes: info.notes ?? [],
+    liveOrders: "Not switched on yet; when they are, the user's broker account will also need a static IP registered (a SEBI rule, one per client).",
+  };
+}
+
 export async function runAgentTool(userId: string, name: string, rawArgs: string): Promise<ToolOutcome> {
   let a: Record<string, unknown> = {};
   try {
@@ -729,6 +811,8 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
         })),
       };
     }
+    case "get_broker_connection_guide":
+      return { result: await brokerGuide(userId, typeof a.broker === "string" ? a.broker : undefined) };
     case "list_instruments": {
       const rows = await prisma.instrument.findMany({ orderBy: { symbol: "asc" }, select: { symbol: true, name: true, sector: true } });
       return { result: rows };

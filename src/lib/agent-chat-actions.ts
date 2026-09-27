@@ -1,5 +1,6 @@
 "use server";
 
+import { forModel, redactSecrets } from "@/lib/ai/redact";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -102,7 +103,9 @@ export async function sendAgentMessage(input: {
   if (!session?.user?.id) return { ok: false, error: "Not signed in." };
   const userId = session.user.id;
 
-  const text = typeof input?.text === "string" ? input.text.trim() : "";
+  // A pasted broker key/secret/password is hidden before it's stored or sent to the model.
+  const raw = typeof input?.text === "string" ? input.text.trim() : "";
+  const text = redactSecrets(raw).text;
   if (!text) return { ok: false, error: "Please enter a message." };
   if (text.length > AI_LIMITS.maxUserChars) {
     return { ok: false, error: `Your message is too long. Please keep it under ${AI_LIMITS.maxUserChars.toLocaleString("en-IN")} characters.` };
@@ -176,7 +179,7 @@ export async function sendAgentMessage(input: {
           const note = p ? `\n\n[${PROPOSAL_TITLES[p.kind]} proposal — ${p.status === "pending" ? "not decided yet" : p.status} by the user]` : "";
           return { role: m.role === "USER" ? ("user" as const) : ("assistant" as const), text: m.content + note };
         }),
-        { role: "user" as const, text },
+        { role: "user" as const, text: forModel(raw) },
       ],
     };
     let reply;

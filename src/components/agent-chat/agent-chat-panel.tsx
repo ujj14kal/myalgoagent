@@ -40,6 +40,7 @@ import {
   type AgentConversationSummary,
 } from "@/lib/agent-chat-actions";
 import { parseReplyBlocks, parseReplyLinks } from "@/lib/ai/links";
+import { groupReply } from "@/lib/ai/reply-format";
 import type { AgentProposal, ProposalStatus } from "@/lib/ai/proposals";
 import { ProposalCard, ProposalReviewModal } from "./proposal-review";
 import VoiceMode from "./voice-mode";
@@ -74,13 +75,21 @@ function Inline({ text, onNavigate }: { text: string; onNavigate: () => void }) 
             {part.text}
           </Link>
         ) : (
-          part.text.split(/(\*\*[^*]+\*\*)/g).map((seg, j) =>
+          part.text.split(/(\*\*[^*]+\*\*|`[^`]+`|(?<![*\\\w])\*(?![\s*])[^*\n]+?(?<![\s\\])\*(?![*\w]))/g).map((seg, j) =>
             seg.startsWith("**") && seg.endsWith("**") ? (
               <strong key={`${i}-${j}`} className="font-semibold text-brand-navy">
                 {seg.slice(2, -2)}
               </strong>
+            ) : seg.length > 2 && seg.startsWith("*") && seg.endsWith("*") ? (
+              <em key={`${i}-${j}`} className="italic">
+                {seg.slice(1, -1)}
+              </em>
+            ) : seg.length > 2 && seg.startsWith("`") && seg.endsWith("`") ? (
+              <code key={`${i}-${j}`} className="break-all rounded bg-brand-primary/[0.07] px-1 py-px font-mono text-[0.92em] text-brand-navy">
+                {seg.slice(1, -1)}
+              </code>
             ) : (
-              <span key={`${i}-${j}`}>{seg}</span>
+              <span key={`${i}-${j}`}>{seg.replace(/\\([*_|`])/g, "$1")}</span>
             )
           )
         )
@@ -89,96 +98,81 @@ function Inline({ text, onNavigate }: { text: string; onNavigate: () => void }) 
   );
 }
 
-const LIST_ITEM = /^\s*([-*•]|\d+[.)])\s+/;
+/** Numbers, money and percentages line up on the right, like a statement. */
+const NUMERIC = /^[-+−]?[₹$]?\s?[\d,]+(\.\d+)?\s?(%|x|×|[kKLCr]+)?$/;
 
 /**
- * A reply as paragraphs and bullet lists — no raw HTML is ever rendered.
- * Lines are grouped as they come, so a heading line followed by bullets in
- * the same paragraph renders as a heading and a real list.
+ * A reply as headings, paragraphs, lists and real tables (see groupReply) —
+ * no raw HTML is ever rendered.
  */
 function ReplyBody({ content, onNavigate }: { content: string; onNavigate: () => void }) {
-  type Group =
-    | { kind: "p"; lines: string[] }
-    | { kind: "list"; ordered: boolean; items: string[] }
-    | { kind: "table"; rows: string[][] };
-  const TABLE_ROW = /^\s*\|.*\|\s*$/;
-  const TABLE_RULE = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
-  const groups: Group[] = [];
-  for (const block of content.split(/\n{2,}/)) {
-    let current: Group | null = null;
-    for (const line of block.split("\n").filter((l) => l.trim())) {
-      if (TABLE_RULE.test(line)) continue;
-      if (TABLE_ROW.test(line)) {
-        if (current?.kind !== "table") {
-          current = { kind: "table", rows: [] };
-          groups.push(current);
-        }
-        current.rows.push(line.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim()));
-        continue;
-      }
-      if (LIST_ITEM.test(line)) {
-        const ordered = /^\s*\d/.test(line);
-        if (current?.kind !== "list" || current.ordered !== ordered) {
-          current = { kind: "list", ordered, items: [] };
-          groups.push(current);
-        }
-        current.items.push(line.replace(LIST_ITEM, ""));
-      } else {
-        if (current?.kind !== "p") {
-          current = { kind: "p", lines: [] };
-          groups.push(current);
-        }
-        current.lines.push(line);
-      }
-    }
-  }
+  const groups = groupReply(content);
   return (
     <div className="space-y-2">
-      {groups.map((g, gi) =>
-        g.kind === "table" ? (
-          <div key={gi} className="-mx-1 overflow-x-auto rounded-lg ring-1 ring-black/5">
-            <table className="w-full text-left text-[12px]">
-              <thead className="bg-brand-bg text-brand-navy/55">
-                <tr>
-                  {g.rows[0].map((h, i) => (
-                    <th key={i} className="whitespace-nowrap px-2.5 py-1.5 font-semibold">
-                      <Inline text={h} onNavigate={onNavigate} />
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-black/5">
-                {g.rows.slice(1).map((r, ri) => (
-                  <tr key={ri}>
-                    {r.map((cell, ci) => (
-                      <td key={ci} className="px-2.5 py-1.5 align-top text-brand-navy/80">
-                        <Inline text={cell} onNavigate={onNavigate} />
-                      </td>
+      {groups.map((g, gi) => {
+        if (g.kind === "heading") {
+          return (
+            <p key={gi} className="pt-1 font-semibold text-brand-navy">
+              <Inline text={g.text} onNavigate={onNavigate} />
+            </p>
+          );
+        }
+        if (g.kind === "table") {
+          const align = g.header.map((_, ci) => {
+            const col = g.rows.map((r) => r[ci]).filter(Boolean);
+            return g.align[ci] !== "left" ? g.align[ci] : col.length > 0 && col.every((c) => NUMERIC.test(c.replace(/\*\*/g, ""))) ? "right" : "left";
+          });
+          const alignClass = (a: string) => (a === "right" ? "text-right tabular-nums" : a === "center" ? "text-center" : "text-left");
+          const cell = (text: string) =>
+            text.split("\n").map((line, li) => (
+              <span key={li} className="block">
+                <Inline text={line} onNavigate={onNavigate} />
+              </span>
+            ));
+          return (
+            <div key={gi} className="overflow-x-auto rounded-xl bg-white ring-1 ring-brand-navy/10">
+              <table className="w-full border-collapse text-[12.5px] leading-snug">
+                <thead>
+                  <tr className="bg-brand-primary/[0.06]">
+                    {g.header.map((h, i) => (
+                      <th key={i} scope="col" className={`whitespace-nowrap border-b border-brand-navy/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-brand-navy/60 ${alignClass(align[i])}`}>
+                        {cell(h)}
+                      </th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : g.kind === "list" ? (
-          g.ordered ? (
-            <ol key={gi} className="list-decimal space-y-1 pl-5 marker:text-brand-primary/60">
+                </thead>
+                <tbody>
+                  {g.rows.map((r, ri) => (
+                    <tr key={ri} className="border-b border-brand-navy/[0.06] last:border-0 even:bg-brand-bg/60">
+                      {r.map((c, ci) => (
+                        <td key={ci} className={`px-3 py-2 align-top ${ci === 0 ? "font-medium text-brand-navy" : "text-brand-navy/80"} ${alignClass(align[ci])}`}>
+                          {cell(c)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+        if (g.kind === "list") {
+          const Tag = g.ordered ? "ol" : "ul";
+          return (
+            <Tag key={gi} start={g.ordered && g.start !== 1 ? g.start : undefined} className={`${g.ordered ? "list-decimal marker:text-brand-primary/60" : "list-disc marker:text-brand-primary/50"} space-y-1 pl-5`}>
               {g.items.map((it, i) => (
                 <li key={i}>
-                  <Inline text={it} onNavigate={onNavigate} />
+                  {it.split("\n").map((line, li) => (
+                    <span key={li} className={li > 0 ? "mt-1 block" : undefined}>
+                      <Inline text={line} onNavigate={onNavigate} />
+                    </span>
+                  ))}
                 </li>
               ))}
-            </ol>
-          ) : (
-            <ul key={gi} className="list-disc space-y-1 pl-5 marker:text-brand-primary/50">
-              {g.items.map((it, i) => (
-                <li key={i}>
-                  <Inline text={it} onNavigate={onNavigate} />
-                </li>
-              ))}
-            </ul>
-          )
-        ) : (
+            </Tag>
+          );
+        }
+        return (
           <p key={gi}>
             {g.lines.map((l, li) => (
               <span key={li}>
@@ -187,8 +181,8 @@ function ReplyBody({ content, onNavigate }: { content: string; onNavigate: () =>
               </span>
             ))}
           </p>
-        )
-      )}
+        );
+      })}
     </div>
   );
 }

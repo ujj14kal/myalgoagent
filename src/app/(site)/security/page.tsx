@@ -26,11 +26,15 @@ export default function SecurityPage() {
       <Prose>
         <h2>Credentials & secrets</h2>
         <p>
-          Broker API keys, database credentials and other secrets are never
-          hard-coded or committed to source control. They are managed
-          through environment variables and a secure secret-management
-          system (such as AWS Secrets Manager), and broker secrets are never
-          exposed to browser-side code.
+          Database credentials and other platform secrets are never
+          hard-coded or committed to source control. The broker API keys,
+          secrets and daily session tokens you connect are encrypted with
+          AES-256-GCM before they&rsquo;re stored, bound to your account so
+          they can&rsquo;t be moved to another, and decrypted only on our
+          servers when talking to your broker &mdash; they are never sent
+          to browser-side code. The encryption key is kept apart from the
+          database. Your broker password and 2FA are entered only on your
+          broker&rsquo;s own login page.
         </p>
 
         <h2>Encryption</h2>
