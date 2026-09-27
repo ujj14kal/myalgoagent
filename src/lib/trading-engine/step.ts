@@ -1,4 +1,5 @@
 import type { Candle } from "@/lib/market-data";
+import { istDayAndMinute } from "@/lib/market-data/resample";
 
 // Whether the entry condition opens a long (buy first, sell to close) or
 // short (sell first, buy to cover) position. Fixed per strategy — see
@@ -78,6 +79,38 @@ export interface EngineConfig {
   // is open is ignored. N > 1 allows up to N total entries to stack into
   // one blended position (pyramiding).
   maxPyramidEntries?: number;
+  // Intraday session rules (IST minutes of the day), only set for strategies
+  // on an intraday timeframe. Omitted = no time-of-day rules (daily strategies).
+  session?: IntradaySession;
+}
+
+export interface IntradaySession {
+  /** No new position (or pyramid add) whose fill would be at or after this minute. */
+  noEntryAfterMinute?: number | null;
+  /** Close any open position at the first candle at/after this minute — and always by the day's last candle. */
+  squareOffMinute?: number | null;
+  /**
+   * The entry time window starts at the open (09:15): a signal on the previous
+   * day's last candle may fill at today's first candle. Otherwise entries
+   * never cross a day boundary.
+   */
+  allowOpeningEntry?: boolean;
+}
+
+function sameIstDay(a: Candle, b: Candle | undefined): boolean {
+  return !!b && istDayAndMinute(a.time).day === istDayAndMinute(b.time).day;
+}
+
+/** May an entry signalled on `bar` fill at `nextBar`'s open under the session rules? */
+function entryAllowed(session: IntradaySession | undefined, bar: Candle, nextBar: Candle): boolean {
+  if (!session) return true;
+  // An intraday position never opens on a different day from its signal —
+  // unless the strategy's entry time explicitly targets the open.
+  if (!sameIstDay(bar, nextBar) && !session.allowOpeningEntry) return false;
+  const fillMinute = istDayAndMinute(nextBar.time).minute;
+  if (session.noEntryAfterMinute != null && fillMinute >= session.noEntryAfterMinute) return false;
+  if (session.squareOffMinute != null && fillMinute >= session.squareOffMinute) return false;
+  return true;
 }
 
 /** Converts a risk leg into an absolute price distance from the entry price. */
@@ -196,7 +229,7 @@ function closeTrade(
  * intrabar order of price movement isn't knowable from candle data.
  */
 /** Why a position closed — reported with each trade so fills can be explained. */
-export type ExitReason = "trailing_stop" | "stop_loss" | "target" | "exit_rule";
+export type ExitReason = "trailing_stop" | "stop_loss" | "target" | "exit_rule" | "square_off";
 
 export function stepBar(
   candles: Candle[],
@@ -218,6 +251,13 @@ export function stepBar(
     const bar = candles[i];
     const pos = state.position;
     const rm = config.riskManagement;
+
+    // Intraday square-off time reached: close at this candle's open, before anything else.
+    const session = config.session;
+    if (session?.squareOffMinute != null && i > pos.entryIdx && istDayAndMinute(bar.time).minute >= session.squareOffMinute) {
+      const trade = closeTrade(candles, pos, i, closeFillPrice(bar.open), config.brokeragePercent, direction);
+      return { state: { cash: state.cash + trade.netPnl, position: null }, trade, exitReason: "square_off" };
+    }
     const favorableExtreme = isShort ? Math.min(pos.favorableExtreme, bar.low) : Math.max(pos.favorableExtreme, bar.high);
 
     let trailingStopPrice: number | null = null;
@@ -251,8 +291,16 @@ export function stepBar(
       return { state: { cash: state.cash + trade.netPnl, position: null }, trade, exitReason: "exit_rule" };
     }
 
+    // Intraday: never carry a position overnight. The data may end before the
+    // square-off time (Yahoo's last NSE candle is 15:15), so the day's last
+    // candle always closes it, at its close.
+    if (session && nextBar && !sameIstDay(bar, nextBar)) {
+      const trade = closeTrade(candles, pos, i, closeFillPrice(bar.close), config.brokeragePercent, direction);
+      return { state: { cash: state.cash + trade.netPnl, position: null }, trade, exitReason: "square_off" };
+    }
+
     const maxPyramidEntries = config.maxPyramidEntries ?? 1;
-    if (entrySignal && nextBar && pos.pyramidCount < maxPyramidEntries) {
+    if (entrySignal && nextBar && pos.pyramidCount < maxPyramidEntries && entryAllowed(session, bar, nextBar)) {
       const fillPrice = openFillPrice(nextBar.open);
       const addQuantity = computeQuantity(state.cash, fillPrice, config.positionSizing);
       if (addQuantity > 0) {
@@ -280,7 +328,7 @@ export function stepBar(
     return { state: { ...state, position: { ...pos, favorableExtreme } } };
   }
 
-  if (entrySignal && nextBar) {
+  if (entrySignal && nextBar && entryAllowed(config.session, candles[i], nextBar)) {
     const fillPrice = openFillPrice(nextBar.open);
     const quantity = computeQuantity(state.cash, fillPrice, config.positionSizing);
     if (quantity > 0) {

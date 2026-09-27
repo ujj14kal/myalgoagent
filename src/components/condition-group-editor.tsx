@@ -1,5 +1,6 @@
 "use client";
 
+import { createContext, useContext } from "react";
 import type { ComparisonOperator, ConditionNode, IndicatorKind, Operand, PriceField } from "@/lib/strategy";
 import { INDICATOR_CATALOG, INDICATOR_BY_KIND, operandsScaleCompatible } from "@/lib/strategy/indicator-catalog";
 import { CANDLE_PATTERN_CATALOG } from "@/lib/strategy/candle-pattern-catalog";
@@ -96,20 +97,21 @@ function timeInputToMinutes(value: string): number {
   return h * 60 + m;
 }
 
-/** The strategy's own chart — patterns with no timeframe of their own are read on it. */
-const BASE_TIMEFRAME: CandleInterval = "1d";
+/** The strategy's own timeframe — conditions with no timeframe of their own are read on it. */
+export const StrategyTimeframeContext = createContext<CandleInterval>("1d");
 
 function TimeframeSelect({ value, onChange }: { value: CandleInterval | undefined; onChange: (v: CandleInterval | undefined) => void }) {
-  // No "Same as chart" option: the strategy chart is shown as the timeframe it
+  const base = useContext(StrategyTimeframeContext);
+  // No "Same as chart" option: the strategy's own timeframe is shown as what it
   // actually is, and choosing it stores no override (so saved strategies are unchanged).
   return (
     <select
       className={`${inputClass} text-brand-navy/60`}
-      value={value ?? BASE_TIMEFRAME}
+      value={value ?? base}
       title="Detect on this timeframe"
       onChange={(e) => {
         const v = e.target.value as CandleInterval;
-        onChange(v === BASE_TIMEFRAME ? undefined : v);
+        onChange(v === base ? undefined : v);
       }}
     >
       {INTERVALS.map((iv) => (
@@ -125,17 +127,39 @@ function SignalEditor({
   node,
   onChange,
   onRemove,
+  purpose,
 }: {
   node: Extract<ConditionNode, { kind: "signal" }>;
   onChange: (n: ConditionNode) => void;
   onRemove: () => void;
+  /** In the simple builder: "Entry time" (a window to enter in) or "Exit time" (exit at a time). */
+  purpose?: "entry" | "exit";
 }) {
   const signal = node.signal;
+
+  if (signal.family === "TIME_WINDOW" && purpose === "exit") {
+    // "Exit at 15:15" = true from that time until the close.
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-lg bg-brand-bg p-2">
+        <span className="text-xs font-medium text-brand-navy/60">Exit time: close the position at</span>
+        <input
+          type="time"
+          className={inputClass}
+          value={minutesToTimeInput(signal.startMinute)}
+          onChange={(e) => onChange({ kind: "signal", signal: { family: "TIME_WINDOW", startMinute: timeInputToMinutes(e.target.value), endMinute: 15 * 60 + 30 } })}
+        />
+        <span className="text-xs text-brand-navy/40">(IST, or the first candle after it)</span>
+        <button type="button" onClick={onRemove} className="ml-auto text-xs text-brand-navy/40 hover:text-brand-sell">
+          Remove
+        </button>
+      </div>
+    );
+  }
 
   if (signal.family === "TIME_WINDOW") {
     return (
       <div className="flex flex-wrap items-center gap-2 rounded-lg bg-brand-bg p-2">
-        <span className="text-xs font-medium text-brand-navy/60">Time is between</span>
+        <span className="text-xs font-medium text-brand-navy/60">{purpose === "entry" ? "Entry time: enter between" : "Time is between"}</span>
         <input
           type="time"
           className={inputClass}
@@ -212,6 +236,37 @@ function SignalEditor({
           Remove
         </button>
       </div>
+      <label className="flex flex-wrap items-center gap-2 text-xs text-brand-navy/60">
+        <input
+          type="checkbox"
+          className="accent-brand-primary"
+          checked={!!signal.window}
+          onChange={(e) =>
+            onChange({ kind: "signal", signal: { ...signal, window: e.target.checked ? { startMinute: 9 * 60 + 15, endMinute: 11 * 60 } : undefined } })
+          }
+        />
+        Only between
+        {signal.window ? (
+          <>
+            <input
+              type="time"
+              className={inputClass}
+              value={minutesToTimeInput(signal.window.startMinute)}
+              onChange={(e) => onChange({ kind: "signal", signal: { ...signal, window: { ...signal.window!, startMinute: timeInputToMinutes(e.target.value) } } })}
+            />
+            and
+            <input
+              type="time"
+              className={inputClass}
+              value={minutesToTimeInput(signal.window.endMinute)}
+              onChange={(e) => onChange({ kind: "signal", signal: { ...signal, window: { ...signal.window!, endMinute: timeInputToMinutes(e.target.value) } } })}
+            />
+            <span className="text-brand-navy/40">(IST, intraday timeframes)</span>
+          </>
+        ) : (
+          <span className="text-brand-navy/40">certain times of day (optional)</span>
+        )}
+      </label>
       <CandlePatternIllustration pattern={signal.pattern} atLevel={signal.atLevel} />
       </div>
     );

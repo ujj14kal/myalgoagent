@@ -76,3 +76,14 @@ describe("support / resistance for the agent", () => {
     expect(valid({ left: "close", op: "crosses_above", right: { indicator: "resistance" } })).toMatchObject({ right: { type: "RESISTANCE", params: [5, 2, 1] } });
   });
 });
+
+describe("intraday options for the agent", () => {
+  it("adds an optional time window to a candle pattern", () => {
+    expect(valid({ candle_pattern: "hammer", between: ["10:00", "11:30"] })).toMatchObject({ signal: { window: { startMinute: 600, endMinute: 690 } } });
+    expect(() => toConditionNode({ candle_pattern: "hammer", between: ["11:30", "10:00"] })).toThrow(/after its start/);
+  });
+  it("accepts 3m and 4h timeframes", () => {
+    expect(valid({ candle_pattern: "doji", timeframe: "4h" })).toMatchObject({ signal: { timeframe: "4h" } });
+    expect(valid({ left: { indicator: "rsi", timeframe: "3m" }, op: ">", right: 50 })).toMatchObject({ left: { timeframe: "3m" } });
+  });
+});

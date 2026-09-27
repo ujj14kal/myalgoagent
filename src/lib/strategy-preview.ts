@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/logger";
 import { compile } from "@/lib/strategy-compile";
-import { marketDataFor, type Candle } from "@/lib/market-data";
+import { isIntraday, marketDataFor, type Candle } from "@/lib/market-data";
+import { STRATEGY_TIMEFRAMES, engineSession, normalizeSession, rangeFor } from "@/lib/strategy/session";
 import { fetchAuxCandles } from "@/lib/strategy-aux-data";
 import { runBacktest, type BacktestTradeResult } from "@/lib/backtest/run";
 import { conditionToText } from "@/lib/strategy/format";
@@ -33,13 +34,21 @@ export type StrategyPreview = {
   winRatePct: number;
   capital: number;
   dataSource: string;
+  timeframeLabel: string;
+  periodLabel: string;
+  intraday: boolean;
 };
+
+const PERIOD_LABEL: Partial<Record<string, string>> = { "1d": "1 day", "5d": "5 days", "1mo": "1 month", "3mo": "3 months", "6mo": "6 months", "1y": "1 year" };
 
 const LABEL_BY_DSL = new Map(INDICATOR_CATALOG.map((d) => [d.dslName, d.label]));
 
 /** A rule as a person would say it: "EMA(9) crosses above EMA(21)" rather than the code form. */
 function readableRule(node: ConditionNode): string {
   return conditionToText(node)
+    // Time rules read as times: "the exit time 15:15 was reached", "it was the entry time (09:15–09:30)".
+    .replace(/time between (\d\d:\d\d) and 15:30/g, "the exit time $1 was reached")
+    .replace(/time between (\d\d:\d\d) and (\d\d:\d\d)/g, "it was the entry time ($1–$2)")
     .replace(/crossesAbove/g, "crosses above")
     .replace(/crossesBelow/g, "crosses below")
     .replace(/\b([a-z]+)\(([^)]*)\)/g, (m, name: string, args: string) => {
@@ -85,10 +94,13 @@ export async function computeStrategyPreview(userId: string | null, input: Strat
     const instrument = await prisma.instrument.findUnique({ where: { id: input.instrumentId }, select: { symbol: true } });
     if (!instrument) return { ok: false, error: "Choose an instrument first." };
 
+    const session = normalizeSession(input);
+    const timeframe = session.timeframe;
+    const range = rangeFor(timeframe, PREVIEW.range);
     const market = marketDataFor(userId, "backtest");
-    const candles = await market.getHistoricalCandles(instrument.symbol, PREVIEW.range, "1d");
+    const candles = await market.getHistoricalCandles(instrument.symbol, range, timeframe);
     if (candles.length === 0) return { ok: false, error: "No recent price data for this instrument." };
-    const aux = await fetchAuxCandles(compiled.entryCondition, compiled.exitCondition, instrument.symbol, PREVIEW.range, "1d", market);
+    const aux = await fetchAuxCandles(compiled.entryCondition, compiled.exitCondition, instrument.symbol, range, timeframe, market);
 
     const leg = (l: StrategyInput["stopLoss"]) => (l.enabled ? { enabled: true, unit: l.unit, value: l.value } : null);
     const result = runBacktest(
@@ -103,6 +115,7 @@ export async function computeStrategyPreview(userId: string | null, input: Strat
         riskManagement: { stopLoss: leg(input.stopLoss), target: leg(input.target), trailingSl: leg(input.trailingSl) },
         maxPyramidEntries: input.maxPyramidEntries,
         direction: input.direction,
+        session: engineSession(session, compiled.entryCondition),
       },
       aux,
     );
@@ -136,6 +149,9 @@ export async function computeStrategyPreview(userId: string | null, input: Strat
         winRatePct: result.metrics.winRatePct,
         capital: PREVIEW.capital,
         dataSource: market.name,
+        timeframeLabel: STRATEGY_TIMEFRAMES.find((t) => t.value === timeframe)?.label ?? timeframe,
+        periodLabel: PERIOD_LABEL[range] ?? range,
+        intraday: isIntraday(timeframe),
       },
     };
   } catch (err) {

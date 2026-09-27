@@ -233,6 +233,12 @@ model Strategy {
   trailingSlUnit      RiskUnit?
   trailingSlValue     Float?
   maxPyramidEntries   Int                @default(1)
+  // Candle timeframe the strategy runs on ("1d", "15m", "3m", "4h" …). Intraday
+  // timeframes enable time-of-day rules; the session fields apply only to them.
+  timeframe           String             @default("1d")
+  // IST minute of day: no new entries at/after it; open positions squared off at it.
+  noEntryAfterMinute  Int?
+  squareOffMinute     Int?
   status              StrategyStatus     @default(DRAFT)
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
@@ -281,6 +287,12 @@ model BacktestRun {
   trailingSlUnit      RiskUnit?
   trailingSlValue     Float?
   maxPyramidEntries   Int                @default(1)
+  // Candle timeframe the strategy runs on ("1d", "15m", "3m", "4h" …). Intraday
+  // timeframes enable time-of-day rules; the session fields apply only to them.
+  timeframe           String             @default("1d")
+  // IST minute of day: no new entries at/after it; open positions squared off at it.
+  noEntryAfterMinute  Int?
+  squareOffMinute     Int?
   range               String
   entryCondition      Json
   exitCondition       Json
@@ -352,6 +364,12 @@ model PaperSession {
   trailingSlUnit           RiskUnit?
   trailingSlValue          Float?
   maxPyramidEntries        Int                @default(1)
+  // Candle timeframe the strategy runs on ("1d", "15m", "3m", "4h" …). Intraday
+  // timeframes enable time-of-day rules; the session fields apply only to them.
+  timeframe           String             @default("1d")
+  // IST minute of day: no new entries at/after it; open positions squared off at it.
+  noEntryAfterMinute  Int?
+  squareOffMinute     Int?
   // Alert-only sessions detect and notify on entry/exit signals without
   // ever placing an order or touching cash/position state.
   alertOnly                Boolean            @default(false)

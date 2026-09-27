@@ -24,12 +24,15 @@ const CATEGORY_LABEL: Record<ConditionCategory, string> = {
   VOLUME_PATTERN: "Volume",
 };
 
-function defaultForCategory(category: ConditionCategory): ConditionNode {
+function defaultForCategory(category: ConditionCategory, purpose?: "entry" | "exit"): ConditionNode {
   switch (category) {
     case "INDICATOR":
       return defaultComparison();
     case "TIME":
-      return defaultTimeWindow();
+      // Exit time defaults to 15:15 (true from then until the close).
+      return purpose === "exit"
+        ? { kind: "signal", signal: { family: "TIME_WINDOW", startMinute: 15 * 60 + 15, endMinute: 15 * 60 + 30 } }
+        : defaultTimeWindow();
     case "CANDLE_PATTERN":
       return defaultCandlePattern();
     case "CHART_PATTERN":
@@ -91,10 +94,13 @@ export default function SimpleConditionPicker({
   onChange,
   instruments,
   categories = ALL_CATEGORIES,
+  purpose,
 }: {
   node: ConditionNode;
   onChange: (n: ConditionNode) => void;
   instruments: InstrumentOption[];
+  /** Entry or exit section — changes how time conditions read ("Entry time" / "Exit time"). */
+  purpose?: "entry" | "exit";
   categories?: ConditionCategory[];
 }) {
   // Two conditions: "Match both" (AND) or "Match any" (OR).
@@ -104,7 +110,7 @@ export default function SimpleConditionPicker({
       onChange({ ...node, children: i === 0 ? [child, second] : [first, child] });
     return (
       <div className="space-y-3">
-        <SingleCondition node={first} onChange={(n) => setChild(0, n)} instruments={instruments} categories={categories} />
+        <SingleCondition node={first} onChange={(n) => setChild(0, n)} instruments={instruments} categories={categories} purpose={purpose} />
         <div className="flex items-center gap-2">
           <span className="h-px flex-1 bg-brand-navy/10" />
           <div className="flex overflow-hidden rounded-full border border-brand-navy/15">
@@ -121,7 +127,7 @@ export default function SimpleConditionPicker({
           </div>
           <span className="h-px flex-1 bg-brand-navy/10" />
         </div>
-        <SingleCondition node={second} onChange={(n) => setChild(1, n)} instruments={instruments} categories={categories} />
+        <SingleCondition node={second} onChange={(n) => setChild(1, n)} instruments={instruments} categories={categories} purpose={purpose} />
         <button type="button" onClick={() => onChange(first)} className="text-xs font-medium text-brand-navy/50 hover:text-brand-sell">
           − Remove second condition
         </button>
@@ -131,7 +137,7 @@ export default function SimpleConditionPicker({
 
   return (
     <div className="space-y-3">
-      <SingleCondition node={node} onChange={onChange} instruments={instruments} categories={categories} />
+      <SingleCondition node={node} onChange={onChange} instruments={instruments} categories={categories} purpose={purpose} />
       <button
         type="button"
         onClick={() => onChange({ kind: "group", op: "AND", children: [node, defaultComparison()] })}
@@ -149,11 +155,13 @@ function SingleCondition({
   onChange,
   instruments,
   categories,
+  purpose,
 }: {
   node: ConditionNode;
   onChange: (n: ConditionNode) => void;
   instruments: InstrumentOption[];
   categories: ConditionCategory[];
+  purpose?: "entry" | "exit";
 }) {
   const active = classifyCategory(node) ?? "INDICATOR";
 
@@ -165,7 +173,7 @@ function SingleCondition({
             key={cat}
             type="button"
             onClick={() => {
-              if (cat !== active) onChange(defaultForCategory(cat));
+              if (cat !== active) onChange(defaultForCategory(cat, purpose));
             }}
             className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
               cat === active
@@ -173,7 +181,7 @@ function SingleCondition({
                 : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
             }`}
           >
-            {CATEGORY_LABEL[cat]}
+            {cat === "TIME" && purpose ? (purpose === "entry" ? "Entry time" : "Exit time") : CATEGORY_LABEL[cat]}
           </button>
         ))}
       </div>
@@ -187,7 +195,7 @@ function SingleCondition({
             instruments={instruments}
           />
         ) : node.kind === "signal" ? (
-          <SignalEditor node={node} onChange={onChange} onRemove={() => onChange(defaultForCategory(active))} />
+          <SignalEditor node={node} onChange={onChange} onRemove={() => onChange(defaultForCategory(active, purpose))} purpose={purpose} />
         ) : (
           // Shouldn't happen (a group/not passed in) — fall back to the
           // full tree editor rather than showing nothing.

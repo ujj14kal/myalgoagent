@@ -136,7 +136,10 @@ async function converseMantle({
     const res = await mantleChat({
       model: model.slice(MANTLE_PREFIX.length),
       messages,
-      maxTokens: useTools ? AI_LIMITS.maxToolTokens : AI_LIMITS.maxOutputTokens,
+      // Any round of a tool-enabled chat — including the final answer after lookups —
+      // gets the larger budget: the model's reasoning over tool results can
+      // otherwise use up the whole allowance and leave no reply.
+      maxTokens: tools?.length ? AI_LIMITS.maxToolTokens : AI_LIMITS.maxOutputTokens,
       temperature: 0.3,
       tools: useTools ? tools : undefined,
       signal,

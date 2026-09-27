@@ -29,6 +29,10 @@ export type AgentProposal =
         entrySource?: string;
         exitSource?: string;
         maxPyramidEntries?: number;
+        /** Candle timeframe ("1d" default, or intraday) and intraday session rules (IST minutes). */
+        timeframe?: string;
+        noEntryAfterMinute?: number | null;
+        squareOffMinute?: number | null;
         /** TradingView-webhook strategy — rules come from alerts, not conditions. */
         webhook?: boolean;
         stopLoss: RiskLegDraft;
@@ -142,6 +146,9 @@ export function toStrategyInput(
     target: d.target,
     trailingSl: d.trailingSl,
     maxPyramidEntries: d.maxPyramidEntries && d.maxPyramidEntries > 0 ? Math.floor(d.maxPyramidEntries) : 1,
+    timeframe: d.timeframe ?? "1d",
+    noEntryAfterMinute: d.noEntryAfterMinute ?? null,
+    squareOffMinute: d.squareOffMinute ?? null,
   };
   if (d.webhook) return { ...common, mode: "WEBHOOK" };
   if (d.entryCondition) {

@@ -16,12 +16,19 @@ export type ExplainContext = {
   stopLoss: Leg;
   target: Leg;
   trailingStop: Leg;
+  /** Intraday timeframe: show the time of day with each date. */
+  intraday?: boolean;
 };
 
 const inr = (n: number) => `₹${Math.abs(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const signedInr = (n: number) => `${n < 0 ? "−" : "+"}${inr(n)}`;
-const day = (unixSeconds: number) =>
-  new Date(unixSeconds * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
+/** "25 Sep" for a daily strategy; "25 Sep, 10:15" (IST) for an intraday one. */
+const when = (unixSeconds: number, intraday?: boolean) => {
+  const d = new Date(unixSeconds * 1000);
+  const date = d.toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
+  if (!intraday) return date;
+  return `${date}, ${d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" })}`;
+};
 const clip = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 function legText(leg: Leg): string {
@@ -37,6 +44,7 @@ export function explainPaperOrder(o: NewPaperOrder, c: ExplainContext): string {
   const verb = isOpen ? (c.direction === "SHORT" ? "Sold short" : "Bought") : c.direction === "SHORT" ? "Bought back" : "Sold";
   const head = `${verb} ${qty} ${c.symbol} at ${inr(o.price)} (${c.strategyName})`;
   const pnl = o.netPnl != null ? ` P&L ${signedInr(o.netPnl)} after fees.` : "";
+  const day = (t: number) => when(t, c.intraday);
 
   switch (o.reason) {
     case "entry_rule":
@@ -51,5 +59,7 @@ export function explainPaperOrder(o: NewPaperOrder, c: ExplainContext): string {
       return `${head} — your ${legText(c.target)} take-profit was reached on ${day(o.signalTime)}.${pnl}`;
     case "trailing_stop":
       return `${head} — your ${legText(c.trailingStop)} trailing stop was hit on ${day(o.signalTime)} (price moved that far back from its best level).${pnl}`;
+    case "square_off":
+      return `${head} — intraday position squared off on ${day(o.signalTime)} (square-off time reached or the day's trading ended), so nothing is carried overnight.${pnl}`;
   }
 }

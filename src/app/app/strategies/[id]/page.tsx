@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { marketDataFor } from "@/lib/market-data";
+import { type CandleInterval, marketDataFor } from "@/lib/market-data";
+import { rangeFor } from "@/lib/strategy/session";
+import { describeExecutionConfig } from "@/lib/describe-strategy-config";
 import {
   evaluateStrategy,
   collectConditionOperands,
@@ -56,7 +58,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
   let fetchError: string | null = null;
   if (!isWebhook) {
     try {
-      candles = await market.getHistoricalCandles(strategy.instrument.symbol, "6mo", "1d");
+      candles = await market.getHistoricalCandles(strategy.instrument.symbol, rangeFor(strategy.timeframe, "6mo"), strategy.timeframe as CandleInterval);
     } catch (err) {
       fetchError = err instanceof Error ? err.message : "Failed to load market data";
     }
@@ -69,7 +71,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
   // evaluate to "unknown data" and be treated as false).
   const aux =
     !isWebhook && candles.length > 0
-      ? await fetchAuxCandles(entryCondition, exitCondition, strategy.instrument.symbol, "6mo", "1d", market)
+      ? await fetchAuxCandles(entryCondition, exitCondition, strategy.instrument.symbol, rangeFor(strategy.timeframe, "6mo"), strategy.timeframe as CandleInterval, market)
       : new Map();
 
   // A webhook-mode strategy has no real condition tree (see
@@ -116,7 +118,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
         <p className="-mt-2 text-xs text-brand-navy/45">
           Data: {market.name}
           {!market.isOfficial && " (interim feed, not an official NSE/BSE source)"}
-          {" · "}Daily bars, not real-time · signals shown are a preview of where this
+          {" · "}{describeExecutionConfig({ ...strategy }).split(" · ")[0]}, not real-time · signals shown are a preview of where this
           strategy would have triggered, not a backtest of P&amp;L.
         </p>
       )}
@@ -174,6 +176,9 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
               trailingSlUnit: strategy.trailingSlUnit,
               trailingSlValue: strategy.trailingSlValue,
               maxPyramidEntries: strategy.maxPyramidEntries,
+              timeframe: strategy.timeframe,
+              noEntryAfterMinute: strategy.noEntryAfterMinute,
+              squareOffMinute: strategy.squareOffMinute,
             }}
           />
         </div>

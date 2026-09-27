@@ -13,7 +13,13 @@ export interface StrategyExecutionConfig {
   trailingSlUnit: RiskUnit | null;
   trailingSlValue: number | null;
   maxPyramidEntries: number;
+  timeframe?: string;
+  noEntryAfterMinute?: number | null;
+  squareOffMinute?: number | null;
 }
+
+const TIMEFRAME_LABEL: Record<string, string> = { "1m": "1-minute", "3m": "3-minute", "5m": "5-minute", "15m": "15-minute", "30m": "30-minute", "60m": "1-hour", "4h": "4-hour", "1d": "daily" };
+const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
 const UNIT_SUFFIX: Record<RiskUnit, string> = {
   PERCENT: "%",
@@ -39,6 +45,7 @@ const SIZING_LABEL: Record<PositionSizingMode, string> = {
  * what's actually running. */
 export function describeExecutionConfig(config: StrategyExecutionConfig): string {
   const parts: string[] = [];
+  if (config.timeframe) parts.push(`${TIMEFRAME_LABEL[config.timeframe] ?? config.timeframe} candles`);
 
   const sizing = SIZING_LABEL[config.positionSizingMode];
   parts.push(
@@ -55,6 +62,8 @@ export function describeExecutionConfig(config: StrategyExecutionConfig): string
   parts.push(target ? `${target} target` : "no target");
   parts.push(trailingSl ? `${trailingSl} trailing stop` : "no trailing stop");
   parts.push(config.maxPyramidEntries > 1 ? `up to ${config.maxPyramidEntries} pyramided entries` : "no pyramiding");
+  if (config.noEntryAfterMinute != null) parts.push(`no entries after ${hhmm(config.noEntryAfterMinute)}`);
+  if (config.squareOffMinute != null) parts.push(`square-off at ${hhmm(config.squareOffMinute)}`);
 
   return parts.join(" · ");
 }

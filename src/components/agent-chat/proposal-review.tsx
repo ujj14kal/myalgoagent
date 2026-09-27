@@ -24,7 +24,14 @@ import Agent2D from "@/components/robot/agent-2d";
 import { NEW_STRATEGY_ID, PROPOSAL_TITLES, toStrategyInput, type AgentProposal, type PlanStep, type ProposalStatus } from "@/lib/ai/proposals";
 import { listInstrumentsForReview, setProposalStatus } from "@/lib/agent-chat-actions";
 import { createStrategy, createStrategyForAgent, archiveStrategyAction, updateStrategy } from "@/lib/strategy-actions";
-import ConditionGroupEditor, { defaultComparison } from "@/components/condition-group-editor";
+import ConditionGroupEditor, { StrategyTimeframeContext, defaultComparison } from "@/components/condition-group-editor";
+import type { CandleInterval } from "@/lib/market-data";
+import { DEFAULT_SQUARE_OFF_MINUTE, STRATEGY_TIMEFRAMES, clock } from "@/lib/strategy/session";
+
+const toMinutes = (v: string) => {
+  const [h, m] = v.split(":").map(Number);
+  return h * 60 + m;
+};
 import { runBacktestAction, runBacktestForAgent } from "@/lib/backtest-actions";
 import { setPaperSessionStatus, startPaperSession, startPaperSessionForAgent, syncPaperSessionAction } from "@/lib/paper-actions";
 import { toggleKillSwitch, updateRiskSettings } from "@/lib/risk-actions";
@@ -393,6 +400,7 @@ function StrategyFields({
           ))}
         </div>
       </Field>
+      <StrategyTimeframeContext.Provider value={(draft.timeframe ?? "1d") as CandleInterval}>
       {draft.entryCondition ? (
         <>
           <div>
@@ -434,6 +442,7 @@ function StrategyFields({
           </Field>
         </>
       )}
+      </StrategyTimeframeContext.Provider>
       <div>
         <span className={labelCls}>Risk rules</span>
         <div className="space-y-2 rounded-xl bg-brand-bg p-3 ring-1 ring-black/5">
@@ -459,6 +468,50 @@ function StrategyFields({
           <Field label="Value">
             <NumberInput value={draft.positionSizingValue} onChange={(v) => set("positionSizingValue", v)} />
           </Field>
+        )}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Field label="Timeframe">
+          <select
+            value={draft.timeframe ?? "1d"}
+            onChange={(e) => {
+              const timeframe = e.target.value;
+              const intraday = timeframe !== "1d";
+              onChange({
+                ...draft,
+                timeframe,
+                noEntryAfterMinute: intraday ? draft.noEntryAfterMinute ?? null : null,
+                squareOffMinute: intraday ? draft.squareOffMinute ?? DEFAULT_SQUARE_OFF_MINUTE : null,
+              });
+            }}
+            className={inputCls}
+          >
+            {STRATEGY_TIMEFRAMES.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {(draft.timeframe ?? "1d") !== "1d" && (
+          <>
+            <Field label="No new entries after">
+              <input
+                type="time"
+                value={draft.noEntryAfterMinute != null ? clock(draft.noEntryAfterMinute) : ""}
+                onChange={(e) => set("noEntryAfterMinute", e.target.value ? toMinutes(e.target.value) : null)}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Square off at">
+              <input
+                type="time"
+                value={draft.squareOffMinute != null ? clock(draft.squareOffMinute) : ""}
+                onChange={(e) => set("squareOffMinute", e.target.value ? toMinutes(e.target.value) : null)}
+                className={inputCls}
+              />
+            </Field>
+          </>
         )}
       </div>
       <Field label="Max entries per position (pyramiding)" className="sm:w-1/2">
@@ -581,7 +634,7 @@ function ProposalFields({
           {p.draft.action === "pause" && "Pause"}
           {p.draft.action === "resume" && "Resume"}
           {p.draft.action === "stop" && "Stop"} the paper session <strong>{p.draft.strategyName}</strong> ({p.draft.instrumentSymbol})
-          {p.draft.action === "sync" && " with the latest end-of-day data"}
+          {p.draft.action === "sync" && " with the latest market data"}
           {p.draft.action === "stop" && ". A stopped session can't be restarted"}.
         </Statement>
       );

@@ -234,6 +234,9 @@ function walk(node: ConditionNode, section: FeasibilitySection, issues: Feasibil
 
   if (node.kind === "signal") {
     if (node.signal.family === "TIME_WINDOW") checkTimeWindowFeasibility(node.signal, section, issues);
+    if (node.signal.family === "CANDLE_PATTERN" && node.signal.window) {
+      checkTimeWindowFeasibility({ family: "TIME_WINDOW", ...node.signal.window }, section, issues);
+    }
     return;
   }
 

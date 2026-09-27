@@ -13,11 +13,21 @@ interface StrategyOption extends StrategyExecutionConfig {
 }
 
 const RANGES: { value: CandleRange; label: string }[] = [
+  { value: "5d", label: "5 days" },
+  { value: "1mo", label: "1 month" },
   { value: "3mo", label: "3 months" },
   { value: "6mo", label: "6 months" },
   { value: "1y", label: "1 year" },
   { value: "5y", label: "5 years" },
 ];
+
+/** Periods the data source keeps for a timeframe (intraday history is limited). */
+function rangesFor(timeframe: string | undefined): typeof RANGES {
+  if (timeframe === "1m" || timeframe === "3m") return RANGES.filter((r) => r.value === "5d");
+  if (["5m", "15m", "30m"].includes(timeframe ?? "")) return RANGES.filter((r) => r.value === "5d" || r.value === "1mo");
+  if (timeframe === "60m" || timeframe === "4h") return RANGES.filter((r) => ["1mo", "3mo", "6mo", "1y"].includes(r.value));
+  return RANGES.filter((r) => r.value !== "5d" && r.value !== "1mo");
+}
 
 export default function BacktestRunForm({ strategies }: { strategies: StrategyOption[] }) {
   const [strategyId, setStrategyId] = useState(strategies[0]?.id ?? "");
@@ -29,6 +39,9 @@ export default function BacktestRunForm({ strategies }: { strategies: StrategyOp
   const [isPending, startTransition] = useTransition();
 
   const selectedStrategy = strategies.find((s) => s.id === strategyId);
+  const periods = rangesFor(selectedStrategy?.timeframe);
+  // Keep the chosen period valid for the selected strategy's timeframe.
+  const effectiveRange = periods.some((p) => p.value === range) ? range : periods[periods.length - 1].value;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -40,7 +53,7 @@ export default function BacktestRunForm({ strategies }: { strategies: StrategyOp
           startingCapital,
           brokeragePercent,
           slippagePercent,
-          range,
+          range: effectiveRange,
         });
         if (result?.error) setError(result.error);
       } catch (err) {
@@ -129,11 +142,11 @@ export default function BacktestRunForm({ strategies }: { strategies: StrategyOp
         <div>
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Period</label>
           <select
-            value={range}
+            value={effectiveRange}
             onChange={(e) => setRange(e.target.value as CandleRange)}
             className="rounded-lg border border-brand-navy/15 px-3 py-2 text-sm outline-none focus:border-brand-primary"
           >
-            {RANGES.map((r) => (
+            {periods.map((r) => (
               <option key={r.value} value={r.value}>
                 {r.label}
               </option>

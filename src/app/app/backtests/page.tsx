@@ -49,6 +49,9 @@ export default async function BacktestsPage() {
             trailingSlUnit: s.trailingSlUnit,
             trailingSlValue: s.trailingSlValue,
             maxPyramidEntries: s.maxPyramidEntries,
+            timeframe: s.timeframe,
+            noEntryAfterMinute: s.noEntryAfterMinute,
+            squareOffMinute: s.squareOffMinute,
           }))}
         />
       </div>

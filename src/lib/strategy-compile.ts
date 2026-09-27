@@ -4,6 +4,7 @@ import { NEVER_EXIT_CONDITION, type FeasibilityIssue } from "@/lib/strategy/type
 import { validatePositionSizing, type RiskLegInput } from "@/lib/trading-engine/step";
 import type { ConditionNode } from "@/lib/strategy";
 import type { StrategyInput } from "@/lib/strategy-actions";
+import { checkSessionFeasibility, sessionFromInput } from "@/lib/strategy/session";
 
 // Every check a strategy must pass before it's saved — shared by the builder's
 // server actions (strategy-actions.ts) and the agent's propose_strategy tool,
@@ -87,7 +88,8 @@ export async function compile(input: StrategyInput): Promise<{
 }> {
   if (!input.name.trim()) throw new Error("Strategy name is required");
   if (!input.instrumentId) throw new Error("Instrument is required");
-  throwIfInfeasible([...checkPositionSizingFeasibility(input), ...checkRiskFeasibility(input)]);
+  const session = sessionFromInput(input);
+  throwIfInfeasible([...checkPositionSizingFeasibility(input), ...checkRiskFeasibility(input), ...checkSessionFeasibility(session, null, null)]);
 
   if (input.mode === "WEBHOOK") {
     // No condition tree at all — entries/exits come from an external
@@ -108,7 +110,11 @@ export async function compile(input: StrategyInput): Promise<{
     }
     const entryCondition = parseDsl(input.entrySource);
     const exitCondition = parseDsl(input.exitSource);
-    throwIfInfeasible([...checkConditionFeasibility(entryCondition, "entry"), ...checkConditionFeasibility(exitCondition, "exit")]);
+    throwIfInfeasible([
+      ...checkConditionFeasibility(entryCondition, "entry"),
+      ...checkConditionFeasibility(exitCondition, "exit"),
+      ...checkSessionFeasibility(session, entryCondition, exitCondition),
+    ]);
     await validateReferencedInstruments(entryCondition, exitCondition);
     return {
       entryCondition,
@@ -126,6 +132,7 @@ export async function compile(input: StrategyInput): Promise<{
   throwIfInfeasible([
     ...checkConditionFeasibility(input.entryCondition, "entry"),
     ...checkConditionFeasibility(input.exitCondition, "exit"),
+    ...checkSessionFeasibility(session, input.entryCondition, input.exitCondition),
   ]);
   await validateReferencedInstruments(input.entryCondition, input.exitCondition);
   return {

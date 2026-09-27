@@ -8,13 +8,18 @@ import type { PreviewTrade, StrategyPreview as Preview } from "@/lib/strategy-pr
 import type { StrategyInput } from "@/lib/strategy-actions";
 
 const inr = (n: number) => `${n < 0 ? "−" : ""}₹${Math.abs(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
-const day = (t: number) => new Date(t * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
+const day = (t: number, intraday = false) => {
+  const d = new Date(t * 1000);
+  const date = d.toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
+  return intraday ? `${date}, ${d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" })}` : date;
+};
 
 const EXIT_REASON: Record<NonNullable<PreviewTrade["exitReason"]>, string> = {
   exit_rule: "the exit rule was met",
   stop_loss: "the stop-loss was hit",
   target: "the take-profit was hit",
   trailing_stop: "the trailing stop was hit",
+  square_off: "the intraday square-off time was reached",
   end_of_data: "still open at the end of the period (closed for this demo)",
 };
 
@@ -51,7 +56,7 @@ export default function StrategyPreview({ buildInput, direction }: { buildInput:
           {isPending ? <RefreshCw size={15} className="animate-spin" /> : preview ? <RefreshCw size={15} /> : <PlayCircle size={15} />}
           {isPending ? "Running…" : preview ? "Update the demo" : "Show how it trades"}
         </button>
-        <p className="text-xs text-brand-navy/50">Runs your rules on the last 6 months of daily data. Nothing is saved.</p>
+        <p className="text-xs text-brand-navy/50">Runs your rules on recent data for the chosen timeframe. Nothing is saved.</p>
       </div>
 
       {error && <p className="mt-3 rounded-lg bg-brand-sell/[0.06] px-3 py-2 text-sm text-brand-sell">{error}</p>}
@@ -75,6 +80,9 @@ export function PreviewResultView({ preview, direction }: { preview: Preview; di
           <div className="flex flex-wrap gap-2 text-xs">
             <span className="rounded-full bg-brand-bg px-3 py-1 font-semibold text-brand-navy ring-1 ring-black/5">{preview.symbol}</span>
             <span className="rounded-full bg-brand-bg px-3 py-1 text-brand-navy/70 ring-1 ring-black/5">
+              {preview.timeframeLabel} · last {preview.periodLabel}
+            </span>
+            <span className="rounded-full bg-brand-bg px-3 py-1 text-brand-navy/70 ring-1 ring-black/5">
               {preview.trades.length} trade{preview.trades.length === 1 ? "" : "s"}
             </span>
             {preview.trades.length > 0 && (
@@ -94,7 +102,7 @@ export function PreviewResultView({ preview, direction }: { preview: Preview; di
 
           {preview.trades.length === 0 ? (
             <p className="rounded-lg bg-brand-bg px-4 py-3 text-sm text-brand-navy/70 ring-1 ring-black/5">
-              The entry rule didn&apos;t trigger in the last 6 months, so no trade would have been taken. Try loosening it, or pick another instrument.
+              The entry rule didn&apos;t trigger in the last {preview.periodLabel}, so no trade would have been taken. Try loosening it, or pick another instrument.
             </p>
           ) : (
             <div>
@@ -105,14 +113,14 @@ export function PreviewResultView({ preview, direction }: { preview: Preview; di
                     <p className="flex items-start gap-2 text-brand-navy/80">
                       <ArrowUpRight size={15} className="mt-0.5 shrink-0 text-brand-buy" />
                       <span>
-                        <strong className="font-semibold text-brand-navy">{buyWord}</strong> {t.quantity} on {day(t.entryTime)} at {inr(t.entryPrice)}, because{" "}
+                        <strong className="font-semibold text-brand-navy">{buyWord}</strong> {t.quantity} on {day(t.entryTime, preview.intraday)} at {inr(t.entryPrice)}, because{" "}
                         <span className="font-medium text-brand-navy">{t.entryReason}</span>.
                       </span>
                     </p>
                     <p className="mt-1 flex items-start gap-2 text-brand-navy/80">
                       <ArrowDownRight size={15} className="mt-0.5 shrink-0 text-brand-sell" />
                       <span>
-                        <strong className="font-semibold text-brand-navy">{sellWord}</strong> on {day(t.exitTime)} at {inr(t.exitPrice)}, because {EXIT_REASON[t.exitReason ?? "exit_rule"]}
+                        <strong className="font-semibold text-brand-navy">{sellWord}</strong> on {day(t.exitTime, preview.intraday)} at {inr(t.exitPrice)}, because {EXIT_REASON[t.exitReason ?? "exit_rule"]}
                         {t.exitReason === "exit_rule" && (t.exitRuleReason ?? preview.exitRule) ? (
                           <>
                             {" "}(<span className="font-medium text-brand-navy">{t.exitRuleReason ?? preview.exitRule}</span>)
@@ -133,7 +141,7 @@ export function PreviewResultView({ preview, direction }: { preview: Preview; di
           )}
 
           <p className="text-[11px] text-brand-navy/45">
-            Demo on {preview.dataSource} daily data with ₹1,00,000, 0.03% brokerage and 0.05% slippage. Past results don&apos;t guarantee future results. Run a
+            Demo on {preview.periodLabel} of {preview.dataSource} {preview.timeframeLabel} candles with ₹1,00,000, 0.03% brokerage and 0.05% slippage. Past results don&apos;t guarantee future results. Run a
             full backtest after saving for complete metrics.
           </p>
         </div>

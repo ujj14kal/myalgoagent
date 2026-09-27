@@ -28,6 +28,7 @@ const groups: Group[] = [
     icon: Layers,
     items: [
       "Step-by-step builder: position, entry, optional exit, risk management — or write the same rules as code",
+      "Run on the timeframe you choose — 1m, 3m, 5m, 15m, 30m, 1H, 4H or daily — with entry and exit times, \"no new entries after\" and an intraday square-off time; intraday positions are never carried overnight",
       "Combine two conditions with Match both / Match any, or build any AND/OR group in advanced mode",
       "Indicator-to-indicator and price-to-indicator comparisons, crossovers and crossunders",
       "Candlestick, chart and volume patterns, each shown with a picture of what it looks like — and candle patterns that only count at a support or resistance level",
@@ -64,7 +65,7 @@ const groups: Group[] = [
   {
     title: "Paper & Live Trading",
     icon: Radio,
-    items: ["Paper trading with virtual capital and simulated fills on end-of-day data"],
+    items: ["Paper trading with virtual capital and simulated fills on the strategy's own candles — daily or intraday — updated each time you sync"],
     soon: [
       "Live trading via supported broker APIs, with explicit user authorization",
       "Order lifecycle tracking: pending, submitted, filled, rejected, cancelled",

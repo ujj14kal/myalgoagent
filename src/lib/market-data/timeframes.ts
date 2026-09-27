@@ -27,19 +27,26 @@ export const RANGES: { value: CandleRange; label: string }[] = [
 
 export const INTERVALS: { value: CandleInterval; label: string }[] = [
   { value: "1m", label: "1m" },
-  { value: "2m", label: "2m" },
+  { value: "3m", label: "3m" },
   { value: "5m", label: "5m" },
   { value: "15m", label: "15m" },
   { value: "30m", label: "30m" },
   { value: "60m", label: "1H" },
+  { value: "4h", label: "4H" },
   { value: "1d", label: "1D" },
   { value: "1wk", label: "1W" },
   { value: "1mo", label: "1M" },
 ];
 
-const INTRADAY_1M: CandleInterval[] = ["1m"];
+// 3m is built from 1m candles and 4h from 60m ones, so they share those limits.
+const INTRADAY_1M: CandleInterval[] = ["1m", "3m"];
 const INTRADAY_SHORT: CandleInterval[] = ["2m", "5m", "15m", "30m"];
-const INTRADAY_HOUR: CandleInterval[] = ["60m"];
+const INTRADAY_HOUR: CandleInterval[] = ["60m", "4h"];
+
+/** True for any timeframe shorter than a day — where time-of-day rules and square-off apply. */
+export function isIntraday(interval: CandleInterval): boolean {
+  return INTRADAY_1M.includes(interval) || INTRADAY_SHORT.includes(interval) || INTRADAY_HOUR.includes(interval);
+}
 
 /** Max range each interval can actually be served for, most restrictive first. */
 export function isValidCombo(range: CandleRange, interval: CandleInterval): boolean {
@@ -108,7 +115,7 @@ export function clampRangeForInterval(range: CandleRange, interval: CandleInterv
 }
 
 export const VALID_RANGES: CandleRange[] = RANGES.map((r) => r.value);
-export const VALID_INTERVALS: CandleInterval[] = INTERVALS.map((i) => i.value);
+export const VALID_INTERVALS: CandleInterval[] = [...INTERVALS.map((i) => i.value), "2m"];
 
 /** How long one bar of this interval actually spans, in seconds — the basis
  * for multi-timeframe alignment: a higher-timeframe bar is only "closed"
@@ -121,6 +128,8 @@ export function intervalDurationSeconds(interval: CandleInterval): number {
       return 60;
     case "2m":
       return 120;
+    case "3m":
+      return 180;
     case "5m":
       return 300;
     case "15m":
@@ -129,6 +138,10 @@ export function intervalDurationSeconds(interval: CandleInterval): number {
       return 1800;
     case "60m":
       return 3600;
+    case "4h":
+      // The afternoon 4-hour candle is shorter (13:15–15:30); a full 4 hours is
+      // the safe upper bound, so a 4H candle is never used before it has closed.
+      return 4 * 3600;
     case "1d":
       return 86400;
     case "1wk":

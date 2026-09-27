@@ -1,4 +1,5 @@
-import type { MarketDataProvider } from "@/lib/market-data";
+import type { CandleInterval, MarketDataProvider } from "@/lib/market-data";
+import { engineSession, paperSyncRange } from "@/lib/strategy/session";
 import { evaluateConditionsPerBar } from "@/lib/strategy";
 import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
 import { fetchAuxCandles } from "@/lib/strategy-aux-data";
@@ -27,6 +28,10 @@ export interface PaperSessionState {
   positionSizing: PositionSizing;
   riskManagement?: RiskManagementConfig;
   maxPyramidEntries?: number;
+  /** Candle timeframe (default daily) and intraday session rules. */
+  timeframe?: string;
+  noEntryAfterMinute?: number | null;
+  squareOffMinute?: number | null;
   // When true, entry/exit signals are detected and reported but never
   // acted on — no order is placed, cash/position never change. Lets a
   // user watch a strategy's signals fire before trusting it with money.
@@ -96,8 +101,10 @@ export interface SyncResult {
  * `lastSyncedTime` are actually acted on.
  */
 export async function syncPaperSession(session: PaperSessionState, allowNewEntries: boolean, market: MarketDataProvider): Promise<SyncResult> {
-  const candles = await market.getHistoricalCandles(session.instrumentSymbol, "3mo", "1d");
-  const aux = await fetchAuxCandles(session.entryCondition, session.exitCondition, session.instrumentSymbol, "3mo", "1d", market);
+  const timeframe = (session.timeframe ?? "1d") as CandleInterval;
+  const range = paperSyncRange(timeframe);
+  const candles = await market.getHistoricalCandles(session.instrumentSymbol, range, timeframe);
+  const aux = await fetchAuxCandles(session.entryCondition, session.exitCondition, session.instrumentSymbol, range, timeframe, market);
 
   const { entry, exit } = evaluateConditionsPerBar(candles, session.entryCondition, session.exitCondition, aux);
 
@@ -163,6 +170,10 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
     atrAtEntry: atrByTimeFinal ? (idx: number) => atrByTimeFinal.get(candles[idx]?.time) : undefined,
     maxPyramidEntries: session.maxPyramidEntries ?? DEFAULT_MAX_PYRAMID_ENTRIES,
     direction: session.direction,
+    session: engineSession(
+      { timeframe, noEntryAfterMinute: session.noEntryAfterMinute ?? null, squareOffMinute: session.squareOffMinute ?? null },
+      session.entryCondition,
+    ),
   };
   // A long opens with a BUY and closes with a SELL; a short is the mirror.
   const openSide = session.direction === "SHORT" ? "SELL" : "BUY";

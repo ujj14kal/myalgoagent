@@ -37,6 +37,13 @@ function validateSignal(v: unknown, path: string): asserts v is BooleanSignalKin
     if (v.atLevel !== undefined && v.atLevel !== "SUPPORT" && v.atLevel !== "RESISTANCE") {
       throw new Error(`${path}.atLevel: must be SUPPORT, RESISTANCE or omitted`);
     }
+    if (v.window !== undefined) {
+      const w = v.window as { startMinute?: unknown; endMinute?: unknown } | null;
+      const ok = (m: unknown) => typeof m === "number" && Number.isInteger(m) && m >= 0 && m < 1440;
+      if (!w || !ok(w.startMinute) || !ok(w.endMinute) || (w.endMinute as number) <= (w.startMinute as number)) {
+        throw new Error(`${path}.window: needs a start and a later end time`);
+      }
+    }
     validateTimeframe(v.timeframe, path);
     return;
   }

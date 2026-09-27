@@ -77,8 +77,8 @@ const sections: LegalSection[] = [
     title: "Paper trading",
     body: (
       <p className="mt-3 text-sm leading-relaxed text-brand-navy/70">
-        Paper trading runs a strategy forward on end-of-day market data
-        using virtual capital only. No real orders are placed and no real money
+        Paper trading runs a strategy forward on its own candles — daily or
+        intraday, from 1-minute to 4-hour — using virtual capital only. No real orders are placed and no real money
         is at risk. It exists to validate a strategy&rsquo;s live behavior
         before any capital is committed. See{" "}
         <Link href="/paper-trading" className="text-brand-primary underline">Paper Trading</Link>.

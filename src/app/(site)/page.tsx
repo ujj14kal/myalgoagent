@@ -15,7 +15,7 @@ const workflow = [
   { step: "01", title: "Market Data", text: "Pull historical and intraday price data for supported instruments.", icon: "radio" as const },
   { step: "02", title: "Strategy Builder", text: "Combine indicators, entry/exit rules and risk parameters — no code required.", icon: "braces" as const },
   { step: "03", title: "Backtesting", text: "Simulate the strategy against history with fees, slippage and realistic fills.", icon: "chart" as const },
-  { step: "04", title: "Paper Trading", text: "Run the strategy forward on end-of-day market data using virtual capital only.", icon: "layers" as const },
+  { step: "04", title: "Paper Trading", text: "Run the strategy forward on daily or intraday candles using virtual capital only.", icon: "layers" as const },
   { step: "05", title: "Risk Controls", text: "Set a loss limit, a losing-streak limit and a kill switch before going further.", icon: "shield" as const },
   { step: "06", title: "Live Execution", text: "Connect a supported broker and run the strategy with real capital, with your explicit authorization.", icon: "route" as const, soon: true },
 ];
@@ -23,14 +23,14 @@ const workflow = [
 const capabilities = [
   { title: "No-code strategy builder", text: "Compose entry/exit conditions from indicators, price action and time rules." },
   { title: "Realistic backtesting", text: "Configurable brokerage, fees, slippage and position sizing — not just raw price math." },
-  { title: "Paper trading", text: "Validate strategies on end-of-day market data with virtual capital before risking real money." },
+  { title: "Paper trading", text: "Validate strategies on daily or intraday candles with virtual capital before risking real money." },
   { title: "Risk management engine", text: "Per-session loss limits, a losing-streak limit and an emergency kill switch, enforced on the server." },
   { title: "Portfolio & order tracking", text: "Positions, P&L, orders and fills in one dashboard." },
   { title: "Alerts & notifications", text: "Signal, fill and risk-limit alerts, delivered in the app as they happen." },
 ];
 
 const faqs = [
-  { q: "Can I test without risking real capital?", a: "Yes. Paper trading runs a strategy forward on end-of-day market data using virtual capital only." },
+  { q: "Can I test without risking real capital?", a: "Yes. Paper trading runs a strategy forward on daily or intraday candles using virtual capital only." },
   { q: "Does a successful backtest guarantee results?", a: "No. Historical and backtested results are illustrative and cannot guarantee future performance." },
   { q: "How is live trading authorized?", a: "Live trading is coming soon. When it launches, you’ll connect a supported broker and explicitly authorize execution. You can disconnect the broker or use the kill switch at any time." },
 ];

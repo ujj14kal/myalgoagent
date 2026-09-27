@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import ConditionGroupEditor, { defaultComparison } from "@/components/condition-group-editor";
+import ConditionGroupEditor, { StrategyTimeframeContext, defaultComparison } from "@/components/condition-group-editor";
+import type { CandleInterval } from "@/lib/market-data";
 import SimpleConditionPicker, { ALL_CATEGORIES, fitsSimpleMode, unwrapForSimpleMode } from "@/components/simple-condition-picker";
 import StrategyCodeEditor from "@/components/strategy-code-editor";
 import PositionSizingFields from "@/components/position-sizing-fields";
@@ -12,6 +13,7 @@ import CandlePatternIllustration from "@/components/candle-pattern-illustration"
 import StrategyPreview from "@/components/strategy-preview";
 import { CANDLE_PATTERN_BY_KIND } from "@/lib/strategy/candle-pattern-catalog";
 import type { CandlePatternKind } from "@/lib/candle-patterns";
+import { DEFAULT_SQUARE_OFF_MINUTE, STRATEGY_TIMEFRAMES } from "@/lib/strategy/session";
 import { createStrategy, updateStrategy, autoSaveDraftStrategy, type StrategyInput } from "@/lib/strategy-actions";
 import { NEVER_EXIT_CONDITION, isNeverExitCondition, type FeasibilitySection } from "@/lib/strategy/types";
 import { consumeDraftReminderSkip, setDraftReminderSkipCount } from "@/lib/draft-reminder";
@@ -128,6 +130,50 @@ interface StrategyInitial {
   trailingSlUnit: RiskUnit | null;
   trailingSlValue: number | null;
   maxPyramidEntries: number;
+  timeframe?: string;
+  noEntryAfterMinute?: number | null;
+  squareOffMinute?: number | null;
+}
+
+const minutesToTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const timeToMinutes = (v: string) => {
+  const [h, m] = v.split(":").map(Number);
+  return h * 60 + m;
+};
+
+/** An optional time-of-day setting: a checkbox that switches it on, and the time. */
+function SessionTimeField({
+  label,
+  hint,
+  value,
+  fallback,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  value: number | null;
+  fallback: number;
+  onChange: (v: number | null) => void;
+}) {
+  return (
+    <div className="rounded-xl border border-brand-navy/10 p-3">
+      <label className="flex items-center gap-2 text-sm font-medium text-brand-navy">
+        <input type="checkbox" className="accent-brand-primary" checked={value !== null} onChange={(e) => onChange(e.target.checked ? fallback : null)} />
+        {label}
+      </label>
+      <p className="mt-0.5 text-xs text-brand-navy/40">{hint}</p>
+      {value !== null && (
+        <input
+          type="time"
+          min="09:15"
+          max="15:30"
+          value={minutesToTime(value)}
+          onChange={(e) => e.target.value && onChange(timeToMinutes(e.target.value))}
+          className="mt-2 rounded-lg border border-brand-navy/15 px-3 py-1.5 text-sm outline-none focus:border-brand-primary"
+        />
+      )}
+    </div>
+  );
 }
 
 export default function StrategyBuilderForm({
@@ -168,6 +214,13 @@ export default function StrategyBuilderForm({
   const [positionSizingMode, setPositionSizingMode] = useState<PositionSizingMode>(initial?.positionSizingMode ?? "FULL_CAPITAL");
   const [positionSizingValue, setPositionSizingValue] = useState<number | null>(initial?.positionSizingValue ?? null);
   const [maxPyramidEntries, setMaxPyramidEntries] = useState(initial?.maxPyramidEntries ?? 1);
+  const [timeframe, setTimeframe] = useState<string>(initial?.timeframe ?? "1d");
+  const [noEntryAfterMinute, setNoEntryAfterMinute] = useState<number | null>(initial?.noEntryAfterMinute ?? null);
+  // Intraday strategies square off at 15:20 by default, like a broker's intraday product.
+  const [squareOffMinute, setSquareOffMinute] = useState<number | null>(
+    initial ? (initial.squareOffMinute ?? null) : DEFAULT_SQUARE_OFF_MINUTE,
+  );
+  const intraday = timeframe !== "1d";
   const [stopLoss, setStopLoss] = useState<RiskLegState>(
     toRiskLegState(initial?.stopLossEnabled ?? false, initial?.stopLossUnit ?? null, initial?.stopLossValue ?? null, 2),
   );
@@ -310,6 +363,9 @@ export default function StrategyBuilderForm({
       target,
       trailingSl,
       maxPyramidEntries,
+      timeframe,
+      noEntryAfterMinute: intraday ? noEntryAfterMinute : null,
+      squareOffMinute: intraday ? squareOffMinute : null,
     };
   }
   useEffect(() => {
@@ -374,6 +430,7 @@ export default function StrategyBuilderForm({
 
   return (
     <>
+      <StrategyTimeframeContext.Provider value={timeframe as CandleInterval}>
       <form onSubmit={handleSubmit} className="mx-auto max-w-4xl space-y-5">
         <div className="surface p-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -459,6 +516,36 @@ export default function StrategyBuilderForm({
                   : "Entry sells to open (short); exit buys to cover."}
               </p>
             </div>
+            {mode !== "WEBHOOK" && (
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
+                  Timeframe
+                </label>
+                <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Timeframe">
+                  {STRATEGY_TIMEFRAMES.map((t) => (
+                    <button
+                      key={t.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={timeframe === t.value}
+                      onClick={() => setTimeframe(t.value)}
+                      className={`min-w-[44px] rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        timeframe === t.value ? "border-brand-primary bg-brand-primary text-white" : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-xs text-brand-navy/40">
+                  {intraday
+                    ? `Checks the rules on every ${STRATEGY_TIMEFRAMES.find((t) => t.value === timeframe)?.label} candle. Intraday history is limited: about ${
+                        timeframe === "1m" || timeframe === "3m" ? "7 days" : timeframe === "60m" || timeframe === "4h" ? "1 year" : "60 days"
+                      } for backtests on the current data source.`
+                    : "Checks the rules once per day, on each daily candle."}
+                </p>
+              </div>
+            )}
             <PositionSizingFields
               mode={positionSizingMode}
               value={positionSizingValue}
@@ -509,7 +596,7 @@ export default function StrategyBuilderForm({
             >
               {mode === "NO_CODE" ? (
                 entryMode === "SIMPLE" ? (
-                  <SimpleConditionPicker node={entryCondition} onChange={setEntryCondition} instruments={instruments} categories={ALL_CATEGORIES} />
+                  <SimpleConditionPicker node={entryCondition} onChange={setEntryCondition} instruments={instruments} categories={ALL_CATEGORIES} purpose="entry" />
                 ) : (
                   <ConditionGroupEditor node={entryCondition} onChange={setEntryCondition} instruments={instruments} />
                 )
@@ -535,7 +622,7 @@ export default function StrategyBuilderForm({
                 <>
                   {exitConditionOpen ? (
                     exitMode === "SIMPLE" ? (
-                      <SimpleConditionPicker node={exitCondition} onChange={setExitCondition} instruments={instruments} categories={ALL_CATEGORIES} />
+                      <SimpleConditionPicker node={exitCondition} onChange={setExitCondition} instruments={instruments} categories={ALL_CATEGORIES} purpose="exit" />
                     ) : (
                       <ConditionGroupEditor node={exitCondition} onChange={setExitCondition} instruments={instruments} />
                     )
@@ -568,6 +655,24 @@ export default function StrategyBuilderForm({
             onTargetChange={setTarget}
             onTrailingSlChange={setTrailingSl}
           />
+          {mode !== "WEBHOOK" && intraday && (
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <SessionTimeField
+                label="No new entries after"
+                hint="No position is opened at or after this time."
+                value={noEntryAfterMinute}
+                fallback={14 * 60 + 30}
+                onChange={setNoEntryAfterMinute}
+              />
+              <SessionTimeField
+                label="Square off at"
+                hint="Open positions close at this time. Intraday positions are never carried overnight."
+                value={squareOffMinute}
+                fallback={DEFAULT_SQUARE_OFF_MINUTE}
+                onChange={setSquareOffMinute}
+              />
+            </div>
+          )}
           {mode !== "WEBHOOK" && (
             <p className="mt-3 text-xs text-brand-navy/40">
               These and the exit rule all stay active — whichever triggers first closes the position.
@@ -606,6 +711,7 @@ export default function StrategyBuilderForm({
           {isPending ? "Saving…" : strategyId ? "Save changes" : "Create strategy"}
         </button>
       </form>
+      </StrategyTimeframeContext.Provider>
 
       {feasibilityIssues && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

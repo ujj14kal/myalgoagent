@@ -1,4 +1,5 @@
 import type { Candle } from "@/lib/market-data";
+import { istDayAndMinute } from "@/lib/market-data/resample";
 import { evaluateConditionsPerBar } from "@/lib/strategy";
 import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
 import type { ConditionNode, AuxCandleMap } from "@/lib/strategy";
@@ -12,6 +13,7 @@ import {
   type PositionSizing,
   type RiskManagementConfig,
   type StrategyDirection,
+  type IntradaySession,
 } from "@/lib/trading-engine/step";
 
 const DEFAULT_ATR_PERIOD = 14;
@@ -24,6 +26,7 @@ export interface BacktestConfig {
   riskManagement?: RiskManagementConfig;
   maxPyramidEntries?: number;
   direction?: StrategyDirection;
+  session?: IntradaySession;
 }
 
 function usesAtr(rm: RiskManagementConfig | undefined): boolean {
@@ -92,10 +95,21 @@ function computeMetrics(
     }
   }
 
+  // Sharpe is annualised with √252 trading days, so it must use one equity value
+  // per day: for intraday strategies, each day's last value (for daily ones this
+  // changes nothing).
+  const endOfDay: number[] = [];
+  let lastDay: number | null = null;
+  for (const p of equityCurve) {
+    const d = istDayAndMinute(p.time).day;
+    if (d === lastDay) endOfDay[endOfDay.length - 1] = p.equity;
+    else endOfDay.push(p.equity);
+    lastDay = d;
+  }
   const dailyReturns: number[] = [];
-  for (let i = 1; i < equityCurve.length; i++) {
-    const prev = equityCurve[i - 1].equity;
-    if (prev > 0) dailyReturns.push((equityCurve[i].equity - prev) / prev);
+  for (let i = 1; i < endOfDay.length; i++) {
+    const prev = endOfDay[i - 1];
+    if (prev > 0) dailyReturns.push((endOfDay[i] - prev) / prev);
   }
   const meanReturn = dailyReturns.length > 0 ? dailyReturns.reduce((s, r) => s + r, 0) / dailyReturns.length : 0;
   const variance =
@@ -145,6 +159,7 @@ export function runBacktest(
     atrAtEntry: atrByTimeFinal ? (entryIdx: number) => atrByTimeFinal.get(candles[entryIdx]?.time) : undefined,
     maxPyramidEntries: config.maxPyramidEntries,
     direction: config.direction,
+    session: config.session,
   };
 
   const trades: BacktestTradeResult[] = [];

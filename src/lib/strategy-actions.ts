@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { toRiskLeg, type PositionSizingMode, type RiskLegInput } from "@/lib/trading-engine/step";
 import { compile } from "@/lib/strategy-compile";
+import { normalizeSession } from "@/lib/strategy/session";
 import { isUniqueConstraintViolation } from "@/lib/prisma-errors";
 import type { ConditionNode } from "@/lib/strategy";
 import type { Prisma } from "@prisma/client";
@@ -26,6 +27,12 @@ export interface StrategyInput {
   target: RiskLegInput;
   trailingSl: RiskLegInput;
   maxPyramidEntries: number;
+  /** Candle timeframe the strategy runs on; omitted = daily. */
+  timeframe?: string;
+  /** Intraday only (IST minute of day): no new entries at/after it. */
+  noEntryAfterMinute?: number | null;
+  /** Intraday only (IST minute of day): open positions are closed at it. */
+  squareOffMinute?: number | null;
 }
 
 function riskFields(input: StrategyInput) {
@@ -46,6 +53,7 @@ function riskFields(input: StrategyInput) {
     trailingSlUnit: trailingSl.enabled ? trailingSl.unit : null,
     trailingSlValue: trailingSl.enabled ? trailingSl.value : null,
     maxPyramidEntries: input.maxPyramidEntries,
+    ...normalizeSession(input),
   };
 }
 

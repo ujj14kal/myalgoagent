@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { marketDataFor } from "@/lib/market-data";
+import { type CandleInterval, marketDataFor } from "@/lib/market-data";
+import { paperSyncRange } from "@/lib/strategy/session";
 import CandlestickChart from "@/components/candlestick-chart";
 import PaperSessionControls from "@/components/paper-session-controls";
 import { describePositionSizing } from "@/lib/position-sizing";
@@ -30,7 +31,7 @@ export default async function PaperSessionDetailPage({ params }: { params: Promi
   let candles: Awaited<ReturnType<typeof market.getHistoricalCandles>> = [];
   let fetchError: string | null = null;
   try {
-    candles = await market.getHistoricalCandles(paperSession.instrumentSymbol, "3mo", "1d");
+    candles = await market.getHistoricalCandles(paperSession.instrumentSymbol, paperSyncRange(paperSession.timeframe), paperSession.timeframe as CandleInterval);
   } catch (err) {
     fetchError = err instanceof Error ? err.message : "Failed to load market data";
   }
@@ -81,7 +82,7 @@ export default async function PaperSessionDetailPage({ params }: { params: Promi
 
       <p className="mb-4 flex items-center gap-2 rounded-xl border border-brand-gold/30 bg-brand-gold/[0.08] px-4 py-2.5 text-xs font-medium text-brand-navy/70">
         <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-gold" />
-        Simulated with end-of-day data, not real-time — no real money is involved.
+        Simulated on {paperSession.timeframe === "1d" ? "daily" : `${paperSession.timeframe === "60m" ? "1H" : paperSession.timeframe === "4h" ? "4H" : paperSession.timeframe}`} candles, updated when you sync — not real-time. No real money is involved.
       </p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

@@ -12,7 +12,7 @@ import type { CandleInterval } from "@/lib/market-data";
 // can: indicators, price, time windows, candle/chart/volume patterns, other
 // timeframes and other instruments, with AND / OR / NOT.
 
-export const TIMEFRAMES: CandleInterval[] = ["1m", "2m", "5m", "15m", "30m", "60m", "1d", "1wk", "1mo"];
+export const TIMEFRAMES: CandleInterval[] = ["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d", "1wk", "1mo"];
 
 const OPS: Record<string, ComparisonOperator> = {
   ">": "GT",
@@ -37,8 +37,8 @@ const isObj = (v: unknown): v is J => !!v && typeof v === "object" && !Array.isA
 
 function timeframeOf(v: unknown, where: string): CandleInterval | undefined {
   if (v == null || v === "") return undefined;
-  const tf = String(v).toLowerCase().replace(/^1h$/, "60m");
-  if (!TIMEFRAMES.includes(tf as CandleInterval)) throw new Error(`${where}: timeframe "${v}" isn't supported — use one of ${TIMEFRAMES.join(", ")}.`);
+  const tf = String(v).toLowerCase().replace(/^1h$/, "60m").replace(/^240m$/, "4h");
+  if (!TIMEFRAMES.includes(tf as CandleInterval) && tf !== "2m") throw new Error(`${where}: timeframe "${v}" isn't supported — use one of ${TIMEFRAMES.join(", ")}.`);
   return tf as CandleInterval;
 }
 
@@ -142,9 +142,15 @@ export function toConditionNode(v: unknown, where = "condition"): ConditionNode 
     const at = String(v.at_level ?? v.atLevel ?? "").trim().toUpperCase();
     if (at && at !== "SUPPORT" && at !== "RESISTANCE" && at !== "ANYWHERE") throw new Error(`${where}: at_level must be "support", "resistance" or "anywhere".`);
     const atLevel = at === "SUPPORT" || at === "RESISTANCE" ? at : undefined;
+    let window: { startMinute: number; endMinute: number } | undefined;
+    if (v.between !== undefined) {
+      if (!Array.isArray(v.between) || v.between.length !== 2) throw new Error(`${where}: "between" needs ["HH:MM", "HH:MM"].`);
+      window = { startMinute: clockToMinutes(v.between[0], where), endMinute: clockToMinutes(v.between[1], where) };
+      if (window.endMinute <= window.startMinute) throw new Error(`${where}: the window's end must be after its start.`);
+    }
     return {
       kind: "signal",
-      signal: { family: "CANDLE_PATTERN", pattern: pattern(CANDLES, v.candle_pattern, "candle", where) as never, ...(tf ? { timeframe: tf } : {}), ...(atLevel ? { atLevel } : {}) },
+      signal: { family: "CANDLE_PATTERN", pattern: pattern(CANDLES, v.candle_pattern, "candle", where) as never, ...(tf ? { timeframe: tf } : {}), ...(atLevel ? { atLevel } : {}), ...(window ? { window } : {}) },
     };
   }
   if ("chart_pattern" in v) {
@@ -179,7 +185,8 @@ export const CONDITION_REFERENCE = [
   '- value: a number; "close"/"open"/"high"/"low"/"volume"; {"indicator":"rsi","params":[14]}; {"price":"close"}. Any indicator or price value can add "timeframe" (' +
     TIMEFRAMES.join(", ") +
     ') to read another chart, and/or "symbol" (e.g. "TCS.NS") to read another instrument.',
-  '- time of day (IST): {"time_between":["09:15","09:30"]} — true while the bar time is inside the window (end exclusive). "Enter at 9:15" = time_between 09:15–09:16 or a short window; "exit at/after 3:15 pm" = time_between 15:15–15:30.',
+  '- time of day (IST): {"time_between":["09:15","09:30"]} — true while the candle time is inside the window (end exclusive). Entry time "enter between 9:15 and 9:30" = entry time_between 09:15–09:30; exit time "exit at 3:15 pm" = exit time_between 15:15–15:30. Time rules need an intraday strategy timeframe (set "timeframe", e.g. "5m").',
+  '  A candle pattern can add "between":["10:00","11:30"] to count only in that window (intraday).',
   `- candle pattern: {"candle_pattern":"HAMMER"} — ${CANDLE_PATTERN_CATALOG.map((p) => p.kind).join(", ")}`,
   `- chart pattern: {"chart_pattern":"DOUBLE_BOTTOM"} — ${CHART_PATTERN_CATALOG.map((p) => p.kind).join(", ")}`,
   `- volume pattern: {"volume_pattern":"VOLUME_SPIKE"} — ${VOLUME_PATTERN_CATALOG.map((p) => p.kind).join(", ")}`,

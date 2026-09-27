@@ -18,7 +18,7 @@ const steps = [
   { title: "2. Strategy creation", text: "Define entry and exit rules using the no-code strategy builder: indicators (including support and resistance levels), candlestick and chart patterns, price/volume conditions, time rules and position sizing — then see on a demo chart where it would have entered and exited before you save it. See the Strategy Builder section of Features." },
   { title: "3. Backtesting", text: "Run the strategy against historical data with configurable capital, fees, brokerage and slippage. Backtests are designed to avoid look-ahead bias and future-data leakage." },
   { title: "4. Validation", text: "Review trade-by-trade results, the equity curve, drawdown and performance metrics before trusting a strategy with any capital." },
-  { title: "5. Paper trading", text: "Run the validated strategy forward on end-of-day market data using virtual capital only, to see how it behaves on new data before risking money." },
+  { title: "5. Paper trading", text: "Run the validated strategy forward on daily or intraday candles using virtual capital only, to see how it behaves on new data before risking money." },
   { title: "6. Risk controls", text: "Set a per-session loss limit, a losing-streak limit and the kill switch. These are enforced server-side, independent of the UI." },
   { title: "7. Broker connection", text: "Connect a supported broker account. The platform tests the connection and synchronizes account state before enabling live trading.", soon: true },
   { title: "8. Live execution", text: "With explicit confirmation, the strategy can place real orders through the broker, with the same risk controls active.", soon: true },

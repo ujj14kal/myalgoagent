@@ -8,7 +8,7 @@ import ComingSoonTag from "@/components/coming-soon-tag";
 export const metadata: Metadata = pageMetadata({
   title: "Paper Trading",
   description:
-    "Run a strategy forward on end-of-day market data using virtual capital only — no real orders, no real money at risk.",
+    "Run a strategy forward on daily or intraday candles using virtual capital only — no real orders, no real money at risk.",
   path: "/paper-trading",
 });
 
@@ -27,7 +27,7 @@ export default function PaperTradingPage() {
         <h2>How it differs from live trading</h2>
         <p>
           Paper trading uses the same strategy engine and signals as
-          backtesting, run forward on end-of-day data each time you sync,
+          backtesting, run forward on the strategy&rsquo;s own candles (daily or intraday) each time you sync,
           and every order is simulated against a virtual balance. No order is ever sent to a broker, and no real capital is
           ever at risk. The interface clearly labels a paper account as
           simulated at all times.

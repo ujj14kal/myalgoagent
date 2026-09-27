@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { marketDataFor } from "@/lib/market-data";
+import { marketDataFor, isIntraday, type CandleInterval } from "@/lib/market-data";
+import { rangeFor } from "@/lib/strategy/session";
 import { syncPaperSession } from "@/lib/paper/sync";
 import { evaluateRisk } from "@/lib/risk/evaluate";
 import { enforceRateLimit } from "@/lib/rate-limit";
@@ -64,7 +65,12 @@ async function startPaperSessionCore(userId: string, input: StartPaperSessionInp
     // shouldn't be startable even via a stale/direct request.
     if (strategy.status === "DELETED") throw new Error("This strategy has been deleted");
 
-    const candles = await marketDataFor(userId, "trading").getHistoricalCandles(strategy.instrument.symbol, "1mo", "1d");
+    // The session starts from the latest candle of the strategy's own timeframe.
+    const candles = await marketDataFor(userId, "trading").getHistoricalCandles(
+      strategy.instrument.symbol,
+      rangeFor(strategy.timeframe, "1mo"),
+      strategy.timeframe as CandleInterval,
+    );
     if (candles.length === 0) throw new Error("No historical data available for this instrument");
     const latestTime = candles.at(-1)!.time;
 
@@ -94,6 +100,9 @@ async function startPaperSessionCore(userId: string, input: StartPaperSessionInp
         trailingSlUnit: strategy.trailingSlUnit,
         trailingSlValue: strategy.trailingSlValue,
         maxPyramidEntries: strategy.maxPyramidEntries,
+        timeframe: strategy.timeframe,
+        noEntryAfterMinute: strategy.noEntryAfterMinute,
+        squareOffMinute: strategy.squareOffMinute,
         alertOnly: input.alertOnly,
         cash: input.startingCapital,
         lastSyncedTime: latestTime,
@@ -223,6 +232,9 @@ async function syncPaperSessionInner(id: string, userId: string): Promise<PaperA
           : null,
       },
       maxPyramidEntries: paperSession.maxPyramidEntries,
+      timeframe: paperSession.timeframe,
+      noEntryAfterMinute: paperSession.noEntryAfterMinute,
+      squareOffMinute: paperSession.squareOffMinute,
       alertOnly: paperSession.alertOnly,
       cash: paperSession.cash,
       positionEntryTime: paperSession.positionEntryTime,
@@ -261,6 +273,7 @@ async function syncPaperSessionInner(id: string, userId: string): Promise<PaperA
     stopLoss: leg(paperSession.stopLossEnabled, paperSession.stopLossUnit, paperSession.stopLossValue),
     target: leg(paperSession.targetEnabled, paperSession.targetUnit, paperSession.targetValue),
     trailingStop: leg(paperSession.trailingSlEnabled, paperSession.trailingSlUnit, paperSession.trailingSlValue),
+    intraday: isIntraday(paperSession.timeframe as CandleInterval),
   };
 
   const writes: Prisma.PrismaPromise<unknown>[] = [

@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { marketDataFor, type CandleRange } from "@/lib/market-data";
+import { marketDataFor, type CandleInterval, type CandleRange } from "@/lib/market-data";
+import { engineSession, rangeFor } from "@/lib/strategy/session";
 import { runBacktest } from "@/lib/backtest/run";
 import { fetchAuxCandles } from "@/lib/strategy-aux-data";
 import { enforceRateLimit } from "@/lib/rate-limit";
@@ -67,14 +68,18 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
         : null,
     };
 
+    // Runs on the strategy's own timeframe; intraday history is limited by what
+    // the data source keeps, so the period is clamped to what's available.
+    const timeframe = strategy.timeframe as CandleInterval;
+    const range = rangeFor(timeframe, input.range);
     const market = marketDataFor(userId, "backtest");
-    const candles = await market.getHistoricalCandles(strategy.instrument.symbol, input.range, "1d");
+    const candles = await market.getHistoricalCandles(strategy.instrument.symbol, range, timeframe);
     if (candles.length === 0) throw new Error("No historical data available for this instrument");
 
     const entryCondition = strategy.entryCondition as unknown as ConditionNode;
     const exitCondition = strategy.exitCondition as unknown as ConditionNode;
 
-    const aux = await fetchAuxCandles(entryCondition, exitCondition, strategy.instrument.symbol, input.range, "1d", market);
+    const aux = await fetchAuxCandles(entryCondition, exitCondition, strategy.instrument.symbol, range, timeframe, market);
 
     const result = runBacktest(
       candles,
@@ -88,6 +93,7 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
         riskManagement,
         maxPyramidEntries: strategy.maxPyramidEntries,
         direction: strategy.direction,
+        session: engineSession(strategy, entryCondition),
       },
       aux,
     );
@@ -114,7 +120,10 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
         trailingSlUnit: strategy.trailingSlUnit,
         trailingSlValue: strategy.trailingSlValue,
         maxPyramidEntries: strategy.maxPyramidEntries,
-        range: input.range,
+        range,
+        timeframe: strategy.timeframe,
+        noEntryAfterMinute: strategy.noEntryAfterMinute,
+        squareOffMinute: strategy.squareOffMinute,
         entryCondition: entryCondition as unknown as Prisma.InputJsonValue,
         exitCondition: exitCondition as unknown as Prisma.InputJsonValue,
         totalReturnPct: result.metrics.totalReturnPct,

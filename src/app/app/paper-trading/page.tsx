@@ -60,7 +60,7 @@ export default async function PaperTradingPage() {
 
   return (
     <div>
-      <PageHeader title="Paper Trading" icon={Activity} description={<>Run a strategy forward with virtual capital. This uses end-of-day data and updates when you click <strong>Sync now</strong> — it is not a continuous real-time simulation.</>} />
+      <PageHeader title="Paper Trading" icon={Activity} description={<>Run a strategy forward with virtual capital. It steps through the strategy&apos;s own candles (daily or intraday) and updates when you click <strong>Sync now</strong> — it is not a continuous real-time simulation.</>} />
 
       <CollapsiblePanel
         title="Start a new paper session"

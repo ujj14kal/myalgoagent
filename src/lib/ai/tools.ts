@@ -110,6 +110,9 @@ export const AGENT_TOOLS: MantleTool[] = [
           entry: { anyOf: [{ type: "string" }, { type: "object" }], description: "Entry condition (see CONDITIONS)" },
           exit: { anyOf: [{ type: "string" }, { type: "object" }, { type: "null" }], description: "Exit condition (see CONDITIONS); null = no rule-based exit (needs a stop-loss, take-profit or trailing stop)" },
           max_entries: { type: "number", description: "Max entries per position (pyramiding); default 1" },
+          timeframe: { type: "string", enum: ["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d"], description: "Candle timeframe the strategy runs on. Use an intraday one (1m–4h) whenever the rules involve times of day; default 1d." },
+          no_entry_after: { type: ["string", "null"], description: "Intraday only: no new entries at/after this IST time, e.g. \"14:30\"" },
+          square_off_at: { type: ["string", "null"], description: "Intraday only: close open positions at this IST time, e.g. \"15:20\" (default 15:20 for intraday; positions are never carried overnight)" },
           stop_loss: riskLegSchema,
           take_profit: riskLegSchema,
           trailing_stop: riskLegSchema,
@@ -247,6 +250,9 @@ export const AGENT_TOOLS: MantleTool[] = [
             },
           },
           max_entries: { type: "number" },
+          timeframe: { type: "string", enum: ["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d"], description: "Candle timeframe the strategy runs on. Use an intraday one (1m–4h) whenever the rules involve times of day; default 1d." },
+          no_entry_after: { type: ["string", "null"], description: "Intraday only: no new entries at/after this IST time, e.g. \"14:30\"" },
+          square_off_at: { type: ["string", "null"], description: "Intraday only: close open positions at this IST time, e.g. \"15:20\" (default 15:20 for intraday; positions are never carried overnight)" },
         },
         required: ["strategy"],
       },
@@ -390,6 +396,25 @@ function sizingFrom(v: unknown, fallback?: { mode: SizingModeName; value: number
   return { mode, value: mode === "FULL_CAPITAL" ? null : num(sizing.value) ?? null };
 }
 
+/** "14:30" / "2:30 pm" → IST minute of day; null/"" → null; undefined when absent. */
+function clockArg(v: unknown): number | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null || v === "" || (typeof v === "string" && /^(none|off|no)$/i.test(v.trim()))) return null;
+  const m = /^(\d{1,2}):(\d{2})\s*(am|pm)?$/i.exec(String(v).trim());
+  if (!m) throw new Error(`time "${String(v)}" should look like 14:30.`);
+  let h = Number(m[1]);
+  if (m[3]) h = (h % 12) + (m[3].toLowerCase() === "pm" ? 12 : 0);
+  return h * 60 + Number(m[2]);
+}
+
+const STRATEGY_TF = ["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d"];
+function timeframeArg(v: unknown): string | undefined {
+  if (v === undefined || v === null || v === "") return undefined;
+  const tf = String(v).toLowerCase().replace(/^1h$/, "60m");
+  if (!STRATEGY_TF.includes(tf)) throw new Error(`timeframe "${String(v)}" isn't supported — use one of ${STRATEGY_TF.join(", ")}.`);
+  return tf;
+}
+
 /** Parses entry/exit; "exit": null / "none" means no rule-based exit. Throws readable errors. */
 function rulesFrom(a: Record<string, unknown>, needEntry: boolean): { entry?: ConditionNode; exit?: ConditionNode | null } {
   const out: { entry?: ConditionNode; exit?: ConditionNode | null } = {};
@@ -426,6 +451,16 @@ async function proposeStrategy(userId: string, a: Record<string, unknown>): Prom
   } catch (err) {
     return { result: { error: `${readableIssues(err)} Fix it and call propose_strategy again.` } };
   }
+  let session;
+  try {
+    const timeframe = timeframeArg(a.timeframe) ?? "1d";
+    const intraday = timeframe !== "1d";
+    const noEntry = clockArg(a.no_entry_after);
+    const squareOff = clockArg(a.square_off_at);
+    session = { timeframe, noEntryAfterMinute: intraday ? noEntry ?? null : null, squareOffMinute: intraday ? (squareOff === undefined ? 15 * 60 + 20 : squareOff) : null };
+  } catch (err) {
+    return { result: { error: `${readableIssues(err)} Fix it and call propose_strategy again.` } };
+  }
   const sizing = sizingFrom(a.position_sizing);
   const draft: StrategyDraft = {
     name: await uniqueStrategyName(userId, str(a.name)),
@@ -440,6 +475,7 @@ async function proposeStrategy(userId: string, a: Record<string, unknown>): Prom
     positionSizingMode: sizing.mode,
     positionSizingValue: sizing.value,
     maxPyramidEntries: Math.max(1, Math.floor(num(a.max_entries) ?? 1)),
+    ...session,
   };
 
   // Same validator as the builder. Instrument isn't needed to check the rules,
@@ -509,6 +545,20 @@ async function proposeStrategyUpdate(userId: string, a: Record<string, unknown>)
     key in a ? (a[key] === null ? { enabled: false, unit: "PERCENT" as RiskUnitName, value: 0 } : leg(a[key])) : saved;
   const sizing = sizingFrom(a.position_sizing, { mode: s.positionSizingMode, value: s.positionSizingValue });
   const newName = str(a.new_name);
+  let updSession;
+  try {
+    const timeframe = timeframeArg(a.timeframe) ?? s.timeframe;
+    const intraday = timeframe !== "1d";
+    const noEntry = clockArg(a.no_entry_after);
+    const squareOff = clockArg(a.square_off_at);
+    updSession = {
+      timeframe,
+      noEntryAfterMinute: intraday ? (noEntry === undefined ? s.noEntryAfterMinute : noEntry) : null,
+      squareOffMinute: intraday ? (squareOff === undefined ? (s.squareOffMinute ?? (s.timeframe === "1d" ? 15 * 60 + 20 : null)) : squareOff) : null,
+    };
+  } catch (err) {
+    return { result: { error: `${readableIssues(err)} Fix it and call propose_strategy_update again.` } };
+  }
 
   const draft: StrategyDraft = {
     name: newName || s.name,
@@ -525,6 +575,7 @@ async function proposeStrategyUpdate(userId: string, a: Record<string, unknown>)
     positionSizingMode: sizing.mode,
     positionSizingValue: sizing.value,
     maxPyramidEntries: Math.max(1, Math.floor(num(a.max_entries) ?? s.maxPyramidEntries)),
+    ...updSession,
     ...(webhook ? { webhook: true } : {}),
   };
   if (newName && newName.toLowerCase() !== s.name.toLowerCase()) {
@@ -581,6 +632,9 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
           trailingStop: legText(r.trailingSlEnabled, r.trailingSlUnit, r.trailingSlValue),
           sizing: r.positionSizingMode + (r.positionSizingValue != null ? ` ${r.positionSizingValue}` : ""),
           maxEntries: r.maxPyramidEntries,
+          timeframe: r.timeframe,
+          noEntryAfter: r.noEntryAfterMinute,
+          squareOffAt: r.squareOffMinute,
         })),
       };
     }

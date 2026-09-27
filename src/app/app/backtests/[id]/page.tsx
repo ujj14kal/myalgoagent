@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { marketDataFor } from "@/lib/market-data";
+import { type CandleInterval, marketDataFor } from "@/lib/market-data";
 import type { CandleRange } from "@/lib/market-data";
 import CandlestickChart from "@/components/candlestick-chart";
 import EquityCurveChart from "@/components/equity-curve-chart";
@@ -52,7 +52,7 @@ export default async function BacktestDetailPage({ params }: { params: Promise<{
   let candles: Awaited<ReturnType<typeof market.getHistoricalCandles>> = [];
   let fetchError: string | null = null;
   try {
-    candles = await market.getHistoricalCandles(run.instrumentSymbol, run.range as CandleRange, "1d");
+    candles = await market.getHistoricalCandles(run.instrumentSymbol, run.range as CandleRange, run.timeframe as CandleInterval);
   } catch (err) {
     fetchError = err instanceof Error ? err.message : "Failed to load market data";
   }

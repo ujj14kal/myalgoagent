@@ -77,7 +77,14 @@ export type BooleanSignalKind =
   | { family: "TIME_WINDOW"; startMinute: number; endMinute: number }
   // `atLevel`: only count the pattern when the candle is at a support (or
   // resistance) level — see lib/support-resistance.ts. Omitted = anywhere.
-  | { family: "CANDLE_PATTERN"; pattern: CandlePatternKind; timeframe?: CandleInterval; atLevel?: "SUPPORT" | "RESISTANCE" }
+  // `window`: only count the pattern between these IST times (intraday strategies).
+  | {
+      family: "CANDLE_PATTERN";
+      pattern: CandlePatternKind;
+      timeframe?: CandleInterval;
+      atLevel?: "SUPPORT" | "RESISTANCE";
+      window?: { startMinute: number; endMinute: number };
+    }
   | { family: "CHART_PATTERN"; pattern: ChartPatternKind; timeframe?: CandleInterval }
   | { family: "VOLUME_PATTERN"; pattern: VolumePatternKind; timeframe?: CandleInterval };
 

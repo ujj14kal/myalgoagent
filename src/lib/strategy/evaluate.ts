@@ -1,6 +1,6 @@
 import type { Candle, CandleInterval } from "@/lib/market-data";
 import { computeIndicatorSeries } from "./compute-series";
-import { computeTimeWindowSeries } from "./time-window";
+import { computeOrderTimeWindowSeries, computeTimeWindowSeries } from "./time-window";
 import { alignToBase, alignSignalToBase } from "./timeframe-align";
 import { computeCandlePatternSeries } from "@/lib/candle-patterns";
 import { computeChartPatternSeries } from "@/lib/chart-patterns";
@@ -149,7 +149,7 @@ function signalKey(signal: BooleanSignalKind): string {
     case "TIME_WINDOW":
       return `TIME_WINDOW:${signal.startMinute}-${signal.endMinute}`;
     case "CANDLE_PATTERN":
-      return `CANDLE_PATTERN:${signal.pattern}:${timeframe ?? ""}:${signal.atLevel ?? ""}`;
+      return `CANDLE_PATTERN:${signal.pattern}:${timeframe ?? ""}:${signal.atLevel ?? ""}:${signal.window ? `${signal.window.startMinute}-${signal.window.endMinute}` : ""}`;
     case "CHART_PATTERN":
       return `CHART_PATTERN:${signal.pattern}:${timeframe ?? ""}`;
     case "VOLUME_PATTERN":
@@ -160,13 +160,21 @@ function signalKey(signal: BooleanSignalKind): string {
 function detectPattern(candles: Candle[], signal: BooleanSignalKind): boolean[] {
   switch (signal.family) {
     case "TIME_WINDOW":
-      return computeTimeWindowSeries(candles, signal.startMinute, signal.endMinute);
+      // Entry/exit times refer to when the order fills (the next candle's open).
+      return computeOrderTimeWindowSeries(candles, signal.startMinute, signal.endMinute);
     case "CANDLE_PATTERN": {
-      const pattern = computeCandlePatternSeries(candles, signal.pattern);
-      if (!signal.atLevel) return pattern;
+      let series = computeCandlePatternSeries(candles, signal.pattern);
       // Same candles, same bar: the pattern AND the candle sitting at the level.
-      const at = atLevelSeries(candles, signal.atLevel);
-      return pattern.map((p, i) => p && at[i]);
+      if (signal.atLevel) {
+        const at = atLevelSeries(candles, signal.atLevel);
+        series = series.map((p, i) => p && at[i]);
+      }
+      // …and, optionally, only between two times of day.
+      if (signal.window) {
+        const inWindow = computeTimeWindowSeries(candles, signal.window.startMinute, signal.window.endMinute);
+        series = series.map((p, i) => p && inWindow[i]);
+      }
+      return series;
     }
     case "CHART_PATTERN":
       return computeChartPatternSeries(candles, signal.pattern);
