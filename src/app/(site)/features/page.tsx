@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Activity, Bell, FlaskConical, Layers, Radio, ShieldCheck, Sparkles } from "lucide-react";
+import { Activity, Bell, FlaskConical, Layers, Radio, ShieldCheck, Sparkles, Sigma } from "lucide-react";
 import PageHeader from "@/components/page-header";
 import { Breadcrumbs } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
@@ -95,6 +95,16 @@ const groups: Group[] = [
       "Portfolio, order and position dashboards",
     ],
     soon: ["Audit logs for authentication, strategy and trading actions", "CSV export of trades and backtest results"],
+  },
+  {
+    title: "Options Lab",
+    icon: Sigma,
+    items: [
+      "Build multi-leg options positions — spreads, straddles, strangles, iron condors and more — from ready-made templates or leg by leg",
+      "Payoff chart at expiry and today, net credit or debit, max profit and loss, and exact breakevens",
+      "Position Greeks: delta, gamma, theta and vega",
+    ],
+    soon: ["Live option chain with real premiums, IV and open interest", "Options backtesting and paper trading", "Live options orders through your broker"],
   },
   {
     title: "Your AI agent",
