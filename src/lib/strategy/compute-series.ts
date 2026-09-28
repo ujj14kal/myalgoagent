@@ -30,12 +30,41 @@ import {
 } from "@/lib/indicators";
 import { supportResistance } from "@/lib/support-resistance";
 import type { IndicatorKind } from "./types";
+import { INDICATOR_BY_KIND } from "./indicator-catalog";
 
 /** Single dispatch point from a DSL/visual-builder indicator + its numeric
  * params to the underlying series in @/lib/indicators — shared by the
  * condition evaluator and the strategy chart overlay so they can never
  * drift apart on what an indicator actually computes. */
-export function computeIndicatorSeries(candles: Candle[], type: IndicatorKind, params: number[]): IndicatorPoint[] {
+/** Settings that count bars (periods, lookbacks) — must be whole numbers ≥ 1. */
+const COUNT_PARAM = /period|fast|slow|signal|strength|touches/i;
+
+/**
+ * Settings as typed by a user can be blank, 0 or nonsense (the chart lets
+ * them edit periods freely). Missing ones fall back to the defaults; a
+ * setting no indicator can use means "nothing to draw" rather than a crash.
+ */
+function usableParams(type: IndicatorKind, params: number[]): number[] | null {
+  const def = INDICATOR_BY_KIND.get(type);
+  if (!def) return params;
+  const out: number[] = [];
+  for (let i = 0; i < def.defaults.length; i++) {
+    const v = params[i] ?? def.defaults[i];
+    if (!Number.isFinite(v)) return null;
+    if (COUNT_PARAM.test(def.paramLabels[i] ?? "")) {
+      if (v < 1) return null;
+      out.push(Math.round(v));
+    } else {
+      if (v < 0) return null;
+      out.push(v);
+    }
+  }
+  return out;
+}
+
+export function computeIndicatorSeries(candles: Candle[], type: IndicatorKind, rawParams: number[]): IndicatorPoint[] {
+  const params = usableParams(type, rawParams);
+  if (!params) return [];
   switch (type) {
     case "SMA":
       return sma(candles, params[0]);

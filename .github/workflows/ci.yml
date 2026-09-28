@@ -27,7 +27,8 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Typecheck
-        run: npx tsc --noEmit
+        # next typegen writes the route/layout types (e.g. LayoutProps) that a fresh checkout lacks.
+        run: npx next typegen && npx tsc --noEmit
       - name: Lint
         run: npm run lint
       - name: Unit tests

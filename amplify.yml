@@ -8,6 +8,7 @@ frontend:
       commands:
         # Quality gate: a failing typecheck, lint or unit test fails the build,
         # so it never deploys (mirrors .github/workflows/ci.yml).
+        - npx next typegen
         - npx tsc --noEmit
         - npm run lint
         - npx vitest run
