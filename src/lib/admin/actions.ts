@@ -129,7 +129,7 @@ export async function suspendUser(userId: string, rawReason: string): Promise<Ad
     ]);
     await audit(staff, "user.suspend", { type: "user", id: u.id }, `Suspended ${u.email}`, { reason });
     revalidatePath("/admin", "layout");
-    return { ok: true, message: `${u.email} is suspended and signed out everywhere. Their active paper sessions were paused.` };
+    return { ok: true, message: `${u.email} is suspended and signed out everywhere. Their active forward tests were paused.` };
   });
 }
 
@@ -140,7 +140,7 @@ export async function unsuspendUser(userId: string): Promise<AdminResult> {
     await prisma.user.update({ where: { id: u.id }, data: { status: "ACTIVE", suspendedAt: null, suspendedReason: null } });
     await audit(staff, "user.unsuspend", { type: "user", id: u.id }, `Restored ${u.email}`);
     revalidatePath("/admin", "layout");
-    return { ok: true, message: `${u.email} can sign in again. Their paper sessions stay paused until they resume them.` };
+    return { ok: true, message: `${u.email} can sign in again. Their forward tests stay paused until they resume them.` };
   });
 }
 

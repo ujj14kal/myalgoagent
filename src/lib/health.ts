@@ -67,7 +67,7 @@ export async function getHealthAlerts(userId: string): Promise<HealthAlert[]> {
       id: `orphaned-${s.id}`,
       severity: "CRITICAL",
       title: `"${s.strategyName}" has no strategy behind it`,
-      description: "Its strategy was deleted, but this paper session is still live and syncing. Stop it to move it to history.",
+      description: "Its strategy was deleted, but this forward test is still live and syncing. Stop it to move it to history.",
       action: { kind: "stop-session", sessionId: s.id, label: "Stop session" },
     });
   }
@@ -107,7 +107,7 @@ export async function getHealthAlerts(userId: string): Promise<HealthAlert[]> {
       severity: "WARNING",
       title: `"${s.strategyName}" hasn't synced in over ${STALE_SYNC_DAYS} days`,
       description: "It's still marked Active but hasn't updated — open it and press Sync now to catch it up.",
-      action: { kind: "link", href: `/app/paper-trading/${s.id}`, label: "Open session" },
+      action: { kind: "link", href: `/app/forward-testing/${s.id}`, label: "Open session" },
     });
   }
 

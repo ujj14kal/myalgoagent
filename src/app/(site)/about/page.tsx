@@ -33,7 +33,7 @@ export default function AboutPage() {
 
         <h2>What we believe</h2>
         <ul>
-          <li>A strategy should be validated on history and in paper trading before it ever touches real capital.</li>
+          <li>A strategy should be validated on history and in forward testing before it ever touches real capital.</li>
           <li>Risk limits should be enforced server-side, not just displayed in a UI.</li>
           <li>Backtested performance is informative, not a promise — and the product should say so clearly.</li>
         </ul>

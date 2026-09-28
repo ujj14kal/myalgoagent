@@ -21,7 +21,7 @@ const sections: LegalSection[] = [
     id: "service",
     title: "The service",
     paragraphs: [
-      "MyAlgoAgent provides software for building, backtesting, paper trading and — where a broker is connected — live-executing rule-based trading strategies. We are a software provider, not a broker-dealer, exchange or investment advisor.",
+      "MyAlgoAgent provides software for building, backtesting, forward testing and — where a broker is connected — live-executing rule-based trading strategies. We are a software provider, not a broker-dealer, exchange or investment advisor.",
     ],
   },
   {
@@ -87,7 +87,7 @@ const sections: LegalSection[] = [
     id: "termination",
     title: "Termination",
     paragraphs: [
-      "You may stop using the Service and close your account at any time. We may suspend or terminate access for breach of these Terms, suspected fraud or abuse, or as required by law, with notice where reasonably practicable. While an account is suspended it cannot sign in and its paper-trading sessions are paused; its data is kept unless you ask us to delete it. If you believe a suspension is a mistake, contact support@myalgoagent.com.",
+      "You may stop using the Service and close your account at any time. We may suspend or terminate access for breach of these Terms, suspected fraud or abuse, or as required by law, with notice where reasonably practicable. While an account is suspended it cannot sign in and its forward-testing sessions are paused; its data is kept unless you ask us to delete it. If you believe a suspension is a mistake, contact support@myalgoagent.com.",
     ],
   },
   {

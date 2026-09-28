@@ -128,7 +128,7 @@ export default async function TicketPage({ params }: { params: Promise<{ kind: s
                   <Pill tone="green">seen {ago(user.lastSeenAt)}</Pill>
                 </div>
                 <p className="pt-1 text-xs text-brand-navy/55">
-                  {user._count.strategies} strategies · {user._count.backtestRuns} backtests · {user._count.paperSessions} paper sessions
+                  {user._count.strategies} strategies · {user._count.backtestRuns} backtests · {user._count.paperSessions} forward tests
                 </p>
                 {user.brokerConnections.length > 0 && (
                   <p className="text-xs text-brand-navy/55">

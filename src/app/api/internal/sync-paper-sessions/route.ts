@@ -6,7 +6,7 @@ import { recordJob } from "@/lib/jobs";
 import { runScheduledPaperSync } from "@/lib/paper/scheduled-sync";
 
 // Called every few minutes on weekdays by an EventBridge schedule, so open
-// paper trades close on their own when a stop-loss, target or trailing stop
+// forward-test trades close on their own when a stop-loss, target or trailing stop
 // is hit — the user doesn't have to open the session and press Sync.
 
 export const dynamic = "force-dynamic";

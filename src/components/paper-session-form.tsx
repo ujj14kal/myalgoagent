@@ -47,7 +47,7 @@ export default function PaperSessionForm({ strategies }: { strategies: StrategyO
   if (strategies.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-brand-navy/15 p-6 text-sm text-brand-navy/60">
-        You need a strategy before you can start paper trading.{" "}
+        You need a strategy before you can start forward testing.{" "}
         <Link href="/app/strategies/new" className="font-medium text-brand-primary hover:underline">
           Create one first →
         </Link>
@@ -139,7 +139,7 @@ export default function PaperSessionForm({ strategies }: { strategies: StrategyO
           disabled={isPending}
           className="rounded-full bg-brand-primary px-6 py-2 text-sm font-medium text-white hover:bg-brand-primary-light disabled:opacity-50"
         >
-          {isPending ? "Starting…" : "Start Paper Trading"}
+          {isPending ? "Starting…" : "Start Forward Testing"}
         </button>
       </div>
 

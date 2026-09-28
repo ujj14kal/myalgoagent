@@ -41,7 +41,7 @@ export default function RiskSettingsForm({
     <form onSubmit={handleSubmit} className="surface p-5">
       <p className="text-sm font-semibold text-brand-navy">Loss limits</p>
       <p className="mt-1 text-xs text-brand-navy/60">
-        Applies to all your paper trading sessions. A session that crosses a
+        Applies to all your forward testing sessions. A session that crosses a
         limit is automatically stopped, and won&rsquo;t open new positions
         until you restart it.
       </p>

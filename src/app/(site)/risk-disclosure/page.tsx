@@ -28,7 +28,14 @@ const sections: LegalSection[] = [
     id: "past-performance",
     title: "Past and backtested performance",
     paragraphs: [
-      "Backtested, simulated and historical performance shown on MyAlgoAgent™ does not guarantee future results. Backtests rely on modeled assumptions (fees, slippage, fills) that may differ from actual market conditions. Paper-trading results reflect simulated orders, not real execution.",
+      "Backtested, simulated and historical performance shown on MyAlgoAgent™ does not guarantee future results. Backtests rely on modeled assumptions (fees, slippage, fills) that may differ from actual market conditions. Forward-testing results reflect simulated orders, not real execution.",
+    ],
+  },
+  {
+    id: "forward-testing",
+    title: "Forward-test results are hypothetical",
+    paragraphs: [
+      "Forward testing applies your rules to new market data as it arrives and records the trades they would have taken. No orders are placed and no money is involved. Its results are hypothetical: fills are modelled at candle prices with your fee and slippage assumptions, checked about every 5 minutes during market hours rather than tick by tick, and don't reflect liquidity, order-book depth, rejected orders or the effect of your own orders on the market. A strategy that does well in a forward test can still lose money when traded live.",
     ],
   },
   {
@@ -75,7 +82,7 @@ const sections: LegalSection[] = [
     id: "demos",
     title: "Demos and illustrations",
     paragraphs: [
-      "The strategy builder's demo runs your rules on a short, recent window of data only. Where a replay is labelled an illustration, the price path after the entry is made up to show how your take-profit, stop-loss or trailing stop would behave — it is not a prediction and did not happen. Neither is a substitute for a full backtest, paper trading and your own judgement.",
+      "The strategy builder's demo runs your rules on a short, recent window of data only. Where a replay is labelled an illustration, the price path after the entry is made up to show how your take-profit, stop-loss or trailing stop would behave — it is not a prediction and did not happen. Neither is a substitute for a full backtest, forward testing and your own judgement.",
     ],
   },
   {

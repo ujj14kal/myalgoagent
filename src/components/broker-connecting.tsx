@@ -284,7 +284,7 @@ export default function BrokerConnecting({ broker, query, method = null }: { bro
               <div className="mt-7 grid gap-3 text-left sm:grid-cols-3">
                 {[
                   { href: "/app/strategies/new", icon: LineChart, title: "Build a strategy", body: "Describe it or use the builder." },
-                  { href: "/app/paper-trading", icon: FlaskConical, title: "Paper trade it", body: "Test with virtual money first." },
+                  { href: "/app/forward-testing", icon: FlaskConical, title: "Forward test it", body: "Test with notional capital first." },
                   { href: "/app/broker-connections", icon: ShieldCheck, title: "Manage connection", body: "Test, log in daily, disconnect." },
                 ].map(({ href, icon: Icon, title, body }) => (
                   <Link key={title} href={href} className="surface surface-interactive p-3.5">

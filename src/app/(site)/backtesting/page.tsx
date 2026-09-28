@@ -64,7 +64,7 @@ const sections: LegalSection[] = [
     id: "reproducibility",
     title: "Reproducibility",
     paragraphs: [
-      "Every backtest stores its exact configuration alongside its results, so results can be reproduced and audited later — an important property when a strategy graduates to paper or live trading.",
+      "Every backtest stores its exact configuration alongside its results, so results can be reproduced and audited later — an important property when a strategy moves on to forward testing or live trading.",
     ],
   },
   {
@@ -75,7 +75,7 @@ const sections: LegalSection[] = [
         A backtest describes how a strategy would have performed on
         historical data under the modeled assumptions. It is not a
         guarantee of future performance. Markets change, and live
-        execution can differ from simulated fills.
+        execution can differ from hypothetical fills.
       </Callout>
     ),
   },

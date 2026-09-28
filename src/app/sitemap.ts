@@ -7,7 +7,7 @@ const routes = [
   "/features",
   "/how-it-works",
   "/backtesting",
-  "/paper-trading",
+  "/forward-testing",
   "/live-trading",
   "/risk-management",
   "/technology",

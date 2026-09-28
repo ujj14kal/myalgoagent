@@ -40,6 +40,14 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   // Don't advertise the framework in every response.
   poweredByHeader: false,
+  // Paper trading became forward testing (2026-09-29); old links and bookmarks keep working.
+  async redirects() {
+    return [
+      { source: "/app/paper-trading", destination: "/app/forward-testing", permanent: true },
+      { source: "/app/paper-trading/:id", destination: "/app/forward-testing/:id", permanent: true },
+      { source: "/paper-trading", destination: "/forward-testing", permanent: true },
+    ];
+  },
   async headers() {
     return [
       {

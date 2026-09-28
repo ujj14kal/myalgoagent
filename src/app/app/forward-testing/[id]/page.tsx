@@ -14,7 +14,7 @@ import StatusBadge from "@/components/ui/status-badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { formatINR, formatPct, formatPrice, formatSignedINR, toneOf, TONE_TEXT } from "@/lib/format";
 
-export const metadata = { title: "Paper Session", robots: { index: false } };
+export const metadata = { title: "Forward test", robots: { index: false } };
 
 export default async function PaperSessionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -66,7 +66,7 @@ export default async function PaperSessionDetailPage({ params }: { params: Promi
   return (
     <div>
       <PageHeader
-        eyebrow="Paper session"
+        eyebrow="Forward test"
         title={paperSession.strategyName}
         icon={Activity}
         description={
@@ -82,7 +82,7 @@ export default async function PaperSessionDetailPage({ params }: { params: Promi
 
       <p className="mb-4 flex items-center gap-2 rounded-xl border border-brand-gold/30 bg-brand-gold/[0.08] px-4 py-2.5 text-xs font-medium text-brand-navy/70">
         <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-gold" />
-        Simulated on {paperSession.timeframe === "1d" ? "daily" : `${paperSession.timeframe === "60m" ? "1H" : paperSession.timeframe === "4h" ? "4H" : paperSession.timeframe}`} candles, updated about every 5 minutes during market hours (or when you press Sync) — not tick-by-tick. No real money is involved.
+        Hypothetical results on {paperSession.timeframe === "1d" ? "daily" : `${paperSession.timeframe === "60m" ? "1H" : paperSession.timeframe === "4h" ? "4H" : paperSession.timeframe}`} candles, updated about every 5 minutes during market hours (or when you press Sync) — not tick-by-tick. No orders are sent and no money is involved.
       </p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -102,7 +102,7 @@ export default async function PaperSessionDetailPage({ params }: { params: Promi
       <div className="mt-6">
         <div className="mb-3 flex items-center gap-2">
           <ListOrdered size={16} className="text-brand-primary" />
-          <h2 className="text-sm font-semibold text-brand-navy">Order history</h2>
+          <h2 className="text-sm font-semibold text-brand-navy">Hypothetical trade history</h2>
           <span className="rounded-full bg-brand-navy/[0.06] px-2 py-0.5 text-xs font-semibold text-brand-navy/55">{paperSession.orders.length}</span>
         </div>
         <div className="overflow-x-auto surface">

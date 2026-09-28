@@ -10,10 +10,10 @@ import StatusBadge from "@/components/ui/status-badge";
 import { formatINR, formatPct, toneOf, TONE_TEXT } from "@/lib/format";
 import PageHeader from "@/components/ui/page-header";
 
-export const metadata = { title: "Paper Trading", robots: { index: false } };
+export const metadata = { title: "Forward Testing", robots: { index: false } };
 
 
-export default async function PaperTradingPage() {
+export default async function ForwardTestingPage() {
   const session = await auth();
   const market = marketDataFor(session?.user?.id, "trading");
   if (!session?.user?.id) return null;
@@ -60,11 +60,11 @@ export default async function PaperTradingPage() {
 
   return (
     <div>
-      <PageHeader title="Paper Trading" icon={Activity} description={<>Run a strategy forward with virtual capital. It steps through the strategy&apos;s own candles (daily or intraday) and updates on its own about every 5 minutes during market hours — press <strong>Sync now</strong> to catch up immediately. Trades close by themselves when a stop-loss, target or trailing stop is hit.</>} />
+      <PageHeader title="Forward Testing" icon={Activity} description={<>Validate a strategy on new market data as it arrives. It applies your rules to the strategy&apos;s own candles (daily or intraday) and records the hypothetical trades they would take — no orders are sent and no money is involved. It updates about every 5 minutes during market hours (press <strong>Sync now</strong> to catch up), and hypothetical positions close when a stop-loss, target or trailing stop is hit.</>} />
 
       <CollapsiblePanel
-        title="Start a new paper session"
-        subtitle="Pick a strategy and virtual capital — no real money involved"
+        title="Start a new forward test"
+        subtitle="Pick a strategy and a notional capital to size hypothetical trades"
         icon={<Plus size={17} />}
         defaultOpen={sessions.length === 0}
       >
@@ -91,11 +91,11 @@ export default async function PaperTradingPage() {
 
       {sessions.length === 0 ? (
         <div className="mt-6">
-          <EmptyState pose="analyzing" title="No paper trading sessions yet." description="Start one above to run a strategy forward with virtual capital against real market data." />
+          <EmptyState pose="analyzing" title="No forward tests yet." description="Start one above to run a strategy forward with notional capital against real market data." />
         </div>
       ) : (
         [
-          { key: "live", title: "Live sessions", icon: Radio, list: sessions.filter((s) => s.status !== "STOPPED") },
+          { key: "live", title: "Running", icon: Radio, list: sessions.filter((s) => s.status !== "STOPPED") },
           { key: "history", title: "History", icon: History, list: sessions.filter((s) => s.status === "STOPPED") },
         ]
           .filter((g) => g.list.length > 0)
@@ -118,7 +118,7 @@ export default async function PaperTradingPage() {
                   const pnlPct = ((equity - s.startingCapital) / s.startingCapital) * 100;
                   const tone = toneOf(pnlPct);
                   return (
-                    <Link key={s.id} href={`/app/paper-trading/${s.id}`} className={`surface surface-interactive block p-5 ${g.key === "history" ? "opacity-80 hover:opacity-100" : ""}`}>
+                    <Link key={s.id} href={`/app/forward-testing/${s.id}`} className={`surface surface-interactive block p-5 ${g.key === "history" ? "opacity-80 hover:opacity-100" : ""}`}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-brand-navy">{s.strategyName}</p>

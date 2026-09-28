@@ -20,14 +20,14 @@ const STEPS: TourStep[] = [
     target: '[data-tour="sidebar-nav"]',
     pose: "point",
     title: "Everything lives here",
-    body: "Strategies, backtests, paper trading, risk controls, your account — all one click away. No hunting through menus.",
+    body: "Strategies, backtests, forward testing, risk controls, your account — all one click away. No hunting through menus.",
   },
   {
     id: "portfolio-chart",
     target: '[data-tour="portfolio-chart"]',
     pose: "analyzing",
     title: "Your portfolio, over time",
-    body: "This tracks your combined paper-trading equity as your strategies run, built from your real order history — not a simulated demo feed.",
+    body: "This tracks your combined forward-testing equity as your strategies run, built from your real order history — not a simulated demo feed.",
   },
   {
     id: "pnl-summary",

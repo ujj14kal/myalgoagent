@@ -40,7 +40,7 @@ export default function StrategyStatusControls({
   status: Status;
 }) {
   const [isPending, startTransition] = useTransition();
-  // null = closed, "loading" = checking for live paper sessions, or the
+  // null = closed, "loading" = checking for live forward tests, or the
   // live-session count once known. Checked fresh on every click rather
   // than passed in as a prop, since a session's status can change without
   // this page reloading (e.g. the user stopped one in another tab).
@@ -124,11 +124,11 @@ export default function StrategyStatusControls({
         <div className="fixed inset-0 z-50 flex items-end justify-end bg-black/20 p-6 sm:items-center sm:justify-center">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
             {confirmState === "loading" ? (
-              <p className="text-sm text-brand-navy/60">Checking for live paper trading sessions…</p>
+              <p className="text-sm text-brand-navy/60">Checking for live forward testing sessions…</p>
             ) : confirmState > 0 ? (
               <>
                 <p className="text-sm font-semibold text-brand-navy">
-                  {confirmState} live paper trading session{confirmState === 1 ? "" : "s"} on this strategy
+                  {confirmState} live forward testing session{confirmState === 1 ? "" : "s"} on this strategy
                 </p>
                 <p className="mt-2 text-xs text-brand-navy/60">
                   Deleting this strategy will move {confirmState === 1 ? "that session" : "those sessions"} to
@@ -187,7 +187,7 @@ export default function StrategyStatusControls({
             <p className="text-sm font-semibold text-brand-navy">Delete this strategy forever?</p>
             <p className="mt-2 text-xs text-brand-navy/60">
               This permanently removes the strategy and can&apos;t be undone — unlike Delete, there&apos;s no
-              Restore after this. Its backtests and paper trading order history are kept separately and aren&apos;t
+              Restore after this. Its backtests and forward testing order history are kept separately and aren&apos;t
               affected.
             </p>
             <div className="mt-4 flex justify-end gap-2">

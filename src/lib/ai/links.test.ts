@@ -6,7 +6,7 @@ describe("isAllowedAgentLink", () => {
     expect(isAllowedAgentLink("/app/backtests")).toBe(true);
     expect(isAllowedAgentLink("/app/backtests/")).toBe(true);
     expect(isAllowedAgentLink("/app/strategies/new?x=1")).toBe(true);
-    expect(isAllowedAgentLink("/faq#paper-vs-live")).toBe(true);
+    expect(isAllowedAgentLink("/faq#forward-vs-live")).toBe(true);
   });
 
   it("rejects external, protocol-relative, script and unknown links", () => {

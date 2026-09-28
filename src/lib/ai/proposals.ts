@@ -108,7 +108,7 @@ export type AgentProposal =
       draft: Extract<AgentProposal, { kind: "strategy" }>["draft"];
     }
   | {
-      // Several steps in one review, run in order — e.g. create a strategy, backtest it, paper trade it.
+      // Several steps in one review, run in order — e.g. create a strategy, backtest it, forward test it.
       kind: "plan";
       status: ProposalStatus;
       resultId?: string;
@@ -124,12 +124,12 @@ export const NEW_STRATEGY_ID = "__new_strategy__";
 export const PROPOSAL_TITLES: Record<AgentProposal["kind"], string> = {
   strategy: "New strategy",
   backtest: "Run a backtest",
-  paper_session: "Start paper trading",
+  paper_session: "Start forward testing",
   risk_limits: "Update loss limits",
   kill_switch: "Kill switch",
   watchlist_add: "Add to watchlist",
   watchlist_remove: "Remove from watchlist",
-  paper_control: "Paper session",
+  paper_control: "Forward test",
   strategy_archive: "Archive strategy",
   strategy_update: "Update strategy",
   plan: "Multi-step plan",
@@ -175,7 +175,7 @@ export function proposalReadyLine(p: AgentProposal): string {
 
 /** A reply that says something is prepared / waiting for review. */
 const CLAIMS_PREPARED =
-  /\b(ready (for (you|your)( to)? review|to review)|review window|(i(?:'|’)ve|i have) (prepared|drafted|set up|created|put together|lined up|queued)|(prepared|drafted) (a|an|the|your) (new )?(strategy|backtest|session|paper|change|update|limit|watchlist))/i;
+  /\b(ready (for (you|your)( to)? review|to review)|review window|(i(?:'|’)ve|i have) (prepared|drafted|set up|created|put together|lined up|queued)|(prepared|drafted) (a|an|the|your) (new )?(strategy|backtest|session|paper|forward test|change|update|limit|watchlist))/i;
 
 /** True when the agent claims it prepared something but no proposal exists — it must not say that. */
 export function claimsUnpreparedAction(text: string): boolean {

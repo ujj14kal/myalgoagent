@@ -176,7 +176,7 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
             </ul>
           )}
         </Card>
-        <Card title={`Paper trading (${u._count.paperSessions})`} icon={Activity} pad={false}>
+        <Card title={`Forward testing (${u._count.paperSessions})`} icon={Activity} pad={false}>
           {paper.length === 0 ? (
             <p className="px-5 py-4 text-sm text-brand-navy/45">No sessions.</p>
           ) : (

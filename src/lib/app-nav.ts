@@ -31,7 +31,7 @@ export const navGroups: NavGroup[] = [
       { href: "/app/instruments", label: "Market Data", icon: CandlestickChart },
       { href: "/app/strategies", label: "Strategies", icon: Layers },
       { href: "/app/backtests", label: "Backtests", icon: FlaskConical },
-      { href: "/app/paper-trading", label: "Paper Trading", icon: Activity },
+      { href: "/app/forward-testing", label: "Forward Testing", icon: Activity },
       { href: "/app/options", label: "Options Lab", icon: Sigma },
       { href: "/app/live-trading", label: "Live Trading", icon: Radio },
     ],

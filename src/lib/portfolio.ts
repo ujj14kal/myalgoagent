@@ -22,11 +22,11 @@ export async function getPaperSessionRows(userId: string): Promise<PaperSessionR
   return Promise.all(
     sessions.map(async (s) => {
       // `cash` is never debited when a position opens — it only moves on
-      // realized P&L at close (see the paper trading engine). So equity is
+      // realized P&L at close (see the forward testing engine). So equity is
       // cash + UNREALIZED gain, not cash + the position's full market value;
       // adding the whole value double-counted the entry cost as profit and
       // showed e.g. +97% on a position that was actually down ~1%. Same
-      // formula as the paper-trading list and the risk kill-switch check.
+      // formula as the forward-testing list and the risk kill-switch check.
       let positionValue = 0;
       let unrealizedGain = 0;
       let availableCash = s.cash;

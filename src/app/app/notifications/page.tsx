@@ -33,13 +33,13 @@ export default async function NotificationsPage() {
       <PageHeader
         title="Notifications"
         icon={Bell}
-        description="Order fills and risk events from your paper trading, replies from our support team, and announcements."
+        description="Order fills and risk events from your forward testing, replies from our support team, and announcements."
         actions={unreadCount > 0 ? <NotificationActions markAll /> : undefined}
       />
 
       {notifications.length === 0 && (
         <div className="mt-8">
-          <EmptyState pose="alert" title="No notifications yet." description="Order fills, risk events, and session changes from your paper trading will show up here." />
+          <EmptyState pose="alert" title="No notifications yet." description="Order fills, risk events, and session changes from your forward testing will show up here." />
         </div>
       )}
 
@@ -59,7 +59,7 @@ export default async function NotificationsPage() {
                   </div>
                   <p className="mt-0.5 text-sm font-medium text-brand-navy">
                     {n.link || n.paperSessionId ? (
-                      <Link href={n.link ?? `/app/paper-trading/${n.paperSessionId}`} className="hover:text-brand-primary hover:underline">
+                      <Link href={n.link ?? `/app/forward-testing/${n.paperSessionId}`} className="hover:text-brand-primary hover:underline">
                         {n.message}
                       </Link>
                     ) : (

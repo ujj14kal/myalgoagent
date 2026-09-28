@@ -8,7 +8,7 @@ const columns = [
       { href: "/product", label: "Product Overview" },
       { href: "/features", label: "Features" },
       { href: "/backtesting", label: "Backtesting" },
-      { href: "/paper-trading", label: "Paper Trading" },
+      { href: "/forward-testing", label: "Forward Testing" },
       { href: "/live-trading", label: "Live Trading" },
       { href: "/risk-management", label: "Risk Management" },
     ],

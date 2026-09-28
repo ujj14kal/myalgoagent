@@ -91,7 +91,7 @@ export default function UserActions({ userId, status, canManage, isSelf, protect
         <div className="space-y-2 rounded-2xl bg-brand-sell/[0.04] p-4 ring-1 ring-brand-sell/20">
           <p className="text-xs text-brand-navy/65">
             {panel === "suspend"
-              ? "Suspending signs them out everywhere, blocks sign-in, and pauses their live paper sessions. Their data is kept. You can restore it any time."
+              ? "Suspending signs them out everywhere, blocks sign-in, and pauses their live forward tests. Their data is kept. You can restore it any time."
               : "Schedules permanent deletion in 15 days (the same window as a self-service request) and signs them out. Signing back in before then cancels it. Use this only when the user asked for deletion."}
           </p>
           <input className={input} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={panel === "suspend" ? "Reason (kept on the account and in the audit log)" : "Why — e.g. “user asked by email, case MAA-100012”"} maxLength={300} />

@@ -228,7 +228,7 @@ export async function restoreStrategyAction(id: string) {
   revalidatePath("/app/dashboard");
 }
 
-/** How many of this strategy's paper sessions are still live (ACTIVE or
+/** How many of this strategy's forward tests are still live (ACTIVE or
  * PAUSED) — used to warn before deleting, since the strategy relation is
  * `onDelete: SetNull` (a session survives its strategy being deleted, it
  * just loses the link back). Without this warning a user could delete a
@@ -252,7 +252,7 @@ export async function deleteStrategy(id: string) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
-  // Move any still-live paper sessions to history (STOPPED) at the same
+  // Move any still-live forward tests to history (STOPPED) at the same
   // time — enforced unconditionally here, not left to the confirmation
   // dialog, so a session can never keep syncing live against a strategy
   // its owner just deleted, regardless of what the user clicked through.
@@ -273,13 +273,13 @@ export async function deleteStrategy(id: string) {
   revalidatePath("/app/strategies");
   revalidatePath(`/app/strategies/${id}`);
   revalidatePath("/app/dashboard");
-  revalidatePath("/app/paper-trading");
+  revalidatePath("/app/forward-testing");
   redirect("/app/strategies");
 }
 
 /** The only action that actually removes a strategy row — restricted to a
  * strategy already sitting in DELETED, so it's never reachable in one
- * click from a live strategy. Paper sessions are swept to STOPPED again
+ * click from a live strategy. Forward tests are swept to STOPPED again
  * defensively (a session could in principle have been reactivated after
  * the soft delete); onDelete: SetNull then just drops their now-pointless
  * link back once the row is actually gone. */
@@ -299,5 +299,5 @@ export async function permanentlyDeleteStrategyAction(id: string) {
 
   revalidatePath("/app/strategies");
   revalidatePath("/app/dashboard");
-  revalidatePath("/app/paper-trading");
+  revalidatePath("/app/forward-testing");
 }

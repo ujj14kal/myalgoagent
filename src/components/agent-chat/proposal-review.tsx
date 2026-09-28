@@ -51,7 +51,7 @@ const ICONS: Record<AgentProposal["kind"], React.ReactNode> = {
   plan: <ListChecks size={16} />,
 };
 
-const STEP_TITLES: Record<PlanStep["kind"], string> = { strategy: "Create the strategy", backtest: "Backtest it", paper_session: "Paper trade it" };
+const STEP_TITLES: Record<PlanStep["kind"], string> = { strategy: "Create the strategy", backtest: "Backtest it", paper_session: "Forward test it" };
 
 const RANGE_LABEL = { "3mo": "3 months", "6mo": "6 months", "1y": "1 year", "5y": "5 years" } as const;
 const PAPER_VERB = { sync: "Sync now", pause: "Pause", resume: "Resume", stop: "Stop" } as const;
@@ -65,7 +65,7 @@ export function proposalSummary(p: AgentProposal): string {
     case "backtest":
       return `${p.draft.strategyName} · ${RANGE_LABEL[p.draft.range]} · ${inr(p.draft.startingCapital)}`;
     case "paper_session":
-      return `${p.draft.strategyName} · ${inr(p.draft.startingCapital)} virtual${p.draft.alertOnly ? " · alerts only" : ""}`;
+      return `${p.draft.strategyName} · ${inr(p.draft.startingCapital)} notional${p.draft.alertOnly ? " · alerts only" : ""}`;
     case "risk_limits":
       return `Max loss ${p.draft.maxLossPercent == null ? "off" : `${p.draft.maxLossPercent}%`} · Max losing streak ${p.draft.maxConsecutiveLosses ?? "off"}`;
     case "kill_switch":
@@ -176,7 +176,7 @@ async function execute(p: AgentProposal, instrumentId: string | null, go: (path:
           ? await syncPaperSessionAction(sessionId)
           : await setPaperSessionStatus(sessionId, action === "pause" ? "PAUSED" : action === "resume" ? "ACTIVE" : "STOPPED");
       if (res?.error) return res.error;
-      go(`/app/paper-trading/${sessionId}`);
+      go(`/app/forward-testing/${sessionId}`);
       return null;
     }
     case "strategy_update": {
@@ -237,7 +237,7 @@ async function runPlan(
         if ("id" in res) lastPath = `/app/backtests/${res.id}`;
       } else {
         res = await startPaperSessionForAgent({ strategyId, startingCapital, brokeragePercent, slippagePercent, alertOnly: step.draft.alertOnly });
-        if ("id" in res) lastPath = `/app/paper-trading/${res.id}`;
+        if ("id" in res) lastPath = `/app/forward-testing/${res.id}`;
       }
     }
     if ("error" in res) {
@@ -625,7 +625,7 @@ function ProposalFields({
       return (
         <div className="space-y-4">
           <Statement>
-            Run <strong>{p.draft.strategyName}</strong> on {p.draft.instrumentSymbol} forward with virtual money — no real orders.
+            Run <strong>{p.draft.strategyName}</strong> on {p.draft.instrumentSymbol} forward with notional capital — no real orders.
           </Statement>
           <CostFields draft={p.draft} onChange={(patch) => onChange({ ...p, draft: { ...p.draft, ...patch } })} />
           <label className="flex items-center gap-2 text-sm text-brand-navy">
@@ -637,7 +637,7 @@ function ProposalFields({
     case "risk_limits":
       return (
         <div className="space-y-4">
-          <Statement>These limits apply to all your paper sessions. Leave a field empty for no limit.</Statement>
+          <Statement>These limits apply to all your forward tests. Leave a field empty for no limit.</Statement>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Max loss per session (%)">
               <NumberInput value={p.draft.maxLossPercent} placeholder="No limit" onChange={(v) => onChange({ ...p, draft: { ...p.draft, maxLossPercent: v } })} />
@@ -652,8 +652,8 @@ function ProposalFields({
       return (
         <Statement>
           {p.draft.enabled
-            ? "Turn the kill switch ON: none of your paper sessions will open a new position until you turn it off."
-            : "Turn the kill switch OFF: your paper sessions can open new positions normally again."}
+            ? "Turn the kill switch ON: none of your forward tests will open a new position until you turn it off."
+            : "Turn the kill switch OFF: your forward tests can open new positions normally again."}
         </Statement>
       );
     case "watchlist_add":
@@ -674,7 +674,7 @@ function ProposalFields({
           {p.draft.action === "sync" && "Update"}
           {p.draft.action === "pause" && "Pause"}
           {p.draft.action === "resume" && "Resume"}
-          {p.draft.action === "stop" && "Stop"} the paper session <strong>{p.draft.strategyName}</strong> ({p.draft.instrumentSymbol})
+          {p.draft.action === "stop" && "Stop"} the forward test <strong>{p.draft.strategyName}</strong> ({p.draft.instrumentSymbol})
           {p.draft.action === "sync" && " with the latest market data"}
           {p.draft.action === "stop" && ". A stopped session can't be restarted"}.
         </Statement>

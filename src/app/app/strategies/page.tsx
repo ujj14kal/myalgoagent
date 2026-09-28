@@ -31,7 +31,7 @@ export default async function StrategiesPage() {
       <PageHeader
         title="Strategies"
         icon={Layers}
-        description="Build rule-based strategies visually or with code. Draft and Active are set automatically — a strategy becomes Active the moment you put it to work in paper trading."
+        description="Build rule-based strategies visually or with code. Draft and Active are set automatically — a strategy becomes Active the moment you put it to work in forward testing."
         actions={
           <Link
             href="/app/strategies/new"
@@ -56,10 +56,10 @@ export default async function StrategiesPage() {
         <div className="mt-8 flex flex-col gap-4 lg:flex-row lg:items-start">
           <StrategyBoardColumn
             title="Active"
-            description="In real use — running in paper or live trading."
+            description="In real use — running in a forward test or live trading."
             strategies={byStatus.get("ACTIVE") ?? []}
             accent="bg-brand-buy/5"
-            emptyLabel="Nothing active yet — put a draft to work in paper trading."
+            emptyLabel="Nothing active yet — put a draft to work in forward testing."
           />
           <StrategyBoardColumn
             title="Drafts"

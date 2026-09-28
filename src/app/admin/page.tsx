@@ -30,7 +30,7 @@ export default async function AdminOverview() {
   if (firing.length) attention.push({ tone: "red", text: <>{firing.length} AWS alarm{firing.length === 1 ? "" : "s"} firing: {firing.map((a) => a.name).join(", ")}</>, href: "/admin/system" });
   if (email?.ok && !email.data.production) attention.push({ tone: "red", text: <>Email is in the AWS sandbox (review: {email.data.review?.toLowerCase() ?? "not requested"}) — real users don&apos;t receive sign-in links, resets or replies.</>, href: "/admin/system#email" });
   if (s.brokers.errors) attention.push({ tone: "gold", text: <>{s.brokers.errors} broker connection{s.brokers.errors === 1 ? " is" : "s are"} failing</>, href: "/admin/trading#brokers" });
-  if (lastSync && lastSync.ok === false) attention.push({ tone: "red", text: <>The last paper-trade sync failed ({ago(lastSync.startedAt)})</>, href: "/admin/trading#jobs" });
+  if (lastSync && lastSync.ok === false) attention.push({ tone: "red", text: <>The last forward-test sync failed ({ago(lastSync.startedAt)})</>, href: "/admin/trading#jobs" });
   if (s.users.nextDeletion && dueWithin(s.users.nextDeletion, 2 * 86_400_000)) attention.push({ tone: "purple", text: <>An account is due for permanent deletion {ago(s.users.nextDeletion).replace(" ago", "")} ({ist(s.users.nextDeletion)})</>, href: "/admin/users?status=PENDING_DELETION" });
   const deploy = deploys?.ok ? deploys.data[0] : null;
   if (deploy?.status === "FAILED") attention.push({ tone: "red", text: <>The latest deploy failed: “{deploy.message}”</>, href: "/admin/system#deploys" });
@@ -69,7 +69,7 @@ export default async function AdminOverview() {
         <Kpi label="Users" value={s.users.total} hint={`+${s.users.new7} this week · +${s.users.new30} this month`} href="/admin/users" spark={s.users.signups.map((d) => d.value)} />
         <Kpi label="Active today" value={s.users.active1} hint={`${s.users.active7} active in the last 7 days`} tone="good" />
         <Kpi label="Inbox" value={open} hint={open ? `oldest ${ago(s.inbox.oldestOpen)}` : "nothing waiting"} tone={open ? "warn" : "good"} href="/admin/inbox" />
-        <Kpi label="Live paper sessions" value={s.trading.activePaper} hint={lastSync ? `last auto-sync ${ago(lastSync.startedAt)}` : "no auto-sync yet"} href="/admin/trading" />
+        <Kpi label="Live forward tests" value={s.trading.activePaper} hint={lastSync ? `last auto-sync ${ago(lastSync.startedAt)}` : "no auto-sync yet"} href="/admin/trading" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">

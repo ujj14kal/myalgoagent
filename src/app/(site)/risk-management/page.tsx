@@ -36,7 +36,7 @@ const sections: LegalSection[] = [
     id: "kill-switches",
     title: "Kill switches",
     paragraphs: [
-      "A global kill switch immediately blocks every paper session on your account from opening new positions. Any single session can also be paused or stopped on its own without affecting the others. The kill switch is always one click away on the Risk Controls page.",
+      "A global kill switch immediately blocks every forward test on your account from opening new positions. Any single session can also be paused or stopped on its own without affecting the others. The kill switch is always one click away on the Risk Controls page.",
     ],
   },
   {

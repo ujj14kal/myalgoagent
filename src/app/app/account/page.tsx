@@ -105,7 +105,7 @@ export default async function AccountPage() {
           <section className="surface p-6">
             <h2 className="text-sm font-semibold text-brand-navy">Your data</h2>
             <p className="mt-1 text-xs text-brand-navy/50">
-              Download everything associated with your account — profile, strategies, backtests, paper sessions,
+              Download everything associated with your account — profile, strategies, backtests, forward tests,
               watchlist, and activity — as a single JSON file.
             </p>
             <div className="mt-4">

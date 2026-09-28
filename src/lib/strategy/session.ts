@@ -3,7 +3,7 @@ import type { EntryOrder, IntradaySession } from "@/lib/trading-engine/step";
 import type { ConditionNode, FeasibilityIssue } from "./types";
 
 // A strategy's timeframe and intraday session rules, in one place, so saving,
-// validation, backtests, paper trading and the builder's demo all agree.
+// validation, backtests, forward testing and the builder's demo all agree.
 
 /** Timeframes a strategy can run on (weekly/monthly are chart-only). */
 export const STRATEGY_TIMEFRAMES: { value: CandleInterval; label: string }[] = [
@@ -114,7 +114,7 @@ export function rangeFor(timeframe: string, desired: CandleRange): CandleRange {
   return clampRangeForInterval(desired, timeframe as CandleInterval);
 }
 
-/** Enough recent history for a paper-trading sync: indicators need warm-up bars before the new ones. */
+/** Enough recent history for a forward-testing sync: indicators need warm-up bars before the new ones. */
 export function paperSyncRange(timeframe: string): CandleRange {
   return isIntraday(timeframe as CandleInterval) ? rangeFor(timeframe, "1mo") : "3mo";
 }

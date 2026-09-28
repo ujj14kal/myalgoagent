@@ -19,7 +19,7 @@ export default async function PortfolioPage() {
 
   return (
     <div>
-      <PageHeader title="Portfolio" icon={Wallet} description={<>Aggregated across all your paper trading sessions — not yet connected to a real broker.</>} />
+      <PageHeader title="Portfolio" icon={Wallet} description={<>Hypothetical results aggregated across your forward tests — no real money is involved.</>} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label="Available cash" value={formatINR(totalCash)} icon={Banknote} sub="Not tied up in open positions" />
@@ -30,7 +30,7 @@ export default async function PortfolioPage() {
 
       {rows.length === 0 ? (
         <div className="mt-8">
-          <EmptyState pose="idle" title="No paper trading sessions yet." description="Your combined portfolio across all sessions will show up here once you start one." ctaLabel="Go to Paper Trading" ctaHref="/app/paper-trading" />
+          <EmptyState pose="idle" title="No forward testing sessions yet." description="Your combined portfolio across all sessions will show up here once you start one." ctaLabel="Go to Forward Testing" ctaHref="/app/forward-testing" />
         </div>
       ) : (
         <div className="mt-6 overflow-x-auto surface">
@@ -48,7 +48,7 @@ export default async function PortfolioPage() {
               {rows.map((r) => (
                 <tr key={r.session.id}>
                   <td>
-                    <Link href={`/app/paper-trading/${r.session.id}`} className="font-medium text-brand-primary hover:underline">
+                    <Link href={`/app/forward-testing/${r.session.id}`} className="font-medium text-brand-primary hover:underline">
                       {r.session.strategyName}
                     </Link>
                   </td>

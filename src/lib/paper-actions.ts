@@ -32,7 +32,7 @@ export interface PaperActionResult {
  * success) is exempt, which is why it stays outside the try block. See
  * strategy-actions.ts for the same fix and fuller explanation.
  */
-/** Validates and starts a paper session; shared by the form (which redirects) and the agent (which chains). */
+/** Validates and starts a forward test; shared by the form (which redirects) and the agent (which chains). */
 async function startPaperSessionCore(userId: string, input: StartPaperSessionInput): Promise<{ id: string } | { error: string }> {
   try {
     await enforceRateLimit(`paper-start:${userId}`, 10, 60_000);
@@ -118,7 +118,7 @@ export async function startPaperSession(input: StartPaperSessionInput): Promise<
 
   revalidatePaperPaths();
   revalidatePath("/app/strategies");
-  redirect(`/app/paper-trading/${result.id}`);
+  redirect(`/app/forward-testing/${result.id}`);
 }
 
 /** Same as startPaperSession but returns the new session's id instead of redirecting — for the agent's multi-step plans. */

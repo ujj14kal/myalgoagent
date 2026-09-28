@@ -30,7 +30,7 @@ export default async function RiskControlsPage() {
 
   return (
     <div>
-      <PageHeader title="Risk Controls" icon={ShieldCheck} description={<>Server-enforced limits on your paper trading. These apply regardless of what the strategy builder UI allows — a signal that would open a new position is blocked here first.</>} />
+      <PageHeader title="Risk Controls" icon={ShieldCheck} description={<>Server-enforced limits on your forward testing. These apply regardless of what the strategy builder UI allows — a signal that would open a new position is blocked here first.</>} />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
@@ -76,7 +76,7 @@ export default async function RiskControlsPage() {
                   <td className="font-semibold text-brand-sell">{EVENT_LABEL[e.type] ?? e.type}</td>
                   <td className="whitespace-normal text-brand-navy/70">
                     {e.paperSessionId ? (
-                      <Link href={`/app/paper-trading/${e.paperSessionId}`} className="text-brand-primary hover:underline">
+                      <Link href={`/app/forward-testing/${e.paperSessionId}`} className="text-brand-primary hover:underline">
                         {e.message}
                       </Link>
                     ) : (

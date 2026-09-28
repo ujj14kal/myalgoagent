@@ -7,7 +7,7 @@ import { logError } from "@/lib/logger";
 // jobs are healthy (and when they last ran) without opening AWS.
 
 export const JOBS = {
-  "paper-sync": { label: "Paper trade sync", schedule: "Every 5 min, Mon–Fri 09:15–15:45 IST", rule: "myalgoagent-paper-sync" },
+  "paper-sync": { label: "Forward test sync", schedule: "Every 5 min, Mon–Fri 09:15–15:45 IST", rule: "myalgoagent-paper-sync" },
   "purge-deleted-accounts": { label: "Account deletion purge", schedule: "Daily", rule: "myalgoagent-purge-deleted-accounts" },
 } as const;
 export type JobName = keyof typeof JOBS;

@@ -10,7 +10,7 @@ import BrokerLogos from "@/components/broker-logos";
 export const metadata: Metadata = pageMetadata({
   title: "Features",
   description:
-    "Strategy builder, 46 technical indicators, realistic backtesting, paper trading, risk controls, connections to 9 Indian brokers and an AI agent — with live broker execution coming soon.",
+    "Strategy builder, 46 technical indicators, realistic backtesting, forward testing, risk controls, connections to 9 Indian brokers and an AI agent — with live broker execution coming soon.",
   path: "/features",
 });
 
@@ -68,10 +68,10 @@ const groups: Group[] = [
     soon: ["Sortino ratio", "Drawdown curve and benchmark comparison"],
   },
   {
-    title: "Paper & Live Trading",
+    title: "Forward Testing & Live Trading",
     icon: Radio,
     items: [
-      "Paper trading with virtual capital and simulated fills on the strategy's own candles — daily or intraday — updated automatically during market hours, with stops and trailing stops closing trades on their own",
+      "Forward testing with notional capital and hypothetical fills on the strategy's own candles — daily or intraday — updated automatically during market hours, with stops and trailing stops closing trades on their own",
       "Broker connections for Dhan, Zerodha, Upstox, Fyers, Angel One, Groww, ICICI Direct, 5paisa and Alice Blue — your own API key, encrypted, verified on connect",
     ],
     soon: [
@@ -111,7 +111,7 @@ const groups: Group[] = [
       "Payoff chart at expiry and today, net credit or debit, max profit and loss, and exact breakevens",
       "Position Greeks: delta, gamma, theta and vega",
     ],
-    soon: ["Live option chain with real premiums, IV and open interest", "Options backtesting and paper trading", "Live options orders through your broker"],
+    soon: ["Live option chain with real premiums, IV and open interest", "Options backtesting and forward testing", "Live options orders through your broker"],
   },
   {
     title: "Your AI agent",
@@ -121,14 +121,14 @@ const groups: Group[] = [
       "Talk instead of typing: dictate a message, have any reply read aloud in a natural Indian-English voice, or use hands-free voice mode — with the same rules and review step as typed chat",
       "Describe a strategy and it builds and checks it for you, then opens a review — confirm and it's created",
       "Builds anything the strategy builder can: every indicator, time-of-day windows, candlestick, chart and volume patterns, other timeframes and other stocks — and edits your existing strategies",
-      "Prepares backtests, paper sessions, loss limits, the kill switch and watchlist changes the same way — you just review and confirm, and it takes you to the result",
-      "Answers from your own data: your strategies, backtest results, paper sessions and risk settings",
-      "Explains why each paper trade happened and flags risk events as they occur",
+      "Prepares backtests, forward tests, loss limits, the kill switch and watchlist changes the same way — you just review and confirm, and it takes you to the result",
+      "Answers from your own data: your strategies, backtest results, forward tests and risk settings",
+      "Explains why each forward test happened and flags risk events as they occur",
       "Chat in a side panel or full screen, with all your past conversations",
       "Walks you through connecting your broker step by step — and never asks for your keys or passwords in chat",
       "Uses the same validator as the builder, never gives buy or sell calls, and never acts without your confirmation",
     ],
-    soon: ["Warns when paper-trading results drift from the backtest", "A daily digest of your sessions"],
+    soon: ["Warns when forward-testing results drift from the backtest", "A daily digest of your sessions"],
   },
 ];
 

@@ -90,14 +90,14 @@ export default async function DashboardPage() {
   const lines: BriefingLine[] = isNewAccount
     ? [
         { text: "Your workspace is ready — no strategies yet." },
-        { text: "Build one, backtest it on real history, then paper trade it before any real money is involved." },
+        { text: "Build one, backtest it on real history, then forward test it before any real money is involved." },
       ]
     : [
         riskSettings?.killSwitchEnabled
           ? { text: "The kill switch is ON — no session can open a new position.", tone: "bad" }
-          : { text: `${liveCount} live paper session${liveCount === 1 ? "" : "s"}, ${openPositions} open position${openPositions === 1 ? "" : "s"}.`, tone: liveCount > 0 ? "good" : "neutral" },
+          : { text: `${liveCount} live forward test${liveCount === 1 ? "" : "s"}, ${openPositions} open position${openPositions === 1 ? "" : "s"}.`, tone: liveCount > 0 ? "good" : "neutral" },
         {
-          text: `Paper portfolio ${formatINR(summary.totalEquity)} (${formatPct(summary.totalPnlPct)} overall) · today ${formatSignedINR(pnl.today)} realised.`,
+          text: `Forward-test portfolio ${formatINR(summary.totalEquity)} (${formatPct(summary.totalPnlPct)} overall) · today ${formatSignedINR(pnl.today)} realised.`,
           tone: totalTone === "up" ? "good" : totalTone === "down" ? "bad" : "neutral",
         },
         critical + warnings > 0
@@ -115,7 +115,7 @@ export default async function DashboardPage() {
         greeting={`${greetingFor(new Date())}, ${firstName}`}
         pose={pose}
         lines={lines}
-        primaryAction={isNewAccount ? { href: "/app/strategies/new", label: "Create your first strategy" } : { href: "/app/paper-trading", label: "Open paper trading" }}
+        primaryAction={isNewAccount ? { href: "/app/strategies/new", label: "Create your first strategy" } : { href: "/app/forward-testing", label: "Open forward testing" }}
         secondaryAction={isNewAccount ? { href: "/app/instruments", label: "Browse market data" } : { href: "/app/strategies/new", label: "New strategy" }}
       />
 
@@ -128,7 +128,7 @@ export default async function DashboardPage() {
           <div data-tour="portfolio-chart">
             <CardHeader
               title="Portfolio value"
-              subtitle="Paper trading, all sessions combined"
+              subtitle="Forward testing, all sessions combined"
               icon={LineChart}
               action={
                 <div className="text-right">
@@ -228,7 +228,7 @@ export default async function DashboardPage() {
               </span>
             </div>
             <p className="mt-0.5 text-xs text-brand-navy/60">
-              Describe a strategy, a backtest or a paper session in plain English — {agentName} prepares it, checks it, and you just review and confirm.
+              Describe a strategy, a backtest or a forward test in plain English — {agentName} prepares it, checks it, and you just review and confirm.
             </p>
           </div>
         </div>

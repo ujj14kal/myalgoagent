@@ -10,7 +10,7 @@ export type ProviderChoice = {
   licensed: MarketDataProvider | null;
   /** User ids allowed to receive the licensed feed. */
   allowlist: ReadonlySet<string>;
-  /** Whether trading paths (paper sessions, webhooks, positions) may use the licensed feed too. */
+  /** Whether trading paths (forward tests, webhooks, positions) may use the licensed feed too. */
   licensedForTrading: boolean;
   fallback: MarketDataProvider;
 };

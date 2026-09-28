@@ -8,7 +8,7 @@ export default function Page() {
     <ComingSoon
       title="Live Trading"
       icon={Radio}
-      description="Run a strategy you've already backtested and paper traded against a real broker account."
+      description="Run a strategy you've already backtested and forward tested against a real broker account."
       points={[
         "Connect a supported broker account first",
         "Server-side risk checks before every order",

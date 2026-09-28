@@ -3,7 +3,7 @@ import { marketDataFor } from "@/lib/market-data";
 import { activateStrategyIfDraft } from "@/lib/strategy-status";
 import type { Strategy, PaperSession } from "@prisma/client";
 
-// Same defaults shown to a user starting a paper session by hand
+// Same defaults shown to a user starting a forward test by hand
 // (src/components/paper-session-form.tsx) — a webhook-mode strategy has no
 // equivalent form, so the first alert that arrives auto-starts a session
 // with these instead of asking the user to configure them up front.
@@ -13,10 +13,10 @@ const DEFAULT_SLIPPAGE_PERCENT = 0.05;
 
 /**
  * Webhook-mode strategies have no condition tree to sync against, so unlike
- * a normal strategy's paper session, this one never needs `syncPaperSession`
+ * a normal strategy's forward test, this one never needs `syncPaperSession`
  * — every state change comes from applyWebhookSignal reacting to an alert
  * directly. Still reuses the same PaperSession model/table so it shows up
- * in the existing paper-trading pages, orders list, and portfolio view.
+ * in the existing forward-testing pages, orders list, and portfolio view.
  */
 export async function getOrCreateActivePaperSession(
   strategy: Strategy & { instrument: { symbol: string } },

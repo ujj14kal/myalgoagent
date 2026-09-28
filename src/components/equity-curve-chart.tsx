@@ -70,7 +70,7 @@ export default function EquityCurveChart({ points, height = 240 }: { points: Equ
       <div ref={containerRef} className="w-full" />
       {isFlat && (
         <p className="pointer-events-none absolute inset-x-0 top-3 text-center text-xs text-brand-navy/45">
-          Flat so far — the curve moves once a paper trade closes.
+          Flat so far — the curve moves once a forward test closes.
         </p>
       )}
     </div>

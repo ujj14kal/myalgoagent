@@ -30,7 +30,7 @@ const backtestStepSchema = {
 
 const paperStepSchema = {
   type: "object",
-  description: "Also start paper trading it in the same review (the user asked to run it forward / paper trade it)",
+  description: "Also start forward testing it in the same review (the user asked to run it forward / forward test it)",
   properties: {
     starting_capital: { type: "number" },
     brokerage_percent: { type: "number" },
@@ -68,8 +68,8 @@ export const AGENT_TOOLS: MantleTool[] = [
   {
     type: "function",
     function: {
-      name: "get_my_paper_sessions",
-      description: "The user's paper trading sessions with equity, P&L and status, plus the combined portfolio.",
+      name: "get_my_forward_tests",
+      description: "The user's forward testing sessions with equity, P&L and status, plus the combined portfolio.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -85,7 +85,7 @@ export const AGENT_TOOLS: MantleTool[] = [
     type: "function",
     function: {
       name: "get_recent_events",
-      description: "The user's recent notifications: paper fills (with the rule that caused each), signals, risk events and stopped sessions. Use to explain what happened or give a summary of recent activity.",
+      description: "The user's recent notifications: hypothetical fills (with the rule that caused each), signals, risk events and stopped sessions. Use to explain what happened or give a summary of recent activity.",
       parameters: { type: "object", properties: { days: { type: "number", description: "Look-back in days, 1-30, default 7" } } },
     },
   },
@@ -144,7 +144,7 @@ export const AGENT_TOOLS: MantleTool[] = [
             required: ["mode"],
           },
           also_backtest: backtestStepSchema,
-          also_paper_trade: paperStepSchema,
+          also_forward_test: paperStepSchema,
         },
         required: ["name", "direction", "entry"],
       },
@@ -163,7 +163,7 @@ export const AGENT_TOOLS: MantleTool[] = [
           starting_capital: { type: "number" },
           brokerage_percent: { type: "number" },
           slippage_percent: { type: "number" },
-          also_paper_trade: paperStepSchema,
+          also_forward_test: paperStepSchema,
         },
         required: ["strategy"],
       },
@@ -172,8 +172,8 @@ export const AGENT_TOOLS: MantleTool[] = [
   {
     type: "function",
     function: {
-      name: "propose_paper_session",
-      description: "Prepare a paper trading session (virtual money) for one of the user's strategies, for them to confirm. Defaults: ₹1,00,000, 0.03% brokerage, 0.05% slippage.",
+      name: "propose_forward_test",
+      description: "Prepare a forward testing session (notional capital) for one of the user's strategies, for them to confirm. Defaults: ₹1,00,000, 0.03% brokerage, 0.05% slippage.",
       parameters: {
         type: "object",
         properties: {
@@ -195,7 +195,7 @@ export const AGENT_TOOLS: MantleTool[] = [
       parameters: {
         type: "object",
         properties: {
-          max_loss_percent: { type: ["number", "null"], description: "Max loss per paper session, % of its starting capital" },
+          max_loss_percent: { type: ["number", "null"], description: "Max loss per forward test, % of its starting capital" },
           max_consecutive_losses: { type: ["number", "null"] },
         },
       },
@@ -228,9 +228,9 @@ export const AGENT_TOOLS: MantleTool[] = [
   {
     type: "function",
     function: {
-      name: "propose_paper_session_action",
+      name: "propose_forward_test_action",
       description:
-        "Prepare syncing (update with the latest end-of-day data), pausing, resuming or stopping one of the user's paper sessions, for them to confirm. Get session ids from get_my_paper_sessions.",
+        "Prepare syncing (update with the latest end-of-day data), pausing, resuming or stopping one of the user's forward tests, for them to confirm. Get session ids from get_my_forward_tests.",
       parameters: {
         type: "object",
         properties: {
@@ -389,7 +389,7 @@ const asObject = (v: unknown): Record<string, unknown> | null => (v && typeof v 
 function withFollowUps(first: PlanStep, ref: StrategyRef, a: Record<string, unknown>): { proposal: AgentProposal; steps: number } {
   const steps: PlanStep[] = [first];
   const bt = asObject(a.also_backtest);
-  const pt = asObject(a.also_paper_trade);
+  const pt = asObject(a.also_forward_test);
   if (bt && first.kind !== "backtest") steps.push(backtestStep(ref, bt));
   if (pt) steps.push(paperStep(ref, pt));
   return steps.length === 1 ? { proposal: first, steps: 1 } : { proposal: { kind: "plan", status: "pending", steps }, steps: steps.length };
@@ -796,7 +796,7 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
       });
       return { result: rows.map((r) => ({ ...r, link: `/app/backtests/${r.id}`, createdAt: r.createdAt.toISOString().slice(0, 10) })) };
     }
-    case "get_my_paper_sessions": {
+    case "get_my_forward_tests": {
       const rows = await getPaperSessionRows(userId);
       const summary = summarizePortfolio(rows);
       return {
@@ -805,7 +805,7 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
           sessions: rows.slice(0, 15).map((r) => ({
             id: r.session.id, strategy: r.session.strategyName, instrument: r.session.instrumentSymbol, status: r.session.status,
             startingCapital: r.session.startingCapital, equity: Math.round(r.equity), pnlPct: Number(r.pnlPct.toFixed(2)),
-            inPosition: r.session.positionQuantity != null, link: `/app/paper-trading/${r.session.id}`,
+            inPosition: r.session.positionQuantity != null, link: `/app/forward-testing/${r.session.id}`,
           })),
         },
       };
@@ -827,7 +827,7 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
           type: r.type,
           message: r.message,
           at: r.createdAt.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + " IST",
-          link: r.paperSessionId ? `/app/paper-trading/${r.paperSessionId}` : null,
+          link: r.paperSessionId ? `/app/forward-testing/${r.paperSessionId}` : null,
         })),
       };
     }
@@ -842,12 +842,12 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
     case "propose_strategy_update":
       return proposeStrategyUpdate(userId, a);
     case "propose_backtest":
-    case "propose_paper_session": {
+    case "propose_forward_test": {
       const strategy = await findStrategy(userId, str(a.strategy));
       if (!strategy) return { result: { error: `No strategy matches "${str(a.strategy)}". Ask the user which strategy they mean.` } };
       if ("ambiguous" in strategy) return ambiguityResult(strategy.ambiguous);
       const ref = { strategyId: strategy.id, strategyName: strategy.name, instrumentSymbol: strategy.instrument.symbol };
-      if (name === "propose_paper_session") {
+      if (name === "propose_forward_test") {
         return { result: { ok: true, note: "A review window is open for the user to confirm. Summarise in one sentence." }, proposal: paperStep(ref, a) };
       }
       const planned = withFollowUps(backtestStep(ref, a), ref, a);
@@ -891,7 +891,7 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
         proposal: { kind: "watchlist_remove", status: "pending", draft: { watchlistItemId: item.id, instrumentSymbol: instrument.symbol } },
       };
     }
-    case "propose_paper_session_action": {
+    case "propose_forward_test_action": {
       const ref = str(a.session);
       const select = { id: true, strategyName: true, instrumentSymbol: true, status: true } as const;
       let found = await prisma.paperSession.findFirst({ where: { id: ref, userId }, select });
@@ -907,14 +907,14 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
             result: {
               ambiguous: true,
               options: candidates.map((c) => `${c.strategyName} on ${c.instrumentSymbol} (${c.status.toLowerCase()}, id ${c.id})`),
-              note: "Several paper sessions match. Ask the user which one; do not pick one yourself.",
+              note: "Several forward tests match. Ask the user which one; do not pick one yourself.",
             },
           };
         }
         found = candidates[0] ?? null;
       }
       const action = ["sync", "pause", "resume", "stop"].includes(str(a.action)) ? (str(a.action) as "sync" | "pause" | "resume" | "stop") : null;
-      if (!found || !action) return { result: { error: "No matching paper session or action. Call get_my_paper_sessions and use its id." } };
+      if (!found || !action) return { result: { error: "No matching forward test or action. Call get_my_forward_tests and use its id." } };
       if (found.status === "STOPPED") return { result: { error: "That session is already stopped — stopped sessions can't be changed." } };
       return {
         result: { ok: true, note: "Review window open." },

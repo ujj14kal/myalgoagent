@@ -34,8 +34,8 @@ export default function KillSwitchToggle({ enabled }: { enabled: boolean }) {
           </p>
           <p className="mt-1 text-xs text-brand-navy/60">
             {enabled
-              ? "The kill switch is on — no paper session can open a new position until it's turned off."
-              : "The kill switch is off. All your paper sessions can open new positions normally."}
+              ? "The kill switch is on — no forward test can open a new position until it's turned off."
+              : "The kill switch is off. All your forward tests can open new positions normally."}
           </p>
         </div>
         <button

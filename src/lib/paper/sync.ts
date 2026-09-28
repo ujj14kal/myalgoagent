@@ -104,10 +104,10 @@ export interface SyncResult {
 }
 
 /**
- * Advances a paper session forward using any real candles newer than its
+ * Advances a forward test forward using any real candles newer than its
  * `lastSyncedTime`. Reuses the exact same `stepBar` execution rules as
  * backtesting (next-bar-open fills, same slippage/brokerage math) so a
- * paper session behaves identically to how a backtest of the same period
+ * forward test behaves identically to how a backtest of the same period
  * would have. Indicators are computed over the full fetched range (they
  * need history before the "new" bars to be correct); only bars after
  * `lastSyncedTime` are actually acted on.
@@ -166,7 +166,7 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
     entryIdx = candles.findIndex((c) => c.time === session.positionEntryTime);
     if (entryIdx === -1) {
       throw new Error(
-        "Open paper position's entry bar has rolled out of the fetched history window — cannot safely resume this session.",
+        "Open forward-test position's entry bar has rolled out of the fetched history window — cannot safely resume this session.",
       );
     }
   }

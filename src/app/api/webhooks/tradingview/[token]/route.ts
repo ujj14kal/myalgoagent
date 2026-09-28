@@ -25,7 +25,7 @@ function sanitizeForStorage(value: string): string {
 
 /**
  * Receives a TradingView alert (plain-text message or a JSON body) and
- * executes it against the target strategy's paper session. Auth is the
+ * executes it against the target strategy's forward test. Auth is the
  * token in the URL itself, not a browser session — a webhook fires from
  * TradingView's servers, which can't hold a NextAuth session — the same
  * shape as the magic-link route (src/app/api/auth/magic-link/route.ts).

@@ -38,7 +38,7 @@ export default async function TradingPage() {
 
   return (
     <div className="space-y-5">
-      <AdminPageHeader title="Trading ops" icon={Activity} description="Paper trading, the scheduled jobs that keep it running, and broker connection health." />
+      <AdminPageHeader title="Trading ops" icon={Activity} description="Forward testing, the scheduled jobs that keep it running, and broker connection health." />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <Kpi label="Live sessions" value={active} hint={`${paused} paused`} />
@@ -127,7 +127,7 @@ export default async function TradingPage() {
       </Card>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <Card title="Latest paper fills" icon={Zap} pad={false}>
+        <Card title="Latest hypothetical fills" icon={Zap} pad={false}>
           {recentOrders.length === 0 ? (
             <Empty>No fills yet.</Empty>
           ) : (

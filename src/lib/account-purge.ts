@@ -20,7 +20,7 @@ export async function runAccountPurge(): Promise<PurgeSummary> {
     // for the next run, and this is a data-deletion obligation.
     try {
       // Every related model has onDelete: Cascade back to User, so this
-      // deletes strategies, backtests, paper sessions, orders, etc. too.
+      // deletes strategies, backtests, forward tests, orders, etc. too.
       // Support cases are the exception (SetNull, so requests sent while
       // signed out survive) — the privacy policy promises they go with the account.
       await prisma.$transaction([prisma.supportCase.deleteMany({ where: { userId: user.id } }), prisma.user.delete({ where: { id: user.id } })]);

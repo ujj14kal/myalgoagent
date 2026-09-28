@@ -56,7 +56,7 @@ export default function NotificationPrefsForm({ initial }: { initial: Notificati
           checked={prefs.notifyOrderFilled}
           onChange={(v) => update({ ...prefs, notifyOrderFilled: v })}
           label="Order fills"
-          description="Notify when a paper or webhook order actually executes."
+          description="Notify when a forward-test or webhook trade fills."
         />
         <Toggle
           checked={prefs.notifySignalAlert}

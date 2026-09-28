@@ -24,14 +24,14 @@ export const metadata: Metadata = {
     template: "%s | MyAlgoAgent",
   },
   description:
-    "MyAlgoAgent is an algo-trading software platform for building, backtesting, paper trading and running rule-based strategies with risk controls built in.",
+    "MyAlgoAgent is an algo-trading software platform for building, backtesting, forward testing and running rule-based strategies with risk controls built in.",
   applicationName: "MyAlgoAgent",
   keywords: [
     "algo trading",
     "algorithmic trading platform",
     "strategy builder",
     "backtesting engine",
-    "paper trading",
+    "forward testing",
     "trading risk management",
   ],
   authors: [{ name: "MyAlgoAgent" }],
@@ -50,14 +50,14 @@ export const metadata: Metadata = {
     siteName: "MyAlgoAgent",
     title: "MyAlgoAgent — Algo Trading Platform",
     description:
-      "Build, backtest, paper trade and run rule-based algo trading strategies with risk controls built in.",
+      "Build, backtest, forward test and run rule-based algo trading strategies with risk controls built in.",
     images: [{ url: "/brand/icon-512.png", width: 512, height: 512, alt: "MyAlgoAgent" }],
   },
   twitter: {
     card: "summary",
     title: "MyAlgoAgent — Algo Trading Platform",
     description:
-      "Build, backtest, paper trade and run rule-based algo trading strategies with risk controls built in.",
+      "Build, backtest, forward test and run rule-based algo trading strategies with risk controls built in.",
     images: ["/brand/icon-512.png"],
   },
   alternates: {
@@ -87,7 +87,7 @@ const jsonLd = [
     operatingSystem: "Web",
     url: siteUrl,
     description:
-      "Software platform for building, backtesting, paper trading and running rule-based algo trading strategies with risk controls.",
+      "Software platform for building, backtesting, forward testing and running rule-based algo trading strategies with risk controls.",
   },
 ];
 

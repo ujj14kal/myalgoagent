@@ -44,7 +44,7 @@ const SIZING_LABEL: Record<PositionSizingMode, string> = {
 };
 
 /** Human-readable one-line summary of a strategy's fixed execution/risk
- * config — shown wherever a backtest or paper session used to let the user
+ * config — shown wherever a backtest or forward test used to let the user
  * re-enter these values, so it's clear the strategy's own settings are
  * what's actually running. */
 export function describeExecutionConfig(config: StrategyExecutionConfig): string {

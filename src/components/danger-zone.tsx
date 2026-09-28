@@ -31,8 +31,8 @@ export default function DangerZone() {
     <div className="rounded-2xl border border-brand-sell/30 bg-brand-sell/5 p-6">
       <h2 className="text-sm font-semibold text-brand-sell">Delete account</h2>
       <p className="mt-2 text-sm text-brand-navy/70">
-        This permanently deletes your account, strategies, backtests, paper
-        sessions and all related data. Your account enters a 15-day
+        This permanently deletes your account, strategies, backtests, forward
+        tests and all related data. Your account enters a 15-day
         reversible window first — logging back in during that window
         automatically cancels the deletion. After 15 days it is permanent
         and cannot be undone.

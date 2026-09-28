@@ -50,7 +50,7 @@ const STARTERS = [
   { text: "How do I build my first strategy?", icon: <Layers size={15} /> },
   { text: "Explain RSI in simple terms", icon: <Activity size={15} /> },
   { text: "What does max drawdown mean?", icon: <TrendingDown size={15} /> },
-  { text: "How is paper trading different from a backtest?", icon: <FlaskConical size={15} /> },
+  { text: "How is forward testing different from a backtest?", icon: <FlaskConical size={15} /> },
 ];
 
 const MAX_CHARS = 2000;

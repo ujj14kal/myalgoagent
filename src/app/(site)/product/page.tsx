@@ -8,7 +8,7 @@ import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 export const metadata: Metadata = pageMetadata({
   title: "Product Overview — What MyAlgoAgent Does",
   description:
-    "A plain-language overview of MyAlgoAgent: an algo-trading software platform covering strategy building, backtesting, paper trading and risk management, with live broker execution coming soon.",
+    "A plain-language overview of MyAlgoAgent: an algo-trading software platform covering strategy building, backtesting, forward testing and risk management, with live broker execution coming soon.",
   path: "/product",
 });
 
@@ -24,7 +24,7 @@ const sections: LegalSection[] = [
     id: "what-it-does",
     title: "What our platform does",
     paragraphs: [
-      "MyAlgoAgent lets a user connect market data, define entry and exit rules using technical indicators and price conditions, simulate that strategy against historical data, validate it in a risk-free paper-trading mode, and — only with explicit authorization and a connected broker account — run it against live markets with configurable risk limits.",
+      "MyAlgoAgent lets a user connect market data, define entry and exit rules using technical indicators and price conditions, simulate that strategy against historical data, validate it in a risk-free forward-testing mode, and — only with explicit authorization and a connected broker account — run it against live markets with configurable risk limits.",
     ],
   },
   {
@@ -40,7 +40,7 @@ const sections: LegalSection[] = [
     id: "workflow",
     title: "The complete workflow",
     paragraphs: [
-      "Market data → strategy creation → backtesting → validation → paper trading → risk controls → broker connection → live execution. Each stage is a distinct, explicit step; the platform never moves a strategy into live trading automatically.",
+      "Market data → strategy creation → backtesting → validation → forward testing → risk controls → broker connection → live execution. Each stage is a distinct, explicit step; the platform never moves a strategy into live trading automatically.",
     ],
   },
   {
@@ -77,15 +77,15 @@ const sections: LegalSection[] = [
     ),
   },
   {
-    id: "paper-trading",
-    title: "Paper trading",
+    id: "forward-testing",
+    title: "Forward testing",
     body: (
       <p className="mt-3 text-sm leading-relaxed text-brand-navy/70">
-        Paper trading runs a strategy forward on its own candles — daily or
-        intraday, from 1-minute to 4-hour — using virtual capital only. No real orders are placed and no real money
+        Forward testing runs a strategy forward on its own candles — daily or
+        intraday, from 1-minute to 4-hour — using notional capital only. No real orders are placed and no real money
         is at risk. It exists to validate a strategy&rsquo;s live behavior
         before any capital is committed. See{" "}
-        <Link href="/paper-trading" className="text-brand-primary underline">Paper Trading</Link>.
+        <Link href="/forward-testing" className="text-brand-primary underline">Forward Testing</Link>.
       </p>
     ),
   },
@@ -116,7 +116,7 @@ const sections: LegalSection[] = [
     paragraphs: [
       "A calculator for multi-leg options positions: pick a ready-made strategy (spreads, straddles, strangles, iron condors and more) or build it leg by leg, and see the payoff at expiry and today, net credit or debit, maximum profit and loss, exact breakevens and the position's Greeks — before trading it. Premiums are Black–Scholes estimates you can overwrite until a live option chain is connected.",
     ],
-    soon: ["Live option chain with real premiums, IV and open interest", "Options backtesting and paper trading"],
+    soon: ["Live option chain with real premiums, IV and open interest", "Options backtesting and forward testing"],
   },
   {
     id: "risk-management",
@@ -143,10 +143,10 @@ const sections: LegalSection[] = [
     id: "ai",
     title: "AI functionality",
     paragraphs: [
-      "Every account has its own AI agent, named by the user. It explains the platform and trading concepts, answers from the user's own strategies and results, and prepares strategies, backtests, paper sessions and risk settings that the user reviews and confirms in one step. It can build anything the visual builder can — including time-of-day windows, candlestick, chart and volume patterns, other timeframes and other stocks — and edit existing strategies. It also explains why each paper trade happened and flags risk events. It runs on Amazon Bedrock, never places trades or changes anything on its own, and its output is informational only — never a guarantee of future performance or personalized financial advice.",
+      "Every account has its own AI agent, named by the user. It explains the platform and trading concepts, answers from the user's own strategies and results, and prepares strategies, backtests, forward tests and risk settings that the user reviews and confirms in one step. It can build anything the visual builder can — including time-of-day windows, candlestick, chart and volume patterns, other timeframes and other stocks — and edit existing strategies. It also explains why each forward test happened and flags risk events. It runs on Amazon Bedrock, never places trades or changes anything on its own, and its output is informational only — never a guarantee of future performance or personalized financial advice.",
       "Users can type or talk: dictate a message, hear replies read aloud in a natural Indian-English voice, or use a hands-free voice mode that keeps the conversation going. The microphone is only on while it's in use, and audio isn't stored. Spoken requests follow exactly the same rules as typed ones: anything the agent prepares still opens a review window for the user to confirm.",
     ],
-    soon: ["Flagging signs of possible overfitting in backtest results", "Warning when paper-trading results drift from the backtest"],
+    soon: ["Flagging signs of possible overfitting in backtest results", "Warning when forward-testing results drift from the backtest"],
   },
   {
     id: "disclosure",

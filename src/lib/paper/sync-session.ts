@@ -18,8 +18,8 @@ type Tx = Prisma.TransactionClient;
 class SyncConflict extends Error {}
 
 export function revalidatePaperPaths(id?: string) {
-  revalidatePath("/app/paper-trading");
-  if (id) revalidatePath(`/app/paper-trading/${id}`);
+  revalidatePath("/app/forward-testing");
+  if (id) revalidatePath(`/app/forward-testing/${id}`);
   revalidatePath("/app/orders");
   revalidatePath("/app/positions");
   revalidatePath("/app/portfolio");
@@ -28,7 +28,7 @@ export function revalidatePaperPaths(id?: string) {
 }
 
 /**
- * Brings one ACTIVE paper session up to date with the latest *closed* candles:
+ * Brings one ACTIVE forward test up to date with the latest *closed* candles:
  * fills entries/exits (stop-loss, target, trailing stop, exit rule), applies
  * risk limits and records notifications. Shared by the Sync button and the
  * scheduled job, so an open trade closes on its own when a stop is hit.
@@ -39,7 +39,7 @@ export async function syncPaperSessionFor(id: string, userId: string, opts: { sc
 
   const paperSession = await prisma.paperSession.findFirst({ where: { id, userId } });
   const market = marketDataFor(userId, "trading");
-  if (!paperSession) throw new Error("Paper session not found");
+  if (!paperSession) throw new Error("Forward test not found");
   if (paperSession.status !== "ACTIVE") throw new Error("This session is not active");
 
   const riskSettings = await prisma.riskSettings.findUnique({ where: { userId } });
@@ -63,7 +63,7 @@ export async function syncPaperSessionFor(id: string, userId: string, opts: { sc
     take: 20,
   });
   // Real bug, fixed here: cash is never debited/credited at entry (see the
-  // comment on this same formula in paper-trading/[id]/page.tsx) — it only
+  // comment on this same formula in forward-testing/[id]/page.tsx) — it only
   // reflects realized gains from closed trades. Adding the position's full
   // entry-price notional on top of that un-debited cash double-counted the
   // entry cost as unrealized profit, which fed a systematically inflated

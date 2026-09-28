@@ -48,7 +48,7 @@ async function fetchFillPriceAndDayTime(symbol: string, market: MarketDataProvid
 }
 
 /**
- * Opens or closes a paper position immediately, in response to a webhook
+ * Opens or closes a forward-test position immediately, in response to a webhook
  * signal, bypassing the entry/exit condition tree entirely (a webhook-mode
  * strategy has no condition tree — see NEVER_EXIT_CONDITION usage in
  * strategy-actions.ts). Which literal action *opens* a position depends on
@@ -62,7 +62,7 @@ async function fetchFillPriceAndDayTime(symbol: string, market: MarketDataProvid
  */
 export async function applyWebhookSignal(session: PaperSession, action: WebhookAction): Promise<ApplySignalResult> {
   if (session.status !== "ACTIVE") {
-    return { executed: false, error: "Paper session is not active" };
+    return { executed: false, error: "Forward test is not active" };
   }
 
   const isShort = session.direction === "SHORT";

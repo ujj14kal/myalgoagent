@@ -85,7 +85,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                   <th className="px-3 py-3">Joined</th>
                   <th className="px-3 py-3">Last seen</th>
                   <th className="px-3 py-3 text-right">Strategies</th>
-                  <th className="px-3 py-3 text-right">Live paper</th>
+                  <th className="px-3 py-3 text-right">Live forward tests</th>
                   <th className="px-5 py-3 text-right">Brokers</th>
                 </tr>
               </thead>

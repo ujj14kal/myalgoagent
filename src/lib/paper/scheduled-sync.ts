@@ -9,7 +9,7 @@ const BUDGET_MS = 25_000;
 export type PaperSyncSummary = { total: number; synced: number; failed: number; pending: number; ms: number };
 
 /**
- * One pass over every ACTIVE paper session, so open trades close on their own
+ * One pass over every ACTIVE forward test, so open trades close on their own
  * when a stop-loss, target or trailing stop is hit. Least recently updated
  * first, so a pass cut short by the time budget resumes where it stopped.
  */

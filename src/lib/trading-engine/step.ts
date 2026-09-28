@@ -253,7 +253,7 @@ function closeTrade(
  * Applies one bar's entry/exit signal to the engine state, honoring the
  * no-look-ahead rule: a signal true on bar `i` can only execute at bar
  * `i + 1`'s open. This is the single source of truth for how a simulated
- * fill happens — both backtesting and paper trading call this so the two
+ * fill happens — both backtesting and forward testing call this so the two
  * can never silently disagree on execution rules.
  *
  * Stop-loss/target/trailing-stop are the one deliberate exception: they
@@ -425,8 +425,8 @@ export function stepBar(
 }
 
 /** Closes an open position at a given bar's close — used to finalize a
- * backtest at the end of its data range. Paper trading never calls this;
- * an open paper position just stays open until a real exit signal fires. */
+ * backtest at the end of its data range. Forward testing never calls this;
+ * an open forward-test position just stays open until a real exit signal fires. */
 export function forceClose(
   candles: Candle[],
   idx: number,

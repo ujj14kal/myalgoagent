@@ -7,7 +7,7 @@ import type { ConditionNode, AuxCandleMap } from "@/lib/strategy";
  * Fetches every additional (instrument, timeframe) candle series a
  * strategy's conditions reference beyond its own base chart — see
  * `collectAuxRequirements`/`auxKey` in strategy/evaluate.ts. Used by both
- * backtesting and paper trading so multi-timeframe/cross-instrument
+ * backtesting and forward testing so multi-timeframe/cross-instrument
  * conditions behave identically in both.
  */
 export async function fetchAuxCandles(

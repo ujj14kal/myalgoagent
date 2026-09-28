@@ -22,11 +22,11 @@ export default async function OrdersPage() {
 
   return (
     <div>
-      <PageHeader title="Orders" icon={ListOrdered} description={<>Paper trading order history across all your sessions.</>} />
+      <PageHeader title="Orders" icon={ListOrdered} description={<>Hypothetical trades from all your forward tests. Live orders will appear here too once live trading is switched on.</>} />
 
       {orders.length === 0 ? (
         <div className="mt-8">
-          <EmptyState pose="idle" title="No orders yet." description="Start a paper trading session to generate real order history." ctaLabel="Go to Paper Trading" ctaHref="/app/paper-trading" />
+          <EmptyState pose="idle" title="No orders yet." description="Start a forward testing session to generate real order history." ctaLabel="Go to Forward Testing" ctaHref="/app/forward-testing" />
         </div>
       ) : (
         <div className="mt-6 overflow-x-auto surface">
@@ -48,7 +48,7 @@ export default async function OrdersPage() {
                 <tr key={o.id}>
                   <td className="text-brand-navy/70">{new Date(o.time * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}</td>
                   <td>
-                    <Link href={`/app/paper-trading/${o.paperSessionId}`} className="font-medium text-brand-primary hover:underline">
+                    <Link href={`/app/forward-testing/${o.paperSessionId}`} className="font-medium text-brand-primary hover:underline">
                       {o.paperSession.strategyName}
                     </Link>
                   </td>

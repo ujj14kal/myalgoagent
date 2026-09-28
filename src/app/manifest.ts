@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "MyAlgoAgent",
     short_name: "MyAlgoAgent",
     description:
-      "Build, backtest, paper trade and run rule-based algo trading strategies with risk controls built in.",
+      "Build, backtest, forward test and run rule-based algo trading strategies with risk controls built in.",
     start_url: "/",
     display: "standalone",
     background_color: "#f7f9fc",

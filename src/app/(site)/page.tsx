@@ -8,7 +8,7 @@ import BrokerLogos from "@/components/broker-logos";
 
 export const metadata: Metadata = {
   description:
-    "Build, backtest, paper trade and run rule-based algo trading strategies with market data, technical indicators and risk controls built in.",
+    "Build, backtest, forward test and run rule-based algo trading strategies with market data, technical indicators and risk controls built in.",
   alternates: { canonical: siteUrl },
 };
 
@@ -16,7 +16,7 @@ const workflow = [
   { step: "01", title: "Market Data", text: "Pull historical and intraday price data for supported instruments.", icon: "radio" as const },
   { step: "02", title: "Strategy Builder", text: "Combine indicators, entry/exit rules and risk parameters — no code required.", icon: "braces" as const },
   { step: "03", title: "Backtesting", text: "Simulate the strategy against history with fees, slippage and realistic fills.", icon: "chart" as const },
-  { step: "04", title: "Paper Trading", text: "Run the strategy forward on daily or intraday candles using virtual capital only.", icon: "layers" as const },
+  { step: "04", title: "Forward Testing", text: "Run the strategy forward on daily or intraday candles using notional capital only.", icon: "layers" as const },
   { step: "05", title: "Risk Controls", text: "Set a loss limit, a losing-streak limit and a kill switch before going further.", icon: "shield" as const },
   { step: "06", title: "Broker & Live Execution", text: "Connect your own broker account today; placing live orders with your explicit authorization is next.", icon: "route" as const, soon: true },
 ];
@@ -24,7 +24,7 @@ const workflow = [
 const capabilities = [
   { title: "No-code strategy builder", text: "Compose entry/exit conditions from indicators, price action and time rules." },
   { title: "Realistic backtesting", text: "Configurable brokerage, fees, slippage and position sizing — not just raw price math." },
-  { title: "Paper trading", text: "Validate strategies on daily or intraday candles with virtual capital before risking real money." },
+  { title: "Forward testing", text: "Validate strategies on daily or intraday candles with notional capital before risking real money." },
   { title: "Risk management engine", text: "Per-session loss limits, a losing-streak limit and an emergency kill switch, enforced on the server." },
   { title: "Broker connections", text: "Link your own account at 9 Indian brokers with your own API key — encrypted, verified on connect." },
   { title: "Watch your strategy trade", text: "An animated replay ticks off every condition on the signal candle and plays out the entry, take-profit, stop-loss and trailing stop." },
@@ -34,7 +34,7 @@ const capabilities = [
 ];
 
 const faqs = [
-  { q: "Can I test without risking real capital?", a: "Yes. Paper trading runs a strategy forward on daily or intraday candles using virtual capital only." },
+  { q: "Can I test without risking real capital?", a: "Yes. Forward testing runs a strategy forward on daily or intraday candles using notional capital only." },
   { q: "Does a successful backtest guarantee results?", a: "No. Historical and backtested results are illustrative and cannot guarantee future performance." },
   { q: "Can I connect my broker?", a: "Yes — Dhan, Zerodha, Upstox, Fyers, Angel One, Groww, ICICI Direct, 5paisa and Alice Blue today, with your own API key. You log in on your broker’s own page; we never see your password or 2FA." },
   { q: "How is live trading authorized?", a: "Live order placement is coming soon. It will use your connected broker account and always need your explicit authorization. You can disconnect the broker or use the kill switch at any time." },
@@ -88,7 +88,7 @@ export default function Home() {
             </h1>
             <p className="mt-5 max-w-xl text-lg text-brand-navy/70">
               MyAlgoAgent brings strategy building, realistic backtesting,
-              and paper trading into one risk-managed workflow — connect
+              and forward testing into one risk-managed workflow — connect
               your own broker today, with live execution coming soon.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-5">
@@ -108,7 +108,7 @@ export default function Home() {
             </div>
             <div className="mt-7 flex flex-wrap gap-5 text-xs text-brand-navy/60">
               <span className="flex items-center gap-1.5"><Icon name="check" size={14} /> No-code workflow</span>
-              <span className="flex items-center gap-1.5"><Icon name="check" size={14} /> Risk-free paper trading</span>
+              <span className="flex items-center gap-1.5"><Icon name="check" size={14} /> Risk-free forward testing</span>
               <span className="flex items-center gap-1.5"><Icon name="check" size={14} /> Server-side limits</span>
             </div>
           </div>
@@ -236,7 +236,7 @@ export default function Home() {
               <p className="mt-4 text-brand-navy/70">
                 Tell your agent what you want and it prepares it for you — a
                 strategy with its indicators, entry/exit conditions and risk
-                rules, a backtest, a paper session or new loss limits — using
+                rules, a backtest, a forward test or new loss limits — using
                 the exact same building blocks as the rest of the platform.
                 You review every detail and confirm; nothing happens without
                 you.

@@ -17,7 +17,7 @@ const sections: LegalSection[] = [
     id: "status",
     title: "Availability",
     paragraphs: [
-      "Broker connections are live: you can link your own account at Dhan, Zerodha, Upstox, Fyers, Angel One, Groww, ICICI Direct, 5paisa or Alice Blue today. Placing live orders through that connection is not available yet — until then you build strategies, backtest them and run them in paper trading with virtual capital. The sections marked coming soon describe how live order placement will work when it launches.",
+      "Broker connections are live: you can link your own account at Dhan, Zerodha, Upstox, Fyers, Angel One, Groww, ICICI Direct, 5paisa or Alice Blue today. Placing live orders through that connection is not available yet — until then you build strategies, backtest them and run them in forward testing with notional capital. The sections marked coming soon describe how live order placement will work when it launches.",
     ],
   },
   {

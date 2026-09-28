@@ -40,11 +40,11 @@ export default async function PositionsPage() {
 
   return (
     <div>
-      <PageHeader title="Positions" icon={BriefcaseBusiness} description={<>Currently open positions across your paper trading sessions.</>} />
+      <PageHeader title="Positions" icon={BriefcaseBusiness} description={<>Hypothetical positions currently open in your forward tests.</>} />
 
       {positions.length === 0 ? (
         <div className="mt-8">
-          <EmptyState pose="idle" title="No open positions right now." description="Positions from active paper trading sessions will show up here." ctaLabel="Go to Paper Trading" ctaHref="/app/paper-trading" />
+          <EmptyState pose="idle" title="No open positions right now." description="Positions from active forward testing sessions will show up here." ctaLabel="Go to Forward Testing" ctaHref="/app/forward-testing" />
         </div>
       ) : (
         <div className="mt-6 overflow-x-auto surface">
@@ -67,7 +67,7 @@ export default async function PositionsPage() {
                 return (
                   <tr key={p.session.id}>
                     <td>
-                      <Link href={`/app/paper-trading/${p.session.id}`} className="font-medium text-brand-primary hover:underline">
+                      <Link href={`/app/forward-testing/${p.session.id}`} className="font-medium text-brand-primary hover:underline">
                         {p.session.strategyName}
                       </Link>
                     </td>

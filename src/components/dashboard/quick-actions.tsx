@@ -4,7 +4,7 @@ import { Activity, FlaskConical, Plus, Star, type LucideIcon } from "lucide-reac
 const ACTIONS: { href: string; label: string; description: string; icon: LucideIcon }[] = [
   { href: "/app/strategies/new", label: "New strategy", description: "Build rules visually or as code", icon: Plus },
   { href: "/app/backtests", label: "Run a backtest", description: "Test on real historical data", icon: FlaskConical },
-  { href: "/app/paper-trading", label: "Paper trade", description: "Run live on virtual capital", icon: Activity },
+  { href: "/app/forward-testing", label: "Forward test", description: "Run live on notional capital", icon: Activity },
   { href: "/app/watchlist", label: "Watchlist", description: "Track instruments you follow", icon: Star },
 ];
 
