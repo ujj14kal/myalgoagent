@@ -18,6 +18,8 @@ const sections: LegalSection[] = [
     bullets: [
       "Maximum loss per session, as a percentage of its starting capital",
       "Maximum consecutive losses",
+      "Per-strategy stop-loss, take-profit and trailing stop — in %, points or ATR multiples",
+      "Per-strategy time rules for intraday: no new entries after a set time, and an automatic square-off so positions are never carried overnight",
     ],
     soon: [
       "Maximum daily loss",
@@ -44,7 +46,7 @@ const sections: LegalSection[] = [
     bullets: [
       "Broker-disconnect safety behavior — no new orders are placed while disconnected",
       "Stale market-data detection, so a strategy doesn't act on outdated prices",
-      "Time-based and instrument-level trading restrictions where configured",
+      "Instrument-level trading restrictions where configured",
     ],
   },
   {

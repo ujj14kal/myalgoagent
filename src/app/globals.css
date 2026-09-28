@@ -92,6 +92,11 @@ body {
     var(--brand-bg);
 }
 
+/* Broker logo strip: the list is rendered twice, so moving by half its width loops seamlessly. */
+@keyframes logo-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import BrokerLogos from "@/components/broker-logos";
 import LegalPage, { type LegalSection } from "@/components/legal-page";
 import { Callout } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
@@ -52,9 +53,12 @@ const sections: LegalSection[] = [
         indicators (moving averages, RSI, MACD, Bollinger Bands, VWAP, ATR,
         support and resistance levels and others), candlestick, chart and
         volume patterns, price action and time-based rules, combined with
-        AND/OR logic — or write the same rules as code, in a
-        purpose-built DSL. Before saving, a demo chart shows where the
-        strategy would have entered and exited on recent data. See{" "}
+        AND/OR logic — or write the same rules as simple code. Strategies run on the timeframe you choose, from
+        1-minute to daily, with market or limit entry orders and intraday
+        time rules. Before saving, a demo shows where the strategy would
+        have entered and exited on recent data, with an animated replay of
+        a trade — each condition ticked off, and the entry, take-profit,
+        stop-loss and trailing-stop lines as it plays out. See{" "}
         <Link href="/features" className="text-brand-primary underline">Features</Link>.
       </p>
     ),
@@ -87,19 +91,32 @@ const sections: LegalSection[] = [
   },
   {
     id: "live-trading",
-    title: "Live trading & broker integration",
-    comingSoon: true,
+    title: "Broker connections & live trading",
     body: (
       <p className="mt-3 text-sm leading-relaxed text-brand-navy/70">
-        Users can already connect their own Dhan, Zerodha, Upstox, Fyers
-        or Angel One account through the broker&rsquo;s official API, with
-        their API keys encrypted on our servers. Live trading will require
-        that connection plus confirmed risk settings before any strategy
-        can place real orders. The platform does not custody funds; it
-        connects to broker APIs on the user&rsquo;s behalf. See{" "}
+        Users can connect their own account at Dhan, Zerodha, Upstox,
+        Fyers, Angel One, Groww, ICICI Direct, 5paisa or Alice Blue today,
+        through the broker&rsquo;s official API, with their API keys
+        encrypted on our servers. Live order placement is coming soon: it
+        will require that connection plus confirmed risk settings before
+        any strategy can place real orders. The platform does not custody
+        funds; it connects to broker APIs on the user&rsquo;s behalf. See{" "}
         <Link href="/live-trading" className="text-brand-primary underline">Live Trading</Link>.
       </p>
     ),
+    extra: (
+      <div className="mt-5">
+        <BrokerLogos variant="strip" />
+      </div>
+    ),
+  },
+  {
+    id: "options-lab",
+    title: "Options Lab",
+    paragraphs: [
+      "A calculator for multi-leg options positions: pick a ready-made strategy (spreads, straddles, strangles, iron condors and more) or build it leg by leg, and see the payoff at expiry and today, net credit or debit, maximum profit and loss, exact breakevens and the position's Greeks — before trading it. Premiums are Black–Scholes estimates you can overwrite until a live option chain is connected.",
+    ],
+    soon: ["Live option chain with real premiums, IV and open interest", "Options backtesting and paper trading"],
   },
   {
     id: "risk-management",
@@ -127,7 +144,7 @@ const sections: LegalSection[] = [
     title: "AI functionality",
     paragraphs: [
       "Every account has its own AI agent, named by the user. It explains the platform and trading concepts, answers from the user's own strategies and results, and prepares strategies, backtests, paper sessions and risk settings that the user reviews and confirms in one step. It can build anything the visual builder can — including time-of-day windows, candlestick, chart and volume patterns, other timeframes and other stocks — and edit existing strategies. It also explains why each paper trade happened and flags risk events. It runs on Amazon Bedrock, never places trades or changes anything on its own, and its output is informational only — never a guarantee of future performance or personalized financial advice.",
-      "Users can type or talk. Voice uses Amazon Transcribe to turn speech into text and Amazon Polly to read replies aloud in a natural Indian-English voice, and a hands-free voice mode keeps the conversation going. Spoken requests follow exactly the same rules as typed ones: anything the agent prepares still opens a review window for the user to confirm.",
+      "Users can type or talk: dictate a message, hear replies read aloud in a natural Indian-English voice, or use a hands-free voice mode that keeps the conversation going. The microphone is only on while it's in use, and audio isn't stored. Spoken requests follow exactly the same rules as typed ones: anything the agent prepares still opens a review window for the user to confirm.",
     ],
     soon: ["Flagging signs of possible overfitting in backtest results", "Warning when paper-trading results drift from the backtest"],
   },

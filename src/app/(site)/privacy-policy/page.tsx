@@ -60,7 +60,7 @@ const sections: LegalSection[] = [
     paragraphs: ["We do not sell your personal data. We share information only:"],
     bullets: [
       "With infrastructure and service providers who process data on our behalf strictly to operate the Service.",
-      "With your connected broker, strictly to place, modify, cancel or synchronize orders you have configured and authorized.",
+      "With your connected broker: your API key, secret and session token are sent only to that broker's official API — today to log you in and verify your account, and, once live trading launches, to place, modify, cancel or synchronize orders you have configured and explicitly authorized.",
       "Where required to comply with a legal obligation, court order, or governmental request.",
       "To protect the rights, property or safety of MyAlgoAgent, our users, or the public, where legally permitted.",
       "In connection with a merger, acquisition, or sale of assets, subject to continued protection under a policy at least as protective as this one.",
@@ -76,7 +76,7 @@ const sections: LegalSection[] = [
     title: "Your AI agent (in-app assistant)",
     paragraphs: [
       "Inside the app you can chat with your agent, an AI assistant that explains the platform and trading concepts and prepares actions for you — a strategy, a backtest, a paper session, new loss limits — which you review and confirm. It never places trades or changes anything on its own, and it does not give investment advice.",
-      "When you send it a message, the text of that message and of the recent conversation, general information about the platform and — so it can answer about your account — the names and results of your strategies, backtests, paper sessions and risk settings are sent to Amazon Bedrock (an AWS service) to generate a reply. Bedrock may process this text in AWS data centers outside India; AWS does not use it to train models and does not retain it after generating the reply. We do not include your name, email address or phone number in these requests — please don’t type personal or financial identifiers (such as PAN, Aadhaar or bank details) into the chat.",
+      "When you send it a message, the text of that message and of the recent conversation, general information about the platform and — so it can answer about your account — the names and results of your strategies, backtests, paper sessions and risk settings, and — when you ask about connecting a broker — which brokers you've connected and their status (never your keys or tokens) are sent to Amazon Bedrock (an AWS service) to generate a reply. Bedrock may process this text in AWS data centers outside India; AWS does not use it to train models and does not retain it after generating the reply. We do not include your name, email address or phone number in these requests — if you paste something that looks like a key, secret, token, password or OTP, it is hidden before the message is stored or sent. Please don’t type personal or financial identifiers (such as PAN, Aadhaar or bank details) into the chat.",
       "Voice is optional. When you speak to your agent (the microphone in the chat, or voice mode), your browser streams the audio directly to Amazon Transcribe in AWS's Mumbai region, which turns it into text; we don't receive or store the audio, only the resulting text, which is then handled like a typed message. When your agent reads a reply aloud, the reply's text is sent to Amazon Polly (AWS, Singapore region, or Mumbai as a fallback) to generate the speech. The microphone is used only while you have it switched on, and your browser asks for your permission first.",
       "Your conversations are stored in our database in India so you can revisit them, are included in your account data export, and are deleted when your account is deleted. We keep usage details (such as message counts and processing time) and any ratings you give its replies, to operate and improve the service, prevent abuse and manage costs.",
     ],
@@ -92,7 +92,7 @@ const sections: LegalSection[] = [
     id: "retention",
     title: "Data retention",
     paragraphs: [
-      "We retain account and trading-configuration data for as long as your account remains active, and for a reasonable period afterward as needed to meet audit, security, tax, and legal record-keeping obligations applicable to financial software. You may request earlier deletion as described under “Your rights” below, subject to any retention we are legally required to maintain (for example, records of executed trades).",
+      "We retain account and trading-configuration data for as long as your account remains active, and for a reasonable period afterward as needed to meet audit, security, tax, and legal record-keeping obligations applicable to financial software. Your broker API keys and tokens are deleted as soon as you disconnect that broker or delete your account. Automated database backups are kept for seven days, so deleted data can remain in a backup for up to seven days before it is overwritten. Technical error logs — which never contain passwords or broker keys — are kept for 90 days. You may request earlier deletion as described under “Your rights” below, subject to any retention we are legally required to maintain (for example, records of executed trades).",
     ],
   },
   {

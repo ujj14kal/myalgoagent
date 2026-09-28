@@ -60,6 +60,22 @@ const sections: LegalSection[] = [
     title: "Technology risk",
     paragraphs: [
       "Software, network, broker-API and market-data outages can affect strategy execution. While the platform includes risk controls and safe-failure behavior, no system can eliminate technology risk entirely.",
+      "Broker connections depend on your broker's API: sessions expire every day, and a broker can change, limit or withdraw its API without notice, which can interrupt a connection until you log in again or reconnect.",
+      "Voice input is converted to text by speech recognition, which can mishear words, numbers or stock names. Always check what your agent prepared in the review window before confirming it.",
+    ],
+  },
+  {
+    id: "options-risk",
+    title: "Options",
+    paragraphs: [
+      "Options are complex and can lose value quickly; buyers can lose the entire premium paid, and sellers can face losses far larger than the premium received — in some positions, unlimited. The Options Lab is a calculator: its premiums, payoffs and Greeks are model estimates (Black–Scholes) that can differ materially from real market prices, especially near expiry or in fast markets. It does not place or simulate options trades.",
+    ],
+  },
+  {
+    id: "demos",
+    title: "Demos and illustrations",
+    paragraphs: [
+      "The strategy builder's demo runs your rules on a short, recent window of data only. Where a replay is labelled an illustration, the price path after the entry is made up to show how your take-profit, stop-loss or trailing stop would behave — it is not a prediction and did not happen. Neither is a substitute for a full backtest, paper trading and your own judgement.",
     ],
   },
   {

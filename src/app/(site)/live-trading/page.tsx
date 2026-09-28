@@ -3,11 +3,12 @@ import Link from "next/link";
 import LegalPage, { type LegalSection } from "@/components/legal-page";
 import { Callout } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
+import BrokerLogos from "@/components/broker-logos";
 
 export const metadata: Metadata = pageMetadata({
   title: "Live Algo Trading & Broker Integration",
   description:
-    "Coming soon: live trading through supported broker APIs, protected by explicit user confirmation, server-side risk controls and a global kill switch.",
+    "Connect your own account at 9 Indian brokers today. Live order placement is coming soon — protected by explicit user confirmation, server-side risk controls and a global kill switch.",
   path: "/live-trading",
 });
 
@@ -16,16 +17,21 @@ const sections: LegalSection[] = [
     id: "status",
     title: "Availability",
     paragraphs: [
-      "Live trading is not available yet. Today you can build strategies, backtest them and run them in paper trading with virtual capital. Everything below describes how live trading will work when it launches.",
+      "Broker connections are live: you can link your own account at Dhan, Zerodha, Upstox, Fyers, Angel One, Groww, ICICI Direct, 5paisa or Alice Blue today. Placing live orders through that connection is not available yet — until then you build strategies, backtest them and run them in paper trading with virtual capital. The sections marked coming soon describe how live order placement will work when it launches.",
     ],
   },
   {
-    id: "connection",
+    id: "brokers",
     title: "Broker connection",
-    comingSoon: true,
     paragraphs: [
-      "A user connects a supported broker account through that broker's API. The platform tests the connection and synchronizes account, position and funds data before marking the broker as connected. API credentials are handled through secure secret management and are never exposed to browser-side code.",
+      "You create a free API app on your broker's developer site, paste the Redirect URL we give you, paste your API key and secret on the Broker Connections page, and log in on your broker's own page — your password, PIN and 2FA are never entered on MyAlgoAgent. (Groww works slightly differently: you approve your key on Groww each day instead of logging in through a redirect.) The platform verifies the connection with your broker before marking it connected.",
+      "Your API key, secret and each day's session token are encrypted with AES-256 before they're stored and are never sent to the browser. Broker sessions end every day by exchange rules, so you log in once each trading day. Placing live orders will also need a static IP registered on your broker account (a SEBI rule) — we'll guide you through that when order placement launches.",
     ],
+    extra: (
+      <div className="mt-5">
+        <BrokerLogos variant="strip" />
+      </div>
+    ),
   },
   {
     id: "before-live",
@@ -33,7 +39,7 @@ const sections: LegalSection[] = [
     comingSoon: true,
     bullets: [
       "An explicit risk acknowledgment from the user",
-      "A tested, active broker connection",
+      "A tested, active broker connection (available today)",
       "Configured risk limits for that strategy",
       "Manual start of the strategy — nothing runs automatically without this step",
     ],
@@ -87,7 +93,7 @@ export default function LiveTradingPage() {
         label="Product / Live Trading"
         title="Live execution, protected by explicit confirmation and risk controls"
         updated="September 2026"
-        intro="Live trading is never enabled implicitly. It requires a connected broker account and explicit user authorization."
+        intro="Connect your broker today; live trading is never enabled implicitly — it will require a connected broker account and explicit user authorization."
         sections={sections}
         breadcrumbLabel="Live Trading"
         breadcrumbHref="/live-trading"

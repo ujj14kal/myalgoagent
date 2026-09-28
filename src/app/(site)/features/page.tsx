@@ -5,11 +5,12 @@ import { Breadcrumbs } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 import Reveal from "@/components/reveal";
 import ComingSoonTag, { ComingSoonList } from "@/components/coming-soon-tag";
+import BrokerLogos from "@/components/broker-logos";
 
 export const metadata: Metadata = pageMetadata({
   title: "Features",
   description:
-    "Strategy builder, technical indicators, realistic backtesting, paper trading, risk controls and portfolio tracking — with live broker execution coming soon.",
+    "Strategy builder, 46 technical indicators, realistic backtesting, paper trading, risk controls, connections to 9 Indian brokers and an AI agent — with live broker execution coming soon.",
   path: "/features",
 });
 
@@ -46,11 +47,12 @@ const groups: Group[] = [
     title: "Technical Indicators",
     icon: Activity,
     items: [
-      "Moving averages: SMA, EMA, WMA",
-      "RSI, MACD, Bollinger Bands, ATR",
-      "VWAP, ADX/DMI, Stochastic Oscillator, CCI",
-      "ROC/Momentum, OBV and other volume-based indicators",
-      "Donchian channels and pivot points",
+      "46 indicators in total, each with a picture of what it looks like",
+      "Moving averages: SMA, EMA, WMA and Hull MA",
+      "RSI, MACD, Bollinger Bands, ATR, Standard Deviation",
+      "VWAP, ADX/DMI, Stochastic Oscillator, CCI, Williams %R, MFI, Awesome Oscillator, Aroon",
+      "ROC/Momentum, OBV, Chaikin Money Flow and other volume-based indicators",
+      "Supertrend, Parabolic SAR, Keltner, Donchian and Envelope channels, and pivot points",
       "Automatic support and resistance levels, found from the swing lows and highs price has bounced from",
     ],
   },
@@ -123,6 +125,7 @@ const groups: Group[] = [
       "Answers from your own data: your strategies, backtest results, paper sessions and risk settings",
       "Explains why each paper trade happened and flags risk events as they occur",
       "Chat in a side panel or full screen, with all your past conversations",
+      "Walks you through connecting your broker step by step — and never asks for your keys or passwords in chat",
       "Uses the same validator as the builder, never gives buy or sell calls, and never acts without your confirmation",
     ],
     soon: ["Warns when paper-trading results drift from the backtest", "A daily digest of your sessions"],
@@ -139,8 +142,11 @@ export default function FeaturesPage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/features", label: "Features" }]} />
       <PageHeader eyebrow="Features" title="What you can use today — and what’s next" description="Strategy creation, testing and risk control you can use now, with planned features clearly marked as coming soon." />
+      <div className="mx-auto max-w-5xl px-4 pt-10">
+        <BrokerLogos variant="strip" />
+      </div>
       <Reveal>
-        <div className="mx-auto grid max-w-5xl gap-6 px-4 py-14 sm:grid-cols-2">
+        <div className="mx-auto grid max-w-5xl gap-6 px-4 pb-14 pt-8 sm:grid-cols-2">
           {groups.map((g) => (
             <div key={g.title} className="surface surface-interactive p-6">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-primary/[0.08] text-brand-primary">

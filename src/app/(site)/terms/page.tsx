@@ -50,7 +50,8 @@ const sections: LegalSection[] = [
     id: "brokers",
     title: "Broker connections",
     paragraphs: [
-      "Connecting a broker account authorizes MyAlgoAgent to place, modify and cancel orders on your behalf strictly according to the strategies you configure and start. You may disconnect a broker or trigger the kill switch at any time.",
+      "You connect a broker using an API app you create in your own broker account. Connecting authorizes MyAlgoAgent to use those credentials with your broker's official API on your behalf — today to log you in, verify your account and read basic account information; once live trading launches, to place, modify and cancel orders strictly according to the strategies you configure and explicitly start. You may disconnect a broker or trigger the kill switch at any time, and you can revoke access from your broker's side.",
+      "You are responsible for your broker account and its API app: keeping your API keys secret (regenerate them if they may have been exposed), your broker's API terms and any fees your broker charges for API or data access, logging in each trading day, and any requirements your broker or exchange sets for API trading, such as registering a static IP address. MyAlgoAgent is not affiliated with, endorsed by or responsible for any broker, and a broker may change or withdraw its API at any time.",
     ],
   },
   {

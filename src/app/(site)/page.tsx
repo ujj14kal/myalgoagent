@@ -4,6 +4,7 @@ import { siteUrl } from "@/lib/site";
 import Reveal from "@/components/reveal";
 import Agent2D from "@/components/robot/agent-2d";
 import ComingSoonTag from "@/components/coming-soon-tag";
+import BrokerLogos from "@/components/broker-logos";
 
 export const metadata: Metadata = {
   description:
@@ -17,7 +18,7 @@ const workflow = [
   { step: "03", title: "Backtesting", text: "Simulate the strategy against history with fees, slippage and realistic fills.", icon: "chart" as const },
   { step: "04", title: "Paper Trading", text: "Run the strategy forward on daily or intraday candles using virtual capital only.", icon: "layers" as const },
   { step: "05", title: "Risk Controls", text: "Set a loss limit, a losing-streak limit and a kill switch before going further.", icon: "shield" as const },
-  { step: "06", title: "Live Execution", text: "Connect a supported broker and run the strategy with real capital, with your explicit authorization.", icon: "route" as const, soon: true },
+  { step: "06", title: "Broker & Live Execution", text: "Connect your own broker account today; placing live orders with your explicit authorization is next.", icon: "route" as const, soon: true },
 ];
 
 const capabilities = [
@@ -25,6 +26,9 @@ const capabilities = [
   { title: "Realistic backtesting", text: "Configurable brokerage, fees, slippage and position sizing — not just raw price math." },
   { title: "Paper trading", text: "Validate strategies on daily or intraday candles with virtual capital before risking real money." },
   { title: "Risk management engine", text: "Per-session loss limits, a losing-streak limit and an emergency kill switch, enforced on the server." },
+  { title: "Broker connections", text: "Link your own account at 9 Indian brokers with your own API key — encrypted, verified on connect." },
+  { title: "Watch your strategy trade", text: "An animated replay ticks off every condition on the signal candle and plays out the entry, take-profit, stop-loss and trailing stop." },
+  { title: "Options Lab", text: "Multi-leg options payoffs, breakevens, max profit and loss, and Greeks before you trade." },
   { title: "Portfolio & order tracking", text: "Positions, P&L, orders and fills in one dashboard." },
   { title: "Alerts & notifications", text: "Signal, fill and risk-limit alerts, delivered in the app as they happen." },
 ];
@@ -32,7 +36,8 @@ const capabilities = [
 const faqs = [
   { q: "Can I test without risking real capital?", a: "Yes. Paper trading runs a strategy forward on daily or intraday candles using virtual capital only." },
   { q: "Does a successful backtest guarantee results?", a: "No. Historical and backtested results are illustrative and cannot guarantee future performance." },
-  { q: "How is live trading authorized?", a: "Live trading is coming soon. When it launches, you’ll connect a supported broker and explicitly authorize execution. You can disconnect the broker or use the kill switch at any time." },
+  { q: "Can I connect my broker?", a: "Yes — Dhan, Zerodha, Upstox, Fyers, Angel One, Groww, ICICI Direct, 5paisa and Alice Blue today, with your own API key. You log in on your broker’s own page; we never see your password or 2FA." },
+  { q: "How is live trading authorized?", a: "Live order placement is coming soon. It will use your connected broker account and always need your explicit authorization. You can disconnect the broker or use the kill switch at any time." },
 ];
 
 function Icon({ name, size = 18 }: { name: "radio" | "braces" | "chart" | "layers" | "shield" | "route" | "check" | "arrow" | "gauge" | "lock" | "stop" | "mic"; size?: number }) {
@@ -83,8 +88,8 @@ export default function Home() {
             </h1>
             <p className="mt-5 max-w-xl text-lg text-brand-navy/70">
               MyAlgoAgent brings strategy building, realistic backtesting,
-              and paper trading into one risk-managed workflow — with live
-              execution coming soon.
+              and paper trading into one risk-managed workflow — connect
+              your own broker today, with live execution coming soon.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-5">
               <Link
@@ -210,6 +215,12 @@ export default function Home() {
       </Reveal>
 
       <Reveal>
+        <section id="brokers" className="mx-auto max-w-6xl scroll-mt-20 px-4 pb-20">
+          <Reveal>
+            <BrokerLogos />
+          </Reveal>
+        </section>
+
         <section id="ai-assistant" className="border-y border-black/5 bg-white">
           <div className="mx-auto grid max-w-6xl items-center gap-14 px-4 py-20 lg:grid-cols-[0.85fr_1.15fr]">
             <div>
@@ -365,34 +376,29 @@ export default function Home() {
         <section id="technology" className="mx-auto max-w-6xl px-4 py-20">
           <div className="grid items-center gap-16 lg:grid-cols-[0.7fr_1.3fr]">
             <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-brand-primary">Technology & AWS</p>
-              <h2 className="mt-2 text-3xl font-bold text-brand-navy">Infrastructure designed for continuous, auditable operation</h2>
+              <p className="text-xs font-bold uppercase tracking-widest text-brand-primary">Security & reliability</p>
+              <h2 className="mt-2 text-3xl font-bold text-brand-navy">Built to protect your data and every trade</h2>
               <p className="mt-4 text-brand-navy/70">
-                The platform separates strategy logic, risk checks and
-                broker execution so each step can be monitored and
-                controlled.
+                MyAlgoAgent runs on secure AWS cloud infrastructure in India.
+                Your data is encrypted, your broker keys are locked to your
+                account, and your safety limits are enforced by our servers.
               </p>
               <Link href="/technology" className="mt-6 inline-flex items-center gap-2 rounded-full bg-brand-primary px-6 py-3 text-sm font-semibold text-white hover:bg-brand-primary-light">
-                Discuss the platform <Icon name="arrow" size={15} />
+                How we keep you safe <Icon name="arrow" size={15} />
               </Link>
             </div>
-            <div className="grid grid-cols-1 items-center gap-3 sm:grid-cols-[1fr_28px_1fr_28px_1fr]">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {[
-                { n: "01", title: "Market data", sub: "Historical and near-real-time inputs" },
-                { n: "02", title: "Strategy + risk engine", sub: "Rules validated before execution" },
-                { n: "03", title: "Broker gateway", sub: "Authorized orders and reconciled fills" },
-              ].map((step, i, arr) => (
+                { n: "01", title: "Encrypted everywhere", sub: "HTTPS on every connection, data encrypted at rest, broker keys sealed with AES-256" },
+                { n: "02", title: "Limits you can't bypass", sub: "Loss limits and the kill switch are checked by our servers before every new position" },
+                { n: "03", title: "Watched around the clock", sub: "Monitored 24/7 with instant alerts, backed up every day" },
+              ].map((step) => (
                 <div key={step.n} className="contents">
                   <div className="hover-lift flex min-h-[170px] flex-col border-t-[3px] border-brand-primary bg-white p-5 shadow-sm">
                     <span className="font-mono text-xs font-bold text-brand-gold">{step.n}</span>
                     <span className="mt-8 font-semibold text-brand-navy">{step.title}</span>
                     <span className="mt-1.5 text-xs leading-relaxed text-brand-navy/55">{step.sub}</span>
                   </div>
-                  {i < arr.length - 1 && (
-                    <div className="hidden h-px w-full bg-brand-primary/30 sm:block" aria-hidden>
-                      <div className="relative -top-[3.5px] float-right h-0 w-0 border-y-[3px] border-l-[5px] border-y-transparent border-l-brand-primary/60" />
-                    </div>
-                  )}
                 </div>
               ))}
             </div>

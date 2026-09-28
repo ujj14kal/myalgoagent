@@ -46,9 +46,12 @@ export default function PaperTradingPage() {
           <li>Simulated fills, with stop-loss, target and trailing-stop exits</li>
           <li>Fills using the same fee and slippage assumptions as backtesting</li>
           <li>Virtual positions, P&amp;L and a full paper trade history</li>
+          <li>Limit entry orders — a % from the signal price or a fixed ₹ price — that rest as day orders until they fill or the day ends</li>
+          <li>Intraday strategies on 1m to 4H candles, with entry and exit times, &ldquo;no new entries after&rdquo; and an automatic square-off</li>
+          <li>Each trade explained: the rule that fired, the exit reason and the price</li>
         </ul>
         <p>
-          <ComingSoonTag /> Limit-order simulation and intraday updates.
+          <ComingSoonTag /> Continuous updates during market hours, without clicking Sync.
         </p>
 
         <h2>Controls</h2>
