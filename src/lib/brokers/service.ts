@@ -1,10 +1,10 @@
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { BrokerConnection } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logWarn } from "@/lib/logger";
 import { siteUrl } from "@/lib/site";
 import { ADAPTERS, BrokerError, type BrokerCreds, type BrokerSession } from "./adapters";
-import { brokerById, callbackUrl, type BrokerId } from "./catalog";
+import { brokerById, callbackUrl, notifierUrl, type BrokerId, type LoginMethodId } from "./catalog";
 import { decryptSecret, encryptSecret } from "./crypto";
 import { encodeFailure, type Failure, type FailureCode } from "./failures";
 
@@ -44,8 +44,24 @@ export function credsOf(row: BrokerConnection): BrokerCreds {
     apiKey: decryptSecret(row.apiKeyEnc, ctx(row, "apiKey")),
     apiSecret: row.apiSecretEnc ? decryptSecret(row.apiSecretEnc, ctx(row, "apiSecret")) : undefined,
     clientId: row.brokerClientId ?? undefined,
+    method: (row.loginMethod as LoginMethodId | null) ?? undefined,
   };
 }
+
+/**
+ * This user's private Upstox notifier path segment: stable (so it can be put
+ * in their Upstox app before any keys are saved), unguessable without the
+ * server key, and different for every user. Only its hash is stored.
+ */
+export function notifierToken(userId: string): string {
+  const k = createHash("sha256").update(`upstox-notifier:${process.env.BROKER_ENCRYPTION_KEY ?? ""}`).digest();
+  return createHmac("sha256", k).update(userId).digest("base64url").slice(0, 32);
+}
+export const notifierTokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
+export const notifierUrlFor = (userId: string) => notifierUrl(callbackOrigin(), notifierToken(userId));
+
+/** How long an Upstox phone approval stays open (Upstox itself lapses it at 3:30 AM). */
+export const PHONE_WINDOW_MS = 20 * 3_600_000;
 
 export function accessTokenOf(row: BrokerConnection): string | null {
   return row.accessTokenEnc ? decryptSecret(row.accessTokenEnc, ctx(row, "accessToken")) : null;

@@ -1,13 +1,14 @@
 import { createHash } from "node:crypto";
 import { request as httpsRequest } from "node:https";
-import type { BrokerId } from "./catalog";
+import type { BrokerId, LoginMethodId } from "./catalog";
+import { totpCode } from "./totp";
 import { classifyBrokerMessage, type Failure, type FailureCode } from "./failures";
 
 // Server-side login flows for each live broker, straight from the brokers'
 // official API docs. Each user brings their own API app, so every call runs
 // with that user's key/secret. Nothing here logs or returns a secret.
 
-export type BrokerCreds = { apiKey: string; apiSecret?: string; clientId?: string };
+export type BrokerCreds = { apiKey: string; apiSecret?: string; clientId?: string; /** The daily-login method the user chose, when the broker offers one. */ method?: LoginMethodId };
 export type BrokerSession = { accessToken: string; expiresAt: Date; accountName?: string; brokerClientId?: string };
 export type BrokerProfile = { accountName?: string; brokerClientId?: string };
 
@@ -208,6 +209,26 @@ const upstox: BrokerAdapter = {
   },
 };
 
+/**
+ * Upstox's access-token request: Upstox asks the user to approve in its app /
+ * on WhatsApp, then posts the token to the app's notifier URL (our webhook).
+ * Returns when the request lapses if never approved.
+ */
+export async function requestUpstoxApproval(c: BrokerCreds): Promise<{ expiresAt: Date }> {
+  const { status, body } = await call(`https://api.upstox.com/v3/login/auth/token/request/${encodeURIComponent(c.apiKey)}`, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({ client_secret: need(c.apiSecret) }),
+  });
+  const data = obj(body.data);
+  if (status >= 400 || body.status !== "success") fail(status, body, "bad_keys");
+  const ms = Number(str(data.authorization_expiry) ?? data.authorization_expiry);
+  return { expiresAt: Number.isFinite(ms) && ms > 0 ? new Date(ms) : nextIstClock(3, 30) };
+}
+
+/** Checks a token Upstox posted to our notifier, returning the account it belongs to. */
+export const upstoxProfile = (accessToken: string) => upstox.profile({ apiKey: "" }, accessToken);
+
 // ---------- Fyers (API v3) ----------
 
 const fyers: BrokerAdapter = {
@@ -277,7 +298,7 @@ const angelone: BrokerAdapter = {
   },
 };
 
-// ---------- Groww (Trade API, API key + secret, daily approval — no redirect) ----------
+// ---------- Groww (Trade API — API key + secret with daily approval, or the API TOTP key) ----------
 
 const GROWW_HEADERS = { Accept: "application/json", "X-API-VERSION": "1.0" };
 
@@ -288,15 +309,26 @@ const groww: BrokerAdapter = {
   },
   stateFrom: () => null,
   async exchange(c) {
+    // TOTP key: a code from the key's own secret, generated at this moment and never stored.
+    // Approval key: the day's approval on groww.in, proven with sha256(secret + timestamp).
     const timestamp = String(Math.floor(Date.now() / 1000));
+    const totp = c.method === "totp";
+    let code: string | undefined;
+    if (totp) {
+      try {
+        code = totpCode(need(c.apiSecret));
+      } catch {
+        throw new BrokerError("bad_keys", "The TOTP secret isn't a valid code — copy it again from Groww.");
+      }
+    }
     const { status, body } = await call("https://api.groww.in/v1/token/api/access", {
       method: "POST",
       headers: { ...GROWW_HEADERS, "Content-Type": "application/json", Authorization: `Bearer ${c.apiKey}` },
-      body: JSON.stringify({ key_type: "approval", checksum: sha256(need(c.apiSecret) + timestamp), timestamp }),
+      body: JSON.stringify(totp ? { key_type: "totp", totp: code } : { key_type: "approval", checksum: sha256(need(c.apiSecret) + timestamp), timestamp }),
     });
     const payload = obj(body.payload);
     const accessToken = str(body.token) ?? str(payload.token);
-    if (status >= 400 || !accessToken) fail(status, body, "approval_needed");
+    if (status >= 400 || !accessToken) fail(status, body, totp ? "bad_keys" : "approval_needed");
     const expiry = new Date(str(body.expiry) ?? str(payload.expiry) ?? "");
     return { accessToken, expiresAt: Number.isNaN(expiry.getTime()) ? nextIstClock(6, 0) : expiry };
   },

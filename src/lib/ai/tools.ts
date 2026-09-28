@@ -657,11 +657,11 @@ const CONNECTION_STATE_TEXT = {
 } as const;
 
 async function brokerGuide(userId: string, rawBroker?: string) {
-  let rows: { broker: string; status: string; tokenExpiresAt: Date | null; accountName: string | null; brokerClientId: string | null; lastError: string | null }[] = [];
+  let rows: { broker: string; status: string; tokenExpiresAt: Date | null; accountName: string | null; brokerClientId: string | null; lastError: string | null; loginMethod: string | null }[] = [];
   try {
     rows = await prisma.brokerConnection.findMany({
       where: { userId },
-      select: { broker: true, status: true, tokenExpiresAt: true, accountName: true, brokerClientId: true, lastError: true },
+      select: { broker: true, status: true, tokenExpiresAt: true, accountName: true, brokerClientId: true, lastError: true, loginMethod: true },
     });
   } catch {
     // Table not created yet on this environment — the guides still apply.
@@ -700,6 +700,7 @@ async function brokerGuide(userId: string, rawBroker?: string) {
           state: CONNECTION_STATE_TEXT[stateOf(row)],
           account: row.accountName ?? undefined,
           clientId: row.brokerClientId ?? undefined,
+          dailyLoginMethod: row.loginMethod && info.altLogin?.id === row.loginMethod ? info.altLogin.label : (info.altLogin?.defaultLabel ?? "standard"),
           ...(explained && stateOf(row) !== "connected" ? { lastProblem: explained.title, why: explained.reason, fix: explained.steps, brokerSaid: failure?.detail } : {}),
         }
       : "not connected yet",
@@ -711,6 +712,24 @@ async function brokerGuide(userId: string, rawBroker?: string) {
     apiCost: info.apiCost,
     dailyLogin: info.session,
     notes: info.notes ?? [],
+    ...(info.altLogin
+      ? {
+          dailyLoginChoice: {
+            standard: `${info.altLogin.defaultLabel} — ${info.altLogin.defaultSummary}`,
+            alternative: `${info.altLogin.label} — ${info.altLogin.summary}`,
+            alternativeTradeoff: info.altLogin.tradeoff,
+            alternativeKeysToPaste: info.altLogin.fields.map((f) => f.label),
+            alternativeSteps: info.altLogin.steps.map((st) =>
+              st === "PASTE_CALLBACK"
+                ? `In the ${info.callbackFieldName} field paste exactly ${callbackUrl(origin, info.id)}.`
+                : st === "PASTE_NOTIFIER"
+                  ? "In the Notifier Webhook URL field paste the private URL shown on our Broker Connections page (unique to the user — never ask them to share it)."
+                  : st,
+            ),
+            howToChoose: "The user picks it on the Broker Connections page under “How do you want to log in each day?”. Explain the trade-off honestly; don't push either.",
+          },
+        }
+      : {}),
     liveOrders: "Not switched on yet; when they are, the user's broker account will also need a static IP registered (a SEBI rule, one per client).",
   };
 }

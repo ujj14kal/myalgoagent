@@ -30,7 +30,9 @@ export default function SecurityPage() {
           encrypted with AES-256 before they&rsquo;re stored, locked to your
           account, and never sent back to your browser &mdash; not even to
           you. You log in on your broker&rsquo;s own page, so MyAlgoAgent
-          never sees your broker password, PIN or 2FA codes. You can
+          never sees your broker password, PIN or login 2FA codes. If you
+          choose Groww&rsquo;s automatic login, its API TOTP secret gets the
+          same encryption and is used only to start your daily session. You can
           disconnect at any time, and MyAlgoAgent never holds your money.
         </p>
 

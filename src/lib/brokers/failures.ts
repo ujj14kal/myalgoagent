@@ -5,6 +5,7 @@
 export type FailureCode =
   | "cancelled"
   | "approval_needed"
+  | "phone_not_approved"
   | "bad_keys"
   | "missing_client_id"
   | "redirect_mismatch"
@@ -85,6 +86,17 @@ export function describeFailure(f: Failure, broker: string): FailureText {
         title: "The one-time login code expired",
         reason: `${broker} sends back a code that works only once and only for a short time. It had already expired or been used — this happens if the page was refreshed or opened twice.`,
         steps: ["Click “Try again” and finish the login in one go."],
+        retry: "login",
+      };
+    case "phone_not_approved":
+      return {
+        title: "The approval didn't come through",
+        reason: `We asked ${broker} to send you an approval request, but we haven't received your approval. It may have been declined, it may have lapsed, or ${broker} couldn't reach us.`,
+        steps: [
+          `Click “Try again” and tap Approve in the ${broker} app or on WhatsApp.`,
+          `Check the Notifier Webhook URL in your ${broker} app matches the one on this page exactly.`,
+          `Still stuck? Switch to “Log in on ${broker}'s page” for today — it works the same.`,
+        ],
         retry: "login",
       };
     case "login_timeout":

@@ -23,7 +23,7 @@ import Agent2D from "@/components/robot/agent-2d";
 import BodyPortal from "@/components/ui/body-portal";
 import BrokerFailureCard from "@/components/broker-failure-card";
 import type { Failure } from "@/lib/brokers/failures";
-import { callbackUrl, type BrokerId, type BrokerInfo } from "@/lib/brokers/catalog";
+import { callbackUrl, loginView, type BrokerId, type BrokerInfo, type LoginMethodId } from "@/lib/brokers/catalog";
 import { disconnectBroker, saveBrokerKeys, startBrokerLogin, testBrokerConnection, type BrokerActionResult } from "@/lib/broker-actions";
 
 export type ConnectionView = {
@@ -35,7 +35,10 @@ export type ConnectionView = {
   sessionUntil: string | null;
   lastCheckedAt: string | null;
   failure: Failure | null;
+  loginMethod: LoginMethodId | null;
 };
+
+type View = ReturnType<typeof loginView>;
 
 const STATE_BADGE: Record<ConnectionView["state"] | "none" | "next", { label: string; className: string }> = {
   connected: { label: "Connected", className: "bg-brand-buy/10 text-brand-buy ring-brand-buy/20" },
@@ -93,6 +96,7 @@ export default function BrokerConnections({
   startEditing,
   signedOut,
   storageReady,
+  notifierUrl,
 }: {
   brokers: BrokerInfo[];
   connections: ConnectionView[];
@@ -103,10 +107,16 @@ export default function BrokerConnections({
   /** The user came back from a broker login after being signed out. */
   signedOut: boolean;
   storageReady: boolean;
+  /** This user's private Upstox notifier URL (for the phone-approval login). */
+  notifierUrl: string | null;
 }) {
   const [selectedId, setSelectedId] = useState(initialBroker);
   const selected = brokers.find((b) => b.id === selectedId) ?? brokers[0];
   const byBroker = new Map(connections.map((c) => [c.broker, c]));
+  // The daily-login method picked per broker (starts at what the user saved).
+  const [methods, setMethods] = useState<Record<string, LoginMethodId | null>>(() => Object.fromEntries(connections.map((c) => [c.broker, c.loginMethod])));
+  const method = methods[selected.id] ?? null;
+  const view = loginView(selected, method);
   const live = brokers.filter((b) => b.availability === "live");
   const next = brokers.filter((b) => b.availability === "next");
 
@@ -189,8 +199,44 @@ export default function BrokerConnections({
             </div>
           </div>
 
+          {selected.altLogin && selected.availability === "live" && (
+            <div className="mt-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/45">How do you want to log in each day?</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2" role="radiogroup">
+                {[
+                  { id: null, label: selected.altLogin.defaultLabel, summary: selected.altLogin.defaultSummary },
+                  { id: selected.altLogin.id, label: selected.altLogin.label, summary: selected.altLogin.summary },
+                ].map((o) => {
+                  const on = method === o.id;
+                  return (
+                    <button
+                      key={o.label}
+                      type="button"
+                      role="radio"
+                      aria-checked={on}
+                      onClick={() => setMethods((m) => ({ ...m, [selected.id]: o.id }))}
+                      className={`rounded-xl border p-3 text-left transition-colors ${on ? "border-brand-primary bg-brand-primary/[0.05] ring-1 ring-brand-primary" : "border-black/[0.08] hover:bg-brand-bg"}`}
+                    >
+                      <span className="flex items-center gap-2 text-sm font-semibold text-brand-navy">
+                        <span className={`flex h-4 w-4 items-center justify-center rounded-full border ${on ? "border-brand-primary" : "border-brand-navy/25"}`}>{on && <span className="h-2 w-2 rounded-full bg-brand-primary" />}</span>
+                        {o.label}
+                      </span>
+                      <span className="mt-1 block text-xs text-brand-navy/60">{o.summary}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {method && (
+                <p className="mt-2 flex gap-2 rounded-xl bg-brand-gold/10 px-3 py-2.5 text-xs leading-relaxed text-brand-navy/75 ring-1 ring-brand-gold/25">
+                  <ShieldCheck size={14} className="mt-0.5 shrink-0 text-[#8a7437]" />
+                  {selected.altLogin.tradeoff}
+                </p>
+              )}
+            </div>
+          )}
+
           <ol className="mt-5 space-y-4">
-            {selected.steps.map((step, i) => (
+            {view.steps.map((step, i) => (
               <li key={i} className="flex gap-3">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-primary/10 text-xs font-bold text-brand-primary">{i + 1}</span>
                 <div className="min-w-0 flex-1 pt-0.5 text-sm text-brand-navy/80">
@@ -204,6 +250,14 @@ export default function BrokerConnections({
                         It must match character for character — <code>https</code>, no extra slash at the end, no spaces. A mismatch is the most common reason a login fails.
                       </p>
                     </>
+                  ) : step === "PASTE_NOTIFIER" ? (
+                    <>
+                      <p>
+                        In the <strong className="text-brand-navy">Notifier Webhook URL</strong> field, paste your private URL:
+                      </p>
+                      {notifierUrl ? <CopyField value={notifierUrl} /> : <p className="mt-1.5 text-xs text-brand-navy/50">Your URL appears here once connecting is switched on.</p>}
+                      <p className="mt-1.5 text-xs text-brand-navy/50">It&rsquo;s unique to your account — don&rsquo;t share it. Upstox sends today&rsquo;s session here when you tap Approve.</p>
+                    </>
                   ) : (
                     <p>{step}</p>
                   )}
@@ -214,9 +268,9 @@ export default function BrokerConnections({
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <InfoTile icon={KeyRound} title="Cost">{selected.cost}</InfoTile>
-            <InfoTile icon={Clock} title="Daily login">{selected.session}</InfoTile>
+            <InfoTile icon={Clock} title="Daily login">{view.session}</InfoTile>
           </div>
-          {selected.notes?.map((n) => (
+          {view.notes.map((n) => (
             <p key={n} className="mt-3 rounded-lg bg-brand-bg/70 px-3 py-2 text-xs text-brand-navy/60">
               {n}
             </p>
@@ -232,7 +286,7 @@ export default function BrokerConnections({
               </p>
             </div>
           ) : (
-            <ConnectPanel key={selected.id} broker={selected} conn={byBroker.get(selected.id)} disabled={!storageReady} startEditing={startEditing && selected.id === initialBroker} />
+            <ConnectPanel key={selected.id} broker={selected} view={view} conn={byBroker.get(selected.id)} disabled={!storageReady} startEditing={startEditing && selected.id === initialBroker} />
           )}
         </div>
       </section>
@@ -298,7 +352,7 @@ function InfoCard({ icon: Icon, title, children }: { icon: typeof Lock; title: s
 }
 
 /** Full-screen “taking you to your broker” moment while the login URL is prepared. */
-function RedirectOverlay({ broker }: { broker: BrokerInfo }) {
+function RedirectOverlay({ broker, method }: { broker: BrokerInfo; method: LoginMethodId | null }) {
   return (
     <BodyPortal>
       <motion.div
@@ -319,11 +373,17 @@ function RedirectOverlay({ broker }: { broker: BrokerInfo }) {
             </span>
             <Logo broker={broker} size={56} />
           </div>
-          <p className="mt-5 text-base font-semibold text-brand-navy">{broker.flow === "approval" ? `Connecting to ${broker.name}…` : `Taking you to ${broker.name}…`}</p>
+          <p className="mt-5 text-base font-semibold text-brand-navy">
+            {method === "phone" ? `Asking ${broker.name} to notify your phone…` : broker.flow === "approval" || method === "totp" ? `Connecting to ${broker.name}…` : `Taking you to ${broker.name}…`}
+          </p>
           <p className="mt-1.5 text-sm text-brand-navy/60">
-            {broker.flow === "approval"
-              ? `Asking ${broker.name} for today’s session with the key you approved on ${broker.name}.`
-              : `Log in there with your ${broker.name} password and 2FA. ${broker.name} will bring you straight back here.`}
+            {method === "phone"
+              ? `You'll get an approval request in the ${broker.name} app and on WhatsApp in a moment.`
+              : method === "totp"
+                ? `Creating today’s one-time code from your TOTP key and asking ${broker.name} for today’s session.`
+                : broker.flow === "approval"
+                  ? `Asking ${broker.name} for today’s session with the key you approved on ${broker.name}.`
+                  : `Log in there with your ${broker.name} password and 2FA. ${broker.name} will bring you straight back here.`}
           </p>
         </motion.div>
       </motion.div>
@@ -331,9 +391,12 @@ function RedirectOverlay({ broker }: { broker: BrokerInfo }) {
   );
 }
 
-function ConnectPanel({ broker, conn, disabled, startEditing }: { broker: BrokerInfo; conn?: ConnectionView; disabled: boolean; startEditing: boolean }) {
+function ConnectPanel({ broker, view, conn, disabled, startEditing }: { broker: BrokerInfo; view: View; conn?: ConnectionView; disabled: boolean; startEditing: boolean }) {
   const router = useRouter();
-  const [editing, setEditing] = useState(!conn || startEditing);
+  const method = view.method;
+  const [editingRaw, setEditing] = useState(!conn || startEditing);
+  // Switching the daily-login method needs the keys saved again (different keys for Groww TOTP).
+  const editing = editingRaw || (!!conn && conn.loginMethod !== method);
   const [values, setValues] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
@@ -377,7 +440,8 @@ function ConnectPanel({ broker, conn, disabled, startEditing }: { broker: Broker
   // A failure from this visit wins; otherwise show the one saved from the last attempt.
   const shownFailure = failure ?? (conn && conn.state !== "connected" ? conn.failure : null);
 
-  const overlay = <AnimatePresence>{redirecting && <RedirectOverlay broker={broker} />}</AnimatePresence>;
+  const overlay = <AnimatePresence>{redirecting && <RedirectOverlay broker={broker} method={method} />}</AnimatePresence>;
+  const instant = broker.flow === "approval" || method === "totp";
 
   if (conn && !editing) {
     return (
@@ -417,7 +481,7 @@ function ConnectPanel({ broker, conn, disabled, startEditing }: { broker: Broker
               </button>
             ) : (
               <button type="button" disabled={pending || disabled} onClick={login} className={`${btn} bg-brand-primary text-white hover:bg-brand-primary-light`}>
-                <LogIn size={15} /> {broker.flow === "approval" ? "Connect for today" : conn.state === "expired" ? "Log in for today" : `Log in to ${broker.name}`}
+                <LogIn size={15} /> {method === "phone" ? "Send approval to my phone" : instant ? "Connect for today" : conn.state === "expired" ? "Log in for today" : `Log in to ${broker.name}`}
               </button>
             )}
             <button type="button" disabled={pending} onClick={() => setEditing(true)} className={`${btn} border border-brand-navy/15 text-brand-navy hover:bg-brand-navy/5`}>
@@ -466,7 +530,7 @@ function ConnectPanel({ broker, conn, disabled, startEditing }: { broker: Broker
         className="surface p-5"
         onSubmit={(e) => {
           e.preventDefault();
-          run(() => saveBrokerKeys(broker.id, values), { redirects: true });
+          run(() => saveBrokerKeys(broker.id, values, method), { redirects: true });
         }}
       >
         <div className="flex items-start justify-between gap-2">
@@ -474,19 +538,23 @@ function ConnectPanel({ broker, conn, disabled, startEditing }: { broker: Broker
             <p className="text-sm font-semibold text-brand-navy">{conn ? `Replace your ${broker.name} keys` : `Paste your ${broker.name} keys`}</p>
             <p className="mt-1 text-xs text-brand-navy/55">
               Encrypted before they&rsquo;re stored.{" "}
-              {broker.flow === "approval"
-                ? `Approve the key on ${broker.name} first — then saving connects you for today.`
-                : `After saving, you’ll log in on ${broker.name}’s own page.`}
+              {method === "totp"
+                ? `Saving connects you for today straight away — no approval needed.`
+                : method === "phone"
+                  ? `After saving, tap Approve in the ${broker.name} app or on WhatsApp.`
+                  : broker.flow === "approval"
+                    ? `Approve the key on ${broker.name} first — then saving connects you for today.`
+                    : `After saving, you’ll log in on ${broker.name}’s own page.`}
             </p>
           </div>
-          {conn && (
+          {conn && conn.loginMethod === method && (
             <button type="button" aria-label="Cancel" onClick={() => setEditing(false)} className="rounded-md p-1 text-brand-navy/40 hover:bg-brand-navy/5 hover:text-brand-navy">
               <X size={16} />
             </button>
           )}
         </div>
         <div className="mt-4 space-y-3">
-          {broker.fields.map((f) => (
+          {view.fields.map((f) => (
             <div key={f.name}>
               <label htmlFor={`${broker.id}-${f.name}`} className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
                 {f.label}
@@ -511,13 +579,13 @@ function ConnectPanel({ broker, conn, disabled, startEditing }: { broker: Broker
           </p>
         )}
         <button type="submit" disabled={pending || disabled} className={`${btn} mt-5 w-full bg-brand-primary text-white hover:bg-brand-primary-light`}>
-          <LogIn size={15} /> {pending ? `Checking with ${broker.name}…` : broker.flow === "approval" ? `Save & connect ${broker.name}` : `Save & log in to ${broker.name}`}
+          <LogIn size={15} /> {pending ? `Checking with ${broker.name}…` : method === "phone" ? "Save & send approval" : instant ? `Save & connect ${broker.name}` : `Save & log in to ${broker.name}`}
         </button>
         <p className="mt-4 flex items-start gap-1.5 text-[11px] text-brand-navy/45">
           <Lock size={12} className="mt-0.5 shrink-0" /> Never paste your broker password or PIN anywhere on MyAlgoAgent — you only enter those on {broker.name}&rsquo;s own login page.
         </p>
       </form>
-      {failure && <BrokerFailureCard compact brokerId={broker.id} brokerName={broker.name} failure={failure} onRetry={() => run(() => saveBrokerKeys(broker.id, values), { redirects: true })} onReplaceKeys={() => setFailure(null)} retrying={pending} />}
+      {failure && <BrokerFailureCard compact brokerId={broker.id} brokerName={broker.name} failure={failure} onRetry={() => run(() => saveBrokerKeys(broker.id, values, method), { redirects: true })} onReplaceKeys={() => setFailure(null)} retrying={pending} />}
     </div>
   );
 }

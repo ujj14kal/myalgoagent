@@ -5,7 +5,7 @@ import { logError } from "@/lib/logger";
 import PageHeader from "@/components/ui/page-header";
 import BrokerConnections, { type ConnectionView } from "@/components/broker-connections";
 import { BROKERS, brokerById } from "@/lib/brokers/catalog";
-import { callbackOrigin } from "@/lib/brokers/service";
+import { callbackOrigin, notifierUrlFor } from "@/lib/brokers/service";
 import { brokerEncryptionReady } from "@/lib/brokers/crypto";
 import { decodeFailure } from "@/lib/brokers/failures";
 
@@ -42,6 +42,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ b
       sessionUntil: sessionLive && r.tokenExpiresAt ? istTime(r.tokenExpiresAt) : null,
       lastCheckedAt: r.lastCheckedAt ? istTime(r.lastCheckedAt) : null,
       failure: decodeFailure(r.lastError),
+      loginMethod: r.loginMethod === "totp" || r.loginMethod === "phone" ? r.loginMethod : null,
     };
   });
 
@@ -62,6 +63,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ b
         startEditing={edit === "1"}
         signedOut={result === "signed_out"}
         storageReady={storageReady}
+        notifierUrl={storageReady ? notifierUrlFor(session.user.id) : null}
       />
     </div>
   );

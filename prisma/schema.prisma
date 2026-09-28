@@ -732,6 +732,14 @@ model BrokerConnection {
   pendingState     String?
   pendingStartedAt DateTime?
 
+  // How this user logs in each day, when the broker offers a choice: null =
+  // the broker's usual login, "totp" = Groww's API TOTP key (automatic),
+  // "phone" = Upstox approval request (tap Approve in the Upstox app).
+  loginMethod       String?
+  // sha256 of this user's private Upstox notifier path, so the approval
+  // webhook can find the right connection without revealing anything.
+  notifierTokenHash String?   @unique
+
   lastError     String?
   lastCheckedAt DateTime?
   createdAt     DateTime  @default(now())

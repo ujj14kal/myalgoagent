@@ -3,18 +3,22 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { ArrowLeft, Check, Clock, FlaskConical, Globe, LineChart, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowLeft, Check, Clock, FlaskConical, Globe, LineChart, RefreshCw, ShieldCheck, Smartphone, Sparkles } from "lucide-react";
 import Agent2D from "@/components/robot/agent-2d";
 import BrokerFailureCard from "@/components/broker-failure-card";
 import { useAgentChat } from "@/components/agent-chat/agent-chat-provider";
-import { completeBrokerLogin, startBrokerLogin, type ConnectedAccount } from "@/lib/broker-actions";
-import type { BrokerInfo } from "@/lib/brokers/catalog";
+import { completeBrokerLogin, phoneApprovalStatus, startBrokerLogin, type ConnectedAccount } from "@/lib/broker-actions";
+import type { BrokerInfo, LoginMethodId } from "@/lib/brokers/catalog";
 import type { Failure } from "@/lib/brokers/failures";
 
 type Phase = { kind: "working" } | { kind: "connected"; account: ConnectedAccount } | { kind: "failed"; failure: Failure };
 
 const REDIRECT_STEPS = ["Back from {broker}", "Verifying your login", "Getting today’s secure session", "Checking your account"];
 const APPROVAL_STEPS = ["Using the key you approved on {broker}", "Signing the request", "Getting today’s secure session", "Checking your account"];
+const TOTP_STEPS = ["Creating today’s one-time code", "Sending it to {broker}", "Getting today’s secure session", "Checking your account"];
+const POLL_MS = 3000;
+// Stop polling after this long on one screen; the approval itself stays open until Upstox lapses it.
+const PHONE_GIVE_UP_MS = 15 * 60_000;
 const STEP_COUNT = REDIRECT_STEPS.length; // both flows have the same number of steps
 const STEP_MS = 650;
 // How long the agent celebrates on the card before flying back to its home.
@@ -76,8 +80,10 @@ function Confetti() {
   );
 }
 
-export default function BrokerConnecting({ broker, query }: { broker: BrokerInfo; query: Record<string, string> }) {
-  const STEPS = broker.flow === "approval" ? APPROVAL_STEPS : REDIRECT_STEPS;
+export default function BrokerConnecting({ broker, query, method = null }: { broker: BrokerInfo; query: Record<string, string>; method?: LoginMethodId | null }) {
+  const STEPS = method === "totp" ? TOTP_STEPS : broker.flow === "approval" ? APPROVAL_STEPS : REDIRECT_STEPS;
+  const phone = method === "phone" && query.wait === "phone";
+  const [waitedMs, setWaitedMs] = useState(0);
   const { agentName, flyHome } = useAgentChat();
   const [phase, setPhase] = useState<Phase>({ kind: "working" });
   const [step, setStep] = useState(0);
@@ -86,6 +92,14 @@ export default function BrokerConnecting({ broker, query }: { broker: BrokerInfo
   const [retryFailure, setRetryFailure] = useState<Failure | null>(null);
   const agentRef = useRef<HTMLDivElement>(null);
   const started = useRef(false);
+  // Stops the phone-approval polling when the user leaves this screen.
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
 
   // Finish the login exactly once (React may run effects twice in development).
   useEffect(() => {
@@ -94,6 +108,20 @@ export default function BrokerConnecting({ broker, query }: { broker: BrokerInfo
     // The one-time code is in the address bar — take it out of history right away.
     window.history.replaceState(null, "", window.location.pathname);
     const t0 = Date.now();
+    if (phone) {
+      // The user approves in the Upstox app; our notifier webhook finishes the login. Check until it has.
+      const poll = async () => {
+        if (!alive.current) return;
+        const r = await phoneApprovalStatus(broker.id).catch(() => ({ state: "waiting" as const, sinceMs: Date.now() - t0 }));
+        if (r.state === "connected") return setPhase({ kind: "connected", account: r.account });
+        if (r.state === "failed") return setPhase({ kind: "failed", failure: r.failure });
+        setWaitedMs(Date.now() - t0);
+        if (Date.now() - t0 > PHONE_GIVE_UP_MS) return setPhase({ kind: "failed", failure: { code: "phone_not_approved" } });
+        setTimeout(poll, POLL_MS);
+      };
+      void poll();
+      return;
+    }
     completeBrokerLogin(broker.id, query)
       .catch((): { ok: false; failure: Failure } => ({ ok: false, failure: { code: "unknown" } }))
       .then((r) => {
@@ -101,13 +129,14 @@ export default function BrokerConnecting({ broker, query }: { broker: BrokerInfo
         const wait = Math.max(0, STEP_COUNT * STEP_MS - (Date.now() - t0));
         setTimeout(() => setPhase(r.ok ? { kind: "connected", account: r.account } : { kind: "failed", failure: r.failure }), wait);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per visit
   }, [broker.id, query]);
 
   useEffect(() => {
-    if (phase.kind !== "working") return;
+    if (phase.kind !== "working" || phone) return;
     const id = setInterval(() => setStep((s) => Math.min(s + 1, STEP_COUNT - 1)), STEP_MS);
     return () => clearInterval(id);
-  }, [phase.kind]);
+  }, [phase.kind, phone]);
 
   // Celebrate, then the agent flies back to its home (bottom-left on desktop).
   useEffect(() => {
@@ -170,7 +199,40 @@ export default function BrokerConnecting({ broker, query }: { broker: BrokerInfo
         </div>
 
         <AnimatePresence mode="wait">
-          {phase.kind === "working" && (
+          {phase.kind === "working" && phone && (
+            <motion.div key="phone" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8, transition: { duration: 0.12 } }}>
+              <motion.span
+                className="mx-auto mt-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-primary/10 text-brand-primary"
+                animate={{ rotate: [0, -8, 8, -6, 6, 0] }}
+                transition={{ duration: 0.9, repeat: Infinity, repeatDelay: 1.6 }}
+              >
+                <Smartphone size={26} />
+              </motion.span>
+              <p className="mt-4 text-lg font-semibold text-brand-navy">Approve on your phone</p>
+              <p className="mx-auto mt-1 max-w-sm text-sm text-brand-navy/60">
+                We&rsquo;ve asked {broker.name} to send you an approval request — in the {broker.name} app and on WhatsApp. Tap <strong>Approve</strong> and this page connects by itself.
+              </p>
+              <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-brand-bg px-3 py-1 text-xs text-brand-navy/55">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-primary" />
+                Waiting for your approval · {Math.floor(waitedMs / 60_000)}:{String(Math.floor((waitedMs % 60_000) / 1000)).padStart(2, "0")}
+              </p>
+              <div className="mt-5 flex flex-wrap justify-center gap-2">
+                <button
+                  type="button"
+                  disabled={retrying}
+                  onClick={retry}
+                  className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium text-brand-navy ring-1 ring-brand-navy/15 hover:bg-brand-navy/5 disabled:opacity-50"
+                >
+                  <RefreshCw size={14} className={retrying ? "animate-spin" : ""} /> Send the request again
+                </button>
+                <Link href={`/app/broker-connections?broker=${broker.id}`} className="inline-flex items-center rounded-full px-4 py-2 text-sm font-medium text-brand-primary hover:bg-brand-primary/5">
+                  Use {broker.name}&rsquo;s login page instead
+                </Link>
+              </div>
+            </motion.div>
+          )}
+
+          {phase.kind === "working" && !phone && (
             <motion.div key="working" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8, transition: { duration: 0.12 } }}>
               <p className="mt-6 text-lg font-semibold text-brand-navy">Connecting your {broker.name} account…</p>
               <p className="mt-1 text-sm text-brand-navy/55">This takes a few seconds. Please keep this tab open.</p>

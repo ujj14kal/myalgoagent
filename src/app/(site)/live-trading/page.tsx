@@ -24,7 +24,7 @@ const sections: LegalSection[] = [
     id: "brokers",
     title: "Broker connection",
     paragraphs: [
-      "You create a free API app on your broker's developer site, paste the Redirect URL we give you, paste your API key and secret on the Broker Connections page, and log in on your broker's own page — your password, PIN and 2FA are never entered on MyAlgoAgent. (Groww works slightly differently: you approve your key on Groww each day instead of logging in through a redirect.) The platform verifies the connection with your broker before marking it connected.",
+      "You create a free API app on your broker's developer site, paste the Redirect URL we give you, paste your API key and secret on the Broker Connections page, and log in on your broker's own page — your password, PIN and 2FA are never entered on MyAlgoAgent. (Groww works slightly differently: you approve your key on Groww each day — or choose automatic login with Groww's API TOTP key — instead of logging in through a redirect. With Upstox you can also approve with a tap on your phone.) The platform verifies the connection with your broker before marking it connected.",
       "Your API key, secret and each day's session token are encrypted with AES-256 before they're stored and are never sent to the browser. Broker sessions end every day by exchange rules, so you log in once each trading day. Placing live orders will also need a static IP registered on your broker account (a SEBI rule) — we'll guide you through that when order placement launches.",
     ],
     extra: (

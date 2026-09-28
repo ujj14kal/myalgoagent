@@ -6,6 +6,29 @@ export type BrokerId = "dhan" | "zerodha" | "upstox" | "fyers" | "angelone" | "g
 
 export type BrokerField = { name: "apiKey" | "apiSecret" | "clientId"; label: string; placeholder: string; help?: string; secret?: boolean };
 
+/**
+ * A second way to do the daily login, offered next to the broker's usual one.
+ * "totp": Groww's API TOTP key — we generate the code, no daily approval.
+ * "phone": Upstox's access-token request — the user taps Approve in the
+ * Upstox app or on WhatsApp instead of visiting a login page.
+ */
+export type LoginMethodId = "totp" | "phone";
+export type AltLogin = {
+  id: LoginMethodId;
+  /** Names for the two choices, e.g. "Approve daily on Groww" / "Automatic with TOTP". */
+  defaultLabel: string;
+  defaultSummary: string;
+  label: string;
+  summary: string;
+  fields: BrokerField[];
+  /** PASTE_CALLBACK and PASTE_NOTIFIER are rendered with copy buttons. */
+  steps: string[];
+  session: string;
+  /** The honest trade-off, shown before the user chooses it. */
+  tradeoff: string;
+  notes?: string[];
+};
+
 export type BrokerInfo = {
   id: BrokerId;
   name: string;
@@ -31,6 +54,7 @@ export type BrokerInfo = {
   apiCost: string;
   session: string;
   notes?: string[];
+  altLogin?: AltLogin;
 };
 
 export const BROKERS: BrokerInfo[] = [
@@ -101,6 +125,27 @@ export const BROKERS: BrokerInfo[] = [
     cost: "Free, including market data for your own use.",
     apiCost: "Free",
     session: "Upstox tokens expire at 3:30 AM every day — log in again each trading day.",
+    altLogin: {
+      id: "phone",
+      defaultLabel: "Log in on Upstox's page",
+      defaultSummary: "Each day, sign in on Upstox's login page and come straight back.",
+      label: "Approve on your phone",
+      summary: "No login page — each day, tap Approve in the Upstox app or on WhatsApp.",
+      fields: [
+        { name: "apiKey", label: "API key", placeholder: "Paste the API key" },
+        { name: "apiSecret", label: "API secret", placeholder: "Paste the API secret", secret: true },
+      ],
+      steps: [
+        "Log in at account.upstox.com/developer/apps and click New App (or edit your MyAlgoAgent app).",
+        "PASTE_CALLBACK",
+        "PASTE_NOTIFIER",
+        "Save the app and copy the API key and API secret.",
+        "Paste both below and click Save & send approval. Tap Approve in the Upstox app or on WhatsApp — this page connects the moment you do.",
+      ],
+      session: "Upstox tokens expire at 3:30 AM — each trading day, click “Send approval to my phone” and tap Approve.",
+      tradeoff: "Nothing extra is stored — you still approve every day, just with a tap on your phone instead of a login page.",
+      notes: ["The notifier URL is private to your account — don't share it. If an approval never reaches us, use “Log in on Upstox's page” for that day and tell us."],
+    },
   },
   {
     id: "fyers",
@@ -166,6 +211,26 @@ export const BROKERS: BrokerInfo[] = [
     cost: "Groww charges a monthly fee for Trade API access — check the current price on the API keys page.",
     apiCost: "Paid Groww Trade API subscription",
     session: "Groww tokens expire at 6 AM every day — approve the key on Groww, then connect for today.",
+    altLogin: {
+      id: "totp",
+      defaultLabel: "Approve daily on Groww",
+      defaultSummary: "Each day, click Approve next to your key on Groww, then connect here.",
+      label: "Automatic with TOTP",
+      summary: "No daily approval — one click on “Connect for today” and you're in.",
+      fields: [
+        { name: "apiKey", label: "TOTP token", placeholder: "The long TOTP token (starts with eyJ…)" },
+        { name: "apiSecret", label: "TOTP secret", placeholder: "The shorter code under the QR", help: "Letters A–Z and digits 2–7, about 32 characters.", secret: true },
+      ],
+      steps: [
+        "Log in at groww.in/trade-api/api-keys (subscribe to Groww Trade API if asked).",
+        "Click Generate API key and choose “TOTP”. Give it any name, e.g. MyAlgoAgent. No Redirect URL is needed.",
+        "Copy the TOTP token (the long code) and the TOTP secret (the shorter code under the QR). Treat both like a password — don't screenshot or screen-share that dialog.",
+        "Paste both below and click Save & connect Groww. From then on, “Connect for today” works straight away — no approval on Groww.",
+      ],
+      session: "Groww sessions end at 6 AM — one click on “Connect for today” starts the next one, with no approval needed.",
+      tradeoff:
+        "Convenient, but it removes the daily approval: anyone holding both codes could open a Groww API session. We encrypt them and never show them again, even to our team — and deleting the key on Groww cuts access instantly. This is Groww's API key, not your Groww login or its 2FA.",
+    },
   },
   {
     id: "icicidirect",
@@ -263,4 +328,21 @@ export function brokerById(id: string): BrokerInfo | undefined {
 /** The URL a user pastes into their broker app. Same for every user of a broker; the login it completes is tied to the signed-in user. */
 export function callbackUrl(origin: string, broker: BrokerId): string {
   return `${origin.replace(/\/$/, "")}/api/brokers/${broker}/callback`;
+}
+
+/** Where Upstox sends an approved token for this user (the token part is private to them). */
+export function notifierUrl(origin: string, token: string): string {
+  return `${origin.replace(/\/$/, "")}/api/brokers/upstox/notifier/${token}`;
+}
+
+/** The fields, steps and daily-login text for the method the user picked (null = the broker's usual login). */
+export function loginView(info: BrokerInfo, method: LoginMethodId | null | undefined) {
+  const alt = method && info.altLogin?.id === method ? info.altLogin : null;
+  return {
+    method: alt ? alt.id : null,
+    fields: alt ? alt.fields : info.fields,
+    steps: alt ? alt.steps : info.steps,
+    session: alt ? alt.session : info.session,
+    notes: [...(info.notes ?? []), ...(alt?.notes ?? [])],
+  };
 }

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { brokerById } from "@/lib/brokers/catalog";
 import BrokerConnecting from "@/components/broker-connecting";
 
@@ -24,5 +25,7 @@ export default async function Page({
   for (const [k, v] of Object.entries(await searchParams)) {
     if (typeof v === "string") query[k] = v;
   }
-  return <BrokerConnecting broker={broker} query={query} />;
+  const row = await prisma.brokerConnection.findUnique({ where: { userId_broker: { userId: session.user.id, broker: broker.id } }, select: { loginMethod: true } });
+  const method = row?.loginMethod === "totp" || row?.loginMethod === "phone" ? row.loginMethod : null;
+  return <BrokerConnecting broker={broker} query={query} method={method} />;
 }
