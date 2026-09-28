@@ -34,7 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   const now = new Date();
-  const [unreadCount, liveSessions, announcement] = await Promise.all([
+  const [unreadCount, liveSessions, announcement, brokerRows] = await Promise.all([
     prisma.notification.count({ where: { userId: session.user.id, read: false } }),
     prisma.paperSession.count({ where: { userId: session.user.id, status: "ACTIVE" } }),
     prisma.announcement.findFirst({
@@ -42,7 +42,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       orderBy: { createdAt: "desc" },
       select: { id: true, title: true, body: true, level: true, link: true },
     }),
+    prisma.brokerConnection.findMany({ where: { userId: session.user.id }, select: { broker: true, status: true, tokenExpiresAt: true }, orderBy: { createdAt: "asc" } }),
   ]);
+  // Linked brokers for the top bar: live today, or needing today's login.
+  const brokers = brokerRows.map((b) => ({ broker: b.broker, live: b.status === "CONNECTED" && !!b.tokenExpiresAt && b.tokenExpiresAt > now }));
   // "Last active" for the admin portal — written at most every 10 minutes.
   if (!dbUser.lastSeenAt || now.getTime() - dbUser.lastSeenAt.getTime() > 10 * 60_000) {
     await prisma.user.update({ where: { id: session.user.id }, data: { lastSeenAt: now } }).catch(() => {});
@@ -57,7 +60,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="app-canvas flex min-h-screen">
           <AppSidebar agentName={agentName} liveSessions={liveSessions} />
           <div className="flex min-w-0 flex-1 flex-col">
-            <AppTopbar user={session.user} unreadCount={unreadCount} agentName={agentName} liveSessions={liveSessions} isStaff={isStaff} />
+            <AppTopbar user={session.user} unreadCount={unreadCount} agentName={agentName} liveSessions={liveSessions} isStaff={isStaff} brokers={brokers} />
             {announcement && <AnnouncementBanner {...announcement} />}
             <main className="mx-auto w-full max-w-[1400px] flex-1 p-4 md:p-6 lg:p-8">{children}</main>
             <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-black/5 px-6 pb-20 pt-3 text-xs text-brand-navy/40 md:py-3">

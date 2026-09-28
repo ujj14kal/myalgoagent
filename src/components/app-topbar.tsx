@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { Bell, Link2, LogOut, ShieldHalf } from "lucide-react";
+import { Bell, LogOut, ShieldHalf } from "lucide-react";
 import { signOut } from "@/lib/auth";
 import MobileNavDrawer from "@/components/mobile-nav-drawer";
+import ConnectedBrokers, { type ConnectedBroker } from "@/components/connected-brokers";
 import TopbarTitle from "@/components/topbar-title";
 import { avatarInitials } from "@/lib/avatar";
 
@@ -11,12 +12,14 @@ export default function AppTopbar({
   agentName,
   liveSessions,
   isStaff = false,
+  brokers = [],
 }: {
   user: { name?: string | null; email?: string | null; image?: string | null };
   unreadCount?: number;
   agentName: string;
   liveSessions: number;
   isStaff?: boolean;
+  brokers?: ConnectedBroker[];
 }) {
   const displayName = user.name ?? user.email ?? "";
   const initials = avatarInitials(user.name, user.email);
@@ -26,13 +29,7 @@ export default function AppTopbar({
       <MobileNavDrawer agentName={agentName} liveSessions={liveSessions} />
       <TopbarTitle />
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
-        <Link
-          href="/app/broker-connections"
-          className="hidden items-center gap-1.5 rounded-full bg-brand-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-[0_4px_12px_-6px_rgba(71,24,152,0.7)] transition-colors hover:bg-brand-primary-light md:flex"
-        >
-          <Link2 size={13} />
-          Connect broker
-        </Link>
+        <ConnectedBrokers brokers={brokers} />
         {isStaff && (
           <Link
             href="/admin"
