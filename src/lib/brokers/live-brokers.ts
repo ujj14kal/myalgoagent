@@ -41,7 +41,7 @@ export type LiveReadback = {
 
 export type LiveBroker = {
   id: BrokerId;
-  /** Proven with a real order. Unverified brokers work, but the page says so. */
+  /** Proven with a real order in code review. Otherwise a broker counts as proven once a connectivity test there completes cleanly. */
   verified: boolean;
   /** Some brokers refuse market orders from algos (Angel One) — we send a protected limit instead. */
   marketOrders: boolean;
@@ -101,11 +101,11 @@ function mapWords(raw: string, filled: number, quantity: number): LiveOrderStatu
   return filled > 0 ? "PARTIALLY_FILLED" : "OPEN";
 }
 
-// ---------- Groww (verified) ----------
+// ---------- Groww ----------
 
 const groww: LiveBroker = {
   id: "groww",
-  verified: true,
+  verified: false,
   marketOrders: true,
   place: (ctx, o) =>
     placeGrowwOrder(ctx.token, {

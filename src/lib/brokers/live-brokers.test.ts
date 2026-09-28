@@ -46,8 +46,8 @@ describe("broker coverage", () => {
     const connectable = ["dhan", "zerodha", "upstox", "fyers", "angelone", "groww", "icicidirect", "5paisa", "aliceblue"];
     for (const id of connectable) expect(!!LIVE_BROKERS[id as keyof typeof LIVE_BROKERS] || !!LIVE_NOT_YET[id as keyof typeof LIVE_NOT_YET]).toBe(true);
   });
-  it("marks only Groww as proven, and Angel One as refusing market orders", () => {
-    expect(Object.values(LIVE_BROKERS).filter((b) => b!.verified).map((b) => b!.id)).toEqual(["groww"]);
+  it("claims no broker is proven before a real test, and Angel One refuses market orders", () => {
+    expect(Object.values(LIVE_BROKERS).filter((b) => b!.verified)).toEqual([]);
     expect(LIVE_BROKERS.angelone!.marketOrders).toBe(false);
   });
 });
