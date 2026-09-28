@@ -328,3 +328,18 @@ export async function refreshCost(): Promise<AdminResult> {
     return { ok: true, message: "Cost refreshed." };
   });
 }
+
+// ---------------- live trading ----------------
+
+/** Owner-only: allow (or stop) real orders for an account. */
+export async function setLiveTrading(userId: string, enabled: boolean): Promise<AdminResult> {
+  return run("team", async (staff) => {
+    const u = await targetUser(userId, staff);
+    if (u.status !== "ACTIVE") return { ok: false, error: "Only active accounts can trade." };
+    await prisma.user.update({ where: { id: u.id }, data: { liveTradingEnabledAt: enabled ? new Date() : null } });
+    await audit(staff, enabled ? "user.live-on" : "user.live-off", { type: "user", id: u.id }, `${enabled ? "Enabled" : "Disabled"} live trading for ${u.email}`);
+    revalidatePath("/admin", "layout");
+    revalidatePath("/app/live-trading");
+    return { ok: true, message: enabled ? `Live trading is on for ${u.email}.` : `Live trading is off for ${u.email}. Open orders aren't cancelled automatically — check Groww.` };
+  });
+}

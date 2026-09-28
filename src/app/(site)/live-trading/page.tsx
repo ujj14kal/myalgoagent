@@ -8,7 +8,7 @@ import BrokerLogos from "@/components/broker-logos";
 export const metadata: Metadata = pageMetadata({
   title: "Live Algo Trading & Broker Integration",
   description:
-    "Connect your own account at 9 Indian brokers today. Live order placement is coming soon — protected by explicit user confirmation, server-side risk controls and a global kill switch.",
+    "Connect your own account at 9 Indian brokers today. Live order placement is rolling out account by account — protected by explicit user confirmation, server-side risk controls, your own static IP and a global kill switch.",
   path: "/live-trading",
 });
 
@@ -17,7 +17,7 @@ const sections: LegalSection[] = [
     id: "status",
     title: "Availability",
     paragraphs: [
-      "Broker connections are live: you can link your own account at Dhan, Zerodha, Upstox, Fyers, Angel One, Groww, ICICI Direct, 5paisa or Alice Blue today. Placing live orders through that connection is not available yet — until then you build strategies, backtest them and run them in forward testing with notional capital. The sections marked coming soon describe how live order placement will work when it launches.",
+      "Broker connections are live: you can link your own account at Dhan, Zerodha, Upstox, Fyers, Angel One, Groww, ICICI Direct, 5paisa or Alice Blue today. Live order placement is being switched on account by account: every order is checked on our servers (kill switch, per-order and daily limits, duplicate protection), sent from the static IP registered on your broker account, and recorded with its full history. Until it's on for you, you build strategies, backtest them and forward test them on new market data.",
     ],
   },
   {

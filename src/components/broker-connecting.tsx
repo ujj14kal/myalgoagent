@@ -304,7 +304,7 @@ export default function BrokerConnecting({ broker, query, method = null }: { bro
                 </p>
                 <p className="flex items-start gap-2">
                   <Globe size={13} className="mt-0.5 shrink-0 text-brand-primary" />
-                  Live order placement comes next and will also need a static IP on your broker account — we’ll guide you when it’s ready.
+                  Live orders are switched on account by account and need your static IP registered on your broker account — Live Trading shows what’s ready.
                 </p>
               </div>
             </motion.div>

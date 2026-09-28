@@ -730,7 +730,7 @@ async function brokerGuide(userId: string, rawBroker?: string) {
           },
         }
       : {}),
-    liveOrders: "Not switched on yet; when they are, the user's broker account will also need a static IP registered (a SEBI rule, one per client).",
+    liveOrders: "Rolling out account by account (see Live Trading). Real orders need the static IP shown on the admin/Live Trading setup registered on the user's broker account (a SEBI rule, one per client).",
   };
 }
 

@@ -39,6 +39,13 @@ const sections: LegalSection[] = [
     ],
   },
   {
+    id: "live-orders",
+    title: "Live orders",
+    paragraphs: [
+      "Live orders are real orders on your own broker account and can lose money. Market orders fill at whatever price is available; limit orders may not fill at all; stop orders can slip past their trigger in fast markets or gaps. Our checks (kill switch, per-order and daily limits, duplicate protection) reduce mistakes but can't prevent losses, and they depend on your broker and our systems being reachable. Your broker's records are the final word on what was ordered and filled — check them, and keep your broker's app available to act directly if needed.",
+    ],
+  },
+  {
     id: "no-advice",
     title: "No investment advice",
     paragraphs: [

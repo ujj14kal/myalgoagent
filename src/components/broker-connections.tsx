@@ -308,7 +308,7 @@ export default function BrokerConnections({
         <p className="text-sm font-semibold text-brand-navy">Common questions</p>
         <div className="mt-3 divide-y divide-black/[0.06]">
           {[
-            ["Is MyAlgoAgent placing trades for me?", "No. You build your own strategy, see every rule, and choose to run it on your own account. Nothing trades unless you start it — and live trading isn't switched on yet."],
+            ["Is MyAlgoAgent placing trades for me?", "No. You build your own strategy, see every rule, and choose to run it on your own account. Nothing trades unless you start it, and live orders are switched on account by account with your own risk limits checked first."],
             ["The broker said “invalid redirect URL” or “redirect_uri mismatch”.", "The URL in your broker app doesn't exactly match ours. Copy it again with the Copy button, paste it into the Redirect URL field, save the app, then click “Log in” here again."],
             ["I got “That login took too long”.", "The login must finish within 10 minutes of clicking the button here. Just click Log in again."],
             ["I regenerated my keys at the broker.", "Old keys stop working immediately. Click “Replace keys”, paste the new ones and log in again."],

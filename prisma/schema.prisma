@@ -41,6 +41,9 @@ model User {
   suspendedReason String?
   // Last time the user opened the app (updated at most every few minutes).
   lastSeenAt      DateTime?
+  // Real orders are off for every account until an owner switches them on
+  // (admin portal), and only then after the user confirms on Live Trading.
+  liveTradingEnabledAt DateTime?
 
   agentName           String?
   tutorialCompletedAt DateTime?
@@ -68,6 +71,7 @@ model User {
   supportCases        SupportCase[]
   agentConversations  AgentConversation[]
   brokerConnections   BrokerConnection[]
+  liveOrders          LiveOrder[]
 }
 
 enum OtpPurpose {
@@ -596,6 +600,9 @@ model RiskSettings {
   killSwitchEnabled    Boolean  @default(false)
   maxLossPercent       Float?
   maxConsecutiveLosses Int?
+  // Live-trading caps (checked before every real order; defaults apply when null).
+  liveMaxOrderValue    Float?
+  liveMaxOrdersPerDay  Int?
   updatedAt            DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -748,4 +755,79 @@ model BrokerConnection {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, broker])
+}
+
+enum LiveOrderSide {
+  BUY
+  SELL
+}
+
+// Our own lifecycle for a real broker order (each broker's statuses map onto it).
+enum LiveOrderStatus {
+  CREATED // recorded, not yet accepted by the broker
+  OPEN // accepted, working at the exchange
+  TRIGGER_PENDING // stop order waiting for its trigger
+  PARTIALLY_FILLED
+  FILLED
+  CANCELLED
+  REJECTED // refused by the broker or exchange
+  FAILED // couldn't be sent (network, session, our checks)
+}
+
+// A real order sent to the user's broker. Trading records must be kept for
+// five years, so an order is NOT deleted with the account: the user link is
+// cleared (SetNull) and the email snapshot stays with the record.
+model LiveOrder {
+  id               String          @id @default(cuid())
+  userId           String?
+  userEmail        String
+  broker           String
+  // Our order reference, sent to the broker too — the idempotency key: a
+  // retried request can never create a second order.
+  clientRef        String          @unique
+  brokerOrderId    String?
+  exchange         String
+  segment          String          @default("CASH")
+  tradingSymbol    String
+  instrumentSymbol String
+  side             LiveOrderSide
+  orderType        String // MARKET, LIMIT, SL, SL_M
+  product          String // CNC (delivery), MIS (intraday)
+  quantity         Int
+  price            Float?
+  triggerPrice     Float?
+  status           LiveOrderStatus @default(CREATED)
+  brokerStatus     String?
+  filledQuantity   Int             @default(0)
+  averagePrice     Float?
+  // Why it exists: "test" (connectivity check), "entry", "exit", "manual".
+  purpose          String
+  reason           String?
+  rejectReason     String?
+  // The exchange-issued algo ID, once the platform is registered for one.
+  exchangeAlgoId   String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  submittedAt      DateTime?
+  closedAt         DateTime?
+
+  user   User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  events LiveOrderEvent[]
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+// Every step in a live order's life — request, broker response, status
+// change, cancel — for the audit trail.
+model LiveOrderEvent {
+  id      String   @id @default(cuid())
+  orderId String
+  at      DateTime @default(now())
+  kind    String // created, submitted, status, cancel_requested, error
+  detail  Json?
+
+  order LiveOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, at])
 }
