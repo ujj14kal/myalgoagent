@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useReducedMotion } from "motion/react";
 import { Check, Pause, Play, RotateCcw, X } from "lucide-react";
 import type { StrategyPreview } from "@/lib/strategy-preview";
@@ -60,10 +60,18 @@ const EXIT_TEXT: Record<ScenarioKind, string> = {
 
 type Timeline = { pre: number; signal: number; entry: number; trade: number; exit: number; post: number; total: number };
 
-function timeline(s: Scenario): Timeline {
+/** Extra time on the signal candle so a pattern or crossover can be shown properly. */
+function focusTime(preview: StrategyPreview, s: Scenario): number {
+  const full = s.sourceIdx[s.signalIdx];
+  const caught = preview.studies.markers.filter((m) => full !== null && full !== undefined && m.bars.includes(full));
+  if (caught.length === 0) return preview.studies.overlays.some((o) => o.entry) || preview.studies.oscillators.some((o) => o.lines.some((l) => l.entry)) ? 700 : 0;
+  return Math.max(...caught.map((m) => (m.family === "CANDLE_PATTERN" ? 500 + m.span * 450 : m.family === "CHART_PATTERN" ? 1700 : 1100)));
+}
+
+function timeline(s: Scenario, focus: number): Timeline {
   const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
   const pre = clamp((s.signalIdx + 1) * 60, 1200, 2400);
-  const signal = 1000 + s.checks.length * 500;
+  const signal = 1000 + s.checks.length * 500 + focus;
   const entry = 1200;
   const trade = clamp((s.exitIdx - s.entryIdx + 1) * 300, 2200, 9000);
   const exit = 2000;
@@ -149,7 +157,7 @@ export default function StrategyReplay({ preview }: { preview: StrategyPreview }
 
 function ReplayPlayer({ preview, s }: { preview: StrategyPreview; s: Scenario }) {
   const reduce = useReducedMotion();
-  const tl = useMemo(() => timeline(s), [s]);
+  const tl = useMemo(() => timeline(s, focusTime(preview, s)), [preview, s]);
   const [rawMs, setMs] = useState(0);
   const [wantPlaying, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(1);
@@ -376,11 +384,47 @@ function Legend({ preview, s }: { preview: StrategyPreview; s: Scenario }) {
 
 type Frame = ReturnType<typeof frameAt>;
 
+/** What to point at on each candle of a candle pattern, oldest first. */
+const CANDLE_NOTES: Record<string, string[]> = {
+  DOJI: ["Opens and closes at the same price — indecision"],
+  HAMMER: ["Long lower wick — buyers pushed price back up"],
+  INVERTED_HAMMER: ["Long upper wick after a fall — buyers testing"],
+  SHOOTING_STAR: ["Long upper wick — sellers rejected the high"],
+  HANGING_MAN: ["Long lower wick after a rise — selling showed up"],
+  MARUBOZU_BULLISH: ["Full green body, almost no wicks — buyers in control"],
+  MARUBOZU_BEARISH: ["Full red body, almost no wicks — sellers in control"],
+  SPINNING_TOP: ["Small body, wicks both sides — neither side won"],
+  BULLISH_ENGULFING: ["Red candle", "Green body swallows it"],
+  BEARISH_ENGULFING: ["Green candle", "Red body swallows it"],
+  BULLISH_HARAMI: ["Big red candle", "Small body inside it"],
+  BEARISH_HARAMI: ["Big green candle", "Small body inside it"],
+  TWEEZER_TOP: ["High", "Same high — rejected twice"],
+  TWEEZER_BOTTOM: ["Low", "Same low — held twice"],
+  PIERCING_LINE: ["Red candle", "Closes above its midpoint"],
+  DARK_CLOUD_COVER: ["Green candle", "Closes below its midpoint"],
+  MORNING_STAR: ["Big red", "Small star", "Strong green"],
+  EVENING_STAR: ["Big green", "Small star", "Strong red"],
+  THREE_WHITE_SOLDIERS: ["Soldier 1", "Soldier 2", "Soldier 3"],
+  THREE_BLACK_CROWS: ["Crow 1", "Crow 2", "Crow 3"],
+};
+/** When each candle of a pattern gets its moment, after the signal starts (ms). */
+const CANDLE_STEP = 450;
+const CANDLE_START = 250;
+
 /** Candles on screen at once — the camera pans along the replay instead of squeezing every candle in. */
 const VIEW_BARS = 48;
 const OVERVIEW_H = 22;
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const easeOut = (t: number) => 1 - Math.pow(1 - clamp01(t), 3);
+const easeInOut = (t: number) => {
+  const x = clamp01(t);
+  return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+};
+/** 0 → 1 → 0 over the window [a, a + len] (a smooth pulse). */
+const bump = (t: number, a: number, len: number) => {
+  const k = (t - a) / len;
+  return k <= 0 || k >= 1 ? 0 : Math.sin(Math.PI * k);
+};
 const easeOutBack = (t: number) => {
   const c = 1.70158;
   const x = clamp01(t) - 1;
@@ -411,14 +455,17 @@ function ReplayChart({ preview, s, f }: { preview: StrategyPreview; s: Scenario;
   const clipId = `plot-${useId().replace(/:/g, "")}`;
   const st = preview.studies;
   const n = s.candles.length;
-  const viewN = Math.min(n, VIEW_BARS);
+  // Camera zooms in on the signal candle while the rule is checked, then eases back out as the order fills.
+  const zoom = n > 24 && f.atSignal ? easeInOut(f.sinceSignal / 750) * (1 - easeInOut((f.sinceEntry - 150) / 900)) : 0;
+  const viewN = Math.min(n, VIEW_BARS) * (1 - 0.32 * zoom);
   const plotW = W - ML - MR;
   const slot = plotW / viewN;
   const visible = Math.floor(f.bars);
   const frac = f.bars - visible;
   // Camera: keep the newest candle about 70% across; it glides as the replay plays.
   const head = Math.max(0, f.bars - 1);
-  const cam = Math.min(Math.max(0, head - viewN * 0.7), n - viewN);
+  const camOf = (anchor: number, at: number) => Math.min(Math.max(0, anchor - viewN * at), n - viewN);
+  const cam = camOf(head, 0.7) + (camOf(s.signalIdx, 0.6) - camOf(head, 0.7)) * zoom;
   const x = (i: number) => ML + (i - cam + 0.5) * slot;
   const first = Math.max(0, Math.floor(cam) - 1);
   const last = Math.min(n - 1, Math.ceil(cam + viewN) + 1);
@@ -445,17 +492,42 @@ function ReplayChart({ preview, s, f }: { preview: StrategyPreview; s: Scenario;
 
   // Price scale fits what's on screen (a few bars either side so it doesn't jump);
   // levels far outside become edge markers instead of squashing the candles.
-  const win = s.candles.slice(Math.max(0, first - 4), Math.min(n, last + 5));
+  // Only candles already drawn count — the path ahead must not squash (or give away) what's coming.
+  const drawn = s.candles.slice(Math.max(0, first - 4), Math.min(n, visible));
+  const win = drawn.length ? drawn : s.candles.slice(first, last + 1);
   let lo = Math.min(...win.map((c) => c.low));
   let hi = Math.max(...win.map((c) => c.high));
+  if (drawn.length && visible < n && frac > 0) {
+    const c = s.candles[visible];
+    const g = easeOut(frac);
+    const close = c.open + (c.close - c.open) * g;
+    hi = Math.max(hi, Math.max(c.open, close) + (c.high - Math.max(c.open, c.close)) * g);
+    lo = Math.min(lo, Math.min(c.open, close) - (Math.min(c.open, c.close) - c.low) * g);
+  }
   const span = hi - lo || hi * 0.01;
-  const near = (v: number | null): v is number => v !== null && Number.isFinite(v) && v > lo - span * 0.6 && v < hi + span * 0.6;
+  // Judged against the candles alone — otherwise each level pulled in widens the range for the next one.
+  const [lo0, hi0] = [lo, hi];
+  const near = (v: number | null): v is number => v !== null && Number.isFinite(v) && v > lo0 - span * 0.6 && v < hi0 + span * 0.6;
   const inTrade = f.entryProgress > 0;
   const trailNow = s.trailing ? s.trailing[Math.min(s.trailing.length - 1, Math.max(0, Math.min(visible, s.exitIdx) - 1 - s.entryIdx))] : null;
   for (const v of inTrade ? [s.entryPrice, s.stopLoss, s.target, trailNow, f.exited ? s.exitPrice : null] : []) if (near(v)) [lo, hi] = [Math.min(lo, v), Math.max(hi, v)];
   for (const o of st.overlays) for (let i = first; i <= last; i++) {
     const v = at(o.values, i);
     if (near(v)) [lo, hi] = [Math.min(lo, v), Math.max(hi, v)];
+  }
+  // While zoomed in on the signal, the price scale also tightens around it, so the pattern's candles get big.
+  if (zoom > 0) {
+    const fullSig = s.sourceIdx[s.signalIdx];
+    const vals = s.candles.slice(Math.max(0, s.signalIdx - 12), s.signalIdx + 1).flatMap((c) => [c.low, c.high]);
+    for (const o of st.overlays) if (o.entry) for (let i = Math.max(0, s.signalIdx - 3); i <= s.signalIdx; i++) {
+      const v = at(o.values, i);
+      if (v !== null) vals.push(v);
+    }
+    for (const m of st.markers) if (fullSig !== null && fullSig !== undefined && m.shapes[fullSig]) for (const l of m.shapes[fullSig].lines) if (l.pane === "price") vals.push(...l.pts.map((q) => q[1]));
+    const [fLo, fHi] = [Math.min(...vals), Math.max(...vals)];
+    const z = easeInOut(zoom);
+    lo += (Math.max(lo, fLo) - lo) * z;
+    hi += (Math.min(hi, fHi) - hi) * z;
   }
   const pad = (hi - lo) * 0.08;
   lo -= pad;
@@ -464,15 +536,16 @@ function ReplayChart({ preview, s, f }: { preview: StrategyPreview; s: Scenario;
   const pyClamped = (v: number) => Math.min(pricePane.top + pricePane.h - 9, Math.max(pricePane.top + 9, py(v)));
   const offscreen = (v: number) => (v > hi ? "up" : v < lo ? "down" : null);
 
+  const upto = Math.max(first + 1, Math.min(last + 1, visible + 1));
   const paneY = (pane: string): ((v: number) => number) | null => {
     if (pane === "price") return py;
     if (pane === "volume" && volPane) {
-      const vmax = Math.max(...s.candles.slice(first, last + 1).map((c) => c.volume), 1);
+      const vmax = Math.max(...s.candles.slice(first, upto).map((c) => c.volume), 1);
       return (v) => volPane.top + volPane.h - (Math.min(v, vmax * 1.05) / (vmax * 1.05)) * volPane.h;
     }
     const p = oscPanes.find((o) => o.key === pane);
     if (!p) return null;
-    const vals = p.osc.lines.flatMap((l) => s.candles.slice(first, last + 1).map((_, k) => at(l.values, first + k))).filter((v): v is number => v !== null);
+    const vals = p.osc.lines.flatMap((l) => s.candles.slice(first, upto).map((_, k) => at(l.values, first + k))).filter((v): v is number => v !== null);
     const all = [...vals, ...p.osc.levels];
     let a = Math.min(...all);
     let b = Math.max(...all);
@@ -614,6 +687,330 @@ function ReplayChart({ preview, s, f }: { preview: StrategyPreview; s: Scenario;
     );
   };
 
+  // ---- the moment of detection: exactly what was caught, drawn for its kind ----
+  const sinceSig = f.sinceSignal;
+  const sigMarkers = markers.filter((h) => h.local === s.signalIdx);
+  const fadeAfterEntry = 1 - clamp01((f.sinceEntry - 300) / 700);
+  const num = (v: number) => v.toLocaleString("en-IN", { maximumFractionDigits: Math.abs(v) >= 100 ? 1 : 2 });
+
+  const tag = (tx: number, ty: number, color: string, text: string, opacity: number, anchor: "start" | "middle" | "end" = "middle") =>
+    opacity <= 0.01 ? null : (
+      <text key={`${text}-${tx.toFixed(0)}`} x={tx} y={ty} textAnchor={anchor} fontSize={10} fontWeight={700} fill={color} stroke="white" strokeWidth={3.2} paintOrder="stroke" opacity={opacity}>
+        {text}
+      </text>
+    );
+
+  /** A ring and rays where something just happened (a cross, a breakout). */
+  const burst = (cx: number, cy: number, color: string, t0: number) => {
+    const k = clamp01((sinceSig - t0) / 850);
+    if (!f.atSignal || k <= 0 || k >= 1) return null;
+    const e = easeOut(k);
+    return (
+      <g key={`burst-${t0}-${cx.toFixed(0)}`} opacity={1 - k * k}>
+        <circle cx={cx} cy={cy} r={4 + 22 * e} fill="none" stroke={color} strokeWidth={2.4 * (1 - k) + 0.4} />
+        {Array.from({ length: 8 }, (_, j) => {
+          const a = (j / 8) * Math.PI * 2 + 0.4;
+          return <line key={j} x1={cx + Math.cos(a) * (5 + 9 * e)} y1={cy + Math.sin(a) * (5 + 9 * e)} x2={cx + Math.cos(a) * (9 + 18 * e)} y2={cy + Math.sin(a) * (9 + 18 * e)} stroke={color} strokeWidth={1.8} strokeLinecap="round" />;
+        })}
+      </g>
+    );
+  };
+
+  // Crossovers: where two lines (or a line and a threshold) crossed on the signal candle.
+  type Series = { label: string; at: (i: number) => number | null };
+  const crossOf = (a: Series, b: Series, y: (v: number) => number) => {
+    const i = s.signalIdx;
+    if (i < 1) return null;
+    const [a0, a1, b0, b1] = [a.at(i - 1), a.at(i), b.at(i - 1), b.at(i)];
+    if (a0 === null || a1 === null || b0 === null || b1 === null) return null;
+    const [d0, d1] = [a0 - b0, a1 - b1];
+    if (!((d0 <= 0 && d1 > 0) || (d0 >= 0 && d1 < 0))) return null;
+    const t = d0 / (d0 - d1);
+    return { x: x(i - 1) + (x(i) - x(i - 1)) * t, y: y(a0 + (a1 - a0) * t), text: `${a.label} crossed ${d1 > 0 ? "above" : "below"} ${b.label}` };
+  };
+  const crosses: { x: number; y: number; text: string }[] = [];
+  if (f.atSignal) {
+    const ov: Series[] = st.overlays.filter((o) => o.entry).map((o) => ({ label: o.label, at: (i: number) => at(o.values, i) }));
+    const pair = ov.length === 1 ? [{ label: "Price", at: (i: number) => s.candles[i].close }, ov[0]] : ov;
+    const c = pair.length >= 2 ? crossOf(pair[0], pair[1], py) : null;
+    if (c) crosses.push(c);
+    for (const p of oscPanes) {
+      const y = paneY(p.key)!;
+      const ls: Series[] = p.osc.lines.filter((l) => l.entry).map((l) => ({ label: l.label, at: (i: number) => at(l.values, i) }));
+      if (ls.length >= 2) {
+        const c2 = crossOf(ls[0], ls[1], y);
+        if (c2) crosses.push(c2);
+      } else if (ls.length === 1) {
+        for (const lv of p.osc.levels) {
+          const c2 = crossOf(ls[0], { label: String(lv), at: () => lv }, y);
+          if (c2) {
+            crosses.push(c2);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // Oscillator zones: the stretch where the line sat beyond the threshold the rule uses.
+  const oscZones = f.atSignal
+    ? oscPanes.flatMap((p) => {
+        const y = paneY(p.key)!;
+        return p.osc.lines
+          .filter((l) => l.entry)
+          .flatMap((l) => {
+            const v = at(l.values, s.signalIdx);
+            if (v === null || p.osc.levels.length === 0) return [];
+            const [lvLo, lvHi] = [Math.min(...p.osc.levels), Math.max(...p.osc.levels)];
+            const level = v <= lvLo ? lvLo : v >= lvHi ? lvHi : null;
+            if (level === null) return [];
+            const beyond = (u: number) => (level === lvLo ? u <= level : u >= level);
+            const polys: string[] = [];
+            let run: [number, number][] = [];
+            const flush = () => {
+              if (run.length > 1) polys.push(pts([...run, [run[run.length - 1][0], y(level)], [run[0][0], y(level)]]));
+              run = [];
+            };
+            for (let i = Math.max(first, s.signalIdx - 20); i <= s.signalIdx; i++) {
+              const u = at(l.values, i);
+              if (u !== null && beyond(u)) run.push([x(i), y(u)]);
+              else flush();
+            }
+            flush();
+            return polys.map((d, k) => ({ key: `${p.key}-${l.label}-${k}`, d, text: `${l.label} ${level === lvLo ? "below" : "above"} ${level}`, ly: y(level) }));
+          });
+      })
+    : [];
+
+  // Live values on the lines the rule reads, counting up to the signal candle's value.
+  const valueTags = f.atSignal
+    ? [
+        ...st.overlays.flatMap((o, k) => (o.entry ? [{ label: o.label, values: o.values, y: py, color: LINE_COLORS[k % LINE_COLORS.length] }] : [])),
+        ...oscPanes.flatMap((p) => p.osc.lines.flatMap((l, k) => (l.entry ? [{ label: l.label, values: l.values, y: paneY(p.key)!, color: LINE_COLORS[(k + 2) % LINE_COLORS.length] }] : []))),
+      ]
+    : [];
+  const countUp = easeOut((sinceSig - 150) / 800);
+
+  // Candle patterns: each candle of the pattern gets its moment, with what to look at.
+  const candleGeometry = (pattern: string, from: number, local: number, color: string, span: number) => {
+    const e = easeOut((sinceSig - (CANDLE_START + (span - 1) * CANDLE_STEP)) / 600);
+    if (e <= 0) return null;
+    const op = 0.35 + 0.65 * fadeAfterEntry;
+    const c0 = s.candles[from];
+    const cl = s.candles[local];
+    const bw = Math.max(2, slot * 0.66);
+    const across = (v: number, dashed = true) => {
+      const x0 = x(from) - bw / 2 - 3;
+      const x1 = x0 + (x(local) + bw / 2 + 3 - x0) * e;
+      return <line x1={x0} x2={x1} y1={py(v)} y2={py(v)} stroke={color} strokeWidth={1.8} strokeDasharray={dashed ? "4 3" : undefined} />;
+    };
+    const wick = (upper: boolean) => {
+      const bodyEdge = upper ? Math.max(cl.open, cl.close) : Math.min(cl.open, cl.close);
+      const tip = upper ? cl.high : cl.low;
+      const y2 = py(bodyEdge) + (py(tip) - py(bodyEdge)) * e;
+      return (
+        <g>
+          <line x1={x(local)} x2={x(local)} y1={py(bodyEdge)} y2={y2} stroke={color} strokeWidth={6} opacity={0.35} strokeLinecap="round" filter={`url(#${clipId}-glow)`} />
+          <line x1={x(local)} x2={x(local)} y1={py(bodyEdge)} y2={y2} stroke={color} strokeWidth={2.4} strokeLinecap="round" />
+        </g>
+      );
+    };
+    let g: ReactNode = null;
+    if (pattern === "HAMMER" || pattern === "HANGING_MAN") g = wick(false);
+    else if (pattern === "INVERTED_HAMMER" || pattern === "SHOOTING_STAR") g = wick(true);
+    else if (pattern === "DOJI" || pattern === "SPINNING_TOP")
+      g = (
+        <g>
+          {[cl.open, cl.close].map((v, k) => (
+            <line key={k} x1={x(local) - slot * 0.95 * e} x2={x(local) + slot * 0.95 * e} y1={py(v)} y2={py(v)} stroke={color} strokeWidth={1.8} />
+          ))}
+        </g>
+      );
+    else if (/ENGULFING|HARAMI/.test(pattern)) {
+      const [top, bot] = [py(Math.max(c0.open, c0.close)), py(Math.min(c0.open, c0.close))];
+      const x0 = x(from) - bw / 2 - 2;
+      g = <rect x={x0} y={top} width={(x(local) + bw / 2 + 2 - x0) * e} height={Math.max(1, bot - top)} rx={2} fill={color} fillOpacity={0.08} stroke={color} strokeWidth={1.6} strokeDasharray="4 3" />;
+    } else if (pattern === "PIERCING_LINE" || pattern === "DARK_CLOUD_COVER") {
+      const mid = (c0.open + c0.close) / 2;
+      g = (
+        <g>
+          {across(mid)}
+          {tag(x(from) - bw / 2 - 5, py(mid) + 3.5, color, "midpoint", e, "end")}
+        </g>
+      );
+    } else if (pattern === "TWEEZER_TOP") g = across(Math.max(c0.high, cl.high), false);
+    else if (pattern === "TWEEZER_BOTTOM") g = across(Math.min(c0.low, cl.low), false);
+    else if (span > 2) {
+      const path = s.candles.slice(from, local + 1).map((c, k): [number, number] => [x(from + k), py(c.close)]);
+      g = <polyline points={pts(partial(path, e))} fill="none" stroke={color} strokeWidth={2.2} strokeLinejoin="round" strokeLinecap="round" />;
+    } else if (pattern.startsWith("MARUBOZU")) {
+      const [top, bot] = [py(Math.max(cl.open, cl.close)), py(Math.min(cl.open, cl.close))];
+      g = <rect x={x(local) - bw / 2 - 3} y={top - 3} width={bw + 6} height={bot - top + 6} rx={3} fill="none" stroke={color} strokeWidth={2} opacity={e} />;
+    }
+    return <g opacity={op}>{g}</g>;
+  };
+
+  const candleMoments = sigMarkers
+    .filter((h) => h.m.family === "CANDLE_PATTERN")
+    .map(({ m, local }) => {
+      const color = MARKER_COLOR.CANDLE_PATTERN;
+      const from = Math.max(0, local - m.span + 1);
+      const span = local - from + 1;
+      const notes = CANDLE_NOTES[m.pattern] ?? [];
+      const cs = s.candles.slice(from, local + 1);
+      const top = py(Math.max(...cs.map((c) => c.high)));
+      // Notes sit in the empty space right of the signal candle (later candles aren't drawn yet).
+      const noteX = x(local) + slot * 0.5 + 12;
+      return (
+        <g key={`cm-${m.label}`}>
+          {candleGeometry(m.pattern, from, local, color, span)}
+          {cs.map((c, j) => {
+            const i = from + j;
+            const t0 = CANDLE_START + j * CANDLE_STEP;
+            const b = bump(sinceSig, t0, CANDLE_STEP * 1.7);
+            const cx = x(i);
+            const cy = py((c.high + c.low) / 2);
+            const noteIn = easeOut((sinceSig - t0) / 320) * fadeAfterEntry;
+            const ny = Math.max(pricePane.top + 12, top + 6) + j * 14;
+            return (
+              <g key={i}>
+                {b > 0 && f.atSignal && (
+                  <g transform={`translate(${cx} ${cy}) scale(${1 + 0.5 * b}) translate(${-cx} ${-cy})`}>
+                    <rect x={cx - slot * 0.55} y={py(c.high) - 4} width={slot * 1.1} height={py(c.low) - py(c.high) + 8} rx={4} fill={color} opacity={0.28 * b} filter={`url(#${clipId}-glow)`} />
+                    {candleBody(i)}
+                  </g>
+                )}
+                {notes[j] && noteIn > 0.01 && (
+                  <g opacity={noteIn}>
+                    {span > 1 && (
+                      <g transform={`translate(${cx} ${Math.min(py(c.low) + 11, pricePane.top + pricePane.h - 7)}) scale(${0.6 + 0.4 * easeOutBack((sinceSig - t0) / 350)})`}>
+                        <circle r={6} fill={color} stroke="white" strokeWidth={1.2} />
+                        <text y={3} textAnchor="middle" fontSize={8} fontWeight={800} fill="white">
+                          {j + 1}
+                        </text>
+                      </g>
+                    )}
+                    <g transform={`translate(${noteX + 8 * (1 - easeOut((sinceSig - t0) / 320))} ${ny})`}>
+                      {span > 1 && (
+                        <>
+                          <circle cx={5} cy={-3.5} r={5.5} fill={color} />
+                          <text x={5} y={-0.8} textAnchor="middle" fontSize={7.5} fontWeight={800} fill="white">
+                            {j + 1}
+                          </text>
+                        </>
+                      )}
+                      <text x={span > 1 ? 14 : 0} y={0} fontSize={10} fontWeight={700} fill={color} stroke="white" strokeWidth={3.2} paintOrder="stroke">
+                        {notes[j]}
+                      </text>
+                    </g>
+                  </g>
+                )}
+              </g>
+            );
+          })}
+        </g>
+      );
+    });
+
+  // Chart patterns: the break of the pattern line, the line carried forward, and the measured move.
+  const chartMoments = sigMarkers
+    .filter((h) => h.m.family === "CHART_PATTERN")
+    .map(({ m, local, full }) => {
+      const shape = m.shapes[full];
+      if (!shape) return null;
+      const color = MARKER_COLOR.CHART_PATTERN;
+      const priceLines = shape.lines.filter((l) => l.pane === "price");
+      const necks = priceLines
+        .filter((l) => l.style === "neck")
+        .map((l) => {
+          const [a, b] = [l.pts[0], l.pts[l.pts.length - 1]];
+          const slope = b[0] === a[0] ? 0 : (b[1] - a[1]) / (b[0] - a[0]);
+          return (fi: number) => a[1] + slope * (fi - a[0]);
+        });
+      if (necks.length === 0) return null;
+      const close = s.candles[local].close;
+      const vals = necks.map((nk) => nk(full));
+      let k = 0;
+      if (necks.length > 1) {
+        const upper = vals[0] >= vals[1] ? 0 : 1;
+        k = close >= vals[upper] ? upper : 1 - upper;
+      }
+      const neckV = vals[k];
+      const up = close >= neckV;
+      const all = priceLines.flatMap((l) => l.pts.map((q) => q[1]));
+      const h = up ? neckV - Math.min(...all) : Math.max(...all) - neckV;
+      const target = h > 0 ? neckV + (up ? h : -h) : null;
+      const tBreak = 1100;
+      const ext = easeOut((sinceSig - tBreak + 250) / 550);
+      const arrowP = easeOut((sinceSig - tBreak - 400) / 800);
+      const keep = 0.4 + 0.6 * fadeAfterEntry;
+      const ax = x(local) + slot * 1.8;
+      const y0 = py(neckV);
+      const y1 = target === null ? y0 : y0 + (pyClamped(target) - y0) * arrowP;
+      return (
+        <g key={`chm-${m.label}`}>
+          {ext > 0 && <line x1={x(local)} y1={y0} x2={x(local + 7 * ext)} y2={py(necks[k](full + 7 * ext))} stroke={color} strokeWidth={1.5} strokeDasharray="5 4" opacity={keep} />}
+          {burst(x(local), y0, color, tBreak)}
+          {tag(x(local) - 7, y0 + (up ? 15 : -9), color, up ? "Breakout ↑" : "Breakdown ↓", easeOut((sinceSig - tBreak) / 300) * fadeAfterEntry, "end")}
+          {target !== null && arrowP > 0 && (
+            <g opacity={keep}>
+              <line x1={ax - 5} x2={ax + 5} y1={y0} y2={y0} stroke={color} strokeWidth={1.5} />
+              <line x1={ax} x2={ax} y1={y0} y2={y1} stroke={color} strokeWidth={2} />
+              <path d={`M${ax},${y1}l-4.5,${up ? 7 : -7}h9z`} fill={color} />
+              {tag(ax + 7, y1 + (up ? 4 : 2), color, `Measured move ${inr(target)}`, arrowP, "start")}
+            </g>
+          )}
+        </g>
+      );
+    });
+
+  // Volume patterns: the bar against its 20-bar average, with the multiple counting up.
+  const VOL_RATIO = new Set(["VOLUME_SPIKE", "VOLUME_DRY_UP", "BULLISH_VOLUME_BREAKOUT", "BEARISH_VOLUME_BREAKDOWN"]);
+  const volMoment = sigMarkers.find((h) => h.m.family === "VOLUME_PATTERN" && VOL_RATIO.has(h.m.pattern));
+  const volAvgFrom = Math.max(0, s.signalIdx - 20);
+  const volAvg = s.signalIdx > 0 ? s.candles.slice(volAvgFrom, s.signalIdx).reduce((a, c) => a + c.volume, 0) / (s.signalIdx - volAvgFrom) : 0;
+  /** The signal bar winds back to the average, then shoots to its real height. */
+  const volRegrow = (full: number, avgH: number) => {
+    if (!volMoment || !f.atSignal || sinceSig >= 1100) return full;
+    return sinceSig < 300 ? full + (avgH - full) * easeInOut(sinceSig / 300) : avgH + (full - avgH) * easeOutBack((sinceSig - 300) / 800);
+  };
+  const volumeMoment = (() => {
+    if (!volMoment || !volPane || !f.atSignal || volAvg <= 0) return null;
+    const y = paneY("volume")!;
+    const color = MARKER_COLOR.VOLUME_PATTERN;
+    const reveal = easeOut(sinceSig / 550);
+    const x0 = x(volAvgFrom) - slot / 2;
+    const x1 = x0 + (x(s.signalIdx) + slot / 2 - x0) * reveal;
+    const ratio = s.candles[s.signalIdx].volume / volAvg;
+    const shownRatio = 1 + (ratio - 1) * easeOut((sinceSig - 300) / 800);
+    const keep = 0.35 + 0.65 * fadeAfterEntry;
+    const barTop = Math.max(volPane.top + 22, y(s.candles[s.signalIdx].volume) + 4);
+    const level = volMoment.m.shapes[volMoment.full]?.lines.find((l) => l.style === "level")?.pts[0]?.[1];
+    return (
+      <g>
+        <g opacity={keep}>
+          <rect x={x0} y={y(volAvg)} width={Math.max(0, x1 - x0)} height={volPane.top + volPane.h - y(volAvg)} fill={color} opacity={0.08} />
+          <line x1={x0} x2={x1} y1={y(volAvg)} y2={y(volAvg)} stroke={color} strokeWidth={1.4} strokeDasharray="4 3" />
+          {tag(x(s.signalIdx) - slot / 2 - 4, y(volAvg) - 3, color, "20-bar average", reveal * 0.9, "end")}
+        </g>
+        {tag(x(s.signalIdx) + slot * 0.45 + 5, barTop, color, `${shownRatio.toFixed(1)}× average`, easeOut((sinceSig - 300) / 300) * keep, "start")}
+        {level !== undefined && burst(x(s.signalIdx), py(level), color, 900)}
+      </g>
+    );
+  })();
+
+  // Everything but the moment itself steps back while the camera is zoomed in.
+  let spotFrom = s.signalIdx - 1;
+  for (const h of sigMarkers) {
+    if (h.m.family === "CANDLE_PATTERN") spotFrom = Math.min(spotFrom, h.local - h.m.span + 1);
+    const sh = h.m.shapes[h.full];
+    if (sh) for (const l of sh.lines) for (const [fi] of l.pts) {
+      const li = toLocal(fi);
+      if (li !== null) spotFrom = Math.min(spotFrom, li);
+    }
+  }
+  spotFrom = Math.max(0, spotFrom);
+
   const exitColor = KIND_COLOR[s.kind];
   const ex = x(s.exitIdx);
   const ey = py(s.exitPrice);
@@ -736,7 +1133,7 @@ function ReplayChart({ preview, s, f }: { preview: StrategyPreview; s: Scenario;
                 {isSignal && <rect x={left} y={top} width={w} height={bottom - top} rx={5} fill={color} opacity={0.08 * easeOut(p)} />}
                 <rect x={left} y={top} width={w} height={bottom - top} rx={5} fill="none" stroke={color} strokeWidth={isSignal ? 2 : 1} strokeDasharray={isSignal ? perim : undefined} strokeDashoffset={isSignal ? perim * (1 - easeOut(p)) : undefined} />
                 {isSignal && (
-                  <text x={left + w / 2} y={top - 7 - 6 * (1 - easeOut(p))} opacity={easeOut(p)} textAnchor="middle" fontSize={10.5} fontWeight={700} fill={color} stroke="white" strokeWidth={3} paintOrder="stroke">
+                  <text x={left} y={top - 7 - 6 * (1 - easeOut(p))} opacity={easeOut(p) * fadeAfterEntry} textAnchor="start" fontSize={10.5} fontWeight={700} fill={color} stroke="white" strokeWidth={3} paintOrder="stroke">
                     Caught here: {m.label}
                   </text>
                 )}
@@ -751,8 +1148,8 @@ function ReplayChart({ preview, s, f }: { preview: StrategyPreview; s: Scenario;
               {m.family === "CHART_PATTERN" && (
                 <g opacity={isSignal ? easeOut(p) : 1}>
                   <path d={`M${x(local)},${py(c.high) - 12 - 6 * (1 - easeOut(p))}l-5,-7h10z`} fill={color} />
-                  {isSignal && (
-                    <text x={x(local)} y={py(c.high) - 24} textAnchor="middle" fontSize={10.5} fontWeight={700} fill={color} stroke="white" strokeWidth={3} paintOrder="stroke">
+                  {isSignal && fadeAfterEntry > 0 && (
+                    <text opacity={fadeAfterEntry} x={x(local) - slot / 2} y={py(c.high) - 24} textAnchor="start" fontSize={10.5} fontWeight={700} fill={color} stroke="white" strokeWidth={3} paintOrder="stroke">
                       Caught here: {m.label}
                     </text>
                   )}
@@ -835,7 +1232,8 @@ function ReplayChart({ preview, s, f }: { preview: StrategyPreview; s: Scenario;
                   const c = s.candles[i];
                   const g = i === visible ? easeOut(frac) : 1;
                   const isSig = vmarks.has(i) && i === s.signalIdx;
-                  const vh = (volPane.top + volPane.h - y(c.volume)) * g;
+                  const fullH = volPane.top + volPane.h - y(c.volume);
+                  const vh = (i === s.signalIdx ? volRegrow(fullH, volPane.top + volPane.h - y(volAvg)) : fullH) * g;
                   return (
                     <g key={c.time}>
                       {isSig && <rect x={x(i) - bw / 2 - 2} width={bw + 4} y={volPane.top + volPane.h - vh - 2} height={vh + 2} rx={2} fill="#ea580c" opacity={0.35 * easeOut(signalIn)} filter={`url(#${clipId}-glow)`} />}
@@ -851,7 +1249,7 @@ function ReplayChart({ preview, s, f }: { preview: StrategyPreview; s: Scenario;
                 .map((h) => (
                   <g key={h.m.label}>
                     {h.m.shapes[h.full] && shapeLayer(h.m.shapes[h.full], "#ea580c", "volume", clamp01(f.sinceSignal / 1100))}
-                    <text x={x(h.local)} y={volPane.top + 12} textAnchor="middle" fontSize={10} fontWeight={700} fill="#ea580c" stroke="white" strokeWidth={3} paintOrder="stroke" opacity={easeOut(signalIn)}>
+                    <text x={x(h.local) - slot / 2} y={volPane.top + 12} textAnchor="start" fontSize={10} fontWeight={700} fill="#ea580c" stroke="white" strokeWidth={3} paintOrder="stroke" opacity={easeOut(signalIn) * fadeAfterEntry}>
                       Caught here: {h.m.label}
                     </text>
                   </g>
@@ -886,6 +1284,35 @@ function ReplayChart({ preview, s, f }: { preview: StrategyPreview; s: Scenario;
                   })}
             </g>
           );
+        })}
+
+        {/* spotlight: the rest of the chart steps back while the camera is zoomed in */}
+        {zoom > 0.01 && (
+          <g fill="white" opacity={0.5 * zoom} pointerEvents="none">
+            <rect x={ML} y={pricePane.top} width={Math.max(0, x(spotFrom) - slot / 2 - 3 - ML)} height={axisTop - GAP - pricePane.top} />
+          </g>
+        )}
+
+        {/* the moment of detection, drawn for its kind */}
+        {oscZones.map((z) => (
+          <polygon key={z.key} points={z.d} fill={C.signal} opacity={(0.1 + 0.25 * fadeAfterEntry) * easeOut(signalIn)} />
+        ))}
+        {crosses.length === 0 && oscZones.slice(0, 1).map((z) => tag(x(s.signalIdx) - 8, z.ly - 4, "#8a7437", z.text, easeOut(signalIn) * fadeAfterEntry, "end"))}
+        {candleMoments}
+        {chartMoments}
+        {volumeMoment}
+        {crosses.map((c) => (
+          <g key={c.text}>
+            {burst(c.x, c.y, C.signal, 250)}
+            {tag(c.x - 6, c.y - 12, "#8a7437", c.text, easeOut((sinceSig - 350) / 350) * fadeAfterEntry, "end")}
+          </g>
+        ))}
+        {valueTags.map((v, k) => {
+          const v1 = at(v.values, s.signalIdx);
+          if (v1 === null) return null;
+          const v0 = s.signalIdx > 0 ? at(v.values, s.signalIdx - 1) : null;
+          const now = v0 === null ? v1 : v0 + (v1 - v0) * countUp;
+          return <g key={`vt-${v.label}`}>{tag(x(s.signalIdx) + 10, v.y(v1) + 3.5 + (k % 2) * 11, v.color, `${v.label} ${num(now)}`, easeOut(signalIn) * fadeAfterEntry, "start")}</g>;
         })}
       </g>
 
