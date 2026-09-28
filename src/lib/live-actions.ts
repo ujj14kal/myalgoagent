@@ -7,6 +7,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { logError } from "@/lib/logger";
 import { BrokerError } from "@/lib/brokers/adapters";
 import { describeFailure } from "@/lib/brokers/failures";
+import { brokerById } from "@/lib/brokers/catalog";
 import { cancelLiveOrder, connectivityTest, LiveCheckError, refreshLiveOrder } from "@/lib/live/orders";
 
 // The Live Trading page's actions. Results are returned, not thrown, so the
@@ -19,29 +20,29 @@ async function signedIn() {
   return session?.user?.id ?? null;
 }
 
-function explain(err: unknown, context: string): { ok: false; error: string } {
+function explain(err: unknown, context: string, broker = "your broker"): { ok: false; error: string } {
   if (err instanceof LiveCheckError) return { ok: false, error: err.message };
   if (err instanceof BrokerError) {
-    const d = describeFailure(err.failure, "Groww");
+    const d = describeFailure(err.failure, broker);
     return { ok: false, error: `${d.title}. ${err.failure.detail ?? d.reason}` };
   }
   logError(context, err);
-  return { ok: false, error: "Something went wrong — it's been logged. Check the order on Groww before retrying." };
+  return { ok: false, error: `Something went wrong — it's been logged. Check the order in ${broker === "your broker" ? "your broker's app" : `your ${broker} app`} before retrying.` };
 }
 
 export type TestStep = { step: string; ok: boolean; detail?: string };
 
-export async function runConnectivityTest(instrumentSymbol: string): Promise<LiveResult<TestStep[]>> {
+export async function runConnectivityTest(broker: string, instrumentSymbol: string): Promise<LiveResult<TestStep[]>> {
   const userId = await signedIn();
   if (!userId) return { ok: false, error: "Sign in again." };
   if (await checkRateLimit(`live-test:${userId}`, 5, 10 * 60_000)) return { ok: false, error: "Too many test orders — try again in a few minutes." };
   try {
-    const { steps } = await connectivityTest(userId, instrumentSymbol);
+    const { steps } = await connectivityTest(userId, broker, instrumentSymbol);
     revalidatePath("/app/live-trading");
     revalidatePath("/app/orders");
     return { ok: true, data: steps };
   } catch (err) {
-    return explain(err, "live.test");
+    return explain(err, "live.test", brokerById(broker)?.name);
   }
 }
 

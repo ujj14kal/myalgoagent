@@ -39,6 +39,8 @@ export default async function RiskControlsPage() {
             killSwitchEnabled={riskSettings?.killSwitchEnabled ?? false}
             initialMaxLossPercent={riskSettings?.maxLossPercent ?? null}
             initialMaxConsecutiveLosses={riskSettings?.maxConsecutiveLosses ?? null}
+            initialLiveMaxOrderValue={riskSettings?.liveMaxOrderValue ?? null}
+            initialLiveMaxOrdersPerDay={riskSettings?.liveMaxOrdersPerDay ?? null}
           />
         </div>
         <aside className="surface flex flex-col items-center p-6 text-center">

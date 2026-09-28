@@ -10,6 +10,9 @@ export interface RiskSettingsInput {
   killSwitchEnabled: boolean;
   maxLossPercent: number | null;
   maxConsecutiveLosses: number | null;
+  /** Live-order caps; left unchanged when omitted, back to the defaults when null. */
+  liveMaxOrderValue?: number | null;
+  liveMaxOrdersPerDay?: number | null;
 }
 
 // Returned (not thrown): Next.js redacts the message of any Error thrown
@@ -47,15 +50,32 @@ export async function updateRiskSettings(input: RiskSettingsInput): Promise<Risk
       return { ok: false, error: "Max consecutive losses must be a whole number, at least 1." };
     }
   }
+  if (input.liveMaxOrderValue !== undefined && input.liveMaxOrderValue !== null) {
+    if (!Number.isFinite(input.liveMaxOrderValue) || input.liveMaxOrderValue < 500 || input.liveMaxOrderValue > 10_00_000) {
+      return { ok: false, error: "The live per-order limit must be between ₹500 and ₹10,00,000." };
+    }
+  }
+  if (input.liveMaxOrdersPerDay !== undefined && input.liveMaxOrdersPerDay !== null) {
+    if (!Number.isInteger(input.liveMaxOrdersPerDay) || input.liveMaxOrdersPerDay < 1 || input.liveMaxOrdersPerDay > 200) {
+      return { ok: false, error: "Live orders per day must be a whole number between 1 and 200." };
+    }
+  }
   if (typeof input.killSwitchEnabled !== "boolean") {
     return { ok: false, error: "Invalid kill switch value." };
   }
 
   try {
+    const data = {
+      killSwitchEnabled: input.killSwitchEnabled,
+      maxLossPercent: input.maxLossPercent,
+      maxConsecutiveLosses: input.maxConsecutiveLosses,
+      ...(input.liveMaxOrderValue !== undefined ? { liveMaxOrderValue: input.liveMaxOrderValue } : {}),
+      ...(input.liveMaxOrdersPerDay !== undefined ? { liveMaxOrdersPerDay: input.liveMaxOrdersPerDay } : {}),
+    };
     await prisma.riskSettings.upsert({
       where: { userId: session.user.id },
-      update: input,
-      create: { userId: session.user.id, ...input },
+      update: data,
+      create: { userId: session.user.id, ...data },
     });
   } catch (err) {
     logError("risk-actions:updateRiskSettings", err, { userId: session.user.id });

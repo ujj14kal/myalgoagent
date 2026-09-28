@@ -8,6 +8,8 @@ import ConnectivityTest from "@/components/live/connectivity-test";
 import { CancelOrder, RefreshOrders } from "@/components/live/order-actions";
 import { egressEnabled } from "@/lib/brokers/egress";
 import { LIVE_DEFAULTS, marketOpen } from "@/lib/live/orders";
+import { LIVE_BROKERS, LIVE_NOT_YET } from "@/lib/brokers/live-brokers";
+import { brokerById } from "@/lib/brokers/catalog";
 
 export const metadata = { title: "Live Trading", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -46,17 +48,24 @@ export default async function Page() {
     );
   }
 
-  const [groww, orders, instruments] = await Promise.all([
-    prisma.brokerConnection.findUnique({ where: { userId_broker: { userId, broker: "groww" } }, select: { status: true, tokenExpiresAt: true } }),
+  const [conns, orders, instruments, proven] = await Promise.all([
+    prisma.brokerConnection.findMany({ where: { userId }, select: { broker: true, status: true, tokenExpiresAt: true } }),
     prisma.liveOrder.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 50, include: { events: { orderBy: { at: "asc" } } } }),
     prisma.instrument.findMany({ where: { exchange: "NSE" }, orderBy: { symbol: "asc" }, select: { symbol: true, name: true } }),
+    // A broker counts as proven once any connectivity test there has completed cleanly.
+    prisma.liveOrder.findMany({ where: { purpose: "test", status: "CANCELLED" }, distinct: ["broker"], select: { broker: true } }),
   ]);
-  const growwLive = !!groww && groww.status === "CONNECTED" && !!groww.tokenExpiresAt && groww.tokenExpiresAt > new Date();
+  const provenSet = new Set(proven.map((p) => p.broker));
+  const now = new Date();
+  const linked = conns
+    .map((c) => ({ id: c.broker, name: brokerById(c.broker)?.name ?? c.broker, live: c.status === "CONNECTED" && !!c.tokenExpiresAt && c.tokenExpiresAt > now, adapter: LIVE_BROKERS[c.broker as keyof typeof LIVE_BROKERS], notYet: LIVE_NOT_YET[c.broker as keyof typeof LIVE_NOT_YET] }))
+    .sort((a, b) => Number(b.live) - Number(a.live));
+  const tradable = linked.filter((b) => b.live && b.adapter).map((b) => ({ id: b.id, name: b.name, verified: !!b.adapter?.verified || provenSet.has(b.id) }));
   const relay = egressEnabled();
   const open = marketOpen();
   const risk = user.riskSettings;
   const checks = [
-    { ok: growwLive, label: "Groww connected for today", fix: <Link href="/app/broker-connections?broker=groww" className="font-semibold text-brand-primary">Connect for today →</Link> },
+    { ok: tradable.length > 0, label: "A broker connected for today", fix: <Link href="/app/broker-connections" className="font-semibold text-brand-primary">Broker Connections →</Link> },
     { ok: relay, label: "Orders leave from your static IP", fix: <span>The static-IP relay isn&apos;t configured.</span> },
     { ok: open, label: "Market open (NSE, Mon–Fri 09:15–15:30 IST)", fix: <span>Orders can only be placed during market hours.</span> },
     { ok: !risk?.killSwitchEnabled, label: "Kill switch off", fix: <Link href="/app/risk-controls" className="font-semibold text-brand-primary">Risk Controls →</Link> },
@@ -68,8 +77,8 @@ export default async function Page() {
       <PageHeader
         title="Live Trading"
         icon={Radio}
-        eyebrow="Real orders · Groww"
-        description="Real orders on your own Groww account, placed from your registered static IP. Every order is checked on our servers first and recorded with its full history."
+        eyebrow="Real orders"
+        description="Real orders on your own broker account, placed from your registered static IP. Every order is checked on our servers first, read back from your broker to confirm it's the right stock, and recorded with its full history."
       />
 
       <div className="grid gap-5 lg:grid-cols-2">
@@ -88,6 +97,25 @@ export default async function Page() {
               </li>
             ))}
           </ul>
+          {linked.length > 0 && (
+            <ul className="mt-4 space-y-1.5 border-t border-black/[0.05] pt-3">
+              {linked.map((b) => (
+                <li key={b.id} className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="font-semibold text-brand-navy">{b.name}</span>
+                  <span className={b.live ? "text-[#0b6b30]" : "text-[#6f5a22]"}>{b.live ? "connected today" : "log in for today"}</span>
+                  {b.adapter ? (
+                    b.adapter.verified || provenSet.has(b.id) ? (
+                      <span className="rounded-full bg-brand-buy/10 px-2 py-px font-semibold text-[#0b6b30]">live orders proven</span>
+                    ) : (
+                      <span className="rounded-full bg-brand-gold/15 px-2 py-px font-semibold text-[#6f5a22]" title="Built from the broker's official API docs; run the connectivity test once to prove it">not yet proven — run the test</span>
+                    )
+                  ) : (
+                    <span className="rounded-full bg-brand-navy/[0.06] px-2 py-px text-brand-navy/55" title={b.notYet}>live orders coming later</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
           <p className="mt-4 rounded-xl bg-brand-bg/70 px-3 py-2.5 text-xs leading-relaxed text-brand-navy/60">
             Limits on every new order: up to ₹{(risk?.liveMaxOrderValue ?? LIVE_DEFAULTS.maxOrderValue).toLocaleString("en-IN")} per order and {risk?.liveMaxOrdersPerDay ?? LIVE_DEFAULTS.maxOrdersPerDay} orders a day. Exits
             are never blocked. An identical order within a minute is refused as a duplicate.
@@ -98,7 +126,7 @@ export default async function Page() {
           <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-brand-navy">
             <PlugZap size={16} className="text-brand-primary" /> Connectivity test
           </p>
-          <ConnectivityTest instruments={instruments} ready={ready} />
+          <ConnectivityTest instruments={instruments} brokers={tradable} ready={ready} />
         </section>
       </div>
 
@@ -121,6 +149,7 @@ export default async function Page() {
                     <span className="text-sm font-semibold text-brand-navy">
                       {o.quantity} × {o.tradingSymbol}
                     </span>
+                    <span className="rounded-full bg-brand-navy/[0.05] px-2 py-0.5 text-[11px] text-brand-navy/60">{brokerById(o.broker)?.name ?? o.broker}</span>
                     <span className="text-xs text-brand-navy/55">
                       {o.orderType.replace("_", "-")}
                       {o.price ? ` @ ₹${o.price.toFixed(2)}` : ""} · {o.product} · {o.purpose}
@@ -132,7 +161,7 @@ export default async function Page() {
                     {(o.status === "OPEN" || o.status === "TRIGGER_PENDING") && <CancelOrder id={o.id} />}
                     <span className="w-full text-[11px] text-brand-navy/40">
                       {when(o.createdAt)} · ref {o.clientRef}
-                      {o.brokerOrderId && ` · Groww ${o.brokerOrderId}`}
+                      {o.brokerOrderId && ` · broker order ${o.brokerOrderId}`}
                       {o.rejectReason && <span className="text-brand-sell"> · {o.rejectReason}</span>}
                     </span>
                   </summary>

@@ -5,7 +5,8 @@ import { CheckCircle2, CircleX, PlugZap } from "lucide-react";
 import { runConnectivityTest, type TestStep } from "@/lib/live-actions";
 
 /** Places a 1-share limit buy far below the market through the static IP, then cancels it. */
-export default function ConnectivityTest({ instruments, ready }: { instruments: { symbol: string; name: string }[]; ready: boolean }) {
+export default function ConnectivityTest({ instruments, brokers, ready }: { instruments: { symbol: string; name: string }[]; brokers: { id: string; name: string; verified: boolean }[]; ready: boolean }) {
+  const [broker, setBroker] = useState(brokers[0]?.id ?? "");
   const [symbol, setSymbol] = useState(instruments.find((i) => i.symbol === "ITC.NS")?.symbol ?? instruments[0]?.symbol ?? "");
   const [steps, setSteps] = useState<TestStep[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -13,10 +14,18 @@ export default function ConnectivityTest({ instruments, ready }: { instruments: 
   return (
     <div className="space-y-3">
       <p className="text-sm text-brand-navy/65">
-        Proves the whole path works — your Groww session, the static IP and order placement — without trading: a <strong>1-share limit buy about 8% below the market</strong> (so it won&apos;t fill),
-        cancelled a moment later. It shows up on Groww as a cancelled order.
+        Proves the whole path works — your broker session, the static IP, order placement and that the broker ordered the right stock — without trading: a <strong>1-share limit buy about 8% below the market</strong> (so it won&apos;t fill),
+        cancelled a moment later. It shows up in your broker app as a cancelled order. Passing it once is how a broker marked &ldquo;not yet proven&rdquo; is confirmed.
       </p>
       <div className="flex flex-wrap items-center gap-2">
+        <select value={broker} onChange={(e) => setBroker(e.target.value)} className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm" aria-label="Broker">
+          {brokers.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+              {b.verified ? "" : " (not yet proven)"}
+            </option>
+          ))}
+        </select>
         <select value={symbol} onChange={(e) => setSymbol(e.target.value)} className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm">
           {instruments.map((i) => (
             <option key={i.symbol} value={i.symbol}>
@@ -26,20 +35,21 @@ export default function ConnectivityTest({ instruments, ready }: { instruments: 
         </select>
         <button
           type="button"
-          disabled={!ready || pending || !symbol}
+          disabled={!ready || pending || !symbol || !broker}
           onClick={() => {
-            if (!window.confirm(`Place a real 1-share limit BUY for ${symbol.replace(".NS", "")} on Groww (about 8% below the market), then cancel it?`)) return;
+            const name = brokers.find((b) => b.id === broker)?.name ?? broker;
+            if (!window.confirm(`Place a real 1-share limit BUY for ${symbol.replace(".NS", "")} at ${name} (about 8% below the market), then cancel it?`)) return;
             start(async () => {
               setError(null);
               setSteps(null);
-              const r = await runConnectivityTest(symbol);
+              const r = await runConnectivityTest(broker, symbol);
               if (r.ok) setSteps(r.data ?? []);
               else setError(r.error);
             });
           }}
           className="inline-flex items-center gap-1.5 rounded-full bg-brand-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-primary-light disabled:opacity-40"
         >
-          <PlugZap size={15} /> {pending ? "Testing with Groww…" : "Run the test"}
+          <PlugZap size={15} /> {pending ? "Testing…" : "Run the test"}
         </button>
       </div>
       {!ready && <p className="text-xs text-brand-navy/50">Fix the items marked above first.</p>}

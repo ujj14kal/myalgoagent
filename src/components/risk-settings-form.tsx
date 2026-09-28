@@ -7,11 +7,17 @@ export default function RiskSettingsForm({
   killSwitchEnabled,
   initialMaxLossPercent,
   initialMaxConsecutiveLosses,
+  initialLiveMaxOrderValue = null,
+  initialLiveMaxOrdersPerDay = null,
 }: {
   killSwitchEnabled: boolean;
   initialMaxLossPercent: number | null;
   initialMaxConsecutiveLosses: number | null;
+  initialLiveMaxOrderValue?: number | null;
+  initialLiveMaxOrdersPerDay?: number | null;
 }) {
+  const [liveMaxOrderValue, setLiveMaxOrderValue] = useState(initialLiveMaxOrderValue?.toString() ?? "");
+  const [liveMaxOrdersPerDay, setLiveMaxOrdersPerDay] = useState(initialLiveMaxOrdersPerDay?.toString() ?? "");
   const [maxLossPercent, setMaxLossPercent] = useState(initialMaxLossPercent?.toString() ?? "");
   const [maxConsecutiveLosses, setMaxConsecutiveLosses] = useState(initialMaxConsecutiveLosses?.toString() ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +34,8 @@ export default function RiskSettingsForm({
           killSwitchEnabled,
           maxLossPercent: maxLossPercent.trim() ? Number(maxLossPercent) : null,
           maxConsecutiveLosses: maxConsecutiveLosses.trim() ? Number(maxConsecutiveLosses) : null,
+          liveMaxOrderValue: liveMaxOrderValue.trim() ? Number(liveMaxOrderValue) : null,
+          liveMaxOrdersPerDay: liveMaxOrdersPerDay.trim() ? Number(liveMaxOrdersPerDay) : null,
         });
         if (result.ok) setSaved(true);
         else setError(result.error);
@@ -73,6 +81,39 @@ export default function RiskSettingsForm({
             placeholder="No limit"
             value={maxConsecutiveLosses}
             onChange={(e) => setMaxConsecutiveLosses(e.target.value)}
+            className="w-full rounded-lg border border-brand-navy/15 px-3 py-2 text-sm outline-none focus:border-brand-primary"
+          />
+        </div>
+      </div>
+
+      <p className="mt-6 text-sm font-semibold text-brand-navy">Live order limits</p>
+      <p className="mt-1 text-xs text-brand-navy/60">
+        Checked on our servers before every real order (exits are never blocked). Leave blank for the defaults: ₹25,000 per order and 20 orders a day.
+      </p>
+      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Max value per live order (₹)</label>
+          <input
+            type="number"
+            min={500}
+            max={1000000}
+            step={500}
+            placeholder="25,000"
+            value={liveMaxOrderValue}
+            onChange={(e) => setLiveMaxOrderValue(e.target.value)}
+            className="w-full rounded-lg border border-brand-navy/15 px-3 py-2 text-sm outline-none focus:border-brand-primary"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Max live orders per day</label>
+          <input
+            type="number"
+            min={1}
+            max={200}
+            step={1}
+            placeholder="20"
+            value={liveMaxOrdersPerDay}
+            onChange={(e) => setLiveMaxOrdersPerDay(e.target.value)}
             className="w-full rounded-lg border border-brand-navy/15 px-3 py-2 text-sm outline-none focus:border-brand-primary"
           />
         </div>
