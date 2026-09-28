@@ -43,7 +43,7 @@ const sections: LegalSection[] = [
     title: "Your account & communications",
     paragraphs: [
       "You are responsible for the security of your account credentials and for all activity under your account, including strategies you create or authorize to trade.",
-      "By creating an account, you consent to receive transactional emails necessary to operate it — account verification, sign-in links, password resets, and security notices. We do not send marketing email. See our Privacy Policy for how we handle bounces, complaints and unsubscribe requests.",
+      "By creating an account, you consent to receive the service communications needed to operate it — account verification, sign-in links, password resets, security notices, replies from our support team, and important notices about your account or the Service (such as planned maintenance or changes to these Terms) — by email and in the app. We do not send marketing email. See our Privacy Policy for how we handle bounces, complaints and unsubscribe requests.",
     ],
   },
   {
@@ -86,7 +86,7 @@ const sections: LegalSection[] = [
     id: "termination",
     title: "Termination",
     paragraphs: [
-      "You may stop using the Service and close your account at any time. We may suspend or terminate access for breach of these Terms, suspected fraud or abuse, or as required by law, with notice where reasonably practicable.",
+      "You may stop using the Service and close your account at any time. We may suspend or terminate access for breach of these Terms, suspected fraud or abuse, or as required by law, with notice where reasonably practicable. While an account is suspended it cannot sign in and its paper-trading sessions are paused; its data is kept unless you ask us to delete it. If you believe a suspension is a mistake, contact support@myalgoagent.com.",
     ],
   },
   {
@@ -94,7 +94,7 @@ const sections: LegalSection[] = [
     title: "Force majeure, notices & severability",
     paragraphs: [
       "We are not liable for any failure or delay in the Service caused by events outside our reasonable control, including exchange or broker-API outages, internet or cloud-provider disruptions, natural disasters, or government action.",
-      "We may give you notice under these Terms by email to the address on your account, or by posting a notice on this page. If any provision of these Terms is found unenforceable, the remaining provisions remain in full effect. These Terms, together with our Privacy Policy and Risk Disclosure, are the entire agreement between you and MyAlgoAgent regarding the Service, superseding any prior agreements on the same subject.",
+      "We may give you notice under these Terms by email to the address on your account, by a notice in the app, or by posting a notice on this page. If any provision of these Terms is found unenforceable, the remaining provisions remain in full effect. These Terms, together with our Privacy Policy and Risk Disclosure, are the entire agreement between you and MyAlgoAgent regarding the Service, superseding any prior agreements on the same subject.",
     ],
   },
   {

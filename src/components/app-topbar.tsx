@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bell, Link2, LogOut } from "lucide-react";
+import { Bell, Link2, LogOut, ShieldHalf } from "lucide-react";
 import { signOut } from "@/lib/auth";
 import MobileNavDrawer from "@/components/mobile-nav-drawer";
 import TopbarTitle from "@/components/topbar-title";
@@ -10,11 +10,13 @@ export default function AppTopbar({
   unreadCount = 0,
   agentName,
   liveSessions,
+  isStaff = false,
 }: {
   user: { name?: string | null; email?: string | null; image?: string | null };
   unreadCount?: number;
   agentName: string;
   liveSessions: number;
+  isStaff?: boolean;
 }) {
   const displayName = user.name ?? user.email ?? "";
   const initials = avatarInitials(user.name, user.email);
@@ -31,6 +33,15 @@ export default function AppTopbar({
           <Link2 size={13} />
           Connect broker
         </Link>
+        {isStaff && (
+          <Link
+            href="/admin"
+            className="flex items-center gap-1.5 rounded-full bg-brand-navy px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-brand-navy/85"
+          >
+            <ShieldHalf size={13} />
+            <span className="hidden sm:inline">Admin</span>
+          </Link>
+        )}
         <Link
           href="/app/notifications"
           data-tour="notifications-bell"

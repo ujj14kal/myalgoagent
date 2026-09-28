@@ -27,6 +27,7 @@ export default function CookiePolicyPage() {
         <ul>
           <li><strong>Essential cookies</strong> — required for authentication and session security; the platform cannot function without these.</li>
           <li><strong>Preference cookies</strong> — remember settings such as theme or dashboard layout.</li>
+          <li><strong>Browser storage</strong> — the app keeps a few small items in your browser&rsquo;s local storage, such as which announcements you&rsquo;ve dismissed and your agent chat preferences. They stay on your device and aren&rsquo;t sent to us.</li>
           <li><strong>Analytics cookies</strong> — Google Analytics (gtag.js), used to understand aggregate site usage such as page views and traffic sources. It does not receive your trading data, strategies, or account credentials.</li>
         </ul>
         <h2>Managing cookies</h2>

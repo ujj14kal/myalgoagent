@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Layers,
   Link2,
+  LifeBuoy,
   ListOrdered,
   Radio,
   ShieldCheck,
@@ -58,6 +59,7 @@ export const navGroups: NavGroup[] = [
       { href: "/app/account", label: "Account / Settings", icon: UserRound },
       { href: "/app/agent-settings", label: "Agent Settings", icon: Bot },
       { href: "/app/notifications", label: "Notifications", icon: Bell },
+      { href: "/app/support", label: "Help & Support", icon: LifeBuoy },
     ],
   },
 ];

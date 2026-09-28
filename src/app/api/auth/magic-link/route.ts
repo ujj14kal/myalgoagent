@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
 
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return NextResponse.redirect(failUrl);
+    if (user.status === "SUSPENDED") return NextResponse.redirect(new URL("/login?error=Suspended", req.url));
 
     await reactivateIfPending(user.id);
     await createSessionForUser(user.id);

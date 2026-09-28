@@ -123,3 +123,30 @@ export async function sendSupportCaseConfirmation(to: string, caseId: string) {
     replyTo: "support@myalgoagent.com",
   });
 }
+
+/** A reply from our team to a support case or piece of feedback. */
+export async function sendSupportReplyEmail(to: string, opts: { ref: string; topic: string; body: string; staffName: string; threadUrl: string | null }) {
+  const subject = oneLine(`Re: ${opts.topic} [${opts.ref}]`, 250);
+  const view = opts.threadUrl
+    ? `<p style="margin-top:20px"><a href="${e(opts.threadUrl)}" style="display:inline-block;background:#471898;color:#fff;padding:10px 18px;border-radius:10px;text-decoration:none;font-weight:600">View and reply on MyAlgoAgent</a></p>`
+    : `<p>You can reply to this email to continue the conversation.</p>`;
+  await sendEmail({
+    to,
+    subject,
+    html: wrap(
+      `<p style="color:#666;font-size:13px">${e(opts.ref)} · ${e(opts.topic)}</p><div style="white-space:pre-wrap;border-left:3px solid #471898;padding-left:12px">${e(opts.body)}</div><p style="margin-top:16px">— ${e(opts.staffName)}, MyAlgoAgent support</p>${view}`,
+    ),
+    text: `${opts.ref} · ${opts.topic}\n\n${opts.body}\n\n— ${opts.staffName}, MyAlgoAgent support\n\n${opts.threadUrl ? `View and reply: ${opts.threadUrl}` : "Reply to this email to continue the conversation."}`,
+    replyTo: "support@myalgoagent.com",
+  });
+}
+
+/** A service notice to every user (maintenance, changes to the service or terms) — never marketing. */
+export async function sendAnnouncementEmail(to: string, opts: { title: string; body: string; link: string | null }) {
+  await sendEmail({
+    to,
+    subject: oneLine(opts.title, 200),
+    html: wrap(`<h2 style="font-size:18px;margin:0 0 8px">${e(opts.title)}</h2><div style="white-space:pre-wrap">${e(opts.body)}</div>${opts.link ? `<p style="margin-top:16px"><a href="${e(opts.link)}">Learn more</a></p>` : ""}`),
+    text: `${opts.title}\n\n${opts.body}${opts.link ? `\n\n${opts.link}` : ""}`,
+  });
+}

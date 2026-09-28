@@ -5,8 +5,8 @@ import { auth, signOut } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { sendOtpEmail, sendDeletionConfirmedEmail } from "@/lib/email";
+import { DELETION_WINDOW_DAYS } from "@/lib/account-status";
 
-const DELETION_WINDOW_DAYS = 15;
 const OTP_EXPIRY_MS = 10 * 60_000;
 const CONFIRMATION_PHRASE = "delete-my-account";
 

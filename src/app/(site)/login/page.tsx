@@ -2,6 +2,7 @@ import Agent2D from "@/components/robot/agent-2d";
 import { redirect } from "next/navigation";
 import { auth, signIn } from "@/lib/auth";
 import LoginForm from "@/components/login-form";
+import { SUSPENDED_MESSAGE } from "@/lib/account-status";
 
 export const metadata = {
   title: "Sign in",
@@ -17,6 +18,7 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   OAuthCreateAccount: "Couldn't create an account with that provider — please try again or use a password.",
   Verification: "That sign-in link is invalid or has expired.",
   Configuration: "Sign-in is temporarily unavailable — please try again shortly.",
+  Suspended: SUSPENDED_MESSAGE,
   Default: "Something went wrong signing you in — please try again.",
 };
 

@@ -9,6 +9,14 @@ datasource db {
 enum UserStatus {
   ACTIVE
   PENDING_DELETION
+  SUSPENDED
+}
+
+// Staff access to the admin portal (/admin). Null for every normal user.
+enum AdminRole {
+  OWNER // everything, including managing the team
+  ADMIN // users, announcements, jobs, system
+  SUPPORT // inbox and read-only user lookups
 }
 
 model User {
@@ -27,6 +35,12 @@ model User {
 
   deletionRequestedAt  DateTime?
   deletionScheduledFor DateTime?
+
+  adminRole       AdminRole?
+  suspendedAt     DateTime?
+  suspendedReason String?
+  // Last time the user opened the app (updated at most every few minutes).
+  lastSeenAt      DateTime?
 
   agentName           String?
   tutorialCompletedAt DateTime?
@@ -84,6 +98,21 @@ model PasswordResetToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+// Where a support case or piece of feedback is in its life: OPEN needs a
+// reply from us, PENDING is waiting on the user, RESOLVED is done.
+enum TicketStatus {
+  OPEN
+  PENDING
+  RESOLVED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
 model Feedback {
   id        String   @id @default(cuid())
   userId    String
@@ -91,7 +120,16 @@ model Feedback {
   message   String   @db.Text
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status         TicketStatus   @default(OPEN)
+  priority       TicketPriority @default(NORMAL)
+  assigneeId     String?
+  tags           String[]       @default([])
+  lastActivityAt DateTime       @default(now())
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages SupportMessage[]
+
+  @@index([status, lastActivityAt])
 }
 
 model SupportCase {
@@ -103,7 +141,101 @@ model SupportCase {
   message    String   @db.Text
   createdAt  DateTime @default(now())
 
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  status         TicketStatus   @default(OPEN)
+  priority       TicketPriority @default(NORMAL)
+  assigneeId     String?
+  tags           String[]       @default([])
+  lastActivityAt DateTime       @default(now())
+
+  user     User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  messages SupportMessage[]
+
+  @@index([status, lastActivityAt])
+}
+
+enum SupportAuthor {
+  USER // the person who raised it
+  STAFF // a reply from our team (the user sees it)
+  NOTE // internal note (never shown to the user)
+}
+
+// One message in a support case or feedback thread, after the first one
+// (which lives on the case/feedback row itself).
+model SupportMessage {
+  id          String        @id @default(cuid())
+  caseId      String?
+  feedbackId  String?
+  author      SupportAuthor
+  authorId    String? // user id of whoever wrote it (staff or the user)
+  authorName  String // kept so the thread reads right even if that account is deleted
+  body        String        @db.Text
+  // Email delivery of a staff reply: "sent", "failed: <reason>" or null (in-app only / not a reply).
+  emailStatus String?
+  createdAt   DateTime      @default(now())
+
+  supportCase SupportCase? @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  feedback    Feedback?    @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, createdAt])
+  @@index([feedbackId, createdAt])
+}
+
+// Everything staff do in the admin portal, including viewing a user's
+// details. Kept without a foreign key so the trail survives account deletion.
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorEmail String
+  action     String // e.g. "user.suspend", "case.reply", "user.view"
+  targetType String?
+  targetId   String?
+  summary    String?
+  meta       Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([targetType, targetId])
+  @@index([actorId, createdAt])
+}
+
+enum AnnouncementLevel {
+  INFO
+  SUCCESS
+  WARNING
+  CRITICAL
+}
+
+// A banner shown across the app (e.g. planned maintenance), optionally also
+// sent to everyone as a notification.
+model Announcement {
+  id          String            @id @default(cuid())
+  title       String
+  body        String            @db.Text
+  level       AnnouncementLevel @default(INFO)
+  link        String?
+  startsAt    DateTime          @default(now())
+  endsAt      DateTime?
+  active      Boolean           @default(true)
+  notifiedAt  DateTime?
+  createdById String?
+  createdAt   DateTime          @default(now())
+
+  @@index([active, startsAt])
+}
+
+// One run of a scheduled job (paper-trade sync, account purge), so the admin
+// portal can show whether they're healthy without opening AWS.
+model JobRun {
+  id         String    @id @default(cuid())
+  job        String
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  ok         Boolean?
+  summary    Json?
+  error      String?
+
+  @@index([job, startedAt])
 }
 
 model Account {
@@ -504,6 +636,8 @@ enum NotificationType {
   RISK_EVENT
   SESSION_STOPPED
   SIGNAL_ALERT
+  SUPPORT_REPLY
+  ANNOUNCEMENT
 }
 
 model Notification {
@@ -512,6 +646,8 @@ model Notification {
   type           NotificationType
   message        String
   paperSessionId String?
+  // Where the notification leads (e.g. a support thread), when not a paper session.
+  link           String?
   read           Boolean          @default(false)
   createdAt      DateTime         @default(now())
 

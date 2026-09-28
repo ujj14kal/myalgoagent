@@ -48,6 +48,13 @@ export default function SecurityPage() {
           <li>Every trading action is checked on our servers, so limits can&rsquo;t be bypassed from the browser</li>
         </ul>
 
+        <h2>Who at MyAlgoAgent can see your data</h2>
+        <ul>
+          <li>Only a small, named team, each with the least access their role needs &mdash; support staff can answer you, only administrators can act on an account</li>
+          <li>Nobody on the team can see your password, your broker keys or tokens, or your conversations with your AI agent</li>
+          <li>Every action the team takes &mdash; including opening your account details &mdash; is recorded with who did it and when</li>
+        </ul>
+
         <h2>Monitoring & backups</h2>
         <p>
           The platform is monitored around the clock and our team is alerted

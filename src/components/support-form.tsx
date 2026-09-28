@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { submitSupportCaseAction } from "@/lib/feedback-actions";
 
 type Step = "form" | "confirm-email" | "success";
@@ -13,6 +14,7 @@ export default function SupportForm({ initialEmail }: { initialEmail: string }) 
   const [caseId, setCaseId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const router = useRouter();
 
   function handleFormSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -31,6 +33,8 @@ export default function SupportForm({ initialEmail }: { initialEmail: string }) 
     }
     setCaseId(result.caseId);
     setStep("success");
+    // On the in-app Support page, the new case appears in the list straight away.
+    router.refresh();
   }
 
   if (step === "success" && caseId) {
@@ -39,7 +43,8 @@ export default function SupportForm({ initialEmail }: { initialEmail: string }) 
         <p className="text-sm font-semibold text-brand-navy">Request submitted</p>
         <p className="mt-2 text-sm text-brand-navy/70">
           Your case ID is <strong>{caseId}</strong>. Our support team will
-          reach out to <strong>{email}</strong> within 2–3 days.
+          reply to <strong>{email}</strong> within 2–3 days — and if you&apos;re
+          signed in, on your Help &amp; Support page too.
         </p>
       </div>
     );

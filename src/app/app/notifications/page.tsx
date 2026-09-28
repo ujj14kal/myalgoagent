@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import NotificationActions from "@/components/notification-actions";
 import EmptyState from "@/components/empty-state";
-import { Bell, CircleCheck, CircleStop, TriangleAlert } from "lucide-react";
+import { Bell, CircleCheck, CircleStop, LifeBuoy, Megaphone, TriangleAlert } from "lucide-react";
 import PageHeader from "@/components/ui/page-header";
 
 export const metadata = { title: "Notifications", robots: { index: false } };
@@ -12,6 +12,8 @@ const TYPE_META: Record<string, { label: string; cls: string; Icon: typeof Bell 
   ORDER_FILLED: { label: "Order filled", cls: "bg-brand-buy/10 text-brand-buy", Icon: CircleCheck },
   RISK_EVENT: { label: "Risk event", cls: "bg-brand-gold/15 text-[#8a7437]", Icon: TriangleAlert },
   SESSION_STOPPED: { label: "Session stopped", cls: "bg-brand-navy/[0.06] text-brand-navy/60", Icon: CircleStop },
+  SUPPORT_REPLY: { label: "Support replied", cls: "bg-brand-primary/10 text-brand-primary", Icon: LifeBuoy },
+  ANNOUNCEMENT: { label: "Announcement", cls: "bg-brand-blue-light text-[#23408f]", Icon: Megaphone },
 };
 
 export default async function NotificationsPage() {
@@ -31,7 +33,7 @@ export default async function NotificationsPage() {
       <PageHeader
         title="Notifications"
         icon={Bell}
-        description="Order fills and risk events from your paper trading sessions."
+        description="Order fills and risk events from your paper trading, replies from our support team, and announcements."
         actions={unreadCount > 0 ? <NotificationActions markAll /> : undefined}
       />
 
@@ -56,8 +58,8 @@ export default async function NotificationsPage() {
                     {!n.read && <span className="h-1.5 w-1.5 rounded-full bg-brand-primary" aria-label="Unread" />}
                   </div>
                   <p className="mt-0.5 text-sm font-medium text-brand-navy">
-                    {n.paperSessionId ? (
-                      <Link href={`/app/paper-trading/${n.paperSessionId}`} className="hover:text-brand-primary hover:underline">
+                    {n.link || n.paperSessionId ? (
+                      <Link href={n.link ?? `/app/paper-trading/${n.paperSessionId}`} className="hover:text-brand-primary hover:underline">
                         {n.message}
                       </Link>
                     ) : (

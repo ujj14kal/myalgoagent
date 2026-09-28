@@ -28,6 +28,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: {
     signIn: "/login",
   },
+  callbacks: {
+    // Suspended accounts can't sign in with Google either (password and
+    // magic-link sign-in check this themselves).
+    async signIn({ user }) {
+      if (!user.email) return true;
+      const existing = await prisma.user.findUnique({ where: { email: user.email.toLowerCase() }, select: { status: true } });
+      return existing?.status === "SUSPENDED" ? "/login?error=Suspended" : true;
+    },
+  },
   events: {
     async signIn({ user, account, profile }) {
       if (!user.id) return;

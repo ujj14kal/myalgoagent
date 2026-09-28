@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { createSessionForUser } from "@/lib/session-cookie";
-import { reactivateIfPending } from "@/lib/account-status";
+import { reactivateIfPending, SUSPENDED_MESSAGE } from "@/lib/account-status";
 import { checkRateLimit, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request-ip";
 import { LIMITS, oneLine, text, tooLong } from "@/lib/text";
@@ -104,6 +104,7 @@ export async function loginWithPasswordAction(
 
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) return { ok: false, error: "Incorrect username or password." };
+  if (user.status === "SUSPENDED") return { ok: false, error: SUSPENDED_MESSAGE };
 
   await reactivateIfPending(user.id);
   await createSessionForUser(user.id);
