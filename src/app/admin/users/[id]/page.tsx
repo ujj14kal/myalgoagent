@@ -71,14 +71,14 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
 
       <section className="overflow-hidden rounded-2xl bg-white shadow-[0_12px_32px_-20px_rgba(14,27,45,0.3)] ring-1 ring-black/[0.05]">
         <div className="h-20 bg-[radial-gradient(120%_140%_at_0%_0%,#2a1766_0%,#471898_45%,#bda360_130%)]" />
-        <div className="-mt-10 flex flex-col gap-4 px-6 pb-5 sm:flex-row sm:items-end">
+        <div className="flex flex-col gap-4 px-6 pb-5 sm:flex-row sm:items-start">
           {u.image ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={u.image} alt="" className="h-20 w-20 rounded-2xl object-cover ring-4 ring-white" />
+            <img src={u.image} alt="" className="-mt-10 h-20 w-20 shrink-0 rounded-2xl object-cover ring-4 ring-white" />
           ) : (
-            <span className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-primary to-brand-primary-light text-2xl font-bold text-white ring-4 ring-white">{avatarInitials(u.name, u.email)}</span>
+            <span className="-mt-10 flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-primary to-brand-primary-light text-2xl font-bold text-white ring-4 ring-white">{avatarInitials(u.name, u.email)}</span>
           )}
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 pt-3">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-bold text-brand-navy">{u.name ?? u.username ?? u.email}</h1>
               {u.status === "ACTIVE" ? <Pill tone="green" dot>active</Pill> : u.status === "SUSPENDED" ? <Pill tone="red" dot>suspended</Pill> : <Pill tone="gold" dot>deletion {ist(u.deletionScheduledFor, false)}</Pill>}
@@ -107,7 +107,7 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
           <dl className="space-y-2 text-sm">
             {[
               ["Sign-in methods", logins.join(" · ")],
-              ["Email verified", u.emailVerified ? ist(u.emailVerified, false) : "not via Google/link yet"],
+              ["Email verified", u.emailVerified ? ist(u.emailVerified, false) : "not recorded"],
               ["Phone", maskPhone(u.phone)],
               ["Agent name", u.agentName ?? "default"],
               ["Watchlist", `${u._count.watchlistItems} instruments`],

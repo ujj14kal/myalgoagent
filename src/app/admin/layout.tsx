@@ -10,7 +10,7 @@ import { daysAgo } from "@/lib/admin/time";
 // the tab title mustn't reveal that the portal exists.
 export async function generateMetadata(): Promise<Metadata> {
   const staff = await currentStaff();
-  return { title: staff ? "Admin · MyAlgoAgent" : "Page not found", robots: { index: false, follow: false } };
+  return { title: staff ? { absolute: "Admin · MyAlgoAgent" } : "Page not found", robots: { index: false, follow: false } };
 }
 export const dynamic = "force-dynamic";
 
