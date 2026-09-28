@@ -1,7 +1,6 @@
-import "server-only";
 import { ProxyAgent, fetch as undiciFetch } from "undici";
 
-// Broker API calls leave through our egress relay (infra/egress-proxy) when it
+// Server-side only. Broker API calls leave through our egress relay (infra/egress-proxy) when it
 // is configured, so brokers always see the one static IP registered on the
 // client's account. Unset BROKER_EGRESS_URL to fall back to calling brokers
 // directly from wherever the app runs (Amplify) — nothing else changes.
