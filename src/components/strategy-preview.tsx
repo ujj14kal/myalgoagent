@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { ArrowDownRight, ArrowUpRight, PlayCircle, RefreshCw } from "lucide-react";
 import CandlestickChart from "@/components/candlestick-chart";
+import StrategyReplay from "@/components/strategy-replay";
 import { previewStrategy } from "@/lib/strategy-preview-actions";
 import type { PreviewTrade, StrategyPreview as Preview } from "@/lib/strategy-preview";
 import type { StrategyInput } from "@/lib/strategy-actions";
@@ -96,8 +97,18 @@ export function PreviewResultView({ preview, direction }: { preview: Preview; di
             )}
           </div>
 
-          <div className="overflow-hidden rounded-xl ring-1 ring-black/5">
-            <CandlestickChart candles={preview.candles} markers={markers} />
+          {preview.trades.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Watch a trade play out</p>
+              <StrategyReplay preview={preview} />
+            </div>
+          )}
+
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Every entry and exit in the last {preview.periodLabel}</p>
+            <div className="overflow-hidden rounded-xl ring-1 ring-black/5">
+              <CandlestickChart candles={preview.candles} markers={markers} />
+            </div>
           </div>
 
           {preview.trades.length === 0 ? (

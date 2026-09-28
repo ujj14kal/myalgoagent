@@ -20,7 +20,7 @@ const steps = [
   { title: "4. Validation", text: "Review trade-by-trade results, the equity curve, drawdown and performance metrics before trusting a strategy with any capital." },
   { title: "5. Paper trading", text: "Run the validated strategy forward on daily or intraday candles using virtual capital only, to see how it behaves on new data before risking money." },
   { title: "6. Risk controls", text: "Set a per-session loss limit, a losing-streak limit and the kill switch. These are enforced server-side, independent of the UI." },
-  { title: "7. Broker connection", text: "Connect your own Dhan, Zerodha, Upstox, Fyers or Angel One account with your own API key. You log in on your broker's page, and the platform verifies the connection before marking it connected." },
+  { title: "7. Broker connection", text: "Connect your own account at Dhan, Zerodha, Upstox, Fyers, Angel One, Groww, ICICI Direct, 5paisa or Alice Blue with your own API key. You log in (or approve the key) on your broker's own site, and the platform verifies the connection before marking it connected." },
   { title: "8. Live execution", text: "With explicit confirmation, the strategy can place real orders through the broker, with the same risk controls active.", soon: true },
 ];
 

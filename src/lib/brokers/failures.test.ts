@@ -14,6 +14,7 @@ describe("classifyBrokerMessage", () => {
     ["redirect_uri mismatch", "redirect_mismatch"],
     ["Invalid dhanClientId", "missing_client_id"],
     ["", "unknown"],
+    ["API key not approved for today", "approval_needed"],
   ] as [string, FailureCode][])("%s → %s", (msg, code) => {
     expect(classifyBrokerMessage(msg, "unknown")).toBe(code);
   });
@@ -21,7 +22,7 @@ describe("classifyBrokerMessage", () => {
 
 describe("describeFailure", () => {
   const codes: FailureCode[] = [
-    "cancelled", "bad_keys", "missing_client_id", "redirect_mismatch", "code_expired", "login_timeout", "state_mismatch",
+    "cancelled", "approval_needed", "bad_keys", "missing_client_id", "redirect_mismatch", "code_expired", "login_timeout", "state_mismatch",
     "no_login_started", "no_code", "session_rejected", "session_ended", "unreachable", "not_signed_in", "not_ready", "rate_limited", "unknown",
   ];
   it.each(codes)("%s has a title, reason and at least one fix step naming no placeholders", (code) => {

@@ -4,6 +4,7 @@
 
 export type FailureCode =
   | "cancelled"
+  | "approval_needed"
   | "bad_keys"
   | "missing_client_id"
   | "redirect_mismatch"
@@ -37,6 +38,17 @@ export function describeFailure(f: Failure, broker: string): FailureText {
         title: "The login was cancelled",
         reason: `The ${broker} login page was closed or cancelled before it finished, so ${broker} didn't give us access.`,
         steps: ["Click “Try again”.", `Log in on ${broker}’s page with your password and 2FA, and approve access when asked.`],
+        retry: "login",
+      };
+    case "approval_needed":
+      return {
+        title: `Approve your key on ${broker} first`,
+        reason: `${broker} only issues today’s session after you approve your API key on its website. It hasn’t been approved yet today — or the key or secret doesn’t match.`,
+        steps: [
+          `Open ${broker === "Groww" ? "groww.in/trade-api/api-keys" : `${broker}’s API keys page`} and click Approve next to your key.`,
+          "Come back and click “Try again”.",
+          "If it still fails, copy the API key and secret again and use “Replace keys”.",
+        ],
         retry: "login",
       };
     case "bad_keys":
@@ -160,6 +172,7 @@ export function classifyBrokerMessage(message: string | undefined, fallback: Fai
   const m = (message ?? "").toLowerCase();
   if (!m) return fallback;
   if (/redirect/.test(m)) return "redirect_mismatch";
+  if (/approv/.test(m)) return "approval_needed";
   if (/(expired|already used|invalid|incorrect).{0,30}(code|request_token|tokenid|token id|auth_code)|(code|request_token|tokenid|auth_code).{0,30}(expired|invalid)/.test(m)) return "code_expired";
   if (/client.?id|dhanclientid/.test(m) && !/client_id=|invalid_client/.test(m)) return "missing_client_id";
   if (/api.?key|secret|app.?id|invalid_client|client_id|checksum|unauthori[sz]ed|invalid credentials|appidhash/.test(m)) return "bad_keys";

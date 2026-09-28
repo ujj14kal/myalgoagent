@@ -13,7 +13,9 @@ import type { Failure } from "@/lib/brokers/failures";
 
 type Phase = { kind: "working" } | { kind: "connected"; account: ConnectedAccount } | { kind: "failed"; failure: Failure };
 
-const STEPS = ["Back from {broker}", "Verifying your login", "Getting today’s secure session", "Checking your account"];
+const REDIRECT_STEPS = ["Back from {broker}", "Verifying your login", "Getting today’s secure session", "Checking your account"];
+const APPROVAL_STEPS = ["Using the key you approved on {broker}", "Signing the request", "Getting today’s secure session", "Checking your account"];
+const STEP_COUNT = REDIRECT_STEPS.length; // both flows have the same number of steps
 const STEP_MS = 650;
 // How long the agent celebrates on the card before flying back to its home.
 const CELEBRATE_MS = 2600;
@@ -75,6 +77,7 @@ function Confetti() {
 }
 
 export default function BrokerConnecting({ broker, query }: { broker: BrokerInfo; query: Record<string, string> }) {
+  const STEPS = broker.flow === "approval" ? APPROVAL_STEPS : REDIRECT_STEPS;
   const { agentName, flyHome } = useAgentChat();
   const [phase, setPhase] = useState<Phase>({ kind: "working" });
   const [step, setStep] = useState(0);
@@ -95,14 +98,14 @@ export default function BrokerConnecting({ broker, query }: { broker: BrokerInfo
       .catch((): { ok: false; failure: Failure } => ({ ok: false, failure: { code: "unknown" } }))
       .then((r) => {
         // Let the progress steps play through so the outcome doesn't flash.
-        const wait = Math.max(0, STEPS.length * STEP_MS - (Date.now() - t0));
+        const wait = Math.max(0, STEP_COUNT * STEP_MS - (Date.now() - t0));
         setTimeout(() => setPhase(r.ok ? { kind: "connected", account: r.account } : { kind: "failed", failure: r.failure }), wait);
       });
   }, [broker.id, query]);
 
   useEffect(() => {
     if (phase.kind !== "working") return;
-    const id = setInterval(() => setStep((s) => Math.min(s + 1, STEPS.length - 1)), STEP_MS);
+    const id = setInterval(() => setStep((s) => Math.min(s + 1, STEP_COUNT - 1)), STEP_MS);
     return () => clearInterval(id);
   }, [phase.kind]);
 

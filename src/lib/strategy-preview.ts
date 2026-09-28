@@ -6,10 +6,12 @@ import { STRATEGY_TIMEFRAMES, engineEntryOrder, engineSession, normalizeSession,
 import { fetchAuxCandles } from "@/lib/strategy-aux-data";
 import { runBacktest, type BacktestTradeResult } from "@/lib/backtest/run";
 import { conditionToText } from "@/lib/strategy/format";
-import { NEVER_EXIT_CONDITION, isNeverExitCondition, type ConditionNode } from "@/lib/strategy/types";
-import { evaluateConditionsPerBar, type AuxCandleMap } from "@/lib/strategy/evaluate";
+import { isNeverExitCondition, type ConditionNode } from "@/lib/strategy/types";
+import { conditionTruthPerBar, type AuxCandleMap } from "@/lib/strategy/evaluate";
 import { INDICATOR_CATALOG } from "@/lib/strategy/indicator-catalog";
 import type { StrategyInput } from "@/lib/strategy-actions";
+import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
+import { buildReplayStudies, entryCheckers, tradeLevels, type ReplayRisk, type ReplayStudies, type TradeReplay } from "@/lib/strategy-replay";
 
 // The strategy builder's "See it in action" demo: runs an unsaved draft
 // through the same validator and backtest engine on recent data. Server-only
@@ -22,6 +24,8 @@ export type PreviewTrade = Pick<BacktestTradeResult, "entryTime" | "entryPrice" 
   entryReason: string;
   /** Same for a rule-based exit. */
   exitRuleReason?: string;
+  /** What the animated replay needs: signal/entry/exit candles and the risk levels on each. */
+  replay: TradeReplay;
 };
 
 export type StrategyPreview = {
@@ -38,6 +42,11 @@ export type StrategyPreview = {
   periodLabel: string;
   intraday: boolean;
   entryOrderLabel: string;
+  direction: "LONG" | "SHORT";
+  /** How the entry checklist combines: every part must be true (AND) or any one (OR). */
+  entryJoin: "AND" | "OR" | "SINGLE";
+  studies: ReplayStudies;
+  risk: ReplayRisk;
 };
 
 const PERIOD_LABEL: Partial<Record<string, string>> = { "1d": "1 day", "5d": "5 days", "1mo": "1 month", "3mo": "3 months", "6mo": "6 months", "1y": "1 year" };
@@ -65,7 +74,7 @@ function readableRule(node: ConditionNode): string {
 function firedParts(node: ConditionNode, candles: Candle[], aux: AuxCandleMap): (barIdx: number) => string {
   const whole = readableRule(node);
   if (node.kind !== "group" || node.op !== "OR" || node.children.length < 2) return () => whole;
-  const parts = node.children.map((child) => ({ text: readableRule(child), series: evaluateConditionsPerBar(candles, child, NEVER_EXIT_CONDITION, aux).entry }));
+  const parts = node.children.map((child) => ({ text: readableRule(child), series: conditionTruthPerBar(candles, child, aux) }));
   return (barIdx) => {
     const hit = parts.filter((p) => p.series[barIdx]).map((p) => p.text);
     return hit.length ? hit.join(" and ") : whole;
@@ -123,6 +132,12 @@ export async function computeStrategyPreview(userId: string | null, input: Strat
     );
 
     const entryWhy = firedParts(compiled.entryCondition, candles, aux);
+    const checks = entryCheckers(candles, compiled.entryCondition, aux, readableRule);
+    const rm = { stopLoss: leg(input.stopLoss), target: leg(input.target), trailingSl: leg(input.trailingSl) };
+    const usesAtr = [rm.stopLoss, rm.target, rm.trailingSl].some((l) => l?.unit === "ATR_MULTIPLE");
+    const atrByTime = usesAtr ? new Map(computeIndicatorSeries(candles, "ATR", [14]).map((p) => [p.time, p.value])) : null;
+    const atrAt = (idx: number) => atrByTime?.get(candles[idx]?.time);
+    const indexOf = new Map(candles.map((c, i) => [c.time, i]));
     const exitWhy = isNeverExitCondition(compiled.exitCondition) ? null : firedParts(compiled.exitCondition, candles, aux);
     return {
       ok: true,
@@ -131,7 +146,9 @@ export async function computeStrategyPreview(userId: string | null, input: Strat
         candles,
         trades: result.trades.map(({ entryTime, entryPrice, exitTime, exitPrice, quantity, netPnl, netPnlPct, exitReason }) => {
           // Fills happen at the next candle's open, so the rule was true on the candle before.
-          const signalBar = (t: number) => candles.findIndex((c) => c.time === t) - 1;
+          const signalBar = (t: number) => (indexOf.get(t) ?? 0) - 1;
+          const entryIdx = indexOf.get(entryTime) ?? 0;
+          const exitIdx = indexOf.get(exitTime) ?? candles.length - 1;
           return {
             entryTime,
             entryPrice,
@@ -143,6 +160,13 @@ export async function computeStrategyPreview(userId: string | null, input: Strat
             exitReason,
             entryReason: entryWhy(signalBar(entryTime)),
             ...(exitReason === "exit_rule" && exitWhy ? { exitRuleReason: exitWhy(signalBar(exitTime)) } : {}),
+            replay: {
+              signalIdx: Math.max(0, entryIdx - 1),
+              entryIdx,
+              exitIdx,
+              ...tradeLevels(candles, entryIdx, exitIdx, entryPrice, rm, input.direction, atrAt),
+              checks: checks(Math.max(0, entryIdx - 1)),
+            },
           };
         }),
         entryRule: readableRule(compiled.entryCondition),
@@ -160,6 +184,14 @@ export async function computeStrategyPreview(userId: string | null, input: Strat
               ? `limit orders at ₹${session.limitValue}`
               : `limit orders ${session.limitValue}% from the signal price`
             : "market orders",
+        direction: input.direction,
+        entryJoin: compiled.entryCondition.kind === "group" && compiled.entryCondition.children.length > 1 ? compiled.entryCondition.op : "SINGLE",
+        studies: buildReplayStudies(candles, compiled.entryCondition, compiled.exitCondition, readableRule),
+        risk: {
+          stopLoss: rm.stopLoss ? { unit: rm.stopLoss.unit, value: rm.stopLoss.value } : null,
+          target: rm.target ? { unit: rm.target.unit, value: rm.target.value } : null,
+          trailing: rm.trailingSl ? { unit: rm.trailingSl.unit, value: rm.trailingSl.value } : null,
+        },
       },
     };
   } catch (err) {

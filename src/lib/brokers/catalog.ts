@@ -12,6 +12,13 @@ export type BrokerInfo = {
   logo: string;
   /** "live" = connect works today; "next" = guide shown, connecting comes in a later release. */
   availability: "live" | "next";
+  /**
+   * How the daily login works. "redirect" (default): the user logs in on the
+   * broker's page and is sent back to our Redirect URL. "approval": no
+   * redirect — the user approves the API key on the broker's site each day and
+   * we fetch the day's token with a signed request (Groww).
+   */
+  flow?: "redirect" | "approval";
   /** Where the user creates their API app. */
   portal: { label: string; url: string };
   /** What the broker calls the field our callback URL goes into. */
@@ -137,33 +144,114 @@ export const BROKERS: BrokerInfo[] = [
     session: "Angel One sessions end at midnight — log in again each trading day.",
     notes: ["Angel One doesn’t allow market orders from algos — live strategies on Angel One will send limit orders."],
   },
-  ...(
-    [
-      ["groww", "Groww", "/brokers/groww.png", "groww.in/trade-api", "https://groww.in/trade-api"],
-      ["icicidirect", "ICICI Direct", "/brokers/icicidirect.png", "api.icicidirect.com", "https://api.icicidirect.com"],
-      ["kotak", "Kotak Neo", "/brokers/kotak.svg", "napi.kotaksecurities.com", "https://napi.kotaksecurities.com"],
-      ["5paisa", "5paisa", "/brokers/5paisa.png", "xstream.5paisa.com", "https://xstream.5paisa.com"],
-      ["aliceblue", "Alice Blue", "/brokers/aliceblue.png", "ant.aliceblueonline.com", "https://ant.aliceblueonline.com"],
-    ] as const
-  ).map(
-    ([id, name, logo, label, url]): BrokerInfo => ({
-      id,
-      name,
-      logo,
-      availability: "next",
-      portal: { label, url },
-      callbackFieldName: "Redirect URL",
-      fields: [],
-      steps: [
-        `Create an API app on ${label} — you can do this now so you’re ready.`,
-        "PASTE_CALLBACK",
-        `Keep the API key and secret safe. Connecting ${name} on this page is coming next.`,
-      ],
-      cost: "Check your broker’s API plan — most Indian brokers offer order APIs free.",
-      apiCost: "Not available here yet",
-      session: "Like every broker, you’ll log in again each trading day.",
-    }),
-  ),
+  {
+    id: "groww",
+    name: "Groww",
+    logo: "/brokers/groww.png",
+    availability: "live",
+    flow: "approval",
+    portal: { label: "groww.in/trade-api/api-keys", url: "https://groww.in/trade-api/api-keys" },
+    callbackFieldName: "",
+    fields: [
+      { name: "apiKey", label: "API key", placeholder: "Paste the API key" },
+      { name: "apiSecret", label: "API secret", placeholder: "Paste the API secret", secret: true },
+    ],
+    steps: [
+      "Log in at groww.in/trade-api/api-keys (subscribe to Groww Trade API if asked).",
+      "Click Generate API key, choose “API key & secret”, give it any name, e.g. MyAlgoAgent. No Redirect URL is needed for Groww.",
+      "Copy the API key and API secret.",
+      "Each trading day, click Approve next to the key on that same Groww page.",
+      "Paste both keys below and click Save & connect Groww — after that, it’s one click on “Connect for today” once you’ve approved the key.",
+    ],
+    cost: "Groww charges a monthly fee for Trade API access — check the current price on the API keys page.",
+    apiCost: "Paid Groww Trade API subscription",
+    session: "Groww tokens expire at 6 AM every day — approve the key on Groww, then connect for today.",
+  },
+  {
+    id: "icicidirect",
+    name: "ICICI Direct",
+    logo: "/brokers/icicidirect.png",
+    availability: "live",
+    portal: { label: "api.icicidirect.com", url: "https://api.icicidirect.com/apiuser/home" },
+    callbackFieldName: "Redirect URL",
+    fields: [
+      { name: "apiKey", label: "App key", placeholder: "Paste the Breeze App key" },
+      { name: "apiSecret", label: "Secret key", placeholder: "Paste the Secret key", secret: true },
+    ],
+    steps: [
+      "Log in at api.icicidirect.com with your ICICI Direct account and click Register an App (Breeze API).",
+      "Give the app any name, e.g. MyAlgoAgent.",
+      "PASTE_CALLBACK",
+      "Submit, then copy the App key and Secret key shown under View Apps.",
+      "Paste both below and click Save & log in to ICICI Direct.",
+    ],
+    cost: "Breeze API is free for ICICI Direct customers, including market data for your own use.",
+    apiCost: "Free",
+    session: "Breeze sessions last for the trading day — log in again each trading day.",
+  },
+  {
+    id: "5paisa",
+    name: "5paisa",
+    logo: "/brokers/5paisa.png",
+    availability: "live",
+    portal: { label: "xstream.5paisa.com", url: "https://xstream.5paisa.com/dashboard" },
+    callbackFieldName: "Redirect URL",
+    fields: [
+      { name: "clientId", label: "User ID", placeholder: "The API User ID", help: "From the API keys section of your Xstream dashboard — not your login ID." },
+      { name: "apiKey", label: "User key", placeholder: "Paste the User Key" },
+      { name: "apiSecret", label: "Encryption key", placeholder: "Paste the Encryption Key", secret: true },
+    ],
+    steps: [
+      "Log in at xstream.5paisa.com and open the API keys section of the dashboard.",
+      "Create (or view) your API keys.",
+      "PASTE_CALLBACK",
+      "Copy the User ID, User Key and Encryption Key shown there.",
+      "Paste all three below and click Save & log in to 5paisa.",
+    ],
+    cost: "Trading APIs are free.",
+    apiCost: "Free",
+    session: "5paisa tokens expire at 11:59 PM every day — log in again each trading day.",
+  },
+  {
+    id: "aliceblue",
+    name: "Alice Blue",
+    logo: "/brokers/aliceblue.png",
+    availability: "live",
+    portal: { label: "ant.aliceblueonline.com", url: "https://ant.aliceblueonline.com" },
+    callbackFieldName: "Redirect URL",
+    fields: [
+      { name: "apiKey", label: "App Code", placeholder: "Paste the App Code" },
+      { name: "apiSecret", label: "API Secret", placeholder: "Paste the API Secret", secret: true },
+    ],
+    steps: [
+      "Log in to Alice Blue ANT web, open Apps → API / Developer Portal, and create an app for Individual Trader use.",
+      "Give it any name, e.g. MyAlgoAgent.",
+      "PASTE_CALLBACK",
+      "Save, then copy the App Code and API Secret.",
+      "Paste both below and click Save & log in to Alice Blue.",
+    ],
+    cost: "Trading APIs are free.",
+    apiCost: "Free",
+    session: "Alice Blue sessions last for the trading day — log in again each trading day.",
+  },
+  {
+    id: "kotak",
+    name: "Kotak Neo",
+    logo: "/brokers/kotak.svg",
+    availability: "next",
+    portal: { label: "kotakneo.com", url: "https://www.kotakneo.com/platform/kotak-neo-trade-api/" },
+    callbackFieldName: "Redirect URL",
+    fields: [],
+    steps: [
+      "In the Kotak Neo app or web, open Invest → Trade API and create an application to get your consumer key.",
+      "Register TOTP for your account in an authenticator app — Kotak’s API login needs it.",
+      "Keep the consumer key safe. Connecting Kotak Neo on this page is coming next.",
+    ],
+    cost: "Kotak Neo Trade API is free.",
+    apiCost: "Free",
+    session: "Like every broker, you’ll log in again each trading day.",
+    notes: ["Kotak’s API login uses a TOTP code and your MPIN rather than a redirect to Kotak’s page, so it needs a different, extra-careful login step here."],
+  },
 ];
 
 export const LIVE_BROKER_IDS = BROKERS.filter((b) => b.availability === "live").map((b) => b.id);

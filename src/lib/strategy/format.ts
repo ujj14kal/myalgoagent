@@ -17,7 +17,7 @@ const OPERATORS: Record<ComparisonOperator, string> = {
   CROSSES_BELOW: "crossesBelow",
 };
 
-const humanize = (s: string) => s.toLowerCase().replace(/_/g, " ");
+const humanize = (s: string) => s.toLowerCase().replace(/_/g, " ").replace(/\bobv\b/g, "OBV");
 
 function suffix(o: { timeframe?: string; instrumentSymbol?: string }): string {
   const parts = [o.instrumentSymbol, o.timeframe].filter(Boolean);
@@ -48,7 +48,8 @@ function signalToText(s: BooleanSignalKind): string {
     case "CHART_PATTERN":
       return `${humanize(s.pattern)} pattern${suffix(s)}`;
     case "VOLUME_PATTERN":
-      return `${humanize(s.pattern)} volume${suffix(s)}`;
+      // "volume spike", not "volume spike volume".
+      return `${humanize(s.pattern)}${/volume/i.test(s.pattern) ? "" : " (volume)"}${suffix(s)}`;
   }
 }
 

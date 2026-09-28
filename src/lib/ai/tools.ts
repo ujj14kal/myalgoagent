@@ -689,7 +689,8 @@ async function brokerGuide(userId: string, rawBroker?: string) {
   const row = rows.find((r) => r.broker === info.id);
   const failure = row?.lastError ? decodeFailure(row.lastError) : null;
   const explained = failure ? describeFailure(failure, info.name) : null;
-  const redirectUrl = callbackUrl(origin, info.id);
+  const approval = info.flow === "approval";
+  const redirectUrl = approval ? undefined : callbackUrl(origin, info.id);
   return {
     broker: info.name,
     availableNow: info.availability === "live",
@@ -704,7 +705,7 @@ async function brokerGuide(userId: string, rawBroker?: string) {
       : "not connected yet",
     createAppAt: info.portal.label,
     steps: info.steps.map((s) => (s === "PASTE_CALLBACK" ? `In the ${info.callbackFieldName} field paste exactly ${redirectUrl} (https, no slash at the end, no spaces).` : s)),
-    redirectUrl,
+    ...(redirectUrl ? { redirectUrl } : { howDailyLoginWorks: `No Redirect URL. Each trading day the user approves the API key on ${info.portal.label}, then clicks "Connect for today" on our page.` }),
     keysToPasteOnOurPage: info.fields.map((f) => f.label),
     cost: info.cost,
     apiCost: info.apiCost,

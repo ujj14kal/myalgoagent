@@ -244,12 +244,17 @@ function evaluateNode(
   return compare(node.operator, i > 0 ? left[i - 1] : undefined, leftCur, i > 0 ? right[i - 1] : undefined, rightCur);
 }
 
-export function evaluateConditionsPerBar(
-  candles: Candle[],
-  entryCondition: ConditionNode,
-  exitCondition: ConditionNode,
-  aux: AuxCandleMap = new Map(),
-): { entry: boolean[]; exit: boolean[] } {
+/**
+ * Whether a condition *is* true on each bar (not just the bar it becomes
+ * true on, which is what triggers orders — see evaluateConditionsPerBar).
+ * Used to explain which parts of a rule held on a given candle.
+ */
+export function conditionTruthPerBar(candles: Candle[], node: ConditionNode, aux: AuxCandleMap = new Map()): boolean[] {
+  const { seriesOf, signalSeriesOf } = seriesResolvers(candles, aux);
+  return candles.map((_, i) => evaluateNode(node, i, seriesOf, signalSeriesOf) ?? false);
+}
+
+function seriesResolvers(candles: Candle[], aux: AuxCandleMap) {
   const cache = new Map<string, Series>();
   const seriesCacheByOperand = new Map<Operand, Series>();
   const signalCache = new Map<string, (boolean | undefined)[]>();
@@ -271,6 +276,16 @@ export function evaluateConditionsPerBar(
     return series;
   }
 
+  return { seriesOf, signalSeriesOf };
+}
+
+export function evaluateConditionsPerBar(
+  candles: Candle[],
+  entryCondition: ConditionNode,
+  exitCondition: ConditionNode,
+  aux: AuxCandleMap = new Map(),
+): { entry: boolean[]; exit: boolean[] } {
+  const { seriesOf, signalSeriesOf } = seriesResolvers(candles, aux);
   const entry: boolean[] = [];
   const exit: boolean[] = [];
   let prevEntry = false;

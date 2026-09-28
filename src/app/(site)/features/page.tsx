@@ -37,6 +37,7 @@ const groups: Group[] = [
       "Entry orders at market or as a limit order — a % from the signal price or a fixed ₹ price — valid for the day",
       "Intraday or Delivery products: intraday positions are squared off the same day; delivery can be held overnight (long only)",
       "See it in action: a chart of where your strategy would have entered and exited recently, and why — before you save it",
+      "Animated trade replay: every condition ticked off on the signal candle, the exact pattern it caught, and the entry, take-profit, stop-loss and trailing-stop lines as the trade plays out",
       "Human-readable strategy summaries",
     ],
     soon: ["MTF (margin) orders, with each broker's own terms", "Risk-per-trade position sizing", "Cooldown periods and maximum trade limits"],
@@ -69,11 +70,11 @@ const groups: Group[] = [
     icon: Radio,
     items: [
       "Paper trading with virtual capital and simulated fills on the strategy's own candles — daily or intraday — updated each time you sync",
-      "Broker connections for Dhan, Zerodha, Upstox, Fyers and Angel One — your own API key, encrypted, verified on connect",
+      "Broker connections for Dhan, Zerodha, Upstox, Fyers, Angel One, Groww, ICICI Direct, 5paisa and Alice Blue — your own API key, encrypted, verified on connect",
     ],
     soon: [
       "Live trading via your connected broker, with explicit user authorization",
-      "Groww, ICICI Direct, Kotak Neo, 5paisa and Alice Blue connections",
+      "Kotak Neo connection",
       "Order lifecycle tracking: pending, submitted, filled, rejected, cancelled",
       "Position and P&L reconciliation with the connected broker",
     ],

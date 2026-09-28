@@ -319,9 +319,11 @@ function RedirectOverlay({ broker }: { broker: BrokerInfo }) {
             </span>
             <Logo broker={broker} size={56} />
           </div>
-          <p className="mt-5 text-base font-semibold text-brand-navy">Taking you to {broker.name}…</p>
+          <p className="mt-5 text-base font-semibold text-brand-navy">{broker.flow === "approval" ? `Connecting to ${broker.name}…` : `Taking you to ${broker.name}…`}</p>
           <p className="mt-1.5 text-sm text-brand-navy/60">
-            Log in there with your {broker.name} password and 2FA. {broker.name} will bring you straight back here.
+            {broker.flow === "approval"
+              ? `Asking ${broker.name} for today’s session with the key you approved on ${broker.name}.`
+              : `Log in there with your ${broker.name} password and 2FA. ${broker.name} will bring you straight back here.`}
           </p>
         </motion.div>
       </motion.div>
@@ -415,7 +417,7 @@ function ConnectPanel({ broker, conn, disabled, startEditing }: { broker: Broker
               </button>
             ) : (
               <button type="button" disabled={pending || disabled} onClick={login} className={`${btn} bg-brand-primary text-white hover:bg-brand-primary-light`}>
-                <LogIn size={15} /> {conn.state === "expired" ? "Log in for today" : `Log in to ${broker.name}`}
+                <LogIn size={15} /> {broker.flow === "approval" ? "Connect for today" : conn.state === "expired" ? "Log in for today" : `Log in to ${broker.name}`}
               </button>
             )}
             <button type="button" disabled={pending} onClick={() => setEditing(true)} className={`${btn} border border-brand-navy/15 text-brand-navy hover:bg-brand-navy/5`}>
@@ -470,7 +472,12 @@ function ConnectPanel({ broker, conn, disabled, startEditing }: { broker: Broker
         <div className="flex items-start justify-between gap-2">
           <div>
             <p className="text-sm font-semibold text-brand-navy">{conn ? `Replace your ${broker.name} keys` : `Paste your ${broker.name} keys`}</p>
-            <p className="mt-1 text-xs text-brand-navy/55">Encrypted before they&rsquo;re stored. After saving, you&rsquo;ll log in on {broker.name}&rsquo;s own page.</p>
+            <p className="mt-1 text-xs text-brand-navy/55">
+              Encrypted before they&rsquo;re stored.{" "}
+              {broker.flow === "approval"
+                ? `Approve the key on ${broker.name} first — then saving connects you for today.`
+                : `After saving, you’ll log in on ${broker.name}’s own page.`}
+            </p>
           </div>
           {conn && (
             <button type="button" aria-label="Cancel" onClick={() => setEditing(false)} className="rounded-md p-1 text-brand-navy/40 hover:bg-brand-navy/5 hover:text-brand-navy">
@@ -504,7 +511,7 @@ function ConnectPanel({ broker, conn, disabled, startEditing }: { broker: Broker
           </p>
         )}
         <button type="submit" disabled={pending || disabled} className={`${btn} mt-5 w-full bg-brand-primary text-white hover:bg-brand-primary-light`}>
-          <LogIn size={15} /> {pending ? `Checking with ${broker.name}…` : `Save & log in to ${broker.name}`}
+          <LogIn size={15} /> {pending ? `Checking with ${broker.name}…` : broker.flow === "approval" ? `Save & connect ${broker.name}` : `Save & log in to ${broker.name}`}
         </button>
         <p className="mt-4 flex items-start gap-1.5 text-[11px] text-brand-navy/45">
           <Lock size={12} className="mt-0.5 shrink-0" /> Never paste your broker password or PIN anywhere on MyAlgoAgent — you only enter those on {broker.name}&rsquo;s own login page.

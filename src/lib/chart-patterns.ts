@@ -38,7 +38,7 @@ const HANDLE_WINDOW = 8; // bars spanning the handle portion
 const CUP_RIM_TOLERANCE_PCT = 0.03; // the cup must recover to within 3% of its starting level
 const HANDLE_MAX_DEPTH_RATIO = 0.5; // the handle's pullback must be shallower than half the cup's depth
 
-interface SwingPoint {
+export interface SwingPoint {
   index: number;
   price: number;
   type: "high" | "low";
