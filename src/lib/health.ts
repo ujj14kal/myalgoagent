@@ -106,7 +106,7 @@ export async function getHealthAlerts(userId: string): Promise<HealthAlert[]> {
       id: `stale-${s.id}`,
       severity: "WARNING",
       title: `"${s.strategyName}" hasn't synced in over ${STALE_SYNC_DAYS} days`,
-      description: "It's still marked Active but may be missing real signals. Open it and sync now to catch it up.",
+      description: "It's still marked Active but hasn't updated — open it and press Sync now to catch it up.",
       action: { kind: "link", href: `/app/paper-trading/${s.id}`, label: "Open session" },
     });
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
 import { Check, Pause, Play, RotateCcw, X } from "lucide-react";
 import type { StrategyPreview } from "@/lib/strategy-preview";
@@ -33,7 +33,7 @@ const KIND_COLOR: Record<ScenarioKind, string> = { target: C.tp, stop_loss: C.sl
 const W = 760;
 const ML = 8;
 const MR = 66;
-const PRICE_H = 250;
+const PRICE_H = 300;
 const VOL_H = 60;
 const OSC_H = 78;
 const AXIS_H = 20;
@@ -62,36 +62,48 @@ type Timeline = { pre: number; signal: number; entry: number; trade: number; exi
 
 function timeline(s: Scenario): Timeline {
   const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
-  const pre = clamp((s.signalIdx + 1) * 70, 1200, 2800);
-  const signal = 900 + s.checks.length * 500;
-  const entry = 1100;
-  const trade = clamp((s.exitIdx - s.entryIdx + 1) * 260, 1800, 7000);
-  const exit = 1800;
-  const post = (s.candles.length - 1 - s.exitIdx) * 90;
+  const pre = clamp((s.signalIdx + 1) * 60, 1200, 2400);
+  const signal = 1000 + s.checks.length * 500;
+  const entry = 1200;
+  const trade = clamp((s.exitIdx - s.entryIdx + 1) * 300, 2200, 9000);
+  const exit = 2000;
+  const post = Math.min(1800, (s.candles.length - 1 - s.exitIdx) * 110);
   return { pre, signal, entry, trade, exit, post, total: pre + signal + entry + trade + exit + post };
+}
+
+/** Phase start times (ms into the timeline). */
+function phases(tl: Timeline) {
+  const signalAt = tl.pre;
+  const entryAt = signalAt + tl.signal;
+  const tradeAt = entryAt + tl.entry;
+  const exitAt = tradeAt + tl.trade;
+  const postAt = exitAt + tl.exit;
+  return { signalAt, entryAt, tradeAt, exitAt, postAt };
 }
 
 /** How far the animation has got, at `ms` into the timeline. */
 function frameAt(s: Scenario, tl: Timeline, ms: number) {
-  const t1 = tl.pre;
-  const t2 = t1 + tl.signal;
-  const t3 = t2 + tl.entry;
-  const t4 = t3 + tl.trade;
-  const t5 = t4 + tl.exit;
+  const { signalAt: t1, entryAt: t2, tradeAt: t3, exitAt: t4, postAt: t5 } = phases(tl);
   let bars: number;
-  if (ms < t1) bars = ((ms / tl.pre) * (s.signalIdx + 1));
+  if (ms < t1) bars = (ms / tl.pre) * (s.signalIdx + 1);
   else if (ms < t3) bars = s.signalIdx + 1;
   else if (ms < t4) bars = s.entryIdx + 1 + ((ms - t3) / tl.trade) * (s.exitIdx - s.entryIdx);
   else if (ms < t5) bars = s.exitIdx + 1;
   else bars = s.exitIdx + 1 + (tl.post ? ((ms - t5) / tl.post) * (s.candles.length - 1 - s.exitIdx) : 0);
   const checksShown = ms < t1 ? 0 : Math.min(s.checks.length, Math.floor((ms - t1 - 500) / 500) + 1);
   return {
+    ms,
     bars: Math.min(s.candles.length, bars),
     atSignal: ms >= t1,
     checksShown: Math.max(0, checksShown),
     entryProgress: ms < t2 ? 0 : Math.min(1, (ms - t2) / tl.entry),
     exited: ms >= t4,
     done: ms >= tl.total,
+    sinceSignal: ms - t1,
+    sinceEntry: ms - t2,
+    sinceExit: ms - t4,
+    /** When bar `i` of the trade appeared (for "the trailing stop just moved" tags). */
+    barShownAt: (i: number) => (i <= s.entryIdx ? t3 : t3 + ((i - s.entryIdx - 1) / Math.max(1, s.exitIdx - s.entryIdx)) * tl.trade),
   };
 }
 
@@ -364,14 +376,53 @@ function Legend({ preview, s }: { preview: StrategyPreview; s: Scenario }) {
 
 type Frame = ReturnType<typeof frameAt>;
 
+/** Candles on screen at once — the camera pans along the replay instead of squeezing every candle in. */
+const VIEW_BARS = 48;
+const OVERVIEW_H = 22;
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+const easeOut = (t: number) => 1 - Math.pow(1 - clamp01(t), 3);
+const easeOutBack = (t: number) => {
+  const c = 1.70158;
+  const x = clamp01(t) - 1;
+  return 1 + (c + 1) * x * x * x + c * x * x;
+};
+
+/** The first `p` (0..1) of a polyline, by length — lets any line "draw itself". */
+function partial(points: [number, number][], p: number): [number, number][] {
+  if (p >= 1 || points.length < 2) return points;
+  const seg = points.slice(1).map((q, i) => Math.hypot(q[0] - points[i][0], q[1] - points[i][1]));
+  let left = seg.reduce((a, b) => a + b, 0) * clamp01(p);
+  const out: [number, number][] = [points[0]];
+  for (let i = 0; i < seg.length; i++) {
+    if (left >= seg[i]) {
+      out.push(points[i + 1]);
+      left -= seg[i];
+      continue;
+    }
+    const k = seg[i] ? left / seg[i] : 0;
+    out.push([points[i][0] + (points[i + 1][0] - points[i][0]) * k, points[i][1] + (points[i + 1][1] - points[i][1]) * k]);
+    break;
+  }
+  return out;
+}
+const pts = (p: [number, number][]) => p.map(([a, b]) => `${a.toFixed(1)},${b.toFixed(1)}`).join(" ");
+
 function ReplayChart({ preview, s, f }: { preview: StrategyPreview; s: Scenario; f: Frame }) {
+  const clipId = `plot-${useId().replace(/:/g, "")}`;
   const st = preview.studies;
   const n = s.candles.length;
-  const slot = (W - ML - MR) / n;
-  const x = (i: number) => ML + slot * (i + 0.5);
+  const viewN = Math.min(n, VIEW_BARS);
+  const plotW = W - ML - MR;
+  const slot = plotW / viewN;
   const visible = Math.floor(f.bars);
+  const frac = f.bars - visible;
+  // Camera: keep the newest candle about 70% across; it glides as the replay plays.
+  const head = Math.max(0, f.bars - 1);
+  const cam = Math.min(Math.max(0, head - viewN * 0.7), n - viewN);
+  const x = (i: number) => ML + (i - cam + 0.5) * slot;
+  const first = Math.max(0, Math.floor(cam) - 1);
+  const last = Math.min(n - 1, Math.ceil(cam + viewN) + 1);
   const src = (i: number) => s.sourceIdx[i];
-  /** A study value for scenario bar i (made-up bars have none). */
   const at = (values: (number | null)[], i: number) => {
     const k = src(i);
     return k === null || k === undefined ? null : values[k];
@@ -380,55 +431,60 @@ function ReplayChart({ preview, s, f }: { preview: StrategyPreview; s: Scenario;
     const i = s.sourceIdx.indexOf(full);
     return i === -1 ? null : i;
   };
+  const shown = (i: number) => i < visible || (i === visible && frac > 0);
 
-  // Pane layout.
+  // Panes.
   const oscs = st.oscillators.slice(0, 2);
   const pricePane = { top: 6, h: PRICE_H };
   const volTop = pricePane.top + PRICE_H + GAP;
   const volPane = st.volume.show ? { top: volTop, h: VOL_H } : null;
   const oscTop = volTop + (volPane ? VOL_H + GAP : 0);
   const oscPanes = oscs.map((o, k) => ({ key: o.key, top: oscTop + k * (OSC_H + GAP), h: OSC_H, osc: o }));
-  const H = oscTop + oscs.length * (OSC_H + GAP) + AXIS_H;
+  const axisTop = oscTop + oscs.length * (OSC_H + GAP);
+  const H = axisTop + AXIS_H + OVERVIEW_H;
 
-  // Price scale covers everything that will be drawn, so it never jumps mid-replay.
-  const lows = s.candles.map((c) => c.low);
-  const highs = s.candles.map((c) => c.high);
-  let lo = Math.min(...lows);
-  let hi = Math.max(...highs);
-  const range = hi - lo || hi * 0.01;
-  const within = (v: number | null) => v !== null && v > lo - range * 0.35 && v < hi + range * 0.35;
-  for (const v of [s.entryPrice, s.exitPrice, s.stopLoss, s.target, ...(s.trailing ?? [])]) if (v !== null && Number.isFinite(v)) [lo, hi] = [Math.min(lo, v), Math.max(hi, v)];
-  for (const o of st.overlays) for (let i = 0; i < n; i++) {
+  // Price scale fits what's on screen (a few bars either side so it doesn't jump);
+  // levels far outside become edge markers instead of squashing the candles.
+  const win = s.candles.slice(Math.max(0, first - 4), Math.min(n, last + 5));
+  let lo = Math.min(...win.map((c) => c.low));
+  let hi = Math.max(...win.map((c) => c.high));
+  const span = hi - lo || hi * 0.01;
+  const near = (v: number | null): v is number => v !== null && Number.isFinite(v) && v > lo - span * 0.6 && v < hi + span * 0.6;
+  const inTrade = f.entryProgress > 0;
+  const trailNow = s.trailing ? s.trailing[Math.min(s.trailing.length - 1, Math.max(0, Math.min(visible, s.exitIdx) - 1 - s.entryIdx))] : null;
+  for (const v of inTrade ? [s.entryPrice, s.stopLoss, s.target, trailNow, f.exited ? s.exitPrice : null] : []) if (near(v)) [lo, hi] = [Math.min(lo, v), Math.max(hi, v)];
+  for (const o of st.overlays) for (let i = first; i <= last; i++) {
     const v = at(o.values, i);
-    if (within(v)) [lo, hi] = [Math.min(lo, v!), Math.max(hi, v!)];
+    if (near(v)) [lo, hi] = [Math.min(lo, v), Math.max(hi, v)];
   }
-  for (const l of st.priceLevels) if (within(l.value)) [lo, hi] = [Math.min(lo, l.value), Math.max(hi, l.value)];
-  const pad = (hi - lo) * 0.06;
+  const pad = (hi - lo) * 0.08;
   lo -= pad;
   hi += pad;
   const py = (v: number) => pricePane.top + ((hi - v) / (hi - lo)) * pricePane.h;
+  const pyClamped = (v: number) => Math.min(pricePane.top + pricePane.h - 9, Math.max(pricePane.top + 9, py(v)));
+  const offscreen = (v: number) => (v > hi ? "up" : v < lo ? "down" : null);
 
   const paneY = (pane: string): ((v: number) => number) | null => {
     if (pane === "price") return py;
     if (pane === "volume" && volPane) {
-      const vmax = Math.max(...s.candles.map((c) => c.volume), 1);
-      return (v) => volPane.top + volPane.h - (v / vmax) * volPane.h;
+      const vmax = Math.max(...s.candles.slice(first, last + 1).map((c) => c.volume), 1);
+      return (v) => volPane.top + volPane.h - (Math.min(v, vmax * 1.05) / (vmax * 1.05)) * volPane.h;
     }
     const p = oscPanes.find((o) => o.key === pane);
     if (!p) return null;
-    const vals = p.osc.lines.flatMap((l) => s.candles.map((_, i) => at(l.values, i))).filter((v): v is number => v !== null);
+    const vals = p.osc.lines.flatMap((l) => s.candles.slice(first, last + 1).map((_, k) => at(l.values, first + k))).filter((v): v is number => v !== null);
     const all = [...vals, ...p.osc.levels];
     let a = Math.min(...all);
     let b = Math.max(...all);
-    if (a === b) [a, b] = [a - 1, b + 1];
-    const m = (b - a) * 0.1;
+    if (!Number.isFinite(a) || a === b) [a, b] = [(a || 0) - 1, (b || 0) + 1];
+    const m = (b - a) * 0.12;
     return (v) => p.top + ((b + m - v) / (b - a + 2 * m)) * p.h;
   };
 
-  const path = (values: (number | null)[], y: (v: number) => number, upto: number) => {
+  const linePath = (values: (number | null)[], y: (v: number) => number) => {
     let d = "";
     let pen = false;
-    for (let i = 0; i < Math.min(upto, n); i++) {
+    for (let i = first; i <= Math.min(last, visible - 1); i++) {
       const v = at(values, i);
       if (v === null) {
         pen = false;
@@ -440,308 +496,451 @@ function ReplayChart({ preview, s, f }: { preview: StrategyPreview; s: Scenario;
     return d;
   };
 
+  // ---- timings (all pure functions of the replay clock, so scrubbing is exact) ----
+  const signalIn = clamp01(f.sinceSignal / 450);
+  const entryP = clamp01(f.sinceEntry / 900);
+  const exitP = clamp01(f.sinceExit / 1100);
+  const signalPulse = f.atSignal && f.sinceEntry < 0 ? (f.sinceSignal % 1200) / 1200 : -1;
+
   const entryX = x(s.entryIdx);
-  const lineEnd = f.exited ? x(s.exitIdx) : x(Math.max(s.entryIdx, visible - 1));
-  const drawTo = lineEnd; // entry / TP / SL lines extend with the trade
-  const reveal = f.entryProgress; // 0..1 fade/draw-in of the entry, TP and SL lines
-  const levelLine = (v: number | null, color: string, label: string) =>
-    v === null || reveal === 0 ? null : (
-      <g key={label} opacity={reveal}>
-        <line x1={x(s.signalIdx)} x2={Math.max(drawTo, entryX + 40)} y1={py(v)} y2={py(v)} stroke={color} strokeWidth={1.6} strokeDasharray="6 4" />
-        <rect x={W - MR + 2} y={py(v) - 8} width={MR - 4} height={16} rx={4} fill={color} />
-        <text x={W - MR / 2} y={py(v) + 3.5} textAnchor="middle" fontSize={9.5} fontWeight={700} fill="white">
+  const tradeEnd = f.exited ? x(s.exitIdx) : x(Math.max(s.entryIdx, f.bars - 1));
+  const lineTo = Math.max(entryX + 70 * easeOut(entryP), tradeEnd);
+  const hitLevel = s.kind === "target" ? s.target : s.kind === "stop_loss" ? s.stopLoss : null;
+
+  const levelLine = (v: number | null, color: string, label: string) => {
+    if (v === null || !inTrade) return null;
+    const off = offscreen(v);
+    const y = off ? pyClamped(v) : py(v);
+    const flash = f.exited && hitLevel === v ? 1 - exitP : 0;
+    return (
+      <g key={label} opacity={easeOut(entryP)}>
+        {!off && (
+          <line x1={x(s.signalIdx)} x2={lineTo} y1={y} y2={y} stroke={color} strokeWidth={1.6 + 2.4 * flash} strokeDasharray="6 4" clipPath={`url(#${clipId})`} />
+        )}
+        <rect x={W - MR + 2} y={y - 11} width={MR - 4} height={22} rx={5} fill={color} />
+        <text x={W - MR / 2} y={y - 1.5} textAnchor="middle" fontSize={9} fontWeight={700} fill="white">
+          {off === "up" ? "▲ " : off === "down" ? "▼ " : ""}
           {label}
+        </text>
+        <text x={W - MR / 2} y={y + 8} textAnchor="middle" fontSize={8} fill="white" opacity={0.9}>
+          {v.toLocaleString("en-IN", { maximumFractionDigits: v >= 1000 ? 0 : 2 })}
         </text>
       </g>
     );
+  };
+  const zone = (to: number | null, color: string, boost: number) => {
+    if (to === null || !inTrade) return null;
+    const y1 = Math.min(Math.max(py(s.entryPrice), pricePane.top), pricePane.top + pricePane.h);
+    const y2 = Math.min(Math.max(py(to), pricePane.top), pricePane.top + pricePane.h);
+    return <rect x={entryX} width={Math.max(0, lineTo - entryX)} y={Math.min(y1, y2)} height={Math.abs(y1 - y2)} fill={color} opacity={(0.07 + 0.18 * boost) * easeOut(entryP)} />;
+  };
 
-  // Zones between entry and target / stop, like a trading ticket.
-  const zone = (from: number, to: number | null, color: string) =>
-    to === null || reveal === 0 ? null : (
-      <rect x={entryX} width={Math.max(0, drawTo - entryX)} y={Math.min(py(from), py(to))} height={Math.abs(py(from) - py(to))} fill={color} opacity={0.07 * reveal} />
-    );
+  // Trailing stop as a staircase, with a tag each time it ratchets.
+  const trailSteps: { x1: number; x2: number; y: number; i: number; v: number; moved: boolean }[] = [];
+  if (s.trailing && inTrade) {
+    const until = f.exited ? s.exitIdx : Math.min(visible - 1 + (frac > 0 ? 1 : 0), s.exitIdx);
+    for (let i = Math.max(s.entryIdx, first); i <= Math.min(until, last); i++) {
+      const v = s.trailing[i - s.entryIdx];
+      if (v === null || v === undefined) continue;
+      const prev = i > s.entryIdx ? s.trailing[i - s.entryIdx - 1] : null;
+      const moved = prev !== null && prev !== undefined && (preview.direction === "SHORT" ? v < prev : v > prev);
+      trailSteps.push({ x1: x(i) - slot / 2, x2: x(i) + slot / 2, y: py(v), i, v, moved });
+    }
+  }
+  const trailD = trailSteps.map((t, k) => `${k ? "L" : "M"}${t.x1.toFixed(1)},${t.y.toFixed(1)}L${t.x2.toFixed(1)},${t.y.toFixed(1)}`).join("");
 
-  const trailPath = s.trailing
-    ? (() => {
-        let d = "";
-        const until = f.exited ? s.exitIdx : Math.min(visible - 1, s.exitIdx);
-        for (let i = s.entryIdx; i <= until; i++) {
-          const v = s.trailing![i - s.entryIdx];
-          if (v === null || v === undefined) continue;
-          const xl = x(i) - slot / 2;
-          const xr = x(i) + slot / 2;
-          d += `${d ? "L" : "M"}${xl.toFixed(1)},${py(v).toFixed(1)}L${xr.toFixed(1)},${py(v).toFixed(1)}`;
-        }
-        return d;
-      })()
-    : "";
-
-  const markersInView = st.markers.flatMap((m) =>
+  const markers = st.markers.flatMap((m) =>
     m.bars
       .map((b) => ({ m, local: toLocal(b), full: b }))
-      .filter((h): h is { m: typeof m; local: number; full: number } => h.local !== null && h.local < visible),
+      .filter((h): h is { m: typeof m; local: number; full: number } => h.local !== null && h.local < visible && h.local >= first - 30 && h.local <= last),
   );
 
-  const shapeLines = (shape: ReplayShape, color: string) =>
-    shape.lines.map((l, k) => {
+  /** A pattern's lines drawing themselves in, then its labelled points popping up. */
+  const shapeLayer = (shape: ReplayShape, color: string, pane: string | null, p: number) => {
+    const lines = shape.lines.filter((l) => (pane ? l.pane === pane : true));
+    const pointsOf = (l: ReplayShape["lines"][number]) => {
       const y = paneY(l.pane);
-      const pts = l.pts.map(([fi, v]) => [toLocal(fi), v] as const).filter(([li]) => li !== null) as [number, number][];
-      if (!y || pts.length < 2) return null;
-      return (
-        <polyline
-          key={k}
-          points={pts.map(([li, v]) => `${x(li).toFixed(1)},${y(v).toFixed(1)}`).join(" ")}
-          fill="none"
-          stroke={color}
-          strokeWidth={l.style === "shape" ? 2 : 1.4}
-          strokeDasharray={l.style === "shape" ? undefined : "5 4"}
-          strokeLinejoin="round"
-          opacity={0.9}
-        />
-      );
-    });
+      const out: [number, number][] = [];
+      for (const [fi, v] of l.pts) {
+        const li = toLocal(fi);
+        if (li !== null && y) out.push([x(li), y(v)]);
+      }
+      return out;
+    };
+    return (
+      <g>
+        {lines.map((l, k) => {
+          const ps = pointsOf(l);
+          const lp = clamp01(p * lines.length - k * 0.6);
+          return ps.length < 2 || lp === 0 ? null : (
+            <polyline key={k} points={pts(partial(ps, easeOut(lp)))} fill="none" stroke={color} strokeWidth={l.style === "shape" ? 2.2 : 1.4} strokeDasharray={l.style === "shape" ? undefined : "5 4"} strokeLinejoin="round" strokeLinecap="round" />
+          );
+        })}
+        {shape.points
+          .filter((q) => (pane ? q.pane === pane : true))
+          .map((q, k, arr) => {
+            const li = toLocal(q.idx);
+            const y = paneY(q.pane);
+            const pop = easeOutBack(clamp01(p * (arr.length + 1) - k - 0.6));
+            return li === null || !y || pop <= 0 ? null : (
+              <g key={`${q.label}-${q.idx}`} opacity={clamp01(pop)}>
+                <circle cx={x(li)} cy={y(q.value)} r={3.4 * pop} fill={color} stroke="white" strokeWidth={1.2} />
+                <text x={x(li)} y={y(q.value) - 8} textAnchor="middle" fontSize={9.5} fontWeight={700} fill={color} stroke="white" strokeWidth={3} paintOrder="stroke">
+                  {q.label}
+                </text>
+              </g>
+            );
+          })}
+      </g>
+    );
+  };
 
-  const ticks = Math.min(6, n);
+  const candleBody = (i: number) => {
+    const c = s.candles[i];
+    const growing = i === visible;
+    const g = growing ? easeOut(frac) : 1;
+    const close = c.open + (c.close - c.open) * g;
+    const high = Math.max(c.open, close) + (c.high - Math.max(c.open, c.close)) * g;
+    const low = Math.min(c.open, close) - (Math.min(c.open, c.close) - c.low) * g;
+    const up = c.close >= c.open;
+    const color = up ? C.up : C.down;
+    const bw = Math.max(2, slot * 0.66);
+    const synthetic = s.syntheticFrom !== null && i >= s.syntheticFrom;
+    return (
+      <g key={c.time} opacity={(synthetic ? 0.78 : 1) * (growing ? 0.35 + 0.65 * g : 1)}>
+        <line x1={x(i)} x2={x(i)} y1={py(high)} y2={py(low)} stroke={color} strokeWidth={Math.max(1, slot * 0.08)} />
+        <rect x={x(i) - bw / 2} y={py(Math.max(c.open, close))} width={bw} height={Math.max(1, Math.abs(py(c.open) - py(close)))} rx={Math.min(1.5, bw / 6)} fill={up ? "white" : color} stroke={color} strokeWidth={1.1} />
+      </g>
+    );
+  };
+
+  const exitColor = KIND_COLOR[s.kind];
+  const ex = x(s.exitIdx);
+  const ey = py(s.exitPrice);
+  const tickIdx = Array.from({ length: 5 }, (_, k) => Math.round(cam + (k / 4) * (viewN - 1))).filter((i) => i >= 0 && i < n);
+
+  // Overview strip: the whole window, the part on screen, and where the trade was.
+  const ovTop = axisTop + AXIS_H;
+  const ovX = (i: number) => ML + (i / Math.max(1, n - 1)) * plotW;
+  const closes = s.candles.map((c) => c.close);
+  const [cMin, cMax] = [Math.min(...closes), Math.max(...closes)];
+  const ovY = (v: number) => ovTop + 3 + (1 - (v - cMin) / (cMax - cMin || 1)) * (OVERVIEW_H - 8);
+
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full select-none" role="img" aria-label={`Replay of a ${SCENARIO_TITLE[s.kind].toLowerCase()} trade on ${preview.symbol}`}>
-      {/* grid + pane frames */}
+      <defs>
+        <clipPath id={clipId}>
+          <rect x={ML} y={0} width={plotW} height={axisTop} />
+        </clipPath>
+        <pattern id={`${clipId}-hatch`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <line x1="0" y1="0" x2="0" y2="6" stroke="rgba(14,27,45,0.06)" strokeWidth="3" />
+        </pattern>
+        <filter id={`${clipId}-glow`} x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="2.5" />
+        </filter>
+      </defs>
+
+      {/* pane frames + price grid */}
       {[pricePane, volPane, ...oscPanes].filter(Boolean).map((p, k) => (
-        <rect key={k} x={ML} y={p!.top} width={W - ML - MR} height={p!.h} fill="none" stroke={C.grid} />
+        <rect key={k} x={ML} y={p!.top} width={plotW} height={p!.h} rx={6} fill="rgba(14,27,45,0.012)" stroke={C.grid} />
       ))}
-      {[0.25, 0.5, 0.75].map((r) => (
+      {[0.2, 0.4, 0.6, 0.8].map((r) => (
         <g key={r}>
           <line x1={ML} x2={W - MR} y1={pricePane.top + pricePane.h * r} y2={pricePane.top + pricePane.h * r} stroke={C.grid} />
           <text x={W - MR + 4} y={pricePane.top + pricePane.h * r + 3} fontSize={9} fill={C.text}>
-            {axis(hi - (hi - lo) * r, (hi - lo) / 4)}
+            {axis(hi - (hi - lo) * r, (hi - lo) / 5)}
           </text>
         </g>
       ))}
 
-      {/* intraday time windows the rule uses */}
-      {preview.intraday &&
-        st.timeWindows.map((w) =>
-          s.candles.map((c, i) => {
-            const m = istMinute(c.time);
-            return m >= w.startMinute && m < w.endMinute && i < visible ? <rect key={`${w.label}-${i}`} x={x(i) - slot / 2} width={slot} y={pricePane.top} height={pricePane.h} fill={C.entry} opacity={0.05} /> : null;
-          }),
+      <g clipPath={`url(#${clipId})`}>
+        {/* intraday time windows the rule uses */}
+        {preview.intraday &&
+          st.timeWindows.map((w) =>
+            s.candles.slice(first, last + 1).map((c, k) => {
+              const i = first + k;
+              const m = istMinute(c.time);
+              return m >= w.startMinute && m < w.endMinute && shown(i) ? <rect key={`${w.label}-${i}`} x={x(i) - slot / 2} width={slot} y={pricePane.top} height={pricePane.h} fill={C.entry} opacity={0.05} /> : null;
+            }),
+          )}
+
+        {/* day dividers (intraday): makes overnight gaps obvious — a new session starts here */}
+        {preview.intraday &&
+          Array.from({ length: last - first }, (_, k) => first + k + 1)
+            .filter((i) => shown(i) && Math.floor((s.candles[i].time + 19_800) / 86_400) !== Math.floor((s.candles[i - 1].time + 19_800) / 86_400))
+            .map((i) => (
+              <g key={`day-${i}`}>
+                <line x1={x(i) - slot / 2} x2={x(i) - slot / 2} y1={pricePane.top} y2={axisTop - GAP} stroke="rgba(14,27,45,0.28)" strokeDasharray="3 4" />
+                <text x={x(i) - slot / 2 + 4} y={pricePane.top + 12} fontSize={9} fontWeight={700} fill="rgba(14,27,45,0.5)">
+                  {new Date(s.candles[i].time * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" })} · new day
+                </text>
+              </g>
+            ))}
+
+        {/* signal column, fading in with a pulse while the rule is checked */}
+        {f.atSignal && (
+          <g>
+            <rect x={x(s.signalIdx) - slot / 2 - 1} width={slot + 2} y={pricePane.top} height={axisTop - pricePane.top - GAP} fill={C.signal} opacity={0.2 * easeOut(signalIn)} rx={3} />
+            {signalPulse >= 0 && (
+              <circle cx={x(s.signalIdx)} cy={py(s.candles[s.signalIdx].high) - 6} r={4 + 16 * signalPulse} fill="none" stroke={C.signal} strokeWidth={2} opacity={0.9 * (1 - signalPulse)} />
+            )}
+          </g>
         )}
 
-      {/* signal candle highlight */}
-      {f.atSignal && <rect x={x(s.signalIdx) - slot / 2 - 1} width={slot + 2} y={pricePane.top} height={H - AXIS_H - pricePane.top} fill={C.signal} opacity={0.18} rx={2} />}
-
-      {/* made-up part of an illustration */}
-      {s.syntheticFrom !== null && visible > s.syntheticFrom && (
-        <g>
-          <rect x={x(s.syntheticFrom) - slot / 2} width={W - MR - (x(s.syntheticFrom) - slot / 2)} y={pricePane.top} height={pricePane.h} fill="url(#hatch)" opacity={0.5} />
-          <text x={x(s.syntheticFrom) + 4} y={pricePane.top + pricePane.h - 6} fontSize={9} fill={C.text}>
-            illustration
-          </text>
-        </g>
-      )}
-      <defs>
-        <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-          <line x1="0" y1="0" x2="0" y2="6" stroke="rgba(14,27,45,0.06)" strokeWidth="3" />
-        </pattern>
-      </defs>
-
-      {/* zones + levels */}
-      {zone(s.entryPrice, s.target, C.tp)}
-      {zone(s.entryPrice, s.stopLoss, C.sl)}
-
-      {/* fixed price levels from the rules */}
-      {st.priceLevels.filter((l) => l.value > lo && l.value < hi).map((l) => (
-        <g key={l.label}>
-          <line x1={ML} x2={W - MR} y1={py(l.value)} y2={py(l.value)} stroke={C.text} strokeDasharray="2 4" />
-          <text x={ML + 4} y={py(l.value) - 3} fontSize={9} fill={C.text}>
-            {l.label}
-          </text>
-        </g>
-      ))}
-
-      {/* indicator overlays */}
-      {st.overlays.map((o, k) => (
-        <path key={o.label} d={path(o.values, py, visible)} fill="none" stroke={LINE_COLORS[k % LINE_COLORS.length]} strokeWidth={1.5} opacity={0.9} />
-      ))}
-
-      {/* candles */}
-      {s.candles.slice(0, visible).map((c, i) => {
-        const up = c.close >= c.open;
-        const color = up ? C.up : C.down;
-        const bw = Math.max(1.5, slot * 0.62);
-        const top = py(Math.max(c.open, c.close));
-        const bh = Math.max(1, Math.abs(py(c.open) - py(c.close)));
-        const synthetic = s.syntheticFrom !== null && i >= s.syntheticFrom;
-        return (
-          <g key={c.time} opacity={synthetic ? 0.75 : 1}>
-            <line x1={x(i)} x2={x(i)} y1={py(c.high)} y2={py(c.low)} stroke={color} strokeWidth={1} />
-            <rect x={x(i) - bw / 2} y={top} width={bw} height={bh} fill={up ? "white" : color} stroke={color} strokeWidth={1} />
+        {/* made-up part of an illustration */}
+        {s.syntheticFrom !== null && visible > s.syntheticFrom && (
+          <g>
+            <rect x={x(s.syntheticFrom) - slot / 2} width={Math.max(0, W - MR - (x(s.syntheticFrom) - slot / 2))} y={pricePane.top} height={pricePane.h} fill={`url(#${clipId}-hatch)`} opacity={0.5} />
+            <text x={x(s.syntheticFrom) + 4} y={pricePane.top + pricePane.h - 6} fontSize={9} fill={C.text}>
+              illustration
+            </text>
           </g>
-        );
-      })}
+        )}
 
-      {/* pattern markers, each with its own geometry */}
-      {markersInView.map(({ m, local, full }) => {
-        const color = MARKER_COLOR[m.family];
-        const isSignal = local === s.signalIdx;
-        const shape = m.shapes[full];
-        const c = s.candles[local];
-        if (m.family === "CANDLE_PATTERN") {
-          const from = Math.max(0, local - m.span + 1);
-          const top = py(Math.max(...s.candles.slice(from, local + 1).map((k) => k.high)));
-          const bottom = py(Math.min(...s.candles.slice(from, local + 1).map((k) => k.low)));
-          return (
-            <g key={`${m.label}-${full}`} opacity={isSignal ? 1 : 0.55}>
-              <rect x={x(from) - slot / 2 - 1.5} width={slot * m.span + 3} y={top - 4} height={bottom - top + 8} rx={4} fill="none" stroke={color} strokeWidth={isSignal ? 1.8 : 1} />
-              {isSignal && (
-                <text x={x(local)} y={top - 8} textAnchor="middle" fontSize={10} fontWeight={700} fill={color} stroke="white" strokeWidth={3} paintOrder="stroke">
-                  Caught here: {m.label}
-                </text>
-              )}
-            </g>
-          );
-        }
-        return (
-          <g key={`${m.label}-${full}`} opacity={isSignal ? 1 : 0.45}>
-            {isSignal && shape && shapeLines(shape, color)}
-            {isSignal &&
-              shape?.points.map((p) => {
-                const li = toLocal(p.idx);
-                const y = paneY(p.pane);
-                return li === null || !y ? null : (
-                  <g key={`${p.label}-${p.idx}`}>
-                    <circle cx={x(li)} cy={y(p.value)} r={3} fill={color} />
-                    <text x={x(li)} y={y(p.value) - 6} textAnchor="middle" fontSize={9} fontWeight={600} fill={color} stroke="white" strokeWidth={3} paintOrder="stroke">
-                      {p.label}
-                    </text>
-                  </g>
-                );
-              })}
-            {m.family === "CHART_PATTERN" && (
-              <g>
-                <path d={`M${x(local)},${py(c.high) - 16}l-4,-6h8z`} fill={color} />
+        {/* zones (flash on the one that was hit) */}
+        {zone(s.target, C.tp, s.kind === "target" && f.exited ? 1 - exitP : 0)}
+        {zone(s.stopLoss, C.sl, s.kind === "stop_loss" && f.exited ? 1 - exitP : 0)}
+
+        {/* fixed price levels from the rules */}
+        {st.priceLevels.filter((l) => l.value > lo && l.value < hi).map((l) => (
+          <g key={l.label}>
+            <line x1={ML} x2={W - MR} y1={py(l.value)} y2={py(l.value)} stroke={C.text} strokeDasharray="2 4" />
+            <text x={ML + 4} y={py(l.value) - 3} fontSize={9} fill={C.text}>
+              {l.label}
+            </text>
+          </g>
+        ))}
+
+        {/* indicator overlays */}
+        {st.overlays.map((o, k) => (
+          <path key={o.label} d={linePath(o.values, py)} fill="none" stroke={LINE_COLORS[k % LINE_COLORS.length]} strokeWidth={o.entry ? 1.9 : 1.4} opacity={0.9} strokeLinejoin="round" />
+        ))}
+
+        {/* candles */}
+        {Array.from({ length: last - first + 1 }, (_, k) => first + k).filter(shown).map(candleBody)}
+
+        {/* patterns: earlier catches faint, the one that triggered drawn in */}
+        {markers.map(({ m, local, full }) => {
+          const color = MARKER_COLOR[m.family];
+          const isSignal = local === s.signalIdx;
+          const p = isSignal ? clamp01(f.sinceSignal / 1100) : 1;
+          if (m.family === "CANDLE_PATTERN") {
+            const from = Math.max(0, local - m.span + 1);
+            const top = py(Math.max(...s.candles.slice(from, local + 1).map((c) => c.high))) - 5;
+            const bottom = py(Math.min(...s.candles.slice(from, local + 1).map((c) => c.low))) + 5;
+            const left = x(from) - slot / 2 - 2;
+            const w = slot * (local - from + 1) + 4;
+            const perim = 2 * (w + (bottom - top));
+            return (
+              <g key={`${m.label}-${full}`} opacity={isSignal ? 1 : 0.4}>
+                {isSignal && <rect x={left} y={top} width={w} height={bottom - top} rx={5} fill={color} opacity={0.08 * easeOut(p)} />}
+                <rect x={left} y={top} width={w} height={bottom - top} rx={5} fill="none" stroke={color} strokeWidth={isSignal ? 2 : 1} strokeDasharray={isSignal ? perim : undefined} strokeDashoffset={isSignal ? perim * (1 - easeOut(p)) : undefined} />
                 {isSignal && (
-                  <text x={x(local)} y={py(c.high) - 26} textAnchor="middle" fontSize={10} fontWeight={700} fill={color} stroke="white" strokeWidth={3} paintOrder="stroke">
+                  <text x={left + w / 2} y={top - 7 - 6 * (1 - easeOut(p))} opacity={easeOut(p)} textAnchor="middle" fontSize={10.5} fontWeight={700} fill={color} stroke="white" strokeWidth={3} paintOrder="stroke">
                     Caught here: {m.label}
                   </text>
                 )}
               </g>
-            )}
-          </g>
-        );
-      })}
+            );
+          }
+          const shape = m.shapes[full];
+          const c = s.candles[local];
+          return (
+            <g key={`${m.label}-${full}`} opacity={isSignal ? 1 : 0.4}>
+              {isSignal && shape && shapeLayer(shape, color, "price", p)}
+              {m.family === "CHART_PATTERN" && (
+                <g opacity={isSignal ? easeOut(p) : 1}>
+                  <path d={`M${x(local)},${py(c.high) - 12 - 6 * (1 - easeOut(p))}l-5,-7h10z`} fill={color} />
+                  {isSignal && (
+                    <text x={x(local)} y={py(c.high) - 24} textAnchor="middle" fontSize={10.5} fontWeight={700} fill={color} stroke="white" strokeWidth={3} paintOrder="stroke">
+                      Caught here: {m.label}
+                    </text>
+                  )}
+                </g>
+              )}
+            </g>
+          );
+        })}
 
-      {/* entry, take-profit, stop-loss */}
-      {levelLine(s.target, C.tp, "TP")}
-      {levelLine(s.stopLoss, C.sl, "SL")}
-      {levelLine(s.entryPrice, C.entry, "Entry")}
-      {s.trailing && trailPath && <path d={trailPath} fill="none" stroke={C.trail} strokeWidth={2} />}
-
-      {/* entry and exit markers */}
-      {reveal > 0 && (
-        <g opacity={reveal}>
-          <circle cx={entryX} cy={py(s.entryPrice)} r={5 + 5 * (1 - reveal)} fill={C.entry} stroke="white" strokeWidth={1.5} />
-          <text x={entryX} y={py(s.entryPrice) + (preview.direction === "SHORT" ? -10 : 17)} textAnchor="middle" fontSize={9.5} fontWeight={700} fill={C.entry} stroke="white" strokeWidth={3} paintOrder="stroke">
-            {preview.direction === "SHORT" ? "SELL" : "BUY"}
-          </text>
-        </g>
-      )}
-      {f.exited && (
-        <g>
-          <circle cx={x(s.exitIdx)} cy={py(s.exitPrice)} r={6} fill={KIND_COLOR[s.kind]} stroke="white" strokeWidth={1.5} />
-          <line x1={entryX} y1={py(s.entryPrice)} x2={x(s.exitIdx)} y2={py(s.exitPrice)} stroke={KIND_COLOR[s.kind]} strokeWidth={1} strokeDasharray="2 3" />
-          <text x={x(s.exitIdx)} y={py(s.exitPrice) + (s.pnlPct >= 0 === (preview.direction !== "SHORT") ? -11 : 18)} textAnchor="middle" fontSize={10} fontWeight={700} fill={KIND_COLOR[s.kind]}>
-            {EXIT_TEXT[s.kind]}
-          </text>
-        </g>
-      )}
-
-      {/* volume */}
-      {volPane && (() => {
-        const y = paneY("volume")!;
-        const vmarks = new Set(markersInView.filter((h) => h.m.family === "VOLUME_PATTERN").map((h) => h.local));
-        return (
+        {/* trailing stop: glow + staircase + "moved" tags */}
+        {trailD && (
           <g>
-            <text x={ML + 4} y={volPane.top + 11} fontSize={9} fill={C.text}>
-              Volume
-            </text>
-            {s.candles.slice(0, visible).map((c, i) => (
-              <rect
-                key={c.time}
-                x={x(i) - Math.max(1, slot * 0.62) / 2}
-                width={Math.max(1, slot * 0.62)}
-                y={y(c.volume)}
-                height={volPane.top + volPane.h - y(c.volume)}
-                fill={vmarks.has(i) ? "#ea580c" : c.close >= c.open ? C.up : C.down}
-                opacity={vmarks.has(i) ? 0.95 : 0.35}
-              />
-            ))}
-            {st.volume.lines.map((l) => (
-              <path key={l.label} d={path(l.values, y, visible)} fill="none" stroke="#ea580c" strokeWidth={1.2} strokeDasharray="4 3" />
-            ))}
-            {markersInView
-              .filter((h) => h.m.family === "VOLUME_PATTERN" && h.local === s.signalIdx)
-              .map((h) => (
-                <text key={h.m.label} x={x(h.local)} y={volPane.top + 11} textAnchor="middle" fontSize={9.5} fontWeight={700} fill="#ea580c" stroke="white" strokeWidth={3} paintOrder="stroke">
-                  Caught here: {h.m.label}
-                </text>
-              ))}
+            <path d={trailD} fill="none" stroke={C.trail} strokeWidth={5} opacity={0.25} filter={`url(#${clipId}-glow)`} />
+            <path d={trailD} fill="none" stroke={C.trail} strokeWidth={2.2} strokeLinejoin="round" />
+            {trailSteps
+              .filter((t) => t.moved)
+              .map((t) => {
+                const age = f.ms - f.barShownAt(t.i);
+                if (age < 0 || age > 1100) return null;
+                const k = age / 1100;
+                return (
+                  <g key={t.i} opacity={1 - k}>
+                    <circle cx={t.x1} cy={t.y} r={3 + 5 * k} fill="none" stroke={C.trail} strokeWidth={1.5} />
+                    <text x={t.x2 + 3} y={t.y + (preview.direction === "SHORT" ? -6 : 13) - 6 * k} fontSize={9.5} fontWeight={700} fill={C.trail} stroke="white" strokeWidth={3} paintOrder="stroke">
+                      {preview.direction === "SHORT" ? "↓" : "↑"} {inr(t.v)}
+                    </text>
+                  </g>
+                );
+              })}
           </g>
-        );
-      })()}
+        )}
 
-      {/* oscillators with the thresholds the rules use */}
+        {/* entry: marker drops in with a ripple */}
+        {inTrade && (
+          <g>
+            <circle cx={entryX} cy={py(s.entryPrice)} r={6 + 20 * entryP} fill="none" stroke={C.entry} strokeWidth={2} opacity={0.8 * (1 - entryP)} />
+            <circle cx={entryX} cy={py(s.entryPrice) - 22 * (1 - easeOutBack(entryP))} r={5.5} fill={C.entry} stroke="white" strokeWidth={1.6} opacity={easeOut(entryP * 1.5)} />
+            <text x={entryX} y={py(s.entryPrice) + (preview.direction === "SHORT" ? -11 : 19)} textAnchor="middle" fontSize={10} fontWeight={800} fill={C.entry} stroke="white" strokeWidth={3} paintOrder="stroke" opacity={easeOut(entryP)}>
+              {preview.direction === "SHORT" ? "SELL" : "BUY"}
+            </text>
+          </g>
+        )}
+
+        {/* exit: double shockwave, the path of the trade, and a sliding label */}
+        {f.exited && (
+          <g>
+            <line x1={entryX} y1={py(s.entryPrice)} x2={entryX + (ex - entryX) * easeOut(exitP * 1.4)} y2={py(s.entryPrice) + (ey - py(s.entryPrice)) * easeOut(exitP * 1.4)} stroke={exitColor} strokeWidth={1.3} strokeDasharray="3 3" />
+            {[0, 0.22].map((d) => {
+              const k = clamp01((exitP - d) / (1 - d));
+              return k > 0 && k < 1 ? <circle key={d} cx={ex} cy={ey} r={6 + 28 * easeOut(k)} fill="none" stroke={exitColor} strokeWidth={2.4 * (1 - k) + 0.5} opacity={1 - k} /> : null;
+            })}
+            <circle cx={ex} cy={ey} r={6.5 * easeOutBack(clamp01(exitP * 2))} fill={exitColor} stroke="white" strokeWidth={1.8} />
+            <text x={ex} y={ey + (s.pnlPct >= 0 === (preview.direction !== "SHORT") ? -13 : 21) + 8 * (1 - easeOut(exitP * 1.6))} opacity={easeOut(exitP * 1.6)} textAnchor="end" fontSize={11} fontWeight={800} fill={exitColor} stroke="white" strokeWidth={3.5} paintOrder="stroke">
+              {EXIT_TEXT[s.kind]} {s.pnlPct >= 0 ? "+" : ""}
+              {s.pnlPct.toFixed(2)}%
+            </text>
+          </g>
+        )}
+
+        {/* signal dots on the price-chart lines the entry rule uses */}
+        {f.atSignal &&
+          st.overlays
+            .filter((o) => o.entry)
+            .map((o) => {
+              const v = at(o.values, s.signalIdx);
+              const r = 4 + (signalPulse >= 0 ? 2 * Math.sin(signalPulse * Math.PI) : 0);
+              return v === null ? null : <circle key={o.label} cx={x(s.signalIdx)} cy={py(v)} r={r * easeOutBack(signalIn)} fill="white" stroke={C.signal} strokeWidth={2.6} />;
+            })}
+
+        {/* volume */}
+        {volPane && (() => {
+          const y = paneY("volume")!;
+          const vmarks = new Set(markers.filter((h) => h.m.family === "VOLUME_PATTERN").map((h) => h.local));
+          const bw = Math.max(2, slot * 0.66);
+          return (
+            <g>
+              {Array.from({ length: last - first + 1 }, (_, k) => first + k)
+                .filter(shown)
+                .map((i) => {
+                  const c = s.candles[i];
+                  const g = i === visible ? easeOut(frac) : 1;
+                  const isSig = vmarks.has(i) && i === s.signalIdx;
+                  const vh = (volPane.top + volPane.h - y(c.volume)) * g;
+                  return (
+                    <g key={c.time}>
+                      {isSig && <rect x={x(i) - bw / 2 - 2} width={bw + 4} y={volPane.top + volPane.h - vh - 2} height={vh + 2} rx={2} fill="#ea580c" opacity={0.35 * easeOut(signalIn)} filter={`url(#${clipId}-glow)`} />}
+                      <rect x={x(i) - bw / 2} width={bw} y={volPane.top + volPane.h - vh} height={vh} rx={1} fill={vmarks.has(i) ? "#ea580c" : c.close >= c.open ? C.up : C.down} opacity={vmarks.has(i) ? 0.95 : 0.35} />
+                    </g>
+                  );
+                })}
+              {st.volume.lines.map((l) => (
+                <path key={l.label} d={linePath(l.values, y)} fill="none" stroke="#ea580c" strokeWidth={1.2} strokeDasharray="4 3" />
+              ))}
+              {markers
+                .filter((h) => h.m.family === "VOLUME_PATTERN" && h.local === s.signalIdx)
+                .map((h) => (
+                  <g key={h.m.label}>
+                    {h.m.shapes[h.full] && shapeLayer(h.m.shapes[h.full], "#ea580c", "volume", clamp01(f.sinceSignal / 1100))}
+                    <text x={x(h.local)} y={volPane.top + 12} textAnchor="middle" fontSize={10} fontWeight={700} fill="#ea580c" stroke="white" strokeWidth={3} paintOrder="stroke" opacity={easeOut(signalIn)}>
+                      Caught here: {h.m.label}
+                    </text>
+                  </g>
+                ))}
+            </g>
+          );
+        })()}
+
+        {/* oscillators with the thresholds the rules use */}
+        {oscPanes.map((p) => {
+          const y = paneY(p.key)!;
+          return (
+            <g key={p.key}>
+              {p.osc.levels.map((lv) => (
+                <line key={lv} x1={ML} x2={W - MR} y1={y(lv)} y2={y(lv)} stroke={C.text} strokeDasharray="3 3" />
+              ))}
+              {p.osc.lines.map((l, k) => (
+                <path key={l.label} d={linePath(l.values, y)} fill="none" stroke={LINE_COLORS[(k + 2) % LINE_COLORS.length]} strokeWidth={1.6} strokeLinejoin="round" />
+              ))}
+              {markers
+                .filter((h) => h.local === s.signalIdx && h.m.shapes[h.full])
+                .map((h) => (
+                  <g key={h.m.label}>{shapeLayer(h.m.shapes[h.full], "#ea580c", p.key, clamp01(f.sinceSignal / 1100))}</g>
+                ))}
+              {f.atSignal &&
+                p.osc.lines
+                  .filter((l) => l.entry)
+                  .map((l) => {
+                    const v = at(l.values, s.signalIdx);
+                    const r = 4 + (signalPulse >= 0 ? 2 * Math.sin(signalPulse * Math.PI) : 0);
+                    return v === null ? null : <circle key={l.label} cx={x(s.signalIdx)} cy={y(v)} r={r * easeOutBack(signalIn)} fill="white" stroke={C.signal} strokeWidth={2.6} />;
+                  })}
+            </g>
+          );
+        })}
+      </g>
+
+      {/* labels that sit outside the clipped plot */}
+      {volPane && (
+        <text x={ML + 5} y={volPane.top + 11} fontSize={9} fill={C.text}>
+          Volume
+        </text>
+      )}
       {oscPanes.map((p) => {
         const y = paneY(p.key)!;
         return (
           <g key={p.key}>
-            <text x={ML + 4} y={p.top + 11} fontSize={9} fill={C.text}>
+            <text x={ML + 5} y={p.top + 11} fontSize={9} fill={C.text}>
               {p.osc.lines.map((l) => l.label).join(" · ")}
             </text>
             {p.osc.levels.map((lv) => (
-              <g key={lv}>
-                <line x1={ML} x2={W - MR} y1={y(lv)} y2={y(lv)} stroke={C.text} strokeDasharray="3 3" />
-                <text x={W - MR + 4} y={y(lv) + 3} fontSize={9} fill={C.text}>
-                  {lv}
-                </text>
-              </g>
+              <text key={lv} x={W - MR + 4} y={y(lv) + 3} fontSize={9} fill={C.text}>
+                {lv}
+              </text>
             ))}
-            {p.osc.lines.map((l, k) => (
-              <path key={l.label} d={path(l.values, y, visible)} fill="none" stroke={LINE_COLORS[(k + 2) % LINE_COLORS.length]} strokeWidth={1.5} />
-            ))}
-            {markersInView
-              .filter((h) => h.local === s.signalIdx && h.m.shapes[h.full])
-              .map((h) => (
-                <g key={h.m.label}>{shapeLines({ ...h.m.shapes[h.full], lines: h.m.shapes[h.full].lines.filter((l) => l.pane === p.key) }, "#ea580c")}</g>
-              ))}
-            {f.atSignal &&
-              p.osc.lines
-                .filter((l) => l.entry)
-                .map((l) => {
-                  const v = at(l.values, s.signalIdx);
-                  return v === null ? null : <circle key={l.label} cx={x(s.signalIdx)} cy={y(v)} r={4} fill="white" stroke={C.signal} strokeWidth={2.5} />;
-                })}
           </g>
         );
       })}
 
-      {/* signal dots on the price-chart lines the entry rule uses */}
-      {f.atSignal &&
-        st.overlays
-          .filter((o) => o.entry)
-          .map((o) => {
-            const v = at(o.values, s.signalIdx);
-            return v === null ? null : <circle key={o.label} cx={x(s.signalIdx)} cy={py(v)} r={4} fill="white" stroke={C.signal} strokeWidth={2.5} />;
-          })}
-
-      {/* time axis */}
-      {Array.from({ length: ticks }, (_, k) => {
-        const i = Math.round((k / Math.max(1, ticks - 1)) * (n - 1));
-        return (
-          <text key={k} x={x(i)} y={H - 6} textAnchor={k === 0 ? "start" : k === ticks - 1 ? "end" : "middle"} fontSize={9} fill={C.text}>
-            {when(s.candles[i].time, preview.intraday)}
+      {/* entry, take-profit, stop-loss (labels on the price axis; far-off levels pinned to the edge) */}
+      {levelLine(s.target, C.tp, "TP")}
+      {levelLine(s.stopLoss, C.sl, "SL")}
+      {levelLine(s.entryPrice, C.entry, "Entry")}
+      {trailNow !== null && inTrade && !f.exited && (
+        <g>
+          <rect x={W - MR + 2} y={pyClamped(trailNow) - 8} width={MR - 4} height={16} rx={5} fill={C.trail} />
+          <text x={W - MR / 2} y={pyClamped(trailNow) + 3.5} textAnchor="middle" fontSize={8.5} fontWeight={700} fill="white">
+            Trail {trailNow.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
           </text>
-        );
-      })}
+        </g>
+      )}
+
+      {/* time axis for what's on screen */}
+      {tickIdx.map((i, k) => (
+        <text key={k} x={Math.min(W - MR - 2, Math.max(ML + 2, x(i)))} y={axisTop + 13} textAnchor={k === 0 ? "start" : k === tickIdx.length - 1 ? "end" : "middle"} fontSize={9} fill={C.text}>
+          {when(s.candles[i].time, preview.intraday)}
+        </text>
+      ))}
+
+      {/* overview: whole window, the visible part, entry and exit */}
+      {n > viewN && (
+        <g>
+          <rect x={ML} y={ovTop} width={plotW} height={OVERVIEW_H - 4} rx={4} fill="rgba(14,27,45,0.03)" />
+          <polyline points={pts(closes.slice(0, Math.max(1, visible)).map((v, i) => [ovX(i), ovY(v)]))} fill="none" stroke="rgba(14,27,45,0.35)" strokeWidth={1} />
+          <rect x={ovX(cam)} y={ovTop} width={(viewN / Math.max(1, n - 1)) * plotW} height={OVERVIEW_H - 4} rx={4} fill={C.entry} opacity={0.1} stroke={C.entry} strokeOpacity={0.35} />
+          {inTrade && <circle cx={ovX(s.entryIdx)} cy={ovY(closes[s.entryIdx])} r={2.5} fill={C.entry} />}
+          {f.exited && <circle cx={ovX(s.exitIdx)} cy={ovY(closes[s.exitIdx])} r={2.5} fill={exitColor} />}
+        </g>
+      )}
     </svg>
   );
 }

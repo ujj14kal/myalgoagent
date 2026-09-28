@@ -1,17 +1,10 @@
-import { timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/logger";
-
-function secretMatches(provided: string | null, expected: string | undefined): boolean {
-  if (!provided || !expected) return false;
-  const a = Buffer.from(provided);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
+import { internalSecretMatches } from "@/lib/internal-auth";
 
 export async function POST(req: NextRequest) {
-  if (!secretMatches(req.headers.get("x-purge-secret"), process.env.PURGE_SECRET)) {
+  if (!internalSecretMatches(req.headers.get("x-purge-secret"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -71,7 +71,7 @@ const groups: Group[] = [
     title: "Paper & Live Trading",
     icon: Radio,
     items: [
-      "Paper trading with virtual capital and simulated fills on the strategy's own candles — daily or intraday — updated each time you sync",
+      "Paper trading with virtual capital and simulated fills on the strategy's own candles — daily or intraday — updated automatically during market hours, with stops and trailing stops closing trades on their own",
       "Broker connections for Dhan, Zerodha, Upstox, Fyers, Angel One, Groww, ICICI Direct, 5paisa and Alice Blue — your own API key, encrypted, verified on connect",
     ],
     soon: [

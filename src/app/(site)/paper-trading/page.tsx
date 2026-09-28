@@ -3,7 +3,6 @@ import PageHeader from "@/components/page-header";
 import { Breadcrumbs, Prose } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 import Reveal from "@/components/reveal";
-import ComingSoonTag from "@/components/coming-soon-tag";
 
 export const metadata: Metadata = pageMetadata({
   title: "Paper Trading",
@@ -27,7 +26,7 @@ export default function PaperTradingPage() {
         <h2>How it differs from live trading</h2>
         <p>
           Paper trading uses the same strategy engine and signals as
-          backtesting, run forward on the strategy&rsquo;s own candles (daily or intraday) each time you sync,
+          backtesting, run forward on the strategy&rsquo;s own candles (daily or intraday) automatically during market hours,
           and every order is simulated against a virtual balance. No order is ever sent to a broker, and no real capital is
           ever at risk. The interface clearly labels a paper account as
           simulated at all times.
@@ -51,7 +50,9 @@ export default function PaperTradingPage() {
           <li>Each trade explained: the rule that fired, the exit reason and the price</li>
         </ul>
         <p>
-          <ComingSoonTag /> Continuous updates during market hours, without clicking Sync.
+          Active sessions update on their own about every 5 minutes during market hours, so a trade closes by
+          itself when its stop-loss, target or trailing stop is hit — you&rsquo;ll get a notification explaining
+          why. You can also press Sync any time to catch up immediately.
         </p>
 
         <h2>Controls</h2>

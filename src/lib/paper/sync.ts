@@ -112,10 +112,29 @@ export interface SyncResult {
  * need history before the "new" bars to be correct); only bars after
  * `lastSyncedTime` are actually acted on.
  */
+const INTERVAL_SECONDS: Partial<Record<CandleInterval, number>> = { "1m": 60, "2m": 120, "3m": 180, "5m": 300, "15m": 900, "30m": 1800, "60m": 3600, "4h": 4 * 3600 };
+const IST_OFFSET = 19_800;
+const MARKET_CLOSE_MINUTE = 15 * 60 + 30;
+
+/** Drops a trailing candle that hasn't closed yet at `nowSec`. Intraday candles close after their interval
+ * (the last one of the day at 15:30 IST); a daily candle closes at 15:30 IST on its day. */
+export function closedCandles<T extends { time: number }>(candles: T[], timeframe: CandleInterval, nowSec = Math.floor(Date.now() / 1000)): T[] {
+  const last = candles[candles.length - 1];
+  if (!last) return candles;
+  const istMidnight = Math.floor((last.time + IST_OFFSET) / 86_400) * 86_400 - IST_OFFSET;
+  const sessionEnd = istMidnight + MARKET_CLOSE_MINUTE * 60;
+  const step = INTERVAL_SECONDS[timeframe];
+  const closesAt = step ? Math.min(last.time + step, sessionEnd) : sessionEnd;
+  return closesAt <= nowSec ? candles : candles.slice(0, -1);
+}
+
 export async function syncPaperSession(session: PaperSessionState, allowNewEntries: boolean, market: MarketDataProvider): Promise<SyncResult> {
   const timeframe = (session.timeframe ?? "1d") as CandleInterval;
   const range = paperSyncRange(timeframe);
-  const candles = await market.getHistoricalCandles(session.instrumentSymbol, range, timeframe);
+  // Only act on candles that have closed: the provider also returns the one
+  // still forming, and acting on it (then marking it synced) would both trade
+  // on a half-built candle and skip how it actually closed.
+  const candles = closedCandles(await market.getHistoricalCandles(session.instrumentSymbol, range, timeframe), timeframe);
   const aux = await fetchAuxCandles(session.entryCondition, session.exitCondition, session.instrumentSymbol, range, timeframe, market);
 
   const { entry, exit } = evaluateConditionsPerBar(candles, session.entryCondition, session.exitCondition, aux);
