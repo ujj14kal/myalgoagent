@@ -1,6 +1,7 @@
 "use server";
 
 import bcrypt from "bcryptjs";
+import { LIMITS, oneLine, text, tooLong } from "@/lib/text";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { auth } from "@/lib/auth";
@@ -17,8 +18,12 @@ export async function updateProfileAction(input: {
   const session = await auth();
   if (!session?.user?.id) return { ok: false, error: "Not signed in." };
 
-  const username = input.username.trim().toLowerCase();
-  if (!input.fullName.trim()) return { ok: false, error: "Full name is required." };
+  const username = text(input?.username).toLowerCase();
+  const fullName = oneLine(input?.fullName, LIMITS.fullName + 1);
+  const phone = text(input?.phone);
+  if (!fullName) return { ok: false, error: "Full name is required." };
+  if (tooLong(fullName, LIMITS.fullName)) return { ok: false, error: `Full name must be ${LIMITS.fullName} characters or fewer.` };
+  if (phone && !/^\+?[0-9 ()-]{6,20}$/.test(phone)) return { ok: false, error: "Enter a valid phone number." };
   if (!isValidUsername(username)) {
     return { ok: false, error: "Username must be 3-20 characters: lowercase letters, numbers, underscores." };
   }
@@ -30,7 +35,7 @@ export async function updateProfileAction(input: {
 
   await prisma.user.update({
     where: { id: session.user.id },
-    data: { name: input.fullName.trim(), username, phone: input.phone.trim() || null },
+    data: { name: fullName, username, phone: phone || null },
   });
   revalidatePath("/app/account");
   return { ok: true };

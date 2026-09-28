@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { marketDataFor } from "@/lib/market-data";
-import { activateStrategyIfDraft } from "@/lib/strategy-actions";
+import { activateStrategyIfDraft } from "@/lib/strategy-status";
 import type { Strategy, PaperSession } from "@prisma/client";
 
 // Same defaults shown to a user starting a paper session by hand
@@ -29,7 +29,7 @@ export async function getOrCreateActivePaperSession(
     // Defensive — the DB trigger (see migration add_strategy_active_trigger)
     // already handles this on insert, but an existing session found here
     // could predate that trigger, same class of bug as the one it fixes.
-    await activateStrategyIfDraft(strategy.id);
+    await activateStrategyIfDraft(strategy.id, strategy.userId);
     return existing;
   }
 

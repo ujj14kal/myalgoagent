@@ -9,7 +9,7 @@ import { rangeFor } from "@/lib/strategy/session";
 import { syncPaperSession } from "@/lib/paper/sync";
 import { evaluateRisk } from "@/lib/risk/evaluate";
 import { enforceRateLimit } from "@/lib/rate-limit";
-import { activateStrategyIfDraft } from "@/lib/strategy-actions";
+import { activateStrategyIfDraft } from "@/lib/strategy-status";
 import type { ConditionNode } from "@/lib/strategy";
 import { conditionToText } from "@/lib/strategy/format";
 import { explainPaperOrder, type ExplainContext } from "@/lib/paper/explain";
@@ -116,7 +116,7 @@ async function startPaperSessionCore(userId: string, input: StartPaperSessionInp
     // Actually putting a strategy to work is what promotes it out of
     // Draft — see activateStrategyIfDraft's own comment for why
     // backtesting alone doesn't.
-    await activateStrategyIfDraft(strategy.id);
+    await activateStrategyIfDraft(strategy.id, userId);
     return { id: paperSession.id };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Something went wrong" };

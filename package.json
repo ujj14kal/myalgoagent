@@ -56,5 +56,9 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^2.1.9"
+  },
+  "overrides": {
+    "mysql2": "^3.24.4",
+    "deepmerge-ts": "^8.0.2"
   }
 }

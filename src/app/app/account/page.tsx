@@ -24,7 +24,7 @@ export default async function AccountPage() {
     // have" stat, and a deleted one shouldn't inflate it.
     prisma.strategy.count({ where: { userId: session.user.id, status: { not: "DELETED" } } }),
     prisma.watchlistItem.count({ where: { userId: session.user.id } }),
-    getLinkedProviders(session.user.id),
+    getLinkedProviders(),
   ]);
   if (!user) return null;
 

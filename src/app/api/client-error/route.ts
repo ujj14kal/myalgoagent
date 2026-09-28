@@ -39,6 +39,10 @@ export async function POST(request: NextRequest) {
       clientStack: clip(body.stack),
       url: clip(body.url),
       userAgent: clip(request.headers.get("user-agent")),
+      // Full forwarding chain, to see which entry the CDN appends (per-IP rate limits must use that one).
+      forwardedFor: clip(request.headers.get("x-forwarded-for")),
+      realIp: clip(request.headers.get("x-real-ip")),
+      viewerAddress: clip(request.headers.get("cloudfront-viewer-address")),
     });
 
     return NextResponse.json({ ok: true });

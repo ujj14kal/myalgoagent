@@ -228,16 +228,6 @@ export async function restoreStrategyAction(id: string) {
   revalidatePath("/app/dashboard");
 }
 
-/** Promotes a strategy from DRAFT to ACTIVE the moment it's actually put to
- * work — currently: starting a paper trading session. Never touches a
- * strategy that's already ACTIVE or that's been deliberately ARCHIVED. */
-export async function activateStrategyIfDraft(strategyId: string) {
-  await prisma.strategy.updateMany({
-    where: { id: strategyId, status: "DRAFT" },
-    data: { status: "ACTIVE" },
-  });
-}
-
 /** How many of this strategy's paper sessions are still live (ACTIVE or
  * PAUSED) — used to warn before deleting, since the strategy relation is
  * `onDelete: SetNull` (a session survives its strategy being deleted, it

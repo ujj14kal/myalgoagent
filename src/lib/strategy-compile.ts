@@ -87,6 +87,7 @@ export async function compile(input: StrategyInput): Promise<{
   exitSource: string | null;
 }> {
   if (!input.name.trim()) throw new Error("Strategy name is required");
+  if (input.name.trim().length > 120) throw new Error("Strategy name must be 120 characters or fewer");
   if (!input.instrumentId) throw new Error("Instrument is required");
   const session = sessionFromInput(input);
   throwIfInfeasible([...checkPositionSizingFeasibility(input), ...checkRiskFeasibility(input), ...checkSessionFeasibility(session, null, null)]);

@@ -1,3 +1,4 @@
+import { escapeHtml as e, oneLine } from "@/lib/text";
 import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
 
 const REGION = "ap-south-1";
@@ -50,7 +51,7 @@ export async function sendMagicLinkEmail(to: string, url: string) {
   await sendEmail({
     to,
     subject: "Sign in to MyAlgoAgent",
-    html: wrap(`<p>Click below to sign in to MyAlgoAgent:</p><p><a href="${url}">Sign in</a></p><p>This link expires shortly and can only be used once. If you didn't request this, you can ignore this email.</p>`),
+    html: wrap(`<p>Click below to sign in to MyAlgoAgent:</p><p><a href="${e(url)}">Sign in</a></p><p>This link expires shortly and can only be used once. If you didn't request this, you can ignore this email.</p>`),
     text: `Sign in to MyAlgoAgent: ${url}\n\nThis link expires shortly and can only be used once. If you didn't request this, you can ignore this email.`,
   });
 }
@@ -59,7 +60,7 @@ export async function sendWelcomeEmail(to: string, name: string) {
   await sendEmail({
     to,
     subject: "Welcome to MyAlgoAgent",
-    html: wrap(`<p>Hi ${name},</p><p>Welcome to MyAlgoAgent — your account is ready.</p>`),
+    html: wrap(`<p>Hi ${e(name)},</p><p>Welcome to MyAlgoAgent — your account is ready.</p>`),
     text: `Hi ${name},\n\nWelcome to MyAlgoAgent — your account is ready.`,
   });
 }
@@ -77,7 +78,7 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string) {
   await sendEmail({
     to,
     subject: "Reset your MyAlgoAgent password",
-    html: wrap(`<p>We received a request to reset your password.</p><p><a href="${resetUrl}">Reset your password</a></p><p>This link expires in 1 hour. If you didn't request this, you can ignore this email.</p>`),
+    html: wrap(`<p>We received a request to reset your password.</p><p><a href="${e(resetUrl)}">Reset your password</a></p><p>This link expires in 1 hour. If you didn't request this, you can ignore this email.</p>`),
     text: `We received a request to reset your password.\n\nReset it here: ${resetUrl}\n\nThis link expires in 1 hour. If you didn't request this, you can ignore this email.`,
   });
 }
@@ -95,8 +96,8 @@ export async function sendDeletionConfirmedEmail(to: string, scheduledFor: Date)
 export async function sendFeedbackNotice(page: string, message: string, fromEmail: string) {
   await sendEmail({
     to: "feedbacks@myalgoagent.com",
-    subject: `New feedback from ${page}`,
-    html: wrap(`<p>From: ${fromEmail}</p><p>Page: ${page}</p><p>${message}</p>`),
+    subject: oneLine(`New feedback from ${page}`, 200),
+    html: wrap(`<p>From: ${e(fromEmail)}</p><p>Page: ${e(page)}</p><p style="white-space:pre-wrap">${e(message)}</p>`),
     text: `From: ${fromEmail}\nPage: ${page}\n\n${message}`,
     // reply goes straight to the user who submitted it, not into noreply@
     replyTo: fromEmail,
@@ -106,8 +107,8 @@ export async function sendFeedbackNotice(page: string, message: string, fromEmai
 export async function sendSupportCaseNotice(caseId: string, subject: string, message: string, fromEmail: string) {
   await sendEmail({
     to: "support@myalgoagent.com",
-    subject: `[${caseId}] ${subject}`,
-    html: wrap(`<p>Case: ${caseId}</p><p>From: ${fromEmail}</p><p>Subject: ${subject}</p><p>${message}</p>`),
+    subject: oneLine(`[${caseId}] ${subject}`, 250),
+    html: wrap(`<p>Case: ${e(caseId)}</p><p>From: ${e(fromEmail)}</p><p>Subject: ${e(subject)}</p><p style="white-space:pre-wrap">${e(message)}</p>`),
     text: `Case: ${caseId}\nFrom: ${fromEmail}\nSubject: ${subject}\n\n${message}`,
     replyTo: fromEmail,
   });

@@ -58,10 +58,15 @@ const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object"
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 
 /** A broker's own error text, trimmed — brokers return short, user-meaningful messages (e.g. "Invalid api_key"). */
-function brokerMessage(body: Record<string, unknown>): string | undefined {
+export function brokerMessage(body: Record<string, unknown>): string | undefined {
+  // A message may be a string or nested one level: Groww sends
+  // {"errorMessage":{"message":"…"}}, Upstox {"errors":[{"message":"…"}]}.
+  const text = (v: unknown): string | undefined => str(v) ?? str(obj(v).message) ?? str(obj(v).msg);
   const errors = body.errors;
-  if (Array.isArray(errors) && errors.length) return str(obj(errors[0]).message);
-  return str(body.message) ?? str(body.errorMessage) ?? str(body.error_description) ?? str(body.errorMsg);
+  if (Array.isArray(errors) && errors.length) return text(errors[0]);
+  return (
+    text(body.message) ?? text(body.errorMessage) ?? text(body.error) ?? str(body.error_description) ?? str(body.errorMsg) ?? str(body.emsg) ?? text(body.payload)
+  );
 }
 
 /**

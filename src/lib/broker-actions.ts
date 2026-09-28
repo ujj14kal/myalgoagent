@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { logError } from "@/lib/logger";
 import { BrokerError } from "@/lib/brokers/adapters";
+import { cleanKey, KeyInputError } from "@/lib/brokers/keys";
 import { brokerEncryptionReady } from "@/lib/brokers/crypto";
 import type { Failure } from "@/lib/brokers/failures";
 import {
@@ -34,7 +35,6 @@ export type CompleteLoginResult = { ok: true; account: ConnectedAccount } | { ok
 
 type KeysInput = { apiKey?: string; apiSecret?: string; clientId?: string };
 
-class InputError extends Error {}
 
 const istTime = (d: Date) =>
   new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit", day: "numeric", month: "short" }).format(d);
@@ -53,18 +53,11 @@ async function begin(brokerId: string): Promise<Begin> {
   return { userId, ...live };
 }
 
-function clean(value: string | undefined, label: string, pattern = /^[A-Za-z0-9._\-+/=]{4,512}$/): string {
-  const v = (value ?? "").trim();
-  if (!v) throw new InputError(`Please paste your ${label}.`);
-  if (/\s/.test(v)) throw new InputError(`Your ${label} has a space in it — copy it again from your broker.`);
-  if (!pattern.test(v)) throw new InputError(`That ${label} doesn't look right — copy it again from your broker.`);
-  return v;
-}
 
 async function loginFor(userId: string, brokerId: string) {
   const live = liveAdapter(brokerId)!;
   const row = await prisma.brokerConnection.findUnique({ where: { userId_broker: { userId, broker: brokerId } } });
-  if (!row) throw new InputError("Save your API keys first.");
+  if (!row) throw new KeyInputError("Save your API keys first.");
   const state = newLoginState();
   try {
     const loginUrl = await live.adapter.loginUrl(credsOf(row), { state, redirectUri: redirectUriFor(live.info.id) });
@@ -78,7 +71,7 @@ async function loginFor(userId: string, brokerId: string) {
 }
 
 function failed(err: unknown, context: string, meta: Record<string, unknown>): BrokerActionResult {
-  if (err instanceof InputError) return { ok: false, error: err.message };
+  if (err instanceof KeyInputError) return { ok: false, error: err.message };
   if (!(err instanceof BrokerError)) logError(context, err, meta);
   return { ok: false, failure: failureOf(err) };
 }
@@ -91,9 +84,9 @@ export async function saveBrokerKeys(brokerId: string, input: KeysInput): Promis
   try {
     const wants = new Set(info.fields.map((f) => f.name));
     const label = (n: string) => info.fields.find((f) => f.name === n)?.label ?? n;
-    const apiKey = clean(input.apiKey, label("apiKey"));
-    const apiSecret = wants.has("apiSecret") ? clean(input.apiSecret, label("apiSecret")) : undefined;
-    const clientId = wants.has("clientId") ? clean(input.clientId, label("clientId"), /^[A-Za-z0-9]{3,32}$/) : undefined;
+    const apiKey = cleanKey(input?.apiKey, label("apiKey"));
+    const apiSecret = wants.has("apiSecret") ? cleanKey(input?.apiSecret, label("apiSecret")) : undefined;
+    const clientId = wants.has("clientId") ? cleanKey(input?.clientId, label("clientId"), { maxLength: 64, pattern: /^[A-Za-z0-9_-]+$/ }) : undefined;
 
     const data = {
       status: "KEYS_SAVED" as const,

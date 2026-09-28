@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+const isDev = process.env.NODE_ENV !== "production";
+
 const securityHeaders = [
   // HTTPS is already enforced by Amplify/CloudFront; this tells browsers to
   // never even try plain HTTP for this origin again, for a year.
@@ -14,12 +16,13 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      // Next.js needs inline/eval script in dev; kept permissive enough for
-      // Next's own runtime/hydration scripts in both dev and prod. Google
+      // Next's inline hydration scripts need 'unsafe-inline'; 'unsafe-eval' is
+      // only for the dev server's hot reload, never production. Google
       // Analytics (gtag.js) is loaded from googletagmanager.com.
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com",
+      `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""} https://www.googletagmanager.com`,
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: https:",
+      // blob: = local previews (e.g. a profile photo before upload).
+      "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
       // Google's OAuth pages, our own API/market-data routes, GA4's beacon
       // endpoints (gtag sends hits to both of these hosts), and Amazon
@@ -27,6 +30,7 @@ const securityHeaders = [
       "connect-src 'self' https://accounts.google.com https://query1.finance.yahoo.com https://www.googletagmanager.com https://www.google-analytics.com https://region1.google-analytics.com wss://transcribestreaming.ap-south-1.amazonaws.com:8443",
       "frame-src https://accounts.google.com",
       "frame-ancestors 'none'",
+      "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self' https://accounts.google.com",
     ].join("; "),
@@ -34,6 +38,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Don't advertise the framework in every response.
+  poweredByHeader: false,
   async headers() {
     return [
       {

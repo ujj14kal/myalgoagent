@@ -6,7 +6,9 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { createSessionForUser } from "@/lib/session-cookie";
 import { reactivateIfPending } from "@/lib/account-status";
-import { enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
+import { checkRateLimit, enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
+import { clientIp } from "@/lib/request-ip";
+import { LIMITS, oneLine, text, tooLong } from "@/lib/text";
 import { isPasswordValid } from "@/lib/password";
 import { isUsernameAvailable, isValidUsername, suggestUsernames } from "@/lib/username";
 import { sendWelcomeEmail, sendPasswordResetEmail, sendMagicLinkEmail } from "@/lib/email";
@@ -31,10 +33,14 @@ export async function checkUsernameAction(username: string): Promise<{ available
 }
 
 export async function signupAction(input: SignupInput): Promise<{ ok: true } | { ok: false; error: string }> {
-  const email = input.email.trim().toLowerCase();
-  const username = input.username.trim().toLowerCase();
+  const email = text(input?.email).toLowerCase();
+  const username = text(input?.username).toLowerCase();
+  if (tooLong(email, LIMITS.email)) return { ok: false, error: "Enter a valid email address." };
+  if (tooLong(oneLine(input?.fullName, LIMITS.fullName + 1), LIMITS.fullName)) return { ok: false, error: `Full name must be ${LIMITS.fullName} characters or fewer.` };
+  if (tooLong(text(input?.phone), LIMITS.phone)) return { ok: false, error: "Enter a valid phone number." };
 
   try {
+    await enforceRateLimit(`signup-ip:${await clientIp()}`, 10, 60 * 60_000);
     await enforceRateLimit(`signup:${email}`, 5, 60 * 60_000);
   } catch (err) {
     if (err instanceof RateLimitError) return { ok: false, error: err.message };
@@ -82,9 +88,11 @@ export async function loginWithPasswordAction(
   usernameInput: string,
   password: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const username = usernameInput.trim().toLowerCase();
+  const username = text(usernameInput).toLowerCase().slice(0, 40);
 
   try {
+    // Per IP (stops trying one password across many accounts) and per account.
+    await enforceRateLimit(`login-password-ip:${await clientIp()}`, 30, 60_000);
     await enforceRateLimit(`login-password:${username}`, 10, 60_000);
   } catch (err) {
     if (err instanceof RateLimitError) return { ok: false, error: err.message };
@@ -103,8 +111,13 @@ export async function loginWithPasswordAction(
 }
 
 export async function requestPasswordResetAction(email: string): Promise<{ ok: true }> {
-  const normalized = email.trim().toLowerCase();
-  await enforceRateLimit(`password-reset-request:${normalized}`, 5, 60 * 60_000).catch(() => {});
+  const normalized = text(email).toLowerCase().slice(0, LIMITS.email);
+  // Over the limit: say "sent" exactly as usual (never reveal whether an account
+  // exists) but send nothing — so this can't be used to flood someone's inbox.
+  const limited =
+    (await checkRateLimit(`password-reset-ip:${await clientIp()}`, 10, 60 * 60_000)) ??
+    (await checkRateLimit(`password-reset-request:${normalized}`, 5, 60 * 60_000));
+  if (limited) return { ok: true };
 
   const user = await prisma.user.findUnique({ where: { email: normalized } });
   // Always return ok — never reveal whether an email exists.
@@ -161,8 +174,12 @@ export async function completeUsernameAction(username: string): Promise<{ ok: tr
 }
 
 export async function requestMagicLinkAction(email: string): Promise<{ ok: true }> {
-  const normalized = email.trim().toLowerCase();
-  await enforceRateLimit(`magic-link-request:${normalized}`, 5, 60 * 60_000).catch(() => {});
+  const normalized = text(email).toLowerCase().slice(0, LIMITS.email);
+  // Same as password reset: over the limit, respond as usual but send nothing.
+  const limited =
+    (await checkRateLimit(`magic-link-ip:${await clientIp()}`, 10, 60 * 60_000)) ??
+    (await checkRateLimit(`magic-link-request:${normalized}`, 5, 60 * 60_000));
+  if (limited) return { ok: true };
 
   const user = await prisma.user.findUnique({ where: { email: normalized } });
   if (!user) return { ok: true }; // never reveal whether an email exists
