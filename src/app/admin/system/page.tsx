@@ -1,7 +1,8 @@
-import { Bell, Bug, Database, DollarSign, Mail, Rocket, Server, ShieldAlert } from "lucide-react";
+import { Bell, Bug, Database, DollarSign, Globe, Mail, Rocket, Server, ShieldAlert } from "lucide-react";
 import { requireStaff } from "@/lib/admin/access";
 import { getAlarms, getCost, getDatabase, getDeploys, getEmailStatus, getRecentLogs, getSecurityFindings, load } from "@/lib/admin/aws";
 import RefreshCost from "@/components/admin/refresh-cost";
+import { currentEgressIp } from "@/lib/brokers/egress";
 import { AdminPageHeader, Bars, Card, Empty, Kpi, LoadError, Pill, Sparkline, ago, ist } from "@/components/admin/ui";
 
 export const maxDuration = 30;
@@ -10,7 +11,7 @@ const money = (v: number) => `$${v.toFixed(2)}`;
 
 export default async function SystemPage() {
   await requireStaff("system");
-  const [alarms, logs, email, cost, deploys, db, findings] = await Promise.all([
+  const [alarms, logs, email, cost, deploys, db, findings, egress] = await Promise.all([
     load(getAlarms),
     load(() => getRecentLogs(24)),
     load(getEmailStatus),
@@ -18,7 +19,9 @@ export default async function SystemPage() {
     load(() => getDeploys(8)),
     load(getDatabase),
     load(getSecurityFindings),
+    load(currentEgressIp),
   ]);
+  const staticIp = process.env.BROKER_EGRESS_URL?.match(/\/\/([^:/]+)/)?.[1] ?? null;
 
   const firing = alarms.ok ? alarms.data.filter((a) => a.state === "ALARM").length : null;
   const errors = logs.ok ? logs.data.filter((l) => l.level === "error") : [];
@@ -205,6 +208,27 @@ export default async function SystemPage() {
           )}
         </Card>
       </div>
+
+      <Card title="Broker static IP" icon={Globe}>
+        {!staticIp ? (
+          <p className="text-sm text-brand-navy/60">Not configured — broker calls go out directly from Amplify (no fixed IP). Live orders need the relay.</p>
+        ) : !egress.ok ? (
+          <div className="space-y-2">
+            <p className="text-sm text-brand-navy">
+              Static IP <strong className="font-mono">{staticIp}</strong>
+            </p>
+            <LoadError error={`the relay didn't answer (${egress.error}) — broker calls will fail until it's back`} />
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <span>
+              Brokers see <strong className="font-mono text-brand-navy">{egress.data.ip}</strong>
+            </span>
+            {egress.data.ip === staticIp ? <Pill tone="green" dot>relay working</Pill> : <Pill tone="red" dot>not the registered IP ({staticIp})</Pill>}
+            <span className="text-xs text-brand-navy/45">Register this IP on the broker account. Relay: CloudFormation stack “myalgoagent-egress”.</span>
+          </div>
+        )}
+      </Card>
 
       <Card title="Security findings (GuardDuty)" icon={ShieldAlert} pad={false}>
         {!findings.ok ? (

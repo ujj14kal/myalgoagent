@@ -1,0 +1,181 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  MyAlgoAgent broker egress relay - one small server with one Elastic IP that
+  broker API calls are tunnelled through, so brokers see a single static IP.
+  Delete this stack to remove it (and stop its cost); the app falls back to
+  calling brokers directly when BROKER_EGRESS_URL is unset.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: A public subnet (default VPC subnets are).
+  InstanceType:
+    Type: String
+    Default: t4g.nano
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+  ParameterPrefix:
+    Type: String
+    Default: /myalgoagent/egress
+    Description: SSM Parameter Store path holding tls.key, tls.crt and proxy-secret (SecureString).
+  AllowHosts:
+    Type: String
+    Description: Comma-separated broker API hosts the relay may connect to (port 443 only).
+
+Resources:
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: MyAlgoAgent egress relay - TLS proxy port only
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        # Amplify's servers have no fixed IPs, so the port is open; the relay
+        # requires TLS + a secret and only reaches allow-listed broker hosts.
+        - IpProtocol: tcp
+          FromPort: 8443
+          ToPort: 8443
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - { Key: Name, Value: myalgoagent-egress }
+
+  Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        # Session Manager for admin access (no SSH, no key pair).
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: read-egress-params
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ParameterPrefix}/*
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub ssm.${AWS::Region}.amazonaws.com
+        - PolicyName: logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents, logs:DescribeLogStreams]
+                Resource: !GetAtt LogGroup.Arn
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref Role]
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /myalgoagent/egress
+      RetentionInDays: 90
+
+  Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref AmiId
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds: [!Ref SecurityGroup]
+      IamInstanceProfile: !Ref InstanceProfile
+      MetadataOptions:
+        HttpTokens: required
+        HttpEndpoint: enabled
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeSize: 8, VolumeType: gp3, Encrypted: true }
+      Tags:
+        - { Key: Name, Value: myalgoagent-egress }
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euo pipefail
+          dnf install -y nodejs amazon-cloudwatch-agent
+          mkdir -p /etc/maa-egress /opt/maa-egress
+          get() { aws ssm get-parameter --region ${AWS::Region} --with-decryption --name "${ParameterPrefix}/$1" --query Parameter.Value --output text; }
+          get tls.key > /etc/maa-egress/tls.key
+          get tls.crt > /etc/maa-egress/tls.crt
+          printf 'PROXY_SECRET=%s\nALLOW_HOSTS=%s\nPORT=8443\n' "$(get proxy-secret)" "${AllowHosts}" > /etc/maa-egress/env
+          get server.mjs > /opt/maa-egress/server.mjs
+          useradd --system --no-create-home maa-egress || true
+          chown -R maa-egress /etc/maa-egress /opt/maa-egress
+          chmod 600 /etc/maa-egress/*
+          cat > /etc/systemd/system/maa-egress.service <<'UNIT'
+          [Unit]
+          Description=MyAlgoAgent broker egress relay
+          After=network-online.target
+          [Service]
+          User=maa-egress
+          EnvironmentFile=/etc/maa-egress/env
+          ExecStart=/usr/bin/node /opt/maa-egress/server.mjs
+          Restart=always
+          RestartSec=2
+          StandardOutput=append:/var/log/maa-egress.log
+          StandardError=append:/var/log/maa-egress.log
+          NoNewPrivileges=true
+          ProtectSystem=strict
+          ReadWritePaths=/var/log
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+          # Unprivileged port, so the service needs no extra capabilities.
+          systemctl daemon-reload
+          systemctl enable --now maa-egress
+          cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'CW'
+          {"logs":{"logs_collected":{"files":{"collect_list":[{"file_path":"/var/log/maa-egress.log","log_group_name":"/myalgoagent/egress","log_stream_name":"{instance_id}"}]}}}}
+          CW
+          /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+
+  StaticIp:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      InstanceId: !Ref Instance
+      Tags:
+        - { Key: Name, Value: myalgoagent-broker-static-ip }
+
+  # Restart the server automatically if the underlying host fails.
+  RecoveryAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: myalgoagent-egress-recover
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed_System
+      Dimensions: [{ Name: InstanceId, Value: !Ref Instance }]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions: [!Sub "arn:aws:automate:${AWS::Region}:ec2:recover"]
+
+Outputs:
+  StaticIp:
+    Description: Register this IP as the static IP on your broker account.
+    Value: !Ref StaticIp
+  ProxyUrl:
+    Description: Value for the app's BROKER_EGRESS_URL.
+    Value: !Sub https://${StaticIp}:8443
+  InstanceId:
+    Value: !Ref Instance

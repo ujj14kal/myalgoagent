@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { request as httpsRequest } from "node:https";
 import type { BrokerId, LoginMethodId } from "./catalog";
 import { totpCode } from "./totp";
+import { brokerFetch, brokerGetWithBody } from "./egress";
 import { classifyBrokerMessage, type Failure, type FailureCode } from "./failures";
 
 // Server-side login flows for each live broker, straight from the brokers'
@@ -38,9 +39,10 @@ export type BrokerAdapter = {
 const TIMEOUT_MS = 12_000;
 
 async function call(url: string, init: RequestInit): Promise<{ status: number; body: Record<string, unknown> }> {
-  let res: Response;
+  let res: { status: number; text(): Promise<string> };
   try {
-    res = await fetch(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });
+    // Through the static-IP relay when it's configured (see egress.ts).
+    res = await brokerFetch(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });
   } catch {
     throw new BrokerError("unreachable");
   }
@@ -342,7 +344,19 @@ const groww: BrokerAdapter = {
 // ---------- ICICI Direct (Breeze API) ----------
 
 /** Breeze reads a JSON body on GET requests, which fetch() can't send. */
-function getWithBody(url: string, body: string, headers: Record<string, string>): Promise<{ status: number; body: Record<string, unknown> }> {
+async function getWithBody(url: string, body: string, headers: Record<string, string>): Promise<{ status: number; body: Record<string, unknown> }> {
+  try {
+    const relayed = await brokerGetWithBody(url, body, headers, TIMEOUT_MS);
+    if (relayed) {
+      try {
+        return { status: relayed.status, body: relayed.text ? (JSON.parse(relayed.text) as Record<string, unknown>) : {} };
+      } catch {
+        return { status: relayed.status, body: {} };
+      }
+    }
+  } catch {
+    return { status: 599, body: {} };
+  }
   return new Promise((resolve) => {
     const req = httpsRequest(url, { method: "GET", headers: { ...headers, "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) }, timeout: TIMEOUT_MS }, (res) => {
       let text = "";
