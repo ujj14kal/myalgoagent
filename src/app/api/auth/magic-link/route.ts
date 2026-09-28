@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { clientIpFrom } from "@/lib/request-ip";
 import { prisma } from "@/lib/prisma";
 import { createSessionForUser } from "@/lib/session-cookie";
 import { reactivateIfPending } from "@/lib/account-status";
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest) {
 
   try {
     // Unauthenticated and DB-backed on every hit, so metered per client IP.
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+    const ip = clientIpFrom((n) => req.headers.get(n));
     await enforceRateLimit(`magic-link-verify:${ip}`, 20, 60_000);
 
     const tokenHash = createHash("sha256").update(token).digest("hex");

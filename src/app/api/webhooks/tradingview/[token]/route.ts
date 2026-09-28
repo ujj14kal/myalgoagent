@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { clientIpFrom } from "@/lib/request-ip";
 import { prisma } from "@/lib/prisma";
 import { enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { parseTradingViewPayload } from "@/lib/webhooks/tradingview";
@@ -52,7 +53,7 @@ async function handleWebhook(request: NextRequest, { params }: { params: Promise
   // generous (10/s) — TradingView sends every user's alerts from a small
   // shared set of IPs, so this must never throttle legitimate aggregate
   // traffic, only floods.
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const ip = clientIpFrom((n) => request.headers.get(n));
   try {
     await enforceRateLimit(`webhook-ip:${ip}`, 600, 60_000);
   } catch (err) {

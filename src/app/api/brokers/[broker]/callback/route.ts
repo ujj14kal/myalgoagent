@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
+import { logError } from "@/lib/logger";
 import { callbackOrigin, liveAdapter } from "@/lib/brokers/service";
 
 // The URL users paste into their broker app ("Redirect URL"). After the user
@@ -17,7 +18,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   // Built from the public origin: request.url reflects Amplify's internal listener.
   const origin = callbackOrigin();
-  const session = await auth();
+  let session;
+  try {
+    session = await auth();
+  } catch (err) {
+    // Can't tell who this is (e.g. a brief database outage): send them back to
+    // Broker Connections to retry rather than showing a bare error page.
+    logError("broker.callback:auth", err, { broker: live.info.id });
+    return NextResponse.redirect(new URL(`/app/broker-connections?broker=${live.info.id}`, origin), 303);
+  }
   if (!session?.user?.id) {
     return NextResponse.redirect(new URL("/login?callbackUrl=%2Fapp%2Fbroker-connections%3Fresult%3Dsigned_out", origin), 303);
   }

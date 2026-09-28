@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { clientIpFrom } from "@/lib/request-ip";
 import { enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { logError } from "@/lib/logger";
 
@@ -18,7 +19,7 @@ function clip(value: unknown): string | undefined {
 
 export async function POST(request: NextRequest) {
   try {
-    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+    const ip = clientIpFrom((n) => request.headers.get(n));
     await enforceRateLimit(`client-error:${ip}`, 20, 60_000);
 
     const raw = await request.text();
@@ -39,10 +40,7 @@ export async function POST(request: NextRequest) {
       clientStack: clip(body.stack),
       url: clip(body.url),
       userAgent: clip(request.headers.get("user-agent")),
-      // Full forwarding chain, to see which entry the CDN appends (per-IP rate limits must use that one).
-      forwardedFor: clip(request.headers.get("x-forwarded-for")),
-      realIp: clip(request.headers.get("x-real-ip")),
-      viewerAddress: clip(request.headers.get("cloudfront-viewer-address")),
+
     });
 
     return NextResponse.json({ ok: true });
