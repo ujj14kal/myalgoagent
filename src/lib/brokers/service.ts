@@ -1,6 +1,7 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { BrokerConnection } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { logWarn } from "@/lib/logger";
 import { siteUrl } from "@/lib/site";
 import { ADAPTERS, BrokerError, type BrokerCreds, type BrokerSession } from "./adapters";
 import { brokerById, callbackUrl, type BrokerId } from "./catalog";
@@ -92,7 +93,8 @@ export async function saveSession(row: BrokerConnection, s: BrokerSession) {
 /** Record a failed attempt; a still-valid session from earlier today is kept. */
 export async function saveError(rowId: string, err: unknown, opts: { keepSession?: boolean } = {}): Promise<Failure> {
   const failure = failureOf(err);
-  await prisma.brokerConnection.update({
+  const row = await prisma.brokerConnection.update({
+    select: { broker: true },
     where: { id: rowId },
     data: {
       lastError: encodeFailure(failure),
@@ -102,5 +104,7 @@ export async function saveError(rowId: string, err: unknown, opts: { keepSession
       ...(opts.keepSession ? {} : { status: "ERROR" as const }),
     },
   });
+  // One line per failed attempt (no keys or tokens) — the "broker logins failing" alarm counts these.
+  logWarn("broker.failure", failure.code, { broker: row.broker, code: failure.code, detail: failure.detail?.slice(0, 200) });
   return failure;
 }

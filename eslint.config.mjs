@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Amplify's npm cache lives in the project during builds.
+    ".npm/**",
   ]),
 ]);
 

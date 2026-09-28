@@ -1,0 +1,34 @@
+# Runs on every push and pull request: typecheck, lint and the unit tests.
+# The same checks also run inside the Amplify build (amplify.yml), where a
+# failure stops the deploy — this workflow gives the red/green ✗/✓ on GitHub.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # prisma generate (postinstall) only needs a syntactically valid URL; nothing connects to it.
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npx vitest run
