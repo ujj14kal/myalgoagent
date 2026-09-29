@@ -10,6 +10,7 @@ import { CONDITION_REFERENCE, fillCustomRefs, toConditionNode } from "./conditio
 import { describeCustom, type CustomIndicatorDef } from "@/lib/custom-indicator";
 import { FormulaError, parseFormula } from "@/lib/custom-indicator/formula";
 import type { MantleTool } from "./mantle";
+import { getBrokerAccount, getMarketOverview, getOptionChainSummary, getQuote } from "./market-tools";
 import { NEW_STRATEGY_ID, toStrategyInput, type AgentProposal, type PlanStep, type RiskUnitName, type SizingModeName } from "./proposals";
 
 // Tools the agent can call. Read tools answer from the user's own data.
@@ -101,6 +102,38 @@ export const AGENT_TOOLS: MantleTool[] = [
         type: "object",
         properties: { broker: { type: "string", description: "dhan, zerodha, upstox, fyers, angelone, groww, icicidirect, kotak, 5paisa or aliceblue (optional)" } },
       },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_quote",
+      description: "Latest price of a stock or index (live during market hours where the account has live data), day change, previous close, day and 52-week range, bid/ask. Use whenever the user asks about a price.",
+      parameters: { type: "object", properties: { symbol: { type: "string", description: "e.g. RELIANCE, TCS, NIFTY, BANKNIFTY, SENSEX" } }, required: ["symbol"] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_market_overview",
+      description: "How the market is doing today: main indices, advances/declines, top gainers and losers, most traded stocks.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_option_chain",
+      description: "An option chain in brief (live-data accounts): spot, PCR, max pain, ATM IV and prices/OI for strikes around the money.",
+      parameters: { type: "object", properties: { underlying: { type: "string", description: "NIFTY, BANKNIFTY or an F&O stock like RELIANCE" }, expiry: { type: "string", description: "yyyy-mm-dd; nearest if omitted" } }, required: ["underlying"] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_my_broker_account",
+      description: "The user's real broker account as their broker reports it now (read-only): funds/margin, holdings, positions, today's orders. Only when they ask about their account.",
+      parameters: { type: "object", properties: { broker: { type: "string", description: "broker id (groww, zerodha, upstox…); first connected one if omitted" } } },
     },
   },
   {
@@ -877,6 +910,14 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
     }
     case "get_broker_connection_guide":
       return { result: await brokerGuide(userId, typeof a.broker === "string" ? a.broker : undefined) };
+    case "get_quote":
+      return { result: await getQuote(userId, str(a.symbol)).catch(() => ({ error: "Couldn't load that price right now." })) };
+    case "get_market_overview":
+      return { result: await getMarketOverview(userId).catch(() => ({ error: "Couldn't load the market overview right now." })) };
+    case "get_option_chain":
+      return { result: await getOptionChainSummary(userId, str(a.underlying), str(a.expiry) || undefined).catch(() => ({ error: "Couldn't load the option chain right now." })) };
+    case "get_my_broker_account":
+      return { result: await getBrokerAccount(userId, str(a.broker) || undefined).catch(() => ({ error: "Couldn't read the broker account right now." })) };
     case "list_custom_indicators": {
       const rows = await prisma.customIndicator.findMany({ where: { userId }, orderBy: { name: "asc" }, select: { name: true, description: true, def: true } });
       return { result: rows.map((r) => ({ name: r.name, definition: describeCustom(r.def as unknown as CustomIndicatorDef), description: r.description })) };

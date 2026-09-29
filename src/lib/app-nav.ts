@@ -6,6 +6,7 @@ import {
   CandlestickChart,
   FlaskConical,
   LayoutDashboard,
+  Landmark,
   Layers,
   Link2,
   LifeBuoy,
@@ -41,6 +42,7 @@ export const navGroups: NavGroup[] = [
   {
     label: "Portfolio",
     items: [
+      { href: "/app/broker-account", label: "Broker Account", icon: Landmark },
       { href: "/app/portfolio", label: "Portfolio", icon: Wallet },
       { href: "/app/orders", label: "Orders", icon: ListOrdered },
       { href: "/app/positions", label: "Positions", icon: BriefcaseBusiness },

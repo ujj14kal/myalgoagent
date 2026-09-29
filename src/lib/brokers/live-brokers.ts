@@ -78,14 +78,14 @@ export function angelOptionSymbol(c: FoContract): string {
 // ---------- shared plumbing ----------
 
 const TIMEOUT_MS = 12_000;
-const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
-const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
-const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : null);
-const text = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : typeof v === "number" ? String(v) : null);
+export const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+export const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+export const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : null);
+export const text = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : typeof v === "number" ? String(v) : null);
 /** "RELIANCE-EQ", "NSE:RELIANCE-EQ", "RELIANCE_EQ" → "RELIANCE". */
 export const plainSymbol = (s: string | null) => (s ? s.replace(/^[A-Z]+:/, "").replace(/[-_](EQ|BE)$/i, "").toUpperCase() : null);
 
-async function http(url: string, init: { method?: string; headers?: Record<string, string>; json?: unknown; form?: Record<string, string> }) {
+export async function http(url: string, init: { method?: string; headers?: Record<string, string>; json?: unknown; form?: Record<string, string> }) {
   let res: { status: number; text(): Promise<string> };
   try {
     res = await brokerFetch(url, {
@@ -155,8 +155,8 @@ const groww: LiveBroker = {
 
 // ---------- Zerodha (Kite Connect v3) ----------
 
-const KITE = "https://api.kite.trade";
-const kiteHeaders = (ctx: LiveCtx) => ({ "X-Kite-Version": "3", Authorization: `token ${ctx.creds.apiKey}:${ctx.token}` });
+export const KITE = "https://api.kite.trade";
+export const kiteHeaders = (ctx: LiveCtx) => ({ "X-Kite-Version": "3", Authorization: `token ${ctx.creds.apiKey}:${ctx.token}` });
 const kiteType = { MARKET: "MARKET", LIMIT: "LIMIT", SL: "SL", SL_M: "SL-M" } as const;
 
 const zerodha: LiveBroker = {
@@ -211,7 +211,7 @@ const zerodha: LiveBroker = {
 
 // ---------- Upstox (v2 order APIs; instrument keyed by ISIN) ----------
 
-const upstoxHeaders = (ctx: LiveCtx) => ({ Authorization: `Bearer ${ctx.token}` });
+export const upstoxHeaders = (ctx: LiveCtx) => ({ Authorization: `Bearer ${ctx.token}` });
 const upstoxType = { MARKET: "MARKET", LIMIT: "LIMIT", SL: "SL", SL_M: "SL-M" } as const;
 
 const upstox: LiveBroker = {
@@ -258,8 +258,8 @@ const upstox: LiveBroker = {
 
 // ---------- Fyers (API v3) ----------
 
-const FYERS = "https://api-t1.fyers.in/api/v3";
-const fyersHeaders = (ctx: LiveCtx) => ({ Authorization: `${ctx.creds.apiKey}:${ctx.token}` });
+export const FYERS = "https://api-t1.fyers.in/api/v3";
+export const fyersHeaders = (ctx: LiveCtx) => ({ Authorization: `${ctx.creds.apiKey}:${ctx.token}` });
 const fyersType = { LIMIT: 1, MARKET: 2, SL_M: 3, SL: 4 } as const;
 const FYERS_STATUS: Record<number, string> = { 1: "cancelled", 2: "traded", 4: "transit", 5: "rejected", 6: "pending", 7: "expired" };
 
@@ -308,8 +308,8 @@ const fyers: LiveBroker = {
 
 // ---------- Angel One (SmartAPI) ----------
 
-const ANGEL = "https://apiconnect.angelone.in/rest/secure/angelbroking/order/v1";
-const angelHeaders = (ctx: LiveCtx) => ({
+export const ANGEL = "https://apiconnect.angelone.in/rest/secure/angelbroking/order/v1";
+export const angelHeaders = (ctx: LiveCtx) => ({
   "X-UserType": "USER",
   "X-SourceID": "WEB",
   "X-ClientLocalIP": "127.0.0.1",
@@ -392,8 +392,8 @@ export async function angelLtp(ctx: LiveCtx, o: { tradingSymbol: string; series:
 
 // ---------- Dhan (DhanHQ v2) ----------
 
-const DHAN = "https://api.dhan.co/v2";
-const dhanHeaders = (ctx: LiveCtx) => ({ "access-token": ctx.token });
+export const DHAN = "https://api.dhan.co/v2";
+export const dhanHeaders = (ctx: LiveCtx) => ({ "access-token": ctx.token });
 const dhanType = { MARKET: "MARKET", LIMIT: "LIMIT", SL: "STOP_LOSS", SL_M: "STOP_LOSS_MARKET" } as const;
 
 const dhan: LiveBroker = {
@@ -441,10 +441,10 @@ const dhan: LiveBroker = {
 
 // ---------- 5paisa (Xstream OpenAPI) ----------
 
-const FIVEPAISA = "https://Openapi.5paisa.com/VendorsAPI/Service1.svc";
-const fpHeaders = (ctx: LiveCtx) => ({ Authorization: `Bearer ${ctx.token}` });
+export const FIVEPAISA = "https://Openapi.5paisa.com/VendorsAPI/Service1.svc";
+export const fpHeaders = (ctx: LiveCtx) => ({ Authorization: `Bearer ${ctx.token}` });
 /** The client code sits in the session token (JWT "unique_name"). */
-function fpClientCode(token: string): string {
+export function fpClientCode(token: string): string {
   try {
     const payload = JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8")) as Record<string, unknown>;
     return String(payload.unique_name ?? "");
@@ -521,8 +521,8 @@ const fivepaisa: LiveBroker = {
 
 // ---------- Alice Blue (open API v1) ----------
 
-const ALICE = "https://a3.aliceblueonline.com/open-api/od/v1";
-const aliceHeaders = (ctx: LiveCtx) => ({ Authorization: `Bearer ${ctx.token}` });
+export const ALICE = "https://a3.aliceblueonline.com/open-api/od/v1";
+export const aliceHeaders = (ctx: LiveCtx) => ({ Authorization: `Bearer ${ctx.token}` });
 const aliceType = { MARKET: "MARKET", LIMIT: "LIMIT", SL: "SL", SL_M: "SLM" } as const;
 
 const aliceblue: LiveBroker = {
