@@ -13,14 +13,33 @@ function secretsPath(): string | null {
   return process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.AWS_EXECUTION_ENV ? DEFAULT_PATH : null;
 }
 
-export async function loadRuntimeSecrets(): Promise<void> {
-  const path = secretsPath();
-  if (!path) return;
+let pending: Promise<boolean> | null = null;
+let done = false;
+
+/**
+ * Loads the secrets once per server process. On Amplify the AWS credentials
+ * only exist while a request is being handled, so this is awaited in
+ * proxy.ts before every request (a no-op after the first success); a failed
+ * attempt is retried on the next request.
+ */
+export async function ensureRuntimeSecrets(): Promise<void> {
+  if (done || !secretsPath()) return;
+  pending ??= load().then((ok) => {
+    done = ok;
+    pending = null;
+    return ok;
+  });
+  await pending;
+}
+
+async function load(): Promise<boolean> {
+  const path = secretsPath()!;
   try {
     const { SSMClient, GetParametersByPathCommand } = await import("@aws-sdk/client-ssm");
     const ssm = new SSMClient({ region: process.env.AWS_REGION ?? "ap-south-1" });
     let token: string | undefined;
     const loaded: string[] = [];
+    const present: string[] = [];
     do {
       const page = await ssm.send(new GetParametersByPathCommand({ Path: path, WithDecryption: true, Recursive: false, NextToken: token }));
       for (const p of page.Parameters ?? []) {
@@ -29,13 +48,15 @@ export async function loadRuntimeSecrets(): Promise<void> {
         if (process.env[key] === undefined || process.env[key] === "") {
           process.env[key] = p.Value;
           loaded.push(key);
-        }
+        } else present.push(key);
       }
       token = page.NextToken;
     } while (token);
     // Names only — never values.
-    console.log(JSON.stringify({ level: "info", context: "runtime-secrets", loaded }));
+    console.log(JSON.stringify({ level: "info", context: "runtime-secrets", loaded, alreadySet: present }));
+    return true;
   } catch (err) {
-    console.error(JSON.stringify({ level: "error", context: "runtime-secrets", message: err instanceof Error ? err.message : String(err) }));
+    console.error(JSON.stringify({ level: "warn", context: "runtime-secrets", message: err instanceof Error ? err.message : String(err) }));
+    return false;
   }
 }

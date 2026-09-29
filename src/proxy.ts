@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { ensureRuntimeSecrets } from "@/lib/runtime-secrets";
 
 // myalgoagent.com and www.myalgoagent.com both resolve and both serve this
 // app (Amplify's domain association adds "www" as a live subdomain, not a
@@ -13,7 +14,9 @@ import type { NextRequest } from "next/server";
 // pkceCodeVerifier value could not be parsed"), live-reproduced on 2026-09-07.
 // Canonicalizing to the apex host before any page (including /login) is
 // reached removes the two-host split entirely, for every route and device.
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
+  // Secrets (database URL, auth secret…) come from Parameter Store — loaded on the first request of each server process.
+  await ensureRuntimeSecrets();
   const host = request.headers.get("host");
   if (host === "www.myalgoagent.com") {
     // Build the target from scratch rather than mutating request.url's
