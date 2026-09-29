@@ -1,4 +1,5 @@
-import type { TrueDataProvider } from "./providers/truedata";
+import { parseBarsCsv, toTrueDataTime, type TrueDataProvider } from "./providers/truedata";
+import type { Candle } from "./types";
 
 // Everything the licensed feed offers beyond candles: market movers, breadth,
 // index members, 52-week range, corporate actions and option chains with
@@ -181,6 +182,22 @@ export class MarketExtras {
       .map((r) => ({ purpose: r.purpose, exDate: isoDate(r.ex_date), recordDate: r.record_date?.startsWith("1970") ? null : isoDate(r.record_date) }))
       .filter((a) => a.purpose)
       .sort((a, b) => (b.exDate ?? "").localeCompare(a.exDate ?? ""));
+  }
+
+  /**
+   * Raw candles for any TrueData symbol (option contracts included) over at most
+   * ~14 days. Past windows never change, so they're cached for a week.
+   */
+  async bars(tdSymbol: string, from: number, to: number, interval: "1min" | "5min" | "eod"): Promise<Candle[]> {
+    const past = to < Date.now() / 1000 - 86400;
+    const body = await this.td.request("history", "getbars", { symbol: tdSymbol, from: toTrueDataTime(from), to: toTrueDataTime(to), interval, response: "csv" }, past ? 7 * 86400 : 30);
+    return parseBarsCsv(body, interval === "eod");
+  }
+
+  /** Every F&O contract that traded on a date (yyyy-mm-dd) — how past expiries and strikes are found. */
+  async tradedFoSymbols(date: string): Promise<string[]> {
+    const body = await this.td.request("history", "gettradedsymbols", { segment: "FO", date, response: "csv" }, 7 * 86400);
+    return csvRecords(body).map((r) => r.symbol).filter(Boolean);
   }
 
   /** Contract lot size for an option underlying, from the F&O symbol master. */
