@@ -1,5 +1,5 @@
 import { logWarn } from "@/lib/logger";
-import type { Candle, CandleInterval, CandleRange, MarketDataProvider } from "../types";
+import type { Candle, CandleInterval, CandleRange, MarketDataProvider, Tick } from "../types";
 
 // TrueData history over REST (auth.truedata.in → history.truedata.in).
 // Credentials come only from MARKET_DATA_TRUEDATA_USER / _PASSWORD; the
@@ -78,10 +78,18 @@ export function rangeStart(range: CandleRange, now: number): number {
   }
 }
 
-/** Splits [from, to] into consecutive windows of at most `size` seconds. */
+/**
+ * Splits [from, to] into windows of `size` seconds aligned to fixed IST-day
+ * boundaries, so a past window always has the same from/to — and so the same
+ * URL, which lets its (unchanging) reply be cached. Only the last window, which
+ * ends now, is fetched fresh.
+ */
 export function windows(from: number, to: number, size: number): [number, number][] {
   const out: [number, number][] = [];
-  for (let start = from; start < to; start += size) out.push([start, Math.min(start + size - 1, to)]);
+  const dayStart = (t: number) => Math.floor((t + IST_OFFSET_SECONDS) / 86400) * 86400 - IST_OFFSET_SECONDS;
+  const base = dayStart(0);
+  let start = base + Math.floor((dayStart(from) - base) / size) * size;
+  for (; start <= to; start += size) out.push([start, Math.min(start + size - 1, to)]);
   return out;
 }
 
@@ -118,6 +126,27 @@ export function parseBarsCsv(body: string, daily: boolean): Candle[] {
     // Daily candles are stamped at the 09:15 IST open, the way the rest of the app (and Yahoo) stamps them.
     if (daily) time = istDay(time) * 86400 + SESSION_OPEN * 60 - IST_OFFSET_SECONDS;
     out.push({ time, open, high, low, close, volume: vi >= 0 ? Number(f[vi]) || 0 : 0 });
+  }
+  return out.sort((a, b) => a.time - b.time);
+}
+
+/** Parses a getlastnticks/getticks CSV (with bid/ask columns when asked for) into ticks, oldest first. */
+export function parseTicksCsv(body: string): Tick[] {
+  const text = body.replace(/^\uFEFF/, "").trim();
+  if (!text || /no data exists/i.test(text)) return [];
+  const lines = text.split(/\r?\n/);
+  const header = lines[0].toLowerCase().split(",").map((h) => h.trim());
+  const col = (name: string) => header.indexOf(name);
+  const [ti, pi, vi, bi, bqi, ai, aqi] = ["timestamp", "ltp", "volume", "bid", "bidqty", "ask", "askqty"].map(col);
+  if (ti < 0 || pi < 0) throw new Error(`TrueData: ${text.slice(0, 160)}`);
+  const num = (f: string[], i: number) => (i >= 0 && f[i] !== undefined && f[i] !== "" && Number(f[i]) > 0 ? Number(f[i]) : null);
+  const out: Tick[] = [];
+  for (const line of lines.slice(1)) {
+    const f = line.split(",");
+    const time = parseIstTimestamp(f[ti] ?? "");
+    const price = Number(f[pi]);
+    if (time == null || !(price > 0)) continue;
+    out.push({ time, price, volume: vi >= 0 ? Number(f[vi]) || 0 : 0, bid: num(f, bi), ask: num(f, ai), bidQty: num(f, bqi), askQty: num(f, aqi) });
   }
   return out.sort((a, b) => a.time - b.time);
 }
@@ -167,6 +196,7 @@ type Token = { value: string; expiresAt: number };
 export class TrueDataProvider implements MarketDataProvider {
   readonly name = "TrueData";
   readonly isOfficial = true;
+  readonly depth = "extended" as const;
   private token: Token | null = null;
   private tokenPromise: Promise<string> | null = null;
   private gate: Promise<void> = Promise.resolve();
@@ -210,8 +240,14 @@ export class TrueDataProvider implements MarketDataProvider {
     setTimeout(release, MIN_GAP_MS);
   }
 
-  private async getBarsText(params: Record<string, string>): Promise<string> {
-    const url = `${HISTORY_URL}/getbars?${new URLSearchParams({ ...params, response: "csv" })}`;
+  /**
+   * GET a TrueData REST endpoint with the bearer token: spaced out, retried on
+   * network errors / auth expiry / quota / 5xx, and cached for `revalidate`
+   * seconds (0 = never cached).
+   */
+  async request(base: "history" | "analytics" | "greeks", path: string, params: Record<string, string>, revalidate = 60): Promise<string> {
+    const host = base === "history" ? HISTORY_URL : base === "analytics" ? "https://analytics.truedata.in/api" : "https://greeks.truedata.in/api";
+    const url = `${host}/${path}?${new URLSearchParams(params)}`;
     let lastError: unknown;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       if (attempt > 1) await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * (attempt - 1)));
@@ -222,13 +258,13 @@ export class TrueDataProvider implements MarketDataProvider {
         res = await fetch(url, {
           headers: { Authorization: `Bearer ${await this.accessToken()}` },
           signal: AbortSignal.timeout(TIMEOUT_MS),
-          next: { revalidate: 60 },
+          ...(revalidate > 0 ? { next: { revalidate } } : { cache: "no-store" as const }),
         });
         body = await res.text();
       } catch (err) {
         // Network error, timeout or a failed login — all worth another try.
         lastError = err;
-        logWarn("truedata", "request failed, retrying", { attempt, symbol: params.symbol, error: String(err) });
+        logWarn("truedata", "request failed, retrying", { attempt, path, symbol: params.symbol, error: String(err) });
         continue;
       }
       const denied = res.status === 401 || /authorization has been denied/i.test(body);
@@ -236,13 +272,20 @@ export class TrueDataProvider implements MarketDataProvider {
       if (denied || quota || res.status >= 500) {
         if (denied) this.token = null;
         lastError = new Error(`TrueData request failed: ${res.status} ${body.slice(0, 120)}`);
-        logWarn("truedata", "request rejected, retrying", { attempt, symbol: params.symbol, status: res.status });
+        logWarn("truedata", "request rejected, retrying", { attempt, path, symbol: params.symbol, status: res.status });
         continue;
       }
       if (!res.ok) throw new Error(`TrueData request failed: ${res.status} ${body.slice(0, 120)}`);
       return body;
     }
     throw lastError instanceof Error ? lastError : new Error("TrueData request failed");
+  }
+
+  async getRecentTicks(symbol: string, count: number): Promise<Tick[]> {
+    const tdSymbol = toTrueDataSymbol(symbol);
+    if (!tdSymbol) throw new Error(`${symbol} isn't available on TrueData yet (NSE stocks and main indices only)`);
+    const n = String(Math.min(Math.max(Math.round(count), 1), 500));
+    return parseTicksCsv(await this.request("history", "getlastnticks", { symbol: tdSymbol, bidask: "1", response: "csv", nticks: n, interval: "tick" }, 0));
   }
 
   async getHistoricalCandles(symbol: string, range: CandleRange, interval: CandleInterval): Promise<Candle[]> {
@@ -253,16 +296,27 @@ export class TrueDataProvider implements MarketDataProvider {
 
     const now = Math.floor(Date.now() / 1000);
     const daily = tdInterval === "eod";
+    const from = rangeStart(range, now);
     const parts = await Promise.all(
-      windows(rangeStart(range, now), now, daily ? EOD_WINDOW_S : INTRADAY_WINDOW_S).map(async ([from, to]) =>
-        parseBarsCsv(await this.getBarsText({ symbol: tdSymbol, from: toTrueDataTime(from), to: toTrueDataTime(to), interval: tdInterval }), daily),
+      windows(from, now, daily ? EOD_WINDOW_S : INTRADAY_WINDOW_S).map(async ([from, to]) =>
+        parseBarsCsv(
+          await this.request(
+            "history",
+            "getbars",
+            { symbol: tdSymbol, from: toTrueDataTime(from), to: toTrueDataTime(to), interval: tdInterval, response: "csv" },
+            // A window that ended before today never changes: keep it a day. Today's is refreshed every 30 s.
+            to < now - 86400 ? 86400 : 30,
+          ),
+          daily,
+        ),
       ),
     );
     // Windows can share an edge candle — keep one per timestamp.
     const byTime = new Map<number, Candle>();
     for (const c of parts.flat()) byTime.set(c.time, c);
 
-    let candles = [...byTime.values()].sort((a, b) => a.time - b.time);
+    // Aligned windows can start before the range does — trim back to it.
+    let candles = [...byTime.values()].filter((c) => c.time >= from - 86400).sort((a, b) => a.time - b.time);
     if (!daily) candles = sessionOnly(candles);
     if (range === "1d") candles = lastTradingDays(candles, 1);
     else if (range === "5d") candles = lastTradingDays(candles, 5);

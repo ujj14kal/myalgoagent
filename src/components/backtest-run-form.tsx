@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { runBacktestAction } from "@/lib/backtest-actions";
 import { describeExecutionConfig, type StrategyExecutionConfig } from "@/lib/describe-strategy-config";
-import type { CandleRange } from "@/lib/market-data";
+import { isIntraday, isValidCombo, type CandleInterval, type CandleRange, type HistoryDepth } from "@/lib/market-data";
 
 interface StrategyOption extends StrategyExecutionConfig {
   id: string;
@@ -21,15 +21,14 @@ const RANGES: { value: CandleRange; label: string }[] = [
   { value: "5y", label: "5 years" },
 ];
 
-/** Periods the data source keeps for a timeframe (intraday history is limited). */
-function rangesFor(timeframe: string | undefined): typeof RANGES {
-  if (timeframe === "1m" || timeframe === "3m") return RANGES.filter((r) => r.value === "5d");
-  if (["5m", "15m", "30m"].includes(timeframe ?? "")) return RANGES.filter((r) => r.value === "5d" || r.value === "1mo");
-  if (timeframe === "60m" || timeframe === "4h") return RANGES.filter((r) => ["1mo", "3mo", "6mo", "1y"].includes(r.value));
-  return RANGES.filter((r) => r.value !== "5d" && r.value !== "1mo");
+/** Periods the data source keeps for a timeframe (intraday history is limited; the licensed feed keeps far more). */
+function rangesFor(timeframe: string | undefined, depth: HistoryDepth): typeof RANGES {
+  const tf = (timeframe ?? "1d") as CandleInterval;
+  if (!isIntraday(tf)) return RANGES.filter((r) => r.value !== "5d" && r.value !== "1mo");
+  return RANGES.filter((r) => isValidCombo(r.value, tf, depth));
 }
 
-export default function BacktestRunForm({ strategies }: { strategies: StrategyOption[] }) {
+export default function BacktestRunForm({ strategies, depth = "standard" }: { strategies: StrategyOption[]; depth?: HistoryDepth }) {
   const [strategyId, setStrategyId] = useState(strategies[0]?.id ?? "");
   const [startingCapital, setStartingCapital] = useState(100000);
   const [brokeragePercent, setBrokeragePercent] = useState(0.03);
@@ -39,7 +38,7 @@ export default function BacktestRunForm({ strategies }: { strategies: StrategyOp
   const [isPending, startTransition] = useTransition();
 
   const selectedStrategy = strategies.find((s) => s.id === strategyId);
-  const periods = rangesFor(selectedStrategy?.timeframe);
+  const periods = rangesFor(selectedStrategy?.timeframe, depth);
   // Keep the chosen period valid for the selected strategy's timeframe.
   const effectiveRange = periods.some((p) => p.value === range) ? range : periods[periods.length - 1].value;
 

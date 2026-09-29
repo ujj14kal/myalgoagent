@@ -58,7 +58,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
   let fetchError: string | null = null;
   if (!isWebhook) {
     try {
-      candles = await market.getHistoricalCandles(strategy.instrument.symbol, rangeFor(strategy.timeframe, "6mo"), strategy.timeframe as CandleInterval);
+      candles = await market.getHistoricalCandles(strategy.instrument.symbol, rangeFor(strategy.timeframe, "6mo", market.depth), strategy.timeframe as CandleInterval);
     } catch (err) {
       fetchError = err instanceof Error ? err.message : "Failed to load market data";
     }
@@ -71,7 +71,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
   // evaluate to "unknown data" and be treated as false).
   const aux =
     !isWebhook && candles.length > 0
-      ? await fetchAuxCandles(entryCondition, exitCondition, strategy.instrument.symbol, rangeFor(strategy.timeframe, "6mo"), strategy.timeframe as CandleInterval, market)
+      ? await fetchAuxCandles(entryCondition, exitCondition, strategy.instrument.symbol, rangeFor(strategy.timeframe, "6mo", market.depth), strategy.timeframe as CandleInterval, market)
       : new Map();
 
   // A webhook-mode strategy has no real condition tree (see

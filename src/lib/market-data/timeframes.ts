@@ -48,15 +48,36 @@ export function isIntraday(interval: CandleInterval): boolean {
   return INTRADAY_1M.includes(interval) || INTRADAY_SHORT.includes(interval) || INTRADAY_HOUR.includes(interval);
 }
 
-/** Max range each interval can actually be served for, most restrictive first. */
-export function isValidCombo(range: CandleRange, interval: CandleInterval): boolean {
-  if (INTRADAY_1M.includes(interval)) return range === "1d" || range === "5d";
-  if (INTRADAY_SHORT.includes(interval)) return ["1d", "5d", "1mo"].includes(range);
-  if (INTRADAY_HOUR.includes(interval)) return ["1d", "5d", "1mo", "3mo", "6mo", "1y"].includes(range);
-  // 1d / 1wk / 1mo intervals: no upstream restriction, but a daily candle
-  // over a multi-year range is unreadable (hundreds of bars) — those get a
-  // recommended default below rather than being blocked outright.
-  return true;
+/**
+ * How much history a source keeps: "standard" is Yahoo's window (above);
+ * "extended" is the licensed feed (TrueData), which keeps years of intraday
+ * candles — capped here only so a single chart/backtest stays quick to load.
+ */
+export type HistoryDepth = "standard" | "extended";
+
+const RANGE_ORDER: CandleRange[] = ["1d", "5d", "1mo", "3mo", "6mo", "ytd", "1y", "5y", "max"];
+
+/** The widest range each interval can be served for at this depth. */
+export function maxRangeForInterval(interval: CandleInterval, depth: HistoryDepth = "standard"): CandleRange {
+  if (depth === "extended") {
+    if (INTRADAY_1M.includes(interval)) return "3mo";
+    if (INTRADAY_SHORT.includes(interval)) return "1y";
+    if (INTRADAY_HOUR.includes(interval)) return "5y";
+    return "max";
+  }
+  if (INTRADAY_1M.includes(interval)) return "5d";
+  if (INTRADAY_SHORT.includes(interval)) return "1mo";
+  if (INTRADAY_HOUR.includes(interval)) return "1y";
+  return "max";
+}
+
+/** Whether a (range, interval) pair can be served at this depth. `ytd` counts as within anything from 1y up. */
+export function isValidCombo(range: CandleRange, interval: CandleInterval, depth: HistoryDepth = "standard"): boolean {
+  const max = maxRangeForInterval(interval, depth);
+  if (max === "max") return true;
+  const maxIdx = RANGE_ORDER.indexOf(max);
+  if (range === "ytd") return maxIdx >= RANGE_ORDER.indexOf("1y");
+  return RANGE_ORDER.indexOf(range) <= maxIdx;
 }
 
 /**
@@ -86,32 +107,10 @@ export function defaultIntervalForRange(range: CandleRange): CandleInterval {
   }
 }
 
-/** The widest range each interval can actually be served for, most
- * restrictive first — mirrors `isValidCombo`'s groupings. Used to clamp a
- * requested range down to what's servable rather than sending an
- * out-of-window request that Yahoo rejects outright (a 422 for intraday
- * intervals past their window, confirmed empirically) or silently
- * truncates. */
-export function maxRangeForInterval(interval: CandleInterval): CandleRange {
-  if (INTRADAY_1M.includes(interval)) return "5d";
-  if (INTRADAY_SHORT.includes(interval)) return "1mo";
-  if (INTRADAY_HOUR.includes(interval)) return "1y";
-  return "max";
-}
-
-const RANGE_ORDER: CandleRange[] = ["1d", "5d", "1mo", "3mo", "6mo", "ytd", "1y", "5y", "max"];
-
-/** Clamps `range` down to the widest range `interval` can actually serve,
- * leaving it unchanged when it's already within bounds. `ytd` is treated as
- * unbounded (its actual span varies through the year, so it's never clamped
- * down further than the interval's own cap). */
-export function clampRangeForInterval(range: CandleRange, interval: CandleInterval): CandleRange {
-  if (isValidCombo(range, interval)) return range;
-  const max = maxRangeForInterval(interval);
-  if (range === "ytd") return max;
-  const rangeIdx = RANGE_ORDER.indexOf(range);
-  const maxIdx = RANGE_ORDER.indexOf(max);
-  return rangeIdx > maxIdx ? max : range;
+/** Clamps `range` down to the widest range `interval` can serve at this depth, leaving it unchanged when it's already within bounds. */
+export function clampRangeForInterval(range: CandleRange, interval: CandleInterval, depth: HistoryDepth = "standard"): CandleRange {
+  if (isValidCombo(range, interval, depth)) return range;
+  return maxRangeForInterval(interval, depth);
 }
 
 export const VALID_RANGES: CandleRange[] = RANGES.map((r) => r.value);

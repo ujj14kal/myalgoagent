@@ -1,4 +1,5 @@
 "use client";
+import InstrumentCombobox from "@/components/instrument-combobox";
 
 import { createContext, useContext, useState } from "react";
 import type { ComparisonOperator, ConditionNode, IndicatorKind, Operand, PriceField } from "@/lib/strategy";
@@ -445,19 +446,15 @@ function OperandEditor({
       {overridable && (
         <>
           <TimeframeSelect value={overridable.timeframe} onChange={(timeframe) => onChange({ ...overridable, timeframe })} />
-          <select
-            className={`${inputClass} text-brand-navy/60`}
+          <InstrumentCombobox
+            compact
+            className="w-40"
+            options={instruments}
+            valueKey="symbol"
+            emptyLabel="Same instrument"
             value={overridable.instrumentSymbol ?? ""}
-            title="Instrument"
-            onChange={(e) => onChange({ ...overridable, instrumentSymbol: e.target.value || undefined })}
-          >
-            <option value="">Same instrument</option>
-            {instruments.map((inst) => (
-              <option key={inst.id} value={inst.symbol}>
-                {inst.symbol}
-              </option>
-            ))}
-          </select>
+            onChange={(symbol) => onChange({ ...overridable, instrumentSymbol: symbol || undefined })}
+          />
         </>
       )}
     </div>

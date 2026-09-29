@@ -1,4 +1,5 @@
 "use client";
+import InstrumentCombobox from "@/components/instrument-combobox";
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -374,16 +375,13 @@ function StrategyFields({
           <input value={draft.name} onChange={(e) => set("name", e.target.value)} className={inputCls} />
         </Field>
         <Field label="Instrument">
-          <select value={instrumentId ?? ""} onChange={(e) => onInstrument(e.target.value)} className={`${inputCls} ${!instrumentId ? "border-brand-gold ring-2 ring-brand-gold/20" : ""}`}>
-            <option value="" disabled>
-              Choose an instrument…
-            </option>
-            {instruments.map((i) => (
-              <option key={i.id} value={i.id}>
-                {i.symbol} — {i.name}
-              </option>
-            ))}
-          </select>
+          <InstrumentCombobox
+            options={instruments}
+            value={instrumentId ?? ""}
+            onChange={onInstrument}
+            placeholder="Choose an instrument…"
+            className={!instrumentId ? "rounded-lg ring-2 ring-brand-gold/30" : ""}
+          />
         </Field>
       </div>
       <Field label="Direction">

@@ -31,6 +31,7 @@ interface YahooChartResponse {
 export class YahooFinanceProvider implements MarketDataProvider {
   readonly name = "Yahoo Finance";
   readonly isOfficial = false;
+  readonly depth = "standard" as const;
 
   async getHistoricalCandles(
     symbol: string,

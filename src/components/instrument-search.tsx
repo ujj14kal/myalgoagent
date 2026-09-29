@@ -26,9 +26,20 @@ export default function InstrumentSearch({ instruments }: { instruments: Instrum
   }, [instruments]);
 
   const q = query.trim().toLowerCase();
-  const filtered = instruments.filter(
-    (i) => (!sector || i.sector === sector) && (!q || i.symbol.toLowerCase().includes(q) || i.name.toLowerCase().includes(q)),
-  );
+  // 2,700+ instruments: rank (indices and exact/prefix matches first, then the large caps that carry a sector) and show the top ones.
+  const matches = instruments
+    .filter((i) => (!sector || i.sector === sector) && (!q || i.symbol.toLowerCase().includes(q) || i.name.toLowerCase().includes(q)))
+    .map((i) => {
+      const plain = i.symbol.replace(/\.NS$|\.BO$|^\^/, "").toLowerCase();
+      const rank = q
+        ? plain === q ? 0 : plain.startsWith(q) ? 1 : i.name.toLowerCase().startsWith(q) ? 2 : 3
+        : i.symbol.startsWith("^") ? 0 : i.sector ? 1 : 2;
+      return { i, rank };
+    })
+    .sort((a, b) => a.rank - b.rank || a.i.symbol.localeCompare(b.i.symbol))
+    .map((m) => m.i);
+  const SHOWN = 60;
+  const filtered = matches.slice(0, SHOWN);
 
   return (
     <div>
@@ -87,6 +98,11 @@ export default function InstrumentSearch({ instruments }: { instruments: Instrum
             <ChevronRight size={16} className="shrink-0 text-brand-navy/20 transition-transform group-hover:translate-x-0.5 group-hover:text-brand-primary" />
           </Link>
         ))}
+        {matches.length > SHOWN && (
+          <p className="col-span-full text-center text-xs text-brand-navy/45">
+            Showing {SHOWN} of {matches.length.toLocaleString("en-IN")} — type a symbol or company name to narrow it down.
+          </p>
+        )}
         {filtered.length === 0 && (
           <p className="col-span-full rounded-xl border border-dashed border-brand-navy/15 py-10 text-center text-sm text-brand-navy/50">
             No instruments match{query ? <> &ldquo;{query}&rdquo;</> : null}

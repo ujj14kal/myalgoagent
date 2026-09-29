@@ -44,6 +44,11 @@ model User {
   // Real orders are off for every account until an owner switches them on
   // (admin portal), and only then after the user confirms on Live Trading.
   liveTradingEnabledAt DateTime?
+  // The account's own static IP — one client, one IP (a broker/SEBI rule), so
+  // unique. Not assigned yet: it comes with the paid plan once the Fargate +
+  // NAT setup is live; until then everyone trades from the shared relay IP.
+  liveStaticIp         String?   @unique
+  liveTermsAcceptedAt  DateTime?
 
   agentName           String?
   tutorialCompletedAt DateTime?

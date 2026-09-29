@@ -126,6 +126,8 @@ export default async function InstrumentDetailPage({
             candles={candles}
             allInstruments={allInstruments}
             savedLayout={savedConfig}
+            depth={market.depth}
+            live={!!market.getRecentTicks}
           />
         )}
       </div>

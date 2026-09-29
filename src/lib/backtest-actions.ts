@@ -71,8 +71,8 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
     // Runs on the strategy's own timeframe; intraday history is limited by what
     // the data source keeps, so the period is clamped to what's available.
     const timeframe = strategy.timeframe as CandleInterval;
-    const range = rangeFor(timeframe, input.range);
     const market = marketDataFor(userId, "backtest");
+    const range = rangeFor(timeframe, input.range, market.depth);
     const candles = await market.getHistoricalCandles(strategy.instrument.symbol, range, timeframe);
     if (candles.length === 0) throw new Error("No historical data available for this instrument");
 

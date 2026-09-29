@@ -16,9 +16,11 @@ function withDerivedTimeframes(p: MarketDataProvider): MarketDataProvider {
   return {
     name: p.name,
     isOfficial: p.isOfficial,
+    depth: p.depth,
+    getRecentTicks: p.getRecentTicks?.bind(p),
     async getHistoricalCandles(symbol, range, interval) {
-      if (interval === "3m") return resampleCandles(await p.getHistoricalCandles(symbol, clampRangeForInterval(range, "1m"), "1m"), fixedBucket(3));
-      if (interval === "4h") return resampleCandles(await p.getHistoricalCandles(symbol, clampRangeForInterval(range, "60m"), "60m"), fourHourBucket);
+      if (interval === "3m") return resampleCandles(await p.getHistoricalCandles(symbol, clampRangeForInterval(range, "1m", p.depth), "1m"), fixedBucket(3));
+      if (interval === "4h") return resampleCandles(await p.getHistoricalCandles(symbol, clampRangeForInterval(range, "60m", p.depth), "60m"), fourHourBucket);
       return p.getHistoricalCandles(symbol, range, interval);
     },
   };
@@ -47,7 +49,8 @@ export function marketDataFor(userId: string | null | undefined, use: MarketData
 }
 
 export type { MarketDataUse } from "./select";
-export type { Candle, CandleInterval, CandleRange, MarketDataProvider } from "./types";
+export type { Candle, CandleInterval, CandleRange, MarketDataProvider, Tick } from "./types";
+export type { HistoryDepth } from "./timeframes";
 export {
   RANGES,
   INTERVALS,

@@ -8,7 +8,9 @@ import IndicatorPicker from "@/components/indicator-picker";
 import type { Drawing } from "@/lib/chart-drawing-primitive";
 import { saveChartLayout } from "@/lib/chart-layout-actions";
 import { RANGES, INTERVALS, isValidCombo, defaultIntervalForRange } from "@/lib/market-data";
-import type { Candle, CandleInterval, CandleRange } from "@/lib/market-data";
+import type { Candle, CandleInterval, CandleRange, HistoryDepth, Tick } from "@/lib/market-data";
+import { applyTicks, bucketStart } from "@/lib/market-data/live-candle";
+import { inMarketWindow } from "@/lib/paper/market-window";
 import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
 import { anchoredVwap } from "@/lib/indicators";
 import { INDICATOR_BY_KIND } from "@/lib/strategy/indicator-catalog";
@@ -54,6 +56,29 @@ function pctChangeSeries(candles: Candle[]) {
   return candles.map((c) => ({ time: c.time, value: ((c.close - base) / base) * 100 }));
 }
 
+const inr = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** Last trade, best bid/ask and time — shown while the live feed is updating the chart. */
+function LiveQuote({ quote }: { quote: Tick }) {
+  const at = new Date(quote.time * 1000).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return (
+    <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-full bg-brand-bg px-2.5 py-1 text-[11px] text-brand-navy/70" title="Live from the licensed feed, refreshed every 2 seconds">
+      <span className="flex items-center gap-1 font-bold text-brand-buy">
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-buy" /> LIVE
+      </span>
+      <span className="font-semibold text-brand-navy">₹{inr(quote.price)}</span>
+      {quote.bid && quote.ask && (
+        <span>
+          Bid {inr(quote.bid)}
+          {quote.bidQty ? ` ×${quote.bidQty}` : ""} · Ask {inr(quote.ask)}
+          {quote.askQty ? ` ×${quote.askQty}` : ""}
+        </span>
+      )}
+      <span className="text-brand-navy/40">{at}</span>
+    </span>
+  );
+}
+
 function IndicatorChip({
   instance,
   onChange,
@@ -97,7 +122,13 @@ export default function InstrumentChartPanel({
   candles: initialCandles,
   allInstruments,
   savedLayout,
+  depth = "standard",
+  live = false,
 }: {
+  /** How much history the viewer's data source keeps (the licensed feed keeps years of intraday). */
+  depth?: HistoryDepth;
+  /** Whether the viewer's data source streams live trades (forming candle + quote strip). */
+  live?: boolean;
   instrumentId: string;
   symbol: string;
   candles: Candle[];
@@ -202,8 +233,75 @@ export default function InstrumentChartPanel({
     }
   }
 
+  // ---- Live: the forming candle from recent trades, polled every 2 s in market hours ----
+  const [liveCandle, setLiveCandle] = useState<Candle | null>(null);
+  const [quote, setQuote] = useState<Tick | null>(null);
+  const [historyStamp, setHistoryStamp] = useState(0);
+  const candlesRef = useRef(candles);
+  const historyAtRef = useRef(0);
   useEffect(() => {
-    if (range === "6mo" && interval === "1d" && candles === initialCandles) return;
+    candlesRef.current = candles;
+  }, [candles]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a new dataset starts without a forming candle
+    setLiveCandle(null);
+    historyAtRef.current = Math.floor(Date.now() / 1000);
+    if (!live || interval === "1wk" || interval === "1mo") return;
+    let stopped = false;
+    let forming: Candle | null = null;
+    let lastTick = 0;
+    let first = true;
+    const poll = async () => {
+      if (stopped || document.hidden || !inMarketWindow(new Date())) return;
+      try {
+        const res = await fetch(`/api/instruments/${encodeURIComponent(symbol)}/live?after=${lastTick}`, { cache: "no-store" });
+        if (!res.ok) return;
+        const data: { live: boolean; ticks: Tick[] } = await res.json();
+        if (stopped || !data.live || data.ticks.length === 0) return;
+        const ticks = data.ticks;
+        lastTick = ticks[ticks.length - 1].time;
+        setQuote(ticks[ticks.length - 1]);
+        const hist = candlesRef.current;
+        const last = hist[hist.length - 1] ?? null;
+        if (first) {
+          first = false;
+          const current = bucketStart(lastTick, interval);
+          if (current === null) return;
+          // Rebuild the current candle from trades when they cover all of it; otherwise extend the
+          // history's last candle with trades newer than the history itself (so volume isn't counted twice).
+          if (ticks[0].time <= current) {
+            forming = applyTicks(null, ticks.filter((t) => t.time >= current), interval).forming;
+          } else {
+            const base = last && last.time === current ? last : null;
+            forming = applyTicks(base, ticks.filter((t) => t.time > historyAtRef.current && t.time >= current), interval).forming;
+          }
+        } else {
+          const r = applyTicks(forming, ticks, interval);
+          forming = r.forming;
+          // Finished candles join the history, so indicators include them.
+          if (r.closed.length) setCandles((prev) => [...prev.filter((c) => c.time < r.closed[0].time), ...r.closed]);
+        }
+        if (forming && last && forming.time < last.time) return;
+        setLiveCandle(forming ? { ...forming } : null);
+      } catch {
+        // A missed poll is harmless — the next one catches up.
+      }
+    };
+    void poll();
+    const timer = setInterval(poll, 2000);
+    // Re-sync with the stored history every 5 minutes (corrects any trade the polls missed).
+    const refresh = setInterval(() => !document.hidden && inMarketWindow(new Date()) && setHistoryStamp((n) => n + 1), 5 * 60_000);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+      clearInterval(refresh);
+    };
+     
+  }, [live, symbol, interval, range]);
+
+  useEffect(() => {
+    if (range === "6mo" && interval === "1d" && candles === initialCandles && historyStamp === 0) return;
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- kicks off a loading indicator for the fetch below, not derived state
     setLoading(true);
@@ -221,7 +319,7 @@ export default function InstrumentChartPanel({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range, interval, symbol]);
+  }, [range, interval, symbol, historyStamp]);
 
   useEffect(() => {
     if (!compareSymbol) {
@@ -389,7 +487,7 @@ export default function InstrumentChartPanel({
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/5 p-3">
           <div className="flex flex-wrap items-center gap-2">
             {INTERVALS.map((iv) => {
-              const disabled = !isValidCombo(range, iv.value);
+              const disabled = !isValidCombo(range, iv.value, depth);
               return (
                 <button
                   key={iv.value}
@@ -409,6 +507,7 @@ export default function InstrumentChartPanel({
               );
             })}
             {loading && <span className="text-xs text-brand-navy/40">Loading…</span>}
+            {live && quote && <LiveQuote quote={quote} />}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -554,6 +653,7 @@ export default function InstrumentChartPanel({
               onDrawingsReplace={handleDrawingsReplace}
               magnetEnabled={magnetEnabled}
               showVisibleRangeVolumeProfile={showVisibleRangeVolumeProfile}
+              liveCandle={liveCandle}
             />
           </div>
         </div>

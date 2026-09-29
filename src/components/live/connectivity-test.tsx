@@ -1,4 +1,5 @@
 "use client";
+import InstrumentCombobox from "@/components/instrument-combobox";
 
 import { useState, useTransition } from "react";
 import { CheckCircle2, CircleX, PlugZap } from "lucide-react";
@@ -26,13 +27,7 @@ export default function ConnectivityTest({ instruments, brokers, ready }: { inst
             </option>
           ))}
         </select>
-        <select value={symbol} onChange={(e) => setSymbol(e.target.value)} className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm">
-          {instruments.map((i) => (
-            <option key={i.symbol} value={i.symbol}>
-              {i.symbol.replace(".NS", "")} — {i.name}
-            </option>
-          ))}
-        </select>
+        <InstrumentCombobox className="min-w-56" options={instruments.filter((i) => i.symbol.endsWith(".NS"))} valueKey="symbol" value={symbol} onChange={setSymbol} />
         <button
           type="button"
           disabled={!ready || pending || !symbol || !broker}

@@ -1,4 +1,4 @@
-import { clampRangeForInterval, isIntraday, type CandleInterval, type CandleRange } from "@/lib/market-data";
+import { clampRangeForInterval, isIntraday, type CandleInterval, type CandleRange, type HistoryDepth } from "@/lib/market-data";
 import type { EntryOrder, IntradaySession } from "@/lib/trading-engine/step";
 import type { ConditionNode, FeasibilityIssue } from "./types";
 
@@ -110,13 +110,13 @@ export function engineSession(
 }
 
 /** The history window used for a run on this timeframe (limited by what the data source keeps). */
-export function rangeFor(timeframe: string, desired: CandleRange): CandleRange {
-  return clampRangeForInterval(desired, timeframe as CandleInterval);
+export function rangeFor(timeframe: string, desired: CandleRange, depth: HistoryDepth = "standard"): CandleRange {
+  return clampRangeForInterval(desired, timeframe as CandleInterval, depth);
 }
 
 /** Enough recent history for a forward-testing sync: indicators need warm-up bars before the new ones. */
-export function paperSyncRange(timeframe: string): CandleRange {
-  return isIntraday(timeframe as CandleInterval) ? rangeFor(timeframe, "1mo") : "3mo";
+export function paperSyncRange(timeframe: string, depth: HistoryDepth = "standard"): CandleRange {
+  return isIntraday(timeframe as CandleInterval) ? rangeFor(timeframe, "1mo", depth) : "3mo";
 }
 
 export const clock = (minute: number) => `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;

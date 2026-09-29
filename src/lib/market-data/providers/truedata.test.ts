@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { windows, groupDaily, lastTradingDays, parseBarsCsv, rangeStart, sessionOnly, toTrueDataSymbol, toTrueDataTime } from "./truedata";
+import { windows, parseTicksCsv, groupDaily, lastTradingDays, parseBarsCsv, rangeStart, sessionOnly, toTrueDataSymbol, toTrueDataTime } from "./truedata";
 
 const ist = (s: string) => Date.parse(`${s}+05:30`) / 1000;
 
@@ -80,9 +80,25 @@ describe("groupDaily", () => {
 });
 
 describe("windows", () => {
-  it("covers the span in consecutive, non-overlapping chunks", () => {
-    expect(windows(0, 25, 10)).toEqual([[0, 9], [10, 19], [20, 25]]);
-    expect(windows(0, 5, 10)).toEqual([[0, 5]]);
-    expect(windows(5, 5, 10)).toEqual([]);
+  const day = 86400;
+  it("covers the span with windows aligned to fixed IST-day boundaries", () => {
+    const from = ist("2026-09-01T10:00:00"), to = ist("2026-09-29T12:00:00");
+    const w = windows(from, to, 14 * day);
+    expect(w[0][0]).toBeLessThanOrEqual(from);
+    expect(w.at(-1)![1]).toBe(to);
+    for (let i = 1; i < w.length; i++) expect(w[i][0]).toBe(w[i - 1][1] + 1);
+    // Every window but the last starts at IST midnight and is the same no matter when it's asked.
+    expect((w[0][0] + 5.5 * 3600) % day).toBe(0);
+    expect(windows(from + 3600, to + 7200, 14 * day).slice(0, -1)).toEqual(w.slice(0, -1));
+  });
+});
+
+describe("parseTicksCsv", () => {
+  it("parses ticks with bid/ask, oldest first, ignoring zero quotes", () => {
+    const t = parseTicksCsv("timestamp,ltp,volume,oi,bid,bidqty,ask,askqty\n2026-09-29T15:29:23,22716.2,0,0,0,0,0,0\n2026-09-29T15:14:05,1188.5,5190,0,1188.6,56,1188.7,97");
+    expect(t).toEqual([
+      { time: ist("2026-09-29T15:14:05"), price: 1188.5, volume: 5190, bid: 1188.6, ask: 1188.7, bidQty: 56, askQty: 97 },
+      { time: ist("2026-09-29T15:29:23"), price: 22716.2, volume: 0, bid: null, ask: null, bidQty: null, askQty: null },
+    ]);
   });
 });

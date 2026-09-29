@@ -106,8 +106,8 @@ export async function computeStrategyPreview(userId: string | null, input: Strat
 
     const session = normalizeSession(input);
     const timeframe = session.timeframe;
-    const range = rangeFor(timeframe, PREVIEW.range);
     const market = marketDataFor(userId, "backtest");
+    const range = rangeFor(timeframe, PREVIEW.range, market.depth);
     const candles = await market.getHistoricalCandles(instrument.symbol, range, timeframe);
     if (candles.length === 0) return { ok: false, error: "No recent price data for this instrument." };
     const aux = await fetchAuxCandles(compiled.entryCondition, compiled.exitCondition, instrument.symbol, range, timeframe, market);

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { marketDataFor } from "@/lib/market-data";
 import BacktestRunForm from "@/components/backtest-run-form";
 import EmptyState from "@/components/empty-state";
 import { FlaskConical, History } from "lucide-react";
@@ -33,6 +34,7 @@ export default async function BacktestsPage() {
 
       <div className="mt-6">
         <BacktestRunForm
+          depth={marketDataFor(session.user.id, "backtest").depth}
           strategies={strategies.map((s) => ({
             id: s.id,
             name: s.name,

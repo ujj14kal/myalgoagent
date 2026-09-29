@@ -36,7 +36,7 @@ export async function GET(
   if (!VALID_RANGES.includes(range) || !VALID_INTERVALS.includes(interval)) {
     return NextResponse.json({ error: "Invalid range or interval" }, { status: 400 });
   }
-  if (!isValidCombo(range, interval)) {
+  if (!isValidCombo(range, interval, market.depth)) {
     return NextResponse.json(
       { error: `The "${interval}" interval isn't available for the "${range}" range — the upstream feed only keeps that granularity for a shorter window.` },
       { status: 400 },

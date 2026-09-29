@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 import { parseAllowlist, selectProvider, type ProviderChoice } from "./select";
 import type { MarketDataProvider } from "./types";
 
-const yahoo = { name: "Yahoo", isOfficial: false, getHistoricalCandles: async () => [] } as MarketDataProvider;
-const licensed = { name: "Licensed", isOfficial: true, getHistoricalCandles: async () => [] } as MarketDataProvider;
+const yahoo = { name: "Yahoo", isOfficial: false, depth: "standard", getHistoricalCandles: async () => [] } as MarketDataProvider;
+const licensed = { name: "Licensed", isOfficial: true, depth: "extended", getHistoricalCandles: async () => [] } as MarketDataProvider;
 const base: ProviderChoice = { userId: "owner", use: "view", licensed, allowlist: new Set(["owner"]), licensedForTrading: false, fallback: yahoo };
 
 describe("selectProvider — licensed data only for allow-listed accounts", () => {

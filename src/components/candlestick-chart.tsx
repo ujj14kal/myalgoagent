@@ -105,8 +105,11 @@ export default function CandlestickChart({
   magnetEnabled = false,
   showVisibleRangeVolumeProfile = false,
   onDrawingsReplace,
+  liveCandle = null,
 }: {
   candles: Candle[];
+  /** The candle forming right now from live trades — drawn on top of `candles` without refitting the view. */
+  liveCandle?: Candle | null;
   overlays?: Overlay[];
   markers?: Signal[];
   chartType?: ChartType;
@@ -130,6 +133,8 @@ export default function CandlestickChart({
   // Bar spacing (seconds between consecutive candles) of the data last
   // rendered — see the granularity-change guard in the sync effect below.
   const lastSpacingRef = useRef<number | null>(null);
+  // First candle's time of the data last fitted — the view is only refitted when the dataset itself changes, so a background refresh keeps the user's zoom.
+  const lastFirstTimeRef = useRef<number | null>(null);
   const [hover, setHover] = useState<HoverInfo | null>(null);
   // Text tool uses an inline input positioned over the click point instead
   // of window.prompt() — a native prompt() blocks the whole page's JS
@@ -673,9 +678,29 @@ export default function CandlestickChart({
       volumeSeriesRef.current = null;
     }
 
-    chart.timeScale().fitContent();
+    const firstTime = candles[0]?.time ?? null;
+    if (granularityChanged || firstTime !== lastFirstTimeRef.current) chart.timeScale().fitContent();
+    lastFirstTimeRef.current = firstTime;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `drawings` is only read on the rare granularity-change path above; the dedicated Drawings effect below keeps it in sync on every other render
   }, [candles, overlays, showVolume, chartType]);
+
+  // Live: update (or append) just the forming candle — cheap, and it never touches the view.
+  useEffect(() => {
+    const series = seriesRef.current;
+    const last = candles[candles.length - 1];
+    if (!series || !liveCandle || (last && liveCandle.time < last.time)) return;
+    const point =
+      chartType === "line" || chartType === "area"
+        ? { time: liveCandle.time as UTCTimestamp, value: liveCandle.close }
+        : { time: liveCandle.time as UTCTimestamp, open: liveCandle.open, high: liveCandle.high, low: liveCandle.low, close: liveCandle.close };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (series as any).update(point);
+    volumeSeriesRef.current?.update({
+      time: liveCandle.time as UTCTimestamp,
+      value: liveCandle.volume,
+      color: liveCandle.close >= liveCandle.open ? "rgba(0,168,62,0.5)" : "rgba(214,0,0,0.5)",
+    });
+  }, [liveCandle, candles, chartType]);
 
   // Markers.
   useEffect(() => {

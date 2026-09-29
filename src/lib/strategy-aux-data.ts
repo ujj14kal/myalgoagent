@@ -30,7 +30,7 @@ export async function fetchAuxCandles(
       // base range as-is — Yahoo rejects it outright past its own window for
       // that interval. Clamp to what's actually servable rather than losing
       // the whole condition to a fetch error.
-      const range = clampRangeForInterval(baseRange, interval);
+      const range = clampRangeForInterval(baseRange, interval, market.depth);
       try {
         const candles = await market.getHistoricalCandles(symbol, range, interval);
         aux.set(auxKey(req.instrumentSymbol, req.timeframe), candles);

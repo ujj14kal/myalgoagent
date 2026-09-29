@@ -105,8 +105,11 @@ export const AGENT_TOOLS: MantleTool[] = [
     type: "function",
     function: {
       name: "list_instruments",
-      description: "Instruments available on the platform (NSE symbols).",
-      parameters: { type: "object", properties: {} },
+      description: "Search the platform's instruments (every NSE-listed stock plus the main indices). Pass what the user said — a symbol, company name or part of one — and use an exact symbol from the results.",
+      parameters: {
+        type: "object",
+        properties: { query: { type: "string", description: "Symbol or company name, e.g. 'infosys', 'TATA', 'nifty bank'. Omit to get the most-used large caps." } },
+      },
     },
   },
   {
@@ -834,8 +837,20 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
     case "get_broker_connection_guide":
       return { result: await brokerGuide(userId, typeof a.broker === "string" ? a.broker : undefined) };
     case "list_instruments": {
-      const rows = await prisma.instrument.findMany({ orderBy: { symbol: "asc" }, select: { symbol: true, name: true, sector: true } });
-      return { result: rows };
+      // 2,000+ instruments: never dump them all into the conversation — search and return the best 25.
+      const q = str(a.query).trim();
+      const rows = q
+        ? await prisma.instrument.findMany({
+            where: { OR: [{ symbol: { contains: q, mode: "insensitive" } }, { name: { contains: q, mode: "insensitive" } }] },
+            orderBy: { symbol: "asc" },
+            take: 60,
+            select: { symbol: true, name: true, sector: true },
+          })
+        : await prisma.instrument.findMany({ where: { sector: { not: null } }, orderBy: { symbol: "asc" }, take: 60, select: { symbol: true, name: true, sector: true } });
+      // Exact and prefix matches first.
+      const u = q.toUpperCase();
+      const score = (r: { symbol: string; name: string }) => (r.symbol.replace(/\.NS$/, "") === u ? 0 : r.symbol.startsWith(u) ? 1 : r.name.toUpperCase().startsWith(u) ? 2 : 3);
+      return { result: rows.sort((x, y) => score(x) - score(y)).slice(0, 25) };
     }
     case "propose_strategy":
       return proposeStrategy(userId, a);
