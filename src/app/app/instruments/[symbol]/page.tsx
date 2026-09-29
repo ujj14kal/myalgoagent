@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { marketDataFor } from "@/lib/market-data";
+import { marketDataFor, marketExtrasFor, type CorpAction } from "@/lib/market-data";
+import InstrumentExtras, { type KeyStats } from "@/components/markets/instrument-extras";
 import InstrumentChartPanel from "@/components/instrument-chart-panel";
 import SymbolSwitcher from "@/components/symbol-switcher";
 import type { ChartType } from "@/components/candlestick-chart";
@@ -45,6 +46,33 @@ export default async function InstrumentDetailPage({
     candles = await market.getHistoricalCandles(symbol, "6mo", "1d");
   } catch (err) {
     fetchError = err instanceof Error ? err.message : "Failed to load market data";
+  }
+
+  // Licensed feed only: today's stats, 52-week range and corporate actions.
+  const extras = marketExtrasFor(session?.user?.id);
+  let extraData: { stats: KeyStats; actions: CorpAction[] } | null = null;
+  if (extras && candles.length) {
+    const [today, week52, actions, changes] = await Promise.all([
+      market.getHistoricalCandles(symbol, "1d", "60m").catch(() => []),
+      extras.week52(symbol).catch(() => null),
+      symbol.endsWith(".NS") ? extras.corporateActions(symbol).catch(() => []) : Promise.resolve([]),
+      extras.dayChanges().catch(() => new Map()),
+    ]);
+    const c = changes.get(symbol);
+    const lastTick = await market.getRecentTicks?.(symbol, 1).catch(() => []);
+    extraData = {
+      stats: {
+        open: today[0]?.open ?? null,
+        high: today.length ? Math.max(...today.map((x) => x.high)) : null,
+        low: today.length ? Math.min(...today.map((x) => x.low)) : null,
+        prevClose: c?.prevClose ?? null,
+        volume: c?.volume ?? (today.length ? today.reduce((s, x) => s + x.volume, 0) : null),
+        turnover: c?.turnover ?? null,
+        week52,
+        last: lastTick?.at(-1)?.price ?? today.at(-1)?.close ?? null,
+      },
+      actions,
+    };
   }
 
   const latest = candles.at(-1);
@@ -107,7 +135,8 @@ export default async function InstrumentDetailPage({
       <p className="mt-3 text-xs text-brand-navy/45">
         Data: {market.name}
         {!market.isOfficial && " (interim feed, not an official NSE/BSE source)"}
-        {" · "}Delayed, not real-time · bar size set by the interval selected below
+        {" · "}
+        {market.getRecentTicks ? "Live during market hours" : "Delayed, not real-time"} · bar size set by the interval selected below
       </p>
 
       <div className="mt-6">
@@ -131,6 +160,11 @@ export default async function InstrumentDetailPage({
           />
         )}
       </div>
+      {extraData && (
+        <div className="mt-6">
+          <InstrumentExtras stats={extraData.stats} actions={extraData.actions} />
+        </div>
+      )}
     </div>
   );
 }

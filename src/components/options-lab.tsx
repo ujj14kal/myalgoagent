@@ -11,6 +11,7 @@ import {
   summarize,
   type OptionLeg,
 } from "@/lib/options/positions";
+import OptionChain, { type ChainContext } from "@/components/option-chain";
 
 // Options Lab: a multi-leg payoff, breakeven and Greeks calculator. Works on
 // typed-in (or theoretical) premiums today; once a live option chain is
@@ -35,17 +36,40 @@ function Num({ value, onChange, step = "any" }: { value: number; onChange: (v: n
   return <input type="number" step={step} value={Number.isFinite(value) ? value : ""} onChange={(e) => onChange(Number(e.target.value))} className={inputCls} />;
 }
 
-export default function OptionsLab() {
+/** A leg's live price from the chain: mid of bid/ask when both exist, else the last trade. */
+function livePrice(ctx: ChainContext, type: "CE" | "PE", strike: number): { premium: number; iv: number | null } | null {
+  const row = ctx.rows.find((r) => r.strike === strike);
+  const q = row ? (type === "CE" ? row.call : row.put) : null;
+  if (!q) return null;
+  const premium = q.bid && q.ask ? Math.round(((q.bid + q.ask) / 2) * 20) / 20 : q.ltp;
+  return premium ? { premium, iv: q.iv || null } : null;
+}
+
+export default function OptionsLab({ live = false }: { live?: boolean }) {
   const [s, setS] = useState<Settings>({ spot: 25000, step: 50, expiryDays: 7, ivPct: 13, ratePct: 6.5, lots: 1, lotSize: 75 });
   const [template, setTemplate] = useState("iron-condor");
   const [legs, setLegs] = useState<OptionLeg[]>(() =>
     buildTemplate("iron-condor", { spot: 25000, step: 50, expiryDays: 7, iv: 0.13, rate: 0.065, lots: 1, lotSize: 75 }),
   );
   const rate = s.ratePct / 100;
+  const [ctx, setCtx] = useState<ChainContext | null>(null);
 
   const apply = (id: string, next = s) => {
     setTemplate(id);
-    setLegs(buildTemplate(id, { spot: next.spot, step: next.step, expiryDays: next.expiryDays, iv: next.ivPct / 100, rate: next.ratePct / 100, lots: next.lots, lotSize: next.lotSize }));
+    const built = buildTemplate(id, { spot: next.spot, step: next.step, expiryDays: next.expiryDays, iv: next.ivPct / 100, rate: next.ratePct / 100, lots: next.lots, lotSize: next.lotSize });
+    // With a live chain, every leg is priced from real quotes instead of the model.
+    setLegs(
+      ctx
+        ? built.map((l) => {
+            const q = livePrice(ctx, l.type, l.strike);
+            return q ? { ...l, premium: q.premium, iv: q.iv ?? l.iv } : l;
+          })
+        : built,
+    );
+  };
+  const onContext = (c: ChainContext) => {
+    setCtx(c);
+    setS((prev) => ({ ...prev, spot: c.spot, step: c.step, expiryDays: Math.round(c.daysToExpiry * 100) / 100, lotSize: c.lotSize, ivPct: c.atmIv ? Math.round(c.atmIv * 1000) / 10 : prev.ivPct }));
   };
   const setLeg = (i: number, patch: Partial<OptionLeg>) => setLegs((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
 
@@ -54,13 +78,26 @@ export default function OptionsLab() {
 
   return (
     <div className="mt-6 space-y-5">
-      <p className="flex items-start gap-2 rounded-xl bg-brand-gold/10 px-4 py-3 text-xs leading-relaxed text-brand-navy/75 ring-1 ring-brand-gold/25">
-        <Info size={15} className="mt-0.5 shrink-0 text-[#8a7437]" />
-        <span>
-          Premiums below are <strong>estimates</strong> (Black–Scholes at the IV you set) until a live option chain is connected — replace them with real quotes
-          for accurate numbers. Set the lot size for your contract. This is a calculator for understanding a position, not advice.
-        </span>
-      </p>
+      {live ? (
+        <>
+          <OptionChain onAdd={(leg) => setLegs((ls) => [...ls, { ...leg, lots: s.lots }])} onContext={onContext} />
+          <p className="flex items-start gap-2 rounded-xl bg-brand-bg px-4 py-3 text-xs leading-relaxed text-brand-navy/70 ring-1 ring-black/5">
+            <Info size={15} className="mt-0.5 shrink-0 text-brand-primary" />
+            <span>
+              Spot, lot size, days to expiry and IV below follow the live chain{ctx ? ` (${ctx.underlying} ${ctx.expiry})` : ""}; strategy templates are priced from real
+              quotes. This is a calculator for understanding a position, not advice.
+            </span>
+          </p>
+        </>
+      ) : (
+        <p className="flex items-start gap-2 rounded-xl bg-brand-gold/10 px-4 py-3 text-xs leading-relaxed text-brand-navy/75 ring-1 ring-brand-gold/25">
+          <Info size={15} className="mt-0.5 shrink-0 text-[#8a7437]" />
+          <span>
+            Premiums below are <strong>estimates</strong> (Black–Scholes at the IV you set) until a live option chain is connected — replace them with real quotes
+            for accurate numbers. Set the lot size for your contract. This is a calculator for understanding a position, not advice.
+          </span>
+        </p>
+      )}
 
       <section className="surface p-4 sm:p-5">
         <p className="mb-3 text-sm font-semibold text-brand-navy">Underlying & assumptions</p>

@@ -1,4 +1,5 @@
 import { TrueDataProvider } from "./providers/truedata";
+import { MarketExtras } from "./extras";
 import { YahooFinanceProvider } from "./providers/yahoo";
 import { parseAllowlist, selectProvider, type MarketDataUse } from "./select";
 import { fixedBucket, fourHourBucket, resampleCandles } from "./resample";
@@ -48,7 +49,19 @@ export function marketDataFor(userId: string | null | undefined, use: MarketData
   });
 }
 
+const extras = trueData ? new MarketExtras(trueData) : null;
+
+/**
+ * Market movers, breadth, option chains etc. — only for accounts that get the
+ * licensed feed for viewing (same allow-list as marketDataFor); null for everyone else.
+ */
+export function marketExtrasFor(userId: string | null | undefined): MarketExtras | null {
+  return extras && marketDataFor(userId, "view") === licensed ? extras : null;
+}
+
 export type { MarketDataUse } from "./select";
+export type { Active, Breadth, ChainRow, CorpAction, Mover, OptionSide } from "./extras";
+export { maxPain, pcr, optionUnderlying } from "./extras";
 export type { Candle, CandleInterval, CandleRange, MarketDataProvider, Tick } from "./types";
 export type { HistoryDepth } from "./timeframes";
 export {

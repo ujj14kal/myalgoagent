@@ -281,6 +281,16 @@ export class TrueDataProvider implements MarketDataProvider {
     throw lastError instanceof Error ? lastError : new Error("TrueData request failed");
   }
 
+  /** The symbol-master API (api.truedata.in), which takes the login in the query — the URL is never logged. */
+  async masterRequest(path: string, params: Record<string, string>, revalidate = 86400): Promise<string> {
+    const url = `https://api.truedata.in/${path}?${new URLSearchParams({ ...params, user: this.user, password: this.password })}`;
+    await this.slot();
+    const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS), next: { revalidate } });
+    const body = await res.text();
+    if (!res.ok) throw new Error(`TrueData symbol master failed: ${res.status}`);
+    return body;
+  }
+
   async getRecentTicks(symbol: string, count: number): Promise<Tick[]> {
     const tdSymbol = toTrueDataSymbol(symbol);
     if (!tdSymbol) throw new Error(`${symbol} isn't available on TrueData yet (NSE stocks and main indices only)`);

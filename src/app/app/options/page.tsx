@@ -1,18 +1,28 @@
 import { Sigma } from "lucide-react";
 import PageHeader from "@/components/ui/page-header";
 import OptionsLab from "@/components/options-lab";
+import { auth } from "@/lib/auth";
+import { marketExtrasFor } from "@/lib/market-data";
 
 export const metadata = { title: "Options Lab", robots: { index: false } };
 
-export default function Page() {
+export const dynamic = "force-dynamic";
+
+export default async function Page() {
+  const session = await auth();
+  const live = !!marketExtrasFor(session?.user?.id);
   return (
     <div>
       <PageHeader
         title="Options Lab"
         icon={Sigma}
-        description="Build a multi-leg options position and see its payoff, breakevens, max profit and loss, and Greeks before you trade it."
+        description={
+          live
+            ? "The live option chain with OI, IV and Greeks — click B or S to add legs and see the payoff, breakevens, max profit and loss, and Greeks before you trade."
+            : "Build a multi-leg options position and see its payoff, breakevens, max profit and loss, and Greeks before you trade it."
+        }
       />
-      <OptionsLab />
+      <OptionsLab live={live} />
     </div>
   );
 }
