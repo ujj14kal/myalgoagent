@@ -1,5 +1,9 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
+    // Secrets first: everything else (database, auth, broker crypto) reads them from process.env.
+    const { loadRuntimeSecrets } = await import("@/lib/runtime-secrets");
+    await loadRuntimeSecrets();
+
     const { setGlobalDispatcher, Agent } = await import("undici");
 
     // AWS Lambda (what Amplify's WEB_COMPUTE platform runs on under the
