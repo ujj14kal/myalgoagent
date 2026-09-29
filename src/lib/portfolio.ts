@@ -71,13 +71,16 @@ export async function getEquityCurve(userId: string, startingCapital: number) {
     select: { time: true, netPnl: true },
   });
 
+  // Several trades can close on the same candle (across sessions) — the chart
+  // needs one point per time, so same-time closes collapse into the last total.
   let running = startingCapital;
-  const points = orders
-    .filter((o) => o.netPnl !== null)
-    .map((o) => {
-      running += o.netPnl ?? 0;
-      return { time: o.time, equity: running };
-    });
+  const byTime = new Map<number, number>();
+  for (const o of orders) {
+    if (o.netPnl === null || !Number.isFinite(o.netPnl)) continue;
+    running += o.netPnl;
+    byTime.set(o.time, running);
+  }
+  const points = [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([time, equity]) => ({ time, equity }));
 
   // Always show at least a flat starting point so a brand-new account
   // still renders a (empty) chart shape instead of nothing.
