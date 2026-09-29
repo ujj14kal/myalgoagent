@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { regenerateWebhookToken, setWebhookEnabled } from "@/lib/webhook-actions";
 
 export interface WebhookAlertRow {
@@ -28,6 +28,7 @@ export default function WebhookPanel({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const autoStarted = useRef(false);
 
   function generate() {
     setError(null);
@@ -43,6 +44,14 @@ export default function WebhookPanel({
       }
     });
   }
+
+  // A strategy without a URL yet gets one straight away — shown once, since only a hash of it is kept.
+  useEffect(() => {
+    if (hasToken || autoStarted.current) return;
+    autoStarted.current = true;
+    generate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on first view of a strategy with no URL
+  }, []);
 
   function toggleEnabled() {
     const next = !enabled;

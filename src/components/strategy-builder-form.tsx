@@ -718,7 +718,9 @@ export default function StrategyBuilderForm({
               no entry/exit condition tree to configure. The risk rules below still apply to every position this strategy opens.
             </p>
             <p className="mt-3 text-xs text-brand-navy/40">
-              {strategyId ? "Save your changes, then set up the webhook URL below." : "Create the strategy first — the webhook URL is generated on its detail page."}
+              {strategyId
+                ? "Your webhook URL is on this strategy's page (Webhook setup). It was shown once when it was created — if you didn't copy it, press Regenerate there to get a new one."
+                : "Create the strategy and its page opens with your webhook URL ready to copy into a TradingView alert. It's shown only once, so copy it then."}
             </p>
           </BuilderSection>
         ) : (
