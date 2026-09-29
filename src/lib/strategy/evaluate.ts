@@ -1,5 +1,6 @@
 import type { Candle, CandleInterval } from "@/lib/market-data";
 import { computeIndicatorSeries } from "./compute-series";
+import { computeCustomSeries } from "@/lib/custom-indicator";
 import { computeOrderTimeWindowSeries, computeTimeWindowSeries } from "./time-window";
 import { alignToBase, alignSignalToBase } from "./timeframe-align";
 import { computeCandlePatternSeries } from "@/lib/candle-patterns";
@@ -22,8 +23,23 @@ export function auxKey(instrumentSymbol: string | undefined, timeframe: CandleIn
   return `${instrumentSymbol ?? ""}::${timeframe ?? ""}`;
 }
 
-function seriesKey(op: Extract<Operand, { kind: "indicator" }>): string {
+function seriesKey(op: Extract<Operand, { kind: "indicator" } | { kind: "custom" }>): string {
+  if (op.kind === "custom") return `CUSTOM:${JSON.stringify(op.def)}:${auxKey(op.instrumentSymbol, op.timeframe)}`;
   return `${op.type}:${op.params.join(",")}:${auxKey(op.instrumentSymbol, op.timeframe)}`;
+}
+
+/** An indicator operand's raw values on a candle set (NaN/undefined where not defined). */
+function rawIndicatorSeries(candles: Candle[], operand: Extract<Operand, { kind: "indicator" } | { kind: "custom" }>): (number | undefined)[] {
+  if (operand.kind === "custom") {
+    try {
+      return computeCustomSeries(candles, operand.def).map((v) => (Number.isFinite(v) ? v : undefined));
+    } catch {
+      return candles.map(() => undefined); // a formula that no longer parses reads as "can't be evaluated"
+    }
+  }
+  const points = computeIndicatorSeries(candles, operand.type, operand.params);
+  const byTime = new Map(points.map((p) => [p.time, p.value]));
+  return candles.map((c) => byTime.get(c.time));
 }
 
 /** Aligns a raw series computed on an override candle set back onto the
@@ -67,16 +83,11 @@ function buildSeries(candles: Candle[], operand: Operand, cache: Map<string, Ser
 
   let series: Series;
   if (!usesOverride) {
-    const points = computeIndicatorSeries(candles, operand.type, operand.params);
-    const byTime = new Map(points.map((p) => [p.time, p.value]));
-    series = candles.map((c) => byTime.get(c.time));
+    series = rawIndicatorSeries(candles, operand);
   } else if (!overrideCandles) {
     series = candles.map(() => undefined);
   } else {
-    const points = computeIndicatorSeries(overrideCandles, operand.type, operand.params);
-    const byTime = new Map(points.map((p) => [p.time, p.value]));
-    const rawSeries = overrideCandles.map((c) => byTime.get(c.time));
-    series = alignOverrideSeries(candles, overrideCandles, operand.timeframe, rawSeries);
+    series = alignOverrideSeries(candles, overrideCandles, operand.timeframe, rawIndicatorSeries(overrideCandles, operand));
   }
   cache.set(key, series);
   return series;

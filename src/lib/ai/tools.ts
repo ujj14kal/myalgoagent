@@ -6,7 +6,9 @@ import { getPaperSessionRows, summarizePortfolio } from "@/lib/portfolio";
 import { compile } from "@/lib/strategy-compile";
 import { isNeverExitCondition, type ConditionNode } from "@/lib/strategy/types";
 import { conditionToText } from "@/lib/strategy/format";
-import { CONDITION_REFERENCE, toConditionNode } from "./conditions";
+import { CONDITION_REFERENCE, fillCustomRefs, toConditionNode } from "./conditions";
+import { describeCustom, type CustomIndicatorDef } from "@/lib/custom-indicator";
+import { FormulaError, parseFormula } from "@/lib/custom-indicator/formula";
 import type { MantleTool } from "./mantle";
 import { NEW_STRATEGY_ID, toStrategyInput, type AgentProposal, type PlanStep, type RiskUnitName, type SizingModeName } from "./proposals";
 
@@ -98,6 +100,32 @@ export const AGENT_TOOLS: MantleTool[] = [
       parameters: {
         type: "object",
         properties: { broker: { type: "string", description: "dhan, zerodha, upstox, fyers, angelone, groww, icicidirect, kotak, 5paisa or aliceblue (optional)" } },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_custom_indicators",
+      description: "The user's own custom indicators (name, formula or drawn line). Use them in strategy conditions as {\"custom\": \"<name>\"}.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "draft_custom_indicator",
+      description:
+        "Turn a user's own trend/indicator idea into a formula and give them a link to review, preview on a chart and save it (nothing is saved until they press Save). Formula language: prices open/high/low/close/volume/hl2/hlc3/ohlc4; + - * / ^; comparisons and/or (true = 1); fn(source, length) for sma, ema, wma, rma, rsi, stdev, highest, lowest, sum, change, ref, roc; abs, sqrt, log, min, max, if(cond, a, b), crossover(a, b), crossunder(a, b); and any built-in indicator by its strategy-language name with numeric settings, e.g. atr(14), supertrend(10, 3), vwap(). Example: (close - sma(close, 50)) / atr(14).",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          formula: { type: "string" },
+          pane: { type: "string", enum: ["price", "separate"], description: "price = drawn on the candles (same units as price); separate = its own pane (ratios, scores, 0/1 flags)." },
+          description: { type: "string", description: "One sentence: what it measures." },
+        },
+        required: ["name", "formula", "pane"],
       },
     },
   },
@@ -459,6 +487,19 @@ function timeframeArg(v: unknown): string | undefined {
   return tf;
 }
 
+/** Looks up {custom: "name"} references in the user's saved custom indicators. */
+async function withCustomDefs<T extends { entry?: ConditionNode; exit?: ConditionNode | null }>(userId: string, rules: T): Promise<T> {
+  const text = JSON.stringify(rules);
+  if (!text.includes('"custom"')) return rules;
+  const rows = await prisma.customIndicator.findMany({ where: { userId }, select: { name: true, def: true } });
+  const saved = new Map(rows.map((r) => [r.name, r.def as unknown as CustomIndicatorDef]));
+  return {
+    ...rules,
+    ...(rules.entry ? { entry: fillCustomRefs(rules.entry, saved) } : {}),
+    ...(rules.exit ? { exit: fillCustomRefs(rules.exit, saved) } : {}),
+  };
+}
+
 /** Parses entry/exit; "exit": null / "none" means no rule-based exit. Throws readable errors. */
 function rulesFrom(a: Record<string, unknown>, needEntry: boolean): { entry?: ConditionNode; exit?: ConditionNode | null } {
   const out: { entry?: ConditionNode; exit?: ConditionNode | null } = {};
@@ -491,7 +532,7 @@ async function proposeStrategy(userId: string, a: Record<string, unknown>): Prom
   }
   let rules;
   try {
-    rules = rulesFrom(a, true);
+    rules = await withCustomDefs(userId, rulesFrom(a, true));
   } catch (err) {
     return { result: { error: `${readableIssues(err)} Fix it and call propose_strategy again.` } };
   }
@@ -566,7 +607,7 @@ async function proposeStrategyUpdate(userId: string, a: Record<string, unknown>)
 
   let rules;
   try {
-    rules = rulesFrom(a, false);
+    rules = await withCustomDefs(userId, rulesFrom(a, false));
   } catch (err) {
     return { result: { error: `${readableIssues(err)} Fix it and call propose_strategy_update again.` } };
   }
@@ -836,6 +877,20 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
     }
     case "get_broker_connection_guide":
       return { result: await brokerGuide(userId, typeof a.broker === "string" ? a.broker : undefined) };
+    case "list_custom_indicators": {
+      const rows = await prisma.customIndicator.findMany({ where: { userId }, orderBy: { name: "asc" }, select: { name: true, description: true, def: true } });
+      return { result: rows.map((r) => ({ name: r.name, definition: describeCustom(r.def as unknown as CustomIndicatorDef), description: r.description })) };
+    }
+    case "draft_custom_indicator": {
+      const formula = str(a.formula).trim();
+      try {
+        parseFormula(formula);
+      } catch (err) {
+        return { result: { error: `${err instanceof FormulaError ? err.message : "Invalid formula."} Fix it and call draft_custom_indicator again.` } };
+      }
+      const q = new URLSearchParams({ name: str(a.name).slice(0, 60), formula, pane: a.pane === "price" ? "price" : "separate", ...(str(a.description) ? { description: str(a.description).slice(0, 300) } : {}) });
+      return { result: { ok: true, link: `/app/indicators?${q}`, note: "Give the user this link: they can preview it on any chart and save it. Once saved, it can be used in strategy rules." } };
+    }
     case "list_instruments": {
       // 2,000+ instruments: never dump them all into the conversation — search and return the best 25.
       const q = str(a.query).trim();

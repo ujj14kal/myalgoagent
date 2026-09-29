@@ -1,5 +1,7 @@
 "use client";
 import InstrumentCombobox from "@/components/instrument-combobox";
+import { useCustomIndicators } from "@/components/custom-indicators/context";
+import { describeCustom } from "@/lib/custom-indicator";
 
 import { createContext, useContext, useState } from "react";
 import type { ComparisonOperator, ConditionNode, IndicatorKind, Operand, PriceField } from "@/lib/strategy";
@@ -362,9 +364,10 @@ function OperandEditor({
    * operands that don't sit in a two-sided comparison (none currently). */
   other?: Operand;
 }) {
+  const customs = useCustomIndicators();
   const indicatorDef = value.kind === "indicator" ? INDICATOR_BY_KIND.get(value.type) : undefined;
-  const hasOverrides = value.kind === "indicator" || value.kind === "price";
-  const overridable = hasOverrides ? (value as Extract<Operand, { kind: "indicator" } | { kind: "price" }>) : null;
+  const hasOverrides = value.kind === "indicator" || value.kind === "price" || value.kind === "custom";
+  const overridable = hasOverrides ? (value as Extract<Operand, { kind: "indicator" } | { kind: "price" } | { kind: "custom" }>) : null;
 
   // Filter out choices the other side of the comparison makes nonsensical
   // (e.g. RSI vs a Bollinger Band), but never hide the operand's own
@@ -381,10 +384,14 @@ function OperandEditor({
     <div className="flex flex-wrap items-center gap-1">
       <select
         className={inputClass}
-        value={value.kind === "indicator" ? value.type : value.kind === "price" ? `PRICE:${value.field}` : "CONST"}
+        value={value.kind === "indicator" ? value.type : value.kind === "price" ? `PRICE:${value.field}` : value.kind === "custom" ? `CUSTOM:${value.name}` : "CONST"}
         onChange={(e) => {
           const v = e.target.value;
           if (v === "CONST") onChange({ kind: "constant", value: 0 });
+          else if (v.startsWith("CUSTOM:")) {
+            const c = customs.find((x) => x.name === v.slice(7)) ?? (value.kind === "custom" && value.name === v.slice(7) ? value : null);
+            if (c) onChange({ kind: "custom", name: c.name, def: c.def });
+          }
           else if (v.startsWith("PRICE:")) onChange({ kind: "price", field: v.slice(6) as PriceField });
           else {
             const def = INDICATOR_BY_KIND.get(v as never);
@@ -410,8 +417,23 @@ function OperandEditor({
             ))}
           </optgroup>
         )}
+        {(customs.length > 0 || value.kind === "custom") && (
+          <optgroup label="Custom">
+            {value.kind === "custom" && !customs.some((c) => c.name === value.name) && <option value={`CUSTOM:${value.name}`}>{value.name}</option>}
+            {customs.map((c) => (
+              <option key={c.name} value={`CUSTOM:${c.name}`}>
+                {c.name}
+              </option>
+            ))}
+          </optgroup>
+        )}
         <option value="CONST">Fixed value</option>
       </select>
+      {value.kind === "custom" && (
+        <span className="max-w-xs truncate font-mono text-[11px] text-brand-navy/50" title={describeCustom(value.def)}>
+          {describeCustom(value.def)}
+        </span>
+      )}
 
       {value.kind === "indicator" &&
         indicatorDef?.paramLabels.map((paramLabel, i) => (

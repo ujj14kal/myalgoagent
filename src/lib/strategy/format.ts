@@ -32,6 +32,8 @@ export function operandToText(o: Operand): string {
       return `${o.field.toLowerCase()}${suffix(o)}`;
     case "indicator":
       return `${DSL_BY_KIND.get(o.type) ?? humanize(o.type)}(${o.params.join(",")})${suffix(o)}`;
+    case "custom":
+      return `“${o.name}”${suffix(o)}`;
   }
 }
 

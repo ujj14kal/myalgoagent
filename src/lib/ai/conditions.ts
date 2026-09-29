@@ -1,3 +1,5 @@
+import { parseFormula } from "@/lib/custom-indicator/formula";
+import type { CustomIndicatorDef } from "@/lib/custom-indicator";
 import { parseDsl } from "@/lib/strategy/dsl";
 import { INDICATOR_CATALOG, OSCILLATOR_KINDS, OSCILLATOR_SCALE_GROUP } from "@/lib/strategy/indicator-catalog";
 import { CANDLE_PATTERN_CATALOG } from "@/lib/strategy/candle-pattern-catalog";
@@ -48,10 +50,33 @@ function symbolOf(v: unknown): string | undefined {
   return s.endsWith(".NS") ? s : `${s}.NS`;
 }
 
+/** Placeholder until a {custom: "name"} reference is looked up in the user's saved indicators. */
+export const PENDING_CUSTOM: CustomIndicatorDef = { type: "formula", formula: "0", pane: "separate" };
+
+/** Fills every {custom: "name"} reference with the user's saved definition. Throws a readable error for unknown names. */
+export function fillCustomRefs(node: ConditionNode, saved: Map<string, CustomIndicatorDef>): ConditionNode {
+  const op = (o: Operand): Operand => {
+    if (o.kind !== "custom" || o.def !== PENDING_CUSTOM) return o;
+    const hit = [...saved.entries()].find(([n]) => n.toLowerCase() === o.name.toLowerCase());
+    if (!hit) throw new Error(`There's no custom indicator called "${o.name}". The user has: ${[...saved.keys()].join(", ") || "none yet"}.`);
+    return { ...o, name: hit[0], def: hit[1] };
+  };
+  switch (node.kind) {
+    case "group":
+      return { ...node, children: node.children.map((c) => fillCustomRefs(c, saved)) };
+    case "not":
+      return { ...node, child: fillCustomRefs(node.child, saved) };
+    case "comparison":
+      return { ...node, left: op(node.left), right: op(node.right) };
+    default:
+      return node;
+  }
+}
+
 function toOperand(v: unknown, where: string): Operand {
   if (typeof v === "number" && Number.isFinite(v)) return { kind: "constant", value: v };
   // Forgiving shapes models often write: {"value": 30}, {"constant": 30}, or the builder's own operand.
-  if (isObj(v) && typeof v.kind === "string" && ["constant", "price", "indicator"].includes(v.kind)) return v as unknown as Operand;
+  if (isObj(v) && typeof v.kind === "string" && ["constant", "price", "indicator", "custom"].includes(v.kind)) return v as unknown as Operand;
   if (isObj(v) && ("value" in v || "constant" in v) && !("indicator" in v) && !("price" in v)) return toOperand(v.value ?? v.constant, where);
   if (typeof v === "string") {
     const t = v.trim().toLowerCase();
@@ -65,6 +90,19 @@ function toOperand(v: unknown, where: string): Operand {
   if (isObj(v)) {
     const timeframe = timeframeOf(v.timeframe, where);
     const instrumentSymbol = symbolOf(v.symbol ?? v.instrument);
+    const extra = { ...(timeframe ? { timeframe } : {}), ...(instrumentSymbol ? { instrumentSymbol } : {}) };
+    // The user's saved custom indicator by name — its definition is filled in by resolveCustomRefs().
+    if (typeof v.custom === "string" && v.custom.trim()) return { kind: "custom", name: v.custom.trim(), def: PENDING_CUSTOM, ...extra };
+    // A formula written inline.
+    if (typeof v.formula === "string") {
+      try {
+        parseFormula(v.formula);
+      } catch (err) {
+        throw new Error(`${where}: ${err instanceof Error ? err.message : "invalid formula"}`);
+      }
+      const name = typeof v.name === "string" && v.name.trim() ? v.name.trim().slice(0, 60) : v.formula.trim().slice(0, 60);
+      return { kind: "custom", name, def: { type: "formula", formula: v.formula.trim(), pane: v.pane === "price" ? "price" : "separate" }, ...extra };
+    }
     if (typeof v.price === "string") {
       const field = PRICE[v.price.toLowerCase()];
       if (!field) throw new Error(`${where}: price must be open, high, low, close or volume.`);
@@ -192,6 +230,7 @@ export const CONDITION_REFERENCE = [
   `- volume pattern: {"volume_pattern":"VOLUME_SPIKE"} — ${VOLUME_PATTERN_CATALOG.map((p) => p.kind).join(", ")}`,
   '  Patterns can add "timeframe" to detect on another chart. A candle pattern can add "at_level": "support" or "resistance" to count only when the candle forms at that level (omit = anywhere). Whenever the user wants a pattern "at", "near" or "on" support/resistance, use at_level — never build your own close-vs-support comparison for it (that checks something different). Patterns and time windows are true/false conditions — never compare them to a value.',
   '- support / resistance levels are indicators on the price scale: {"indicator":"support"} is the nearest support level below price (swing lows that price bounced from), {"indicator":"resistance"} the nearest level above (swing highs price failed to break). Compare them with price, e.g. close crosses_above resistance (breakout), close < support (breakdown).',
+  '- the user\'s own custom indicators (list_custom_indicators): {"custom":"<exact name>"}; or a formula written inline: {"formula":"(close - sma(close, 50)) / atr(14)","name":"Trend strength"}. Compare formulas that are ratios/scores/0-1 flags to fixed numbers, and price-level ones (lines, midlines) to price.',
   "- indicators and their settings: " + INDICATOR_CATALOG.map((d) => `${d.dslName}(${d.paramLabels.join(", ") || "no settings"})`).join(", "),
   "RULES THE VALIDATOR ENFORCES (follow them; if it still rejects, fix and retry):",
   `- These have their own scale, unrelated to price: ${oscillators.join(", ")}. Compare them only to a fixed number (rsi(14) > 70, rsi crosses_above 30) or to their own partner: ${pairs.join("; ")}. Never compare them to price or a moving average.`,

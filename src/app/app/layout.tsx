@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import CustomIndicatorsRoot from "@/components/custom-indicators/root";
+import type { CustomIndicatorDef } from "@/lib/custom-indicator";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import AppSidebar from "@/components/app-sidebar";
@@ -34,7 +36,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   const now = new Date();
-  const [unreadCount, liveSessions, announcement, brokerRows] = await Promise.all([
+  const [unreadCount, liveSessions, announcement, brokerRows, customRows] = await Promise.all([
     prisma.notification.count({ where: { userId: session.user.id, read: false } }),
     prisma.paperSession.count({ where: { userId: session.user.id, status: "ACTIVE" } }),
     prisma.announcement.findFirst({
@@ -43,7 +45,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       select: { id: true, title: true, body: true, level: true, link: true },
     }),
     prisma.brokerConnection.findMany({ where: { userId: session.user.id }, select: { broker: true, status: true, tokenExpiresAt: true }, orderBy: { createdAt: "asc" } }),
+    prisma.customIndicator.findMany({ where: { userId: session.user.id }, select: { name: true, def: true }, orderBy: { name: "asc" } }),
   ]);
+  const customIndicators = customRows.map((c) => ({ name: c.name, def: c.def as unknown as CustomIndicatorDef }));
   // Linked brokers for the top bar: live today, or needing today's login.
   const brokers = brokerRows.map((b) => ({ broker: b.broker, live: b.status === "CONNECTED" && !!b.tokenExpiresAt && b.tokenExpiresAt > now }));
   // "Last active" for the admin portal — written at most every 10 minutes.
@@ -54,6 +58,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const agentName = dbUser.agentName ?? DEFAULT_AGENT_NAME;
 
   return (
+    <CustomIndicatorsRoot items={customIndicators}>
     <AgentChatProvider agentName={agentName}>
     <TutorialProvider initialAgentName={dbUser.agentName} tutorialCompleted={!!dbUser.tutorialCompletedAt}>
       <AgentToastProvider agentName={agentName}>
@@ -78,5 +83,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </AgentToastProvider>
     </TutorialProvider>
     </AgentChatProvider>
+    </CustomIndicatorsRoot>
   );
 }

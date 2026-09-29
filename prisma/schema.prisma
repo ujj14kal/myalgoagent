@@ -80,6 +80,7 @@ model User {
   optionStrategies    OptionStrategy[]
   optionBacktestRuns  OptionBacktestRun[]
   optionForwardTests  OptionForwardTest[]
+  customIndicators    CustomIndicator[]
 }
 
 enum OtpPurpose {
@@ -930,4 +931,23 @@ model OptionForwardTest {
 
   @@index([status])
   @@index([userId])
+}
+
+// A user's own indicator: a formula over prices/indicators, or a line drawn on
+// the chart. Always shown with its definition (white-box). Conditions that use
+// it carry a copy of the definition, so editing it later doesn't change past
+// backtests.
+model CustomIndicator {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  // { type: "formula", formula, pane } | { type: "line", points: [{time, price}, {time, price}], symbol? }
+  def         Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
 }

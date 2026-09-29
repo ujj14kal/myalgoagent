@@ -1,3 +1,4 @@
+import { computeCustomSeries, customPane } from "@/lib/custom-indicator";
 import type { Candle } from "@/lib/market-data";
 import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
 import { computeCandlePatternSeries, type CandlePatternKind } from "@/lib/candle-patterns";
@@ -83,7 +84,19 @@ function alignedSeries(candles: Candle[], type: IndicatorKind, params: number[])
   });
 }
 
-const indicatorLabel = (o: Extract<Operand, { kind: "indicator" }>) => `${LABEL.get(o.type) ?? o.type}${o.params.length ? `(${o.params.join(", ")})` : ""}`;
+type IndicatorOperand = Extract<Operand, { kind: "indicator" } | { kind: "custom" }>;
+
+const indicatorLabel = (o: IndicatorOperand) => (o.kind === "custom" ? o.name : `${LABEL.get(o.type) ?? o.type}${o.params.length ? `(${o.params.join(", ")})` : ""}`);
+
+/** Values of a built-in or custom indicator on each candle. */
+function operandValues(candles: Candle[], o: IndicatorOperand): Values {
+  if (o.kind === "indicator") return alignedSeries(candles, o.type, o.params);
+  try {
+    return computeCustomSeries(candles, o.def).map((v) => (Number.isFinite(v) ? round(v) : null));
+  } catch {
+    return candles.map(() => null);
+  }
+}
 
 /** What to draw for the rules, from both the entry and the exit condition. */
 export function buildReplayStudies(
@@ -97,7 +110,7 @@ export function buildReplayStudies(
   const oscByKey = new Map<string, ReplayStudies["oscillators"][number]>();
 
   let inEntry = true;
-  const addIndicator = (o: Extract<Operand, { kind: "indicator" }>): string | null => {
+  const addIndicator = (o: IndicatorOperand): string | null => {
     const label = indicatorLabel(o);
     if (!isBase(o)) {
       const where = [o.instrumentSymbol?.replace(/\.NS$/, ""), o.timeframe].filter(Boolean).join(" ");
@@ -105,10 +118,11 @@ export function buildReplayStudies(
       if (!studies.notes.includes(note)) studies.notes.push(note);
       return null;
     }
-    const key = `${o.type}:${o.params.join(",")}`;
-    const values = alignedSeries(candles, o.type, o.params);
-    if (OSCILLATOR_KINDS.has(o.type)) {
-      const paneKey = OSCILLATOR_SCALE_GROUP[o.type] ?? o.type;
+    const key = o.kind === "custom" ? `CUSTOM:${o.name}` : `${o.type}:${o.params.join(",")}`;
+    const values = operandValues(candles, o);
+    const ownPane = o.kind === "custom" ? customPane(o.def) === "separate" : OSCILLATOR_KINDS.has(o.type);
+    if (ownPane) {
+      const paneKey = o.kind === "custom" ? key : (OSCILLATOR_SCALE_GROUP[o.type] ?? o.type);
       let pane = oscByKey.get(paneKey);
       if (!pane) {
         pane = { key: paneKey, lines: [], levels: [] };
@@ -132,7 +146,7 @@ export function buildReplayStudies(
       const sides = [node.left, node.right];
       let pane: string | null = null;
       for (const s of sides) {
-        if (s.kind === "indicator") pane = addIndicator(s) ?? pane;
+        if (s.kind === "indicator" || s.kind === "custom") pane = addIndicator(s) ?? pane;
         else if (s.kind === "price") {
           if (!isBase(s)) {
             const note = `${s.field.toLowerCase()} of ${[s.instrumentSymbol?.replace(/\.NS$/, ""), s.timeframe].filter(Boolean).join(" ")} is checked but not drawn here.`;
@@ -274,7 +288,7 @@ function detailFor(candles: Candle[], node: ConditionNode): ((i: number) => stri
     if (o.kind === "constant") return { label: "", at: () => o.value };
     if (!isBase(o)) return null;
     if (o.kind === "price") return { label: o.field.charAt(0) + o.field.slice(1).toLowerCase(), at: (i) => candles[i]?.[o.field.toLowerCase() as "open"] ?? null };
-    const values = alignedSeries(candles, o.type, o.params);
+    const values = operandValues(candles, o);
     return { label: indicatorLabel(o), at: (i) => values[i] };
   };
   const l = side(node.left);

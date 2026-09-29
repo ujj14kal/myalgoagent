@@ -1,3 +1,4 @@
+import type { CustomIndicatorDef } from "@/lib/custom-indicator";
 import type { CandlePatternKind } from "@/lib/candle-patterns";
 import type { ChartPatternKind } from "@/lib/chart-patterns";
 import type { VolumePatternKind } from "@/lib/volume-patterns";
@@ -61,7 +62,9 @@ export type ComparisonOperator = "GT" | "LT" | "GTE" | "LTE" | "EQ" | "CROSSES_A
 export type Operand =
   | { kind: "indicator"; type: IndicatorKind; params: number[]; timeframe?: CandleInterval; instrumentSymbol?: string }
   | { kind: "price"; field: PriceField; timeframe?: CandleInterval; instrumentSymbol?: string }
-  | { kind: "constant"; value: number };
+  | { kind: "constant"; value: number }
+  // The user's own indicator (formula or drawn line), definition included — see lib/custom-indicator.
+  | { kind: "custom"; name: string; def: CustomIndicatorDef; timeframe?: CandleInterval; instrumentSymbol?: string };
 
 // A "signal" is a boolean-native condition — true/false per bar — as opposed
 // to a comparison, which compares two numeric time series. Time windows and

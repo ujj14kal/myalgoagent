@@ -10,6 +10,9 @@ import { saveChartLayout } from "@/lib/chart-layout-actions";
 import { RANGES, INTERVALS, isValidCombo, defaultIntervalForRange } from "@/lib/market-data";
 import type { Candle, CandleInterval, CandleRange, HistoryDepth, Tick } from "@/lib/market-data";
 import { useLiveCandle } from "@/lib/market-data/use-live-candle";
+import { CustomIndicatorToggle, SaveLineAsIndicator } from "@/components/custom-indicators/chart-tools";
+import { useCustomIndicators } from "@/components/custom-indicators/context";
+import { computeCustomSeries, customPane } from "@/lib/custom-indicator";
 import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
 import { anchoredVwap } from "@/lib/indicators";
 import { INDICATOR_BY_KIND } from "@/lib/strategy/indicator-catalog";
@@ -283,6 +286,30 @@ export default function InstrumentChartPanel({
     };
   }, [compareSymbol, range, interval]);
 
+  // The user's own indicators toggled on this chart.
+  const customs = useCustomIndicators();
+  const [activeCustom, setActiveCustom] = useState<string[]>([]);
+  const customSeries = useMemo(
+    () =>
+      customs
+        .filter((c) => activeCustom.includes(c.name))
+        .map((c, idx) => {
+          let values: number[] = [];
+          try {
+            values = computeCustomSeries(candles, c.def);
+          } catch {
+            // an unusable formula draws nothing
+          }
+          return {
+            name: c.name,
+            pane: customPane(c.def),
+            color: ["#7c3aed", "#0891b2", "#ea580c", "#be185d"][idx % 4],
+            points: candles.flatMap((k, i) => (Number.isFinite(values[i]) ? [{ time: k.time, value: values[i] }] : [])),
+          };
+        }),
+    [customs, activeCustom, candles],
+  );
+
   const overlays: Overlay[] = useMemo(() => {
     const indicatorOverlays = overlayInstances.map((inst, idx) => {
       const def = INDICATOR_BY_KIND.get(inst.kind);
@@ -305,8 +332,9 @@ export default function InstrumentChartPanel({
         color: ["#d60000", "#00a83e", "#6a35c2"][idx % 3],
         points: anchoredVwap(candles, d.anchorTime),
       }));
-    return [...indicatorOverlays, ...anchoredVwapOverlays];
-  }, [overlayInstances, candles, drawings]);
+    const customOverlays = customSeries.filter((c) => c.pane === "price").map((c) => ({ label: c.name, color: c.color, points: c.points }));
+    return [...indicatorOverlays, ...anchoredVwapOverlays, ...customOverlays];
+  }, [overlayInstances, candles, drawings, customSeries]);
 
   const oscillatorPanels = useMemo(() => {
     return oscillatorInstances.map((inst): { key: string; label: string; series: OscillatorSeries[]; referenceLines?: number[] } => {
@@ -489,6 +517,7 @@ export default function InstrumentChartPanel({
             <span className="mx-1 h-4 w-px bg-brand-navy/10" />
             <IndicatorPicker label="Overlay" scope="overlay" onAdd={addOverlay} />
             <IndicatorPicker label="Oscillator" scope="oscillator" onAdd={addOscillator} />
+            <CustomIndicatorToggle active={activeCustom} onToggle={(name) => setActiveCustom((a) => (a.includes(name) ? a.filter((n) => n !== name) : [...a, name]))} />
             <span className="mx-1 h-4 w-px bg-brand-navy/10" />
             <select
               value={compareSymbol ?? ""}
@@ -576,6 +605,7 @@ export default function InstrumentChartPanel({
         {error && (
           <p className="border-b border-black/5 bg-brand-sell/5 px-3 py-2 text-xs text-brand-sell">{error}</p>
         )}
+        <SaveLineAsIndicator drawings={drawings} symbol={symbol} latestTime={candles.at(-1)?.time ?? 0} />
 
         <div className="flex">
           <DrawingToolbar
@@ -624,6 +654,15 @@ export default function InstrumentChartPanel({
           <OscillatorPanel series={panel.series} referenceLines={panel.referenceLines} />
         </div>
       ))}
+
+      {customSeries
+        .filter((c) => c.pane === "separate")
+        .map((c) => (
+          <div key={c.name} className="mt-4 surface p-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">{c.name} · custom</p>
+            <OscillatorPanel series={[{ label: c.name, color: c.color, points: c.points }]} />
+          </div>
+        ))}
 
       {comparePanel && (
         <div className="mt-4 surface p-4">

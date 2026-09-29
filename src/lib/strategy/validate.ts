@@ -1,3 +1,4 @@
+import { validateCustomDef } from "@/lib/custom-indicator";
 import type { BooleanSignalKind, ComparisonOperator, ConditionNode, Operand, PriceField } from "./types";
 import { INDICATOR_BY_KIND } from "./indicator-catalog";
 import { CANDLE_PATTERN_BY_KIND } from "./candle-pattern-catalog";
@@ -106,7 +107,18 @@ function validateOperand(v: unknown, path: string): asserts v is Operand {
     return;
   }
 
-  throw new Error(`${path}.kind: expected "indicator", "price", or "constant"`);
+  if (v.kind === "custom") {
+    if (typeof v.name !== "string" || !v.name.trim() || v.name.length > 60) throw new Error(`${path}.name: a custom indicator needs a name (up to 60 characters)`);
+    try {
+      validateCustomDef(v.def);
+    } catch (err) {
+      throw new Error(`${path}.def: ${err instanceof Error ? err.message : "invalid custom indicator"}`);
+    }
+    validateOverride(v, path);
+    return;
+  }
+
+  throw new Error(`${path}.kind: expected "indicator", "price", "custom", or "constant"`);
 }
 
 function validateTimeframe(timeframe: unknown, path: string): void {
