@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { regenerateWebhookToken, setWebhookEnabled } from "@/lib/webhook-actions";
+import WebhookGuide from "@/components/webhook-guide";
 
 export interface WebhookAlertRow {
   id: string;
@@ -117,6 +118,10 @@ export default function WebhookPanel({
         </div>
       )}
       {error && <p className="mt-2 text-xs text-brand-sell">{error}</p>}
+
+      <div className="mt-4">
+        <WebhookGuide open={alerts.length === 0} />
+      </div>
 
       <div className="mt-4 rounded-lg bg-brand-bg p-3">
         <p className="text-xs font-semibold text-brand-navy/70">Alert message examples for TradingView</p>

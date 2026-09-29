@@ -1,5 +1,6 @@
 "use client";
 import InstrumentCombobox from "@/components/instrument-combobox";
+import WebhookGuide from "@/components/webhook-guide";
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -713,6 +714,9 @@ export default function StrategyBuilderForm({
 
         {mode === "WEBHOOK" ? (
           <BuilderSection step={2} title="Entry & exit" subtitle="Triggered by your TradingView alerts">
+            <div className="mb-3">
+              <WebhookGuide open={!strategyId} />
+            </div>
             <p className="text-sm text-brand-navy/60">
               Trades are triggered by an external TradingView alert, not by conditions you build here — there&apos;s
               no entry/exit condition tree to configure. The risk rules below still apply to every position this strategy opens.
