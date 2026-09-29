@@ -247,7 +247,7 @@ export default function StrategyBuilderForm({
   initial?: StrategyInitial;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
-  const [instrumentId, setInstrumentId] = useState(initial?.instrumentId ?? instruments[0]?.id ?? "");
+  const [instrumentId, setInstrumentId] = useState(initial?.instrumentId ?? (instruments.find((i) => i.symbol === "RELIANCE.NS") ?? instruments.find((i) => !i.symbol.startsWith("^")) ?? instruments[0])?.id ?? "");
   const [mode, setMode] = useState<"NO_CODE" | "CODE" | "WEBHOOK">(initial?.mode ?? "NO_CODE");
   const [direction, setDirection] = useState<"LONG" | "SHORT">(initial?.direction ?? "LONG");
 

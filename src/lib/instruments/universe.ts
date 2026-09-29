@@ -30,6 +30,8 @@ export function parseUniverseCsv(csv: string): UniverseRow[] {
     if (f[iSeries] !== "EQ") continue;
     const sym = f[iSym]?.trim().toUpperCase();
     if (!sym || !/^[A-Z0-9&-]+$/.test(sym)) continue;
+    // NSE's own test scrips (011NSETEST, G1NSETEST…) aren't real stocks.
+    if (/NSETEST$/.test(sym)) continue;
     const name = (iDisplay >= 0 && f[iDisplay]?.trim()) || (iName >= 0 && titleCase(f[iName]?.trim() ?? "")) || sym;
     out.set(sym, { symbol: `${sym}.NS`, name, exchange: "NSE" });
   }
