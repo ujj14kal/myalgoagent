@@ -30,9 +30,12 @@ function defaultForCategory(category: ConditionCategory, purpose?: "entry" | "ex
       return defaultComparison();
     case "TIME":
       // Exit time defaults to 15:15 (true from then until the close).
+      // Entry: "Enter at 09:15" (the candle that opens then) — the exit time is set right next to it.
       return purpose === "exit"
         ? { kind: "signal", signal: { family: "TIME_WINDOW", startMinute: 15 * 60 + 15, endMinute: 15 * 60 + 30 } }
-        : defaultTimeWindow();
+        : purpose === "entry"
+          ? { kind: "signal", signal: { family: "TIME_WINDOW", startMinute: 9 * 60 + 15, endMinute: 9 * 60 + 16 } }
+          : defaultTimeWindow();
     case "CANDLE_PATTERN":
       return defaultCandlePattern();
     case "CHART_PATTERN":

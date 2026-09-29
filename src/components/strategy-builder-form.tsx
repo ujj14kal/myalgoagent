@@ -3,7 +3,7 @@ import InstrumentCombobox from "@/components/instrument-combobox";
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import ConditionGroupEditor, { StrategyTimeframeContext, defaultComparison } from "@/components/condition-group-editor";
+import ConditionGroupEditor, { ConditionOverridesContext, ExitTimeContext, StrategyTimeframeContext, defaultComparison } from "@/components/condition-group-editor";
 import type { CandleInterval } from "@/lib/market-data";
 import SimpleConditionPicker, { ALL_CATEGORIES, fitsSimpleMode, unwrapForSimpleMode } from "@/components/simple-condition-picker";
 import StrategyCodeEditor from "@/components/strategy-code-editor";
@@ -126,17 +126,6 @@ function BuilderSection({
       {children}
     </section>
   );
-}
-
-function wrapInGroup(node: ConditionNode): ConditionNode {
-  return node.kind === "group" ? node : { kind: "group", op: "AND", children: [node] };
-}
-
-/** Advanced -> Simple is lossy if the tree doesn't already fit one
- * condition — falls back to a fresh default rather than guessing which
- * part of a bigger tree the user meant to keep. */
-function collapseToSimple(node: ConditionNode): ConditionNode {
-  return fitsSimpleMode(node) ? unwrapForSimpleMode(node) : defaultComparison();
 }
 
 interface StrategyInitial {
@@ -263,7 +252,8 @@ export default function StrategyBuilderForm({
   const [direction, setDirection] = useState<"LONG" | "SHORT">(initial?.direction ?? "LONG");
 
   const initialEntryFitsSimple = initial ? fitsSimpleMode(initial.entryCondition) : true;
-  const [entryMode, setEntryMode] = useState<"SIMPLE" | "ADVANCED">(initialEntryFitsSimple ? "SIMPLE" : "ADVANCED");
+  // One layout for rules; a rule saved in the old free-form layout still opens in the full editor.
+  const entryMode: "SIMPLE" | "ADVANCED" = initialEntryFitsSimple ? "SIMPLE" : "ADVANCED";
   const [entryCondition, setEntryCondition] = useState<ConditionNode>(
     initial ? (initialEntryFitsSimple ? unwrapForSimpleMode(initial.entryCondition) : initial.entryCondition) : defaultComparison(),
   );
@@ -271,7 +261,7 @@ export default function StrategyBuilderForm({
   const initialExitOpen = initial ? !isNeverExitCondition(initial.exitCondition) : false;
   const initialExitFitsSimple = initial ? fitsSimpleMode(initial.exitCondition) : true;
   const [exitConditionOpen, setExitConditionOpen] = useState(initialExitOpen);
-  const [exitMode, setExitMode] = useState<"SIMPLE" | "ADVANCED">(initialExitFitsSimple ? "SIMPLE" : "ADVANCED");
+  const exitMode: "SIMPLE" | "ADVANCED" = initialExitFitsSimple ? "SIMPLE" : "ADVANCED";
   const [exitCondition, setExitCondition] = useState<ConditionNode>(
     initial && initialExitOpen
       ? initialExitFitsSimple
@@ -494,31 +484,31 @@ export default function StrategyBuilderForm({
     submit(buildInput());
   }
 
-  function toggleEntryMode() {
-    if (entryMode === "SIMPLE") {
-      setEntryCondition(wrapInGroup(entryCondition));
-      setEntryMode("ADVANCED");
-    } else {
-      setEntryCondition(collapseToSimple(entryCondition));
-      setEntryMode("SIMPLE");
-    }
-  }
-
-  function toggleExitMode() {
-    if (exitMode === "SIMPLE") {
-      setExitCondition(wrapInGroup(exitCondition));
-      setExitMode("ADVANCED");
-    } else {
-      setExitCondition(collapseToSimple(exitCondition));
-      setExitMode("SIMPLE");
-    }
-  }
+  // "Exit at" in the entry section's time rule sets (or clears) a time-based exit rule.
+  const exitTimeMinute =
+    exitConditionOpen && exitCondition.kind === "signal" && exitCondition.signal.family === "TIME_WINDOW" ? exitCondition.signal.startMinute : null;
+  const exitTime = {
+    exitMinute: exitTimeMinute,
+    // Only when the exit rule is empty or already a time rule — never overwrite another exit rule.
+    editable: !exitConditionOpen || exitTimeMinute !== null,
+    setExitMinute: (m: number | null) => {
+      if (m === null) {
+        setExitConditionOpen(false);
+        setExitCondition(defaultComparison());
+        return;
+      }
+      setExitCondition({ kind: "signal", signal: { family: "TIME_WINDOW", startMinute: m, endMinute: 15 * 60 + 30 } });
+      setExitConditionOpen(true);
+    },
+  };
 
   const usedPatterns = mode === "NO_CODE" ? collectPatterns(exitConditionOpen ? exitCondition : NEVER_EXIT_CONDITION, collectPatterns(entryCondition)) : [];
 
   return (
     <>
       <StrategyTimeframeContext.Provider value={timeframe as CandleInterval}>
+      <ConditionOverridesContext.Provider value={false}>
+      <ExitTimeContext.Provider value={exitTime}>
       <form onSubmit={handleSubmit} className="mx-auto max-w-4xl space-y-5">
         <div className="surface p-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -738,13 +728,6 @@ export default function StrategyBuilderForm({
               title="Entry condition"
               subtitle="When to open a position"
               sectionRef={entryRef}
-              action={
-                mode === "NO_CODE" ? (
-                  <button type="button" onClick={toggleEntryMode} className="text-xs font-medium text-brand-primary hover:underline">
-                    {entryMode === "SIMPLE" ? "Switch to Advanced" : "Switch to Simple"}
-                  </button>
-                ) : null
-              }
             >
               {mode === "NO_CODE" ? (
                 entryMode === "SIMPLE" ? (
@@ -762,13 +745,6 @@ export default function StrategyBuilderForm({
               title="Exit condition"
               subtitle="Optional — a rule that closes the position"
               sectionRef={exitRef}
-              action={
-                mode === "NO_CODE" && exitConditionOpen ? (
-                  <button type="button" onClick={toggleExitMode} className="text-xs font-medium text-brand-primary hover:underline">
-                    {exitMode === "SIMPLE" ? "Switch to Advanced" : "Switch to Simple"}
-                  </button>
-                ) : null
-              }
             >
               {mode === "NO_CODE" ? (
                 <>
@@ -882,6 +858,8 @@ export default function StrategyBuilderForm({
           {isPending ? "Saving…" : strategyId ? "Save changes" : "Create strategy"}
         </button>
       </form>
+      </ExitTimeContext.Provider>
+      </ConditionOverridesContext.Provider>
       </StrategyTimeframeContext.Provider>
 
       {feasibilityIssues && (

@@ -9,7 +9,7 @@ import { INDICATOR_CATALOG, INDICATOR_BY_KIND, operandsScaleCompatible } from "@
 import { CANDLE_PATTERN_CATALOG } from "@/lib/strategy/candle-pattern-catalog";
 import { CHART_PATTERN_CATALOG } from "@/lib/strategy/chart-pattern-catalog";
 import { VOLUME_PATTERN_CATALOG } from "@/lib/strategy/volume-pattern-catalog";
-import { INTERVALS } from "@/lib/market-data";
+import { INTERVALS, intervalDurationSeconds } from "@/lib/market-data";
 import type { CandleInterval } from "@/lib/market-data";
 import CandlePatternIllustration from "@/components/candle-pattern-illustration";
 import ChartPatternIllustration from "@/components/chart-pattern-illustration";
@@ -107,8 +107,31 @@ function timeInputToMinutes(value: string): number {
 /** The strategy's own timeframe — conditions with no timeframe of their own are read on it. */
 export const StrategyTimeframeContext = createContext<CandleInterval>("1d");
 
+/**
+ * Whether rules may pick their own timeframe / instrument. The strategy builder
+ * turns this off: every rule uses the timeframe and instrument chosen in its
+ * first section. A rule saved with an override still shows it, with × to clear.
+ */
+export const ConditionOverridesContext = createContext(true);
+
+/** The exit time set from the entry section's time rule (strategy builder only). */
+export const ExitTimeContext = createContext<{ exitMinute: number | null; editable: boolean; setExitMinute: (m: number | null) => void } | null>(null);
+
+function OverrideChip({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-brand-gold/15 px-2 py-0.5 text-[11px] text-[#6f5a22]">
+      {label}
+      <button type="button" onClick={onClear} aria-label={`Use the strategy's own ${label.includes("chart") ? "timeframe" : "instrument"}`} className="font-bold hover:text-brand-sell">
+        ×
+      </button>
+    </span>
+  );
+}
+
 function TimeframeSelect({ value, onChange }: { value: CandleInterval | undefined; onChange: (v: CandleInterval | undefined) => void }) {
   const base = useContext(StrategyTimeframeContext);
+  const allowed = useContext(ConditionOverridesContext);
+  if (!allowed) return value && value !== base ? <OverrideChip label={`on ${INTERVALS.find((i) => i.value === value)?.label ?? value} chart`} onClear={() => onChange(undefined)} /> : null;
   // No "Same as chart" option: the strategy's own timeframe is shown as what it
   // actually is, and choosing it stores no override (so saved strategies are unchanged).
   return (
@@ -127,6 +150,86 @@ function TimeframeSelect({ value, onChange }: { value: CandleInterval | undefine
         </option>
       ))}
     </select>
+  );
+}
+
+/**
+ * A time-based entry: "Enter at 09:20" (the candle that opens then) and,
+ * in the strategy builder, "Exit at 15:00" — which sets the exit rule.
+ * A window saved as "between A and B" (wider than one candle) is still shown and editable.
+ */
+function EntryTimeEditor({
+  signal,
+  onChange,
+  onRemove,
+}: {
+  signal: Extract<Extract<ConditionNode, { kind: "signal" }>["signal"], { family: "TIME_WINDOW" }>;
+  onChange: (n: ConditionNode) => void;
+  onRemove: () => void;
+}) {
+  const tf = useContext(StrategyTimeframeContext);
+  const exit = useContext(ExitTimeContext);
+  const candle = Math.max(1, Math.round(intervalDurationSeconds(tf) / 60));
+  const atTime = signal.endMinute - signal.startMinute <= candle;
+  const setAt = (minute: number) => onChange({ kind: "signal", signal: { family: "TIME_WINDOW", startMinute: minute, endMinute: minute + candle } });
+  return (
+    <div className="space-y-1 rounded-lg bg-brand-bg p-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {atTime ? (
+          <>
+            <span className="text-xs font-medium text-brand-navy/60">Enter at</span>
+            <input type="time" className={inputClass} value={minutesToTimeInput(signal.startMinute)} onChange={(e) => setAt(timeInputToMinutes(e.target.value))} />
+          </>
+        ) : (
+          <>
+            <span className="text-xs font-medium text-brand-navy/60">Enter between</span>
+            <input
+              type="time"
+              className={inputClass}
+              value={minutesToTimeInput(signal.startMinute)}
+              onChange={(e) => onChange({ kind: "signal", signal: { ...signal, startMinute: timeInputToMinutes(e.target.value) } })}
+            />
+            <span className="text-xs font-medium text-brand-navy/60">and</span>
+            <input
+              type="time"
+              className={inputClass}
+              value={minutesToTimeInput(signal.endMinute)}
+              onChange={(e) => onChange({ kind: "signal", signal: { ...signal, endMinute: timeInputToMinutes(e.target.value) } })}
+            />
+            <button type="button" onClick={() => setAt(signal.startMinute)} className="text-[11px] font-semibold text-brand-primary hover:underline">
+              Use one time
+            </button>
+          </>
+        )}
+        {exit && (
+          <>
+            <span className="ml-2 text-xs font-medium text-brand-navy/60">Exit at</span>
+            {exit.editable ? (
+              <>
+                <input
+                  type="time"
+                  className={inputClass}
+                  value={exit.exitMinute == null ? "" : minutesToTimeInput(exit.exitMinute)}
+                  onChange={(e) => exit.setExitMinute(e.target.value ? timeInputToMinutes(e.target.value) : null)}
+                />
+                {exit.exitMinute != null && (
+                  <button type="button" onClick={() => exit.setExitMinute(null)} className="text-[11px] text-brand-navy/45 hover:text-brand-sell">
+                    no exit time
+                  </button>
+                )}
+              </>
+            ) : (
+              <span className="text-xs text-brand-navy/50">set by the exit rule below</span>
+            )}
+          </>
+        )}
+        <span className="text-xs text-brand-navy/40">(IST)</span>
+        <button type="button" onClick={onRemove} className="ml-auto text-xs text-brand-navy/40 hover:text-brand-sell">
+          Remove
+        </button>
+      </div>
+      <TimeWindowStrip startMinute={signal.startMinute} endMinute={signal.endMinute} />
+    </div>
   );
 }
 
@@ -166,11 +269,15 @@ function SignalEditor({
     );
   }
 
+  if (signal.family === "TIME_WINDOW" && purpose === "entry") {
+    return <EntryTimeEditor signal={signal} onChange={onChange} onRemove={onRemove} />;
+  }
+
   if (signal.family === "TIME_WINDOW") {
     return (
       <div className="space-y-1 rounded-lg bg-brand-bg p-2">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium text-brand-navy/60">{purpose === "entry" ? "Entry time: enter between" : "Time is between"}</span>
+        <span className="text-xs font-medium text-brand-navy/60">Time is between</span>
         <input
           type="time"
           className={inputClass}
@@ -365,6 +472,7 @@ function OperandEditor({
   other?: Operand;
 }) {
   const customs = useCustomIndicators();
+  const overridesAllowed = useContext(ConditionOverridesContext);
   const indicatorDef = value.kind === "indicator" ? INDICATOR_BY_KIND.get(value.type) : undefined;
   const hasOverrides = value.kind === "indicator" || value.kind === "price" || value.kind === "custom";
   const overridable = hasOverrides ? (value as Extract<Operand, { kind: "indicator" } | { kind: "price" } | { kind: "custom" }>) : null;
@@ -465,7 +573,15 @@ function OperandEditor({
         />
       )}
 
-      {overridable && (
+      {overridable && !overridesAllowed && (
+        <>
+          <TimeframeSelect value={overridable.timeframe} onChange={(timeframe) => onChange({ ...overridable, timeframe })} />
+          {overridable.instrumentSymbol && (
+            <OverrideChip label={`on ${overridable.instrumentSymbol.replace(/\.NS$/, "")}`} onClear={() => onChange({ ...overridable, instrumentSymbol: undefined })} />
+          )}
+        </>
+      )}
+      {overridable && overridesAllowed && (
         <>
           <TimeframeSelect value={overridable.timeframe} onChange={(timeframe) => onChange({ ...overridable, timeframe })} />
           <InstrumentCombobox

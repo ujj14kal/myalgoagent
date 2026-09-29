@@ -19,8 +19,8 @@ export const STRATEGY_TIMEFRAMES: { value: CandleInterval; label: string }[] = [
 
 export const SESSION_OPEN_MINUTE = 9 * 60 + 15; // 09:15 IST
 export const SESSION_CLOSE_MINUTE = 15 * 60 + 30; // 15:30 IST
-/** Brokers typically auto-square-off intraday positions around 15:20. */
-export const DEFAULT_SQUARE_OFF_MINUTE = 15 * 60 + 20;
+/** Many brokers only allow intraday until 15:15 (their own auto square-off starts then), so that's the default. */
+export const DEFAULT_SQUARE_OFF_MINUTE = 15 * 60 + 15;
 
 /** INTRADAY = squared off the same day; DELIVERY = may be held overnight (long only). MTF: coming later, per broker. */
 export type ProductType = "INTRADAY" | "DELIVERY";

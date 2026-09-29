@@ -12,6 +12,7 @@ import { FormulaError, parseFormula } from "@/lib/custom-indicator/formula";
 import type { MantleTool } from "./mantle";
 import { getBrokerAccount, getMarketOverview, getOptionChainSummary, getQuote } from "./market-tools";
 import { NEW_STRATEGY_ID, toStrategyInput, type AgentProposal, type PlanStep, type RiskUnitName, type SizingModeName } from "./proposals";
+import { DEFAULT_SQUARE_OFF_MINUTE } from "@/lib/strategy/session";
 
 // Tools the agent can call. Read tools answer from the user's own data.
 // "propose_*" tools never change anything: they validate a ready-to-run
@@ -195,7 +196,7 @@ export const AGENT_TOOLS: MantleTool[] = [
           order_type: { type: "string", enum: ["market", "limit"], description: "Entry order type; default market" },
           limit_percent: { type: "number", description: "Limit entries: % better than the signal candle's close (buy below / short above), e.g. 0.2" },
           limit_price: { type: "number", description: "Limit entries: a fixed ₹ price instead of a %" },
-          square_off_at: { type: ["string", "null"], description: "Intraday only: close open positions at this IST time, e.g. \"15:20\" (default 15:20 for intraday; positions are never carried overnight)" },
+          square_off_at: { type: ["string", "null"], description: "Intraday only: close open positions at this IST time, e.g. \"15:15\" (default 15:15 for intraday — many brokers only allow intraday until then; positions are never carried overnight)" },
           stop_loss: riskLegSchema,
           take_profit: riskLegSchema,
           trailing_stop: riskLegSchema,
@@ -339,7 +340,7 @@ export const AGENT_TOOLS: MantleTool[] = [
           order_type: { type: "string", enum: ["market", "limit"], description: "Entry order type; default market" },
           limit_percent: { type: "number", description: "Limit entries: % better than the signal candle's close (buy below / short above), e.g. 0.2" },
           limit_price: { type: "number", description: "Limit entries: a fixed ₹ price instead of a %" },
-          square_off_at: { type: ["string", "null"], description: "Intraday only: close open positions at this IST time, e.g. \"15:20\" (default 15:20 for intraday; positions are never carried overnight)" },
+          square_off_at: { type: ["string", "null"], description: "Intraday only: close open positions at this IST time, e.g. \"15:15\" (default 15:15 for intraday — many brokers only allow intraday until then; positions are never carried overnight)" },
         },
         required: ["strategy"],
       },
@@ -580,7 +581,7 @@ async function proposeStrategy(userId: string, a: Record<string, unknown>): Prom
     session = {
       timeframe,
       noEntryAfterMinute: intraday ? noEntry ?? null : null,
-      squareOffMinute: intraday && productType === "INTRADAY" ? (squareOff === undefined ? 15 * 60 + 20 : squareOff) : null,
+      squareOffMinute: intraday && productType === "INTRADAY" ? (squareOff === undefined ? DEFAULT_SQUARE_OFF_MINUTE : squareOff) : null,
       productType,
       orderType: order.orderType ?? "MARKET",
       limitMode: order.limitMode ?? null,
@@ -687,7 +688,7 @@ async function proposeStrategyUpdate(userId: string, a: Record<string, unknown>)
       limitValue: order.orderType !== undefined ? order.limitValue ?? null : s.limitValue,
       timeframe,
       noEntryAfterMinute: intraday ? (noEntry === undefined ? s.noEntryAfterMinute : noEntry) : null,
-      squareOffMinute: intraday ? (squareOff === undefined ? (s.squareOffMinute ?? (s.timeframe === "1d" ? 15 * 60 + 20 : null)) : squareOff) : null,
+      squareOffMinute: intraday ? (squareOff === undefined ? (s.squareOffMinute ?? (s.timeframe === "1d" ? DEFAULT_SQUARE_OFF_MINUTE : null)) : squareOff) : null,
     };
   } catch (err) {
     return { result: { error: `${readableIssues(err)} Fix it and call propose_strategy_update again.` } };
