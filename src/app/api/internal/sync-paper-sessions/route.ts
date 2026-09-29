@@ -3,8 +3,7 @@ import { logError } from "@/lib/logger";
 import { internalSecretMatches } from "@/lib/internal-auth";
 import { inMarketWindow } from "@/lib/paper/market-window";
 import { recordJob } from "@/lib/jobs";
-import { runScheduledPaperSync } from "@/lib/paper/scheduled-sync";
-import { runScheduledOptionForwardTests } from "@/lib/options/forward-runner";
+import { runMarketHoursJob } from "@/lib/scheduled-jobs";
 
 // Called every few minutes on weekdays by an EventBridge schedule, so open
 // forward-test trades close on their own when a stop-loss, target or trailing stop
@@ -21,17 +20,7 @@ export async function POST(req: NextRequest) {
   if (!force && !inMarketWindow(new Date())) return NextResponse.json({ skipped: "market closed" });
 
   try {
-    // Equity forward tests, then options forward tests — one job, one schedule.
-    return NextResponse.json(
-      await recordJob("paper-sync", async () => {
-        const equity = await runScheduledPaperSync();
-        const options = await runScheduledOptionForwardTests(20_000).catch((err) => {
-          logError("options.forward.scheduled", err);
-          return { total: 0, checked: 0, failed: -1, ms: 0 };
-        });
-        return { ...equity, options };
-      }),
-    );
+    return NextResponse.json(await recordJob("paper-sync", runMarketHoursJob));
   } catch (err) {
     logError("api/internal/sync-paper-sessions", err);
     return NextResponse.json({ error: "Sync failed" }, { status: 500 });

@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { type CandleInterval, marketDataFor } from "@/lib/market-data";
 import { paperSyncRange } from "@/lib/strategy/session";
-import CandlestickChart from "@/components/candlestick-chart";
+import LiveCandlestickChart from "@/components/live-candlestick-chart";
 import PaperSessionControls from "@/components/paper-session-controls";
 import { describePositionSizing } from "@/lib/position-sizing";
 import type { Signal } from "@/lib/strategy";
@@ -95,7 +95,7 @@ export default async function PaperSessionDetailPage({ params }: { params: Promi
       <Card className="mt-6 p-5">
         <CardHeader title="Price chart" subtitle="Last 3 months · entries and exits marked" icon={CandleIcon} />
         <div className="mt-4">
-          {fetchError ? <p className="py-16 text-center text-sm text-brand-sell">{fetchError}</p> : <CandlestickChart candles={candles} markers={markers} />}
+          {fetchError ? <p className="py-16 text-center text-sm text-brand-sell">{fetchError}</p> : <LiveCandlestickChart candles={candles} markers={markers} symbol={paperSession.instrumentSymbol} interval={paperSession.timeframe as CandleInterval} live={!!market.getRecentTicks && paperSession.status === "ACTIVE"} />}
         </div>
       </Card>
 

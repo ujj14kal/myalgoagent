@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { runDailyJob, runMarketHoursJob } from "@/lib/scheduled-jobs";
 import type { AdminRole, AnnouncementLevel, TicketPriority, TicketStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { assertStaff, isBuiltInOwner, StaffError, type Capability, type Staff } from "@/lib/admin/access";
@@ -10,8 +11,6 @@ import { postNote, postStaffReply, ticketHead, MAX_REPLY, type TicketKind } from
 import { sendAnnouncementEmail, sendDeletionConfirmedEmail } from "@/lib/email";
 import { DELETION_WINDOW_DAYS } from "@/lib/account-status";
 import { JOBS, recordJob, type JobName } from "@/lib/jobs";
-import { runScheduledPaperSync } from "@/lib/paper/scheduled-sync";
-import { runAccountPurge } from "@/lib/account-purge";
 import { siteUrl } from "@/lib/site";
 import { text, oneLine } from "@/lib/text";
 import { logError } from "@/lib/logger";
@@ -309,10 +308,10 @@ export async function setJobSchedule(job: JobName, enabled: boolean): Promise<Ad
 export async function runJobNow(job: JobName): Promise<AdminResult> {
   return run("system", async (staff) => {
     if (!JOBS[job]) return { ok: false, error: "Unknown job." };
-    const summary = job === "paper-sync" ? await recordJob(job, runScheduledPaperSync) : await recordJob(job, runAccountPurge);
+    const summary = job === "paper-sync" ? await recordJob(job, runMarketHoursJob) : await recordJob(job, runDailyJob);
     await audit(staff, "job.run", { type: "job", id: job }, `Ran ${JOBS[job].label} manually`, summary);
     revalidatePath("/admin", "layout");
-    const s = summary as Record<string, number>;
+    const s = summary as unknown as Record<string, number>;
     return {
       ok: true,
       message: job === "paper-sync" ? `Synced ${s.synced} of ${s.total} active session${s.total === 1 ? "" : "s"}${s.failed ? ` (${s.failed} failed)` : ""}.` : `Purged ${s.purged} account${s.purged === 1 ? "" : "s"}${s.failed ? `, ${s.failed} failed` : ""}.`,

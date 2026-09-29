@@ -9,8 +9,7 @@ import type { Drawing } from "@/lib/chart-drawing-primitive";
 import { saveChartLayout } from "@/lib/chart-layout-actions";
 import { RANGES, INTERVALS, isValidCombo, defaultIntervalForRange } from "@/lib/market-data";
 import type { Candle, CandleInterval, CandleRange, HistoryDepth, Tick } from "@/lib/market-data";
-import { applyTicks, bucketStart } from "@/lib/market-data/live-candle";
-import { inMarketWindow } from "@/lib/paper/market-window";
+import { useLiveCandle } from "@/lib/market-data/use-live-candle";
 import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
 import { anchoredVwap } from "@/lib/indicators";
 import { INDICATOR_BY_KIND } from "@/lib/strategy/indicator-catalog";
@@ -234,71 +233,17 @@ export default function InstrumentChartPanel({
   }
 
   // ---- Live: the forming candle from recent trades, polled every 2 s in market hours ----
-  const [liveCandle, setLiveCandle] = useState<Candle | null>(null);
-  const [quote, setQuote] = useState<Tick | null>(null);
   const [historyStamp, setHistoryStamp] = useState(0);
-  const candlesRef = useRef(candles);
-  const historyAtRef = useRef(0);
-  useEffect(() => {
-    candlesRef.current = candles;
-  }, [candles]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- a new dataset starts without a forming candle
-    setLiveCandle(null);
-    historyAtRef.current = Math.floor(Date.now() / 1000);
-    if (!live || interval === "1wk" || interval === "1mo") return;
-    let stopped = false;
-    let forming: Candle | null = null;
-    let lastTick = 0;
-    let first = true;
-    const poll = async () => {
-      if (stopped || document.hidden || !inMarketWindow(new Date())) return;
-      try {
-        const res = await fetch(`/api/instruments/${encodeURIComponent(symbol)}/live?after=${lastTick}`, { cache: "no-store" });
-        if (!res.ok) return;
-        const data: { live: boolean; ticks: Tick[] } = await res.json();
-        if (stopped || !data.live || data.ticks.length === 0) return;
-        const ticks = data.ticks;
-        lastTick = ticks[ticks.length - 1].time;
-        setQuote(ticks[ticks.length - 1]);
-        const hist = candlesRef.current;
-        const last = hist[hist.length - 1] ?? null;
-        if (first) {
-          first = false;
-          const current = bucketStart(lastTick, interval);
-          if (current === null) return;
-          // Rebuild the current candle from trades when they cover all of it; otherwise extend the
-          // history's last candle with trades newer than the history itself (so volume isn't counted twice).
-          if (ticks[0].time <= current) {
-            forming = applyTicks(null, ticks.filter((t) => t.time >= current), interval).forming;
-          } else {
-            const base = last && last.time === current ? last : null;
-            forming = applyTicks(base, ticks.filter((t) => t.time > historyAtRef.current && t.time >= current), interval).forming;
-          }
-        } else {
-          const r = applyTicks(forming, ticks, interval);
-          forming = r.forming;
-          // Finished candles join the history, so indicators include them.
-          if (r.closed.length) setCandles((prev) => [...prev.filter((c) => c.time < r.closed[0].time), ...r.closed]);
-        }
-        if (forming && last && forming.time < last.time) return;
-        setLiveCandle(forming ? { ...forming } : null);
-      } catch {
-        // A missed poll is harmless — the next one catches up.
-      }
-    };
-    void poll();
-    const timer = setInterval(poll, 2000);
-    // Re-sync with the stored history every 5 minutes (corrects any trade the polls missed).
-    const refresh = setInterval(() => !document.hidden && inMarketWindow(new Date()) && setHistoryStamp((n) => n + 1), 5 * 60_000);
-    return () => {
-      stopped = true;
-      clearInterval(timer);
-      clearInterval(refresh);
-    };
-     
-  }, [live, symbol, interval, range]);
+  const { liveCandle, quote } = useLiveCandle({
+    symbol,
+    interval,
+    enabled: live,
+    candles,
+    resetKey: range,
+    // Finished candles join the history, so indicators include them.
+    onClosed: (closed) => setCandles((prev) => [...prev.filter((c) => c.time < closed[0].time), ...closed]),
+    onResync: () => setHistoryStamp((n) => n + 1),
+  });
 
   useEffect(() => {
     if (range === "6mo" && interval === "1d" && candles === initialCandles && historyStamp === 0) return;

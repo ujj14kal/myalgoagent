@@ -8,7 +8,7 @@ import { logError } from "@/lib/logger";
 
 export const JOBS = {
   "paper-sync": { label: "Forward test sync", schedule: "Every 5 min, Mon–Fri 09:15–15:45 IST", rule: "myalgoagent-paper-sync" },
-  "purge-deleted-accounts": { label: "Account deletion purge", schedule: "Daily", rule: "myalgoagent-purge-deleted-accounts" },
+  "purge-deleted-accounts": { label: "Account deletion purge + new NSE listings", schedule: "Daily", rule: "myalgoagent-purge-deleted-accounts" },
 } as const;
 export type JobName = keyof typeof JOBS;
 
