@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LIVE_BROKERS, LIVE_NOT_YET, mapBrokerStatus, plainSymbol } from "./live-brokers";
+import { angelOptionSymbol, foInstrumentLabel, LIVE_BROKERS, LIVE_NOT_YET, mapBrokerStatus, plainSymbol, sameInstrument } from "./live-brokers";
 
 describe("broker status words", () => {
   it("maps Kite-style words (Zerodha, Upstox, Angel One)", () => {
@@ -49,5 +49,21 @@ describe("broker coverage", () => {
   it("claims no broker is proven before a real test, and Angel One refuses market orders", () => {
     expect(Object.values(LIVE_BROKERS).filter((b) => b!.verified)).toEqual([]);
     expect(LIVE_BROKERS.angelone!.marketOrders).toBe(false);
+  });
+});
+
+describe("F&O symbols and read-back", () => {
+  const fo = { exchangeSymbol: "NIFTY26O0622700CE", token: "40710", underlying: "NIFTY", expiry: "2026-10-06", strike: 22700, type: "CE" as const };
+  it("builds Angel One's option symbol", () => {
+    expect(angelOptionSymbol(fo)).toBe("NIFTY06OCT2622700CE");
+  });
+  it("accepts every broker's name for the same option and rejects others", () => {
+    const order = { exchange: "NFO", tradingSymbol: "NIFTY26O0622700CE", instrumentSymbol: foInstrumentLabel(fo) };
+    for (const r of ["NIFTY26O0622700CE", "NSE:NIFTY26O0622700CE", "NIFTY06OCT2622700CE", "NIFTY 22700 CE 06 OCT 26", "NIFTY-Oct2026-22700-CE"]) expect(sameInstrument(order, r)).toBe(true);
+    for (const r of ["NIFTY26O0622700PE", "NIFTY26O0622750CE", "BANKNIFTY26O0622700CE", "NIFTYNXT5026O0622700CE"]) expect(sameInstrument(order, r)).toBe(false);
+  });
+  it("compares cash orders exactly", () => {
+    expect(sameInstrument({ exchange: "NSE", tradingSymbol: "RELIANCE", instrumentSymbol: "RELIANCE.NS" }, "RELIANCE")).toBe(true);
+    expect(sameInstrument({ exchange: "NSE", tradingSymbol: "RELIANCE", instrumentSymbol: "RELIANCE.NS" }, "RELINFRA")).toBe(false);
   });
 });

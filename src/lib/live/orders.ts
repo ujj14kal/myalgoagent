@@ -7,7 +7,7 @@ import { BrokerError } from "@/lib/brokers/adapters";
 import { accessTokenOf, credsOf } from "@/lib/brokers/service";
 import { egressEnabled } from "@/lib/brokers/egress";
 import { brokerById } from "@/lib/brokers/catalog";
-import { angelLtp, LIVE_BROKERS, LIVE_NOT_YET, type LiveBroker, type LiveCtx } from "@/lib/brokers/live-brokers";
+import { angelLtp, LIVE_BROKERS, LIVE_NOT_YET, sameInstrument, type LiveBroker, type LiveCtx, type Segment } from "@/lib/brokers/live-brokers";
 import { onTick } from "@/lib/brokers/nse-master";
 import { nseEquity } from "@/lib/brokers/nse-lookup";
 import { marketDataFor } from "@/lib/market-data";
@@ -47,7 +47,7 @@ export function marketOpen(now = new Date()): boolean {
   const m = ist.getUTCHours() * 60 + ist.getUTCMinutes();
   return day >= 1 && day <= 5 && m >= 9 * 60 + 15 && m < 15 * 60 + 30;
 }
-function istDayStart(now = new Date()): Date {
+export function istDayStart(now = new Date()): Date {
   const ist = new Date(now.getTime() + IST_MS);
   return new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate()) - IST_MS);
 }
@@ -60,12 +60,12 @@ export function liveBroker(id: string): LiveBroker {
   return b;
 }
 
-async function event(orderId: string, kind: string, detail?: Prisma.InputJsonValue) {
+export async function event(orderId: string, kind: string, detail?: Prisma.InputJsonValue) {
   await prisma.liveOrderEvent.create({ data: { orderId, kind, detail } }).catch((err) => logError("live.event", err, { orderId, kind }));
 }
 
 /** The broker session to trade with, or a plain reason why not. */
-async function session(userId: string, broker: string): Promise<LiveCtx> {
+export async function session(userId: string, broker: string): Promise<LiveCtx> {
   const conn = await prisma.brokerConnection.findUnique({ where: { userId_broker: { userId, broker } } });
   const token = conn && conn.status === "CONNECTED" && conn.tokenExpiresAt && conn.tokenExpiresAt > new Date() ? accessTokenOf(conn) : null;
   const name = brokerById(broker)?.name ?? broker;
@@ -197,6 +197,8 @@ export async function placeLiveOrder(input: PlaceInput): Promise<LiveOrder> {
 }
 
 const FINAL = new Set(["FILLED", "CANCELLED", "REJECTED", "FAILED"]);
+/** F&O orders are stored with exchange "NFO". */
+export const segmentOf = (o: { exchange: string }): Segment => (o.exchange === "NFO" ? "FO" : "EQ");
 
 /** Ask the broker for an order's latest state, check it's the stock we sent, and store any change. */
 export async function refreshLiveOrder(orderId: string, userId: string): Promise<LiveOrder> {
@@ -205,13 +207,13 @@ export async function refreshLiveOrder(orderId: string, userId: string): Promise
   if (FINAL.has(order.status)) return order;
   const broker = liveBroker(order.broker);
   const ctx = await session(userId, order.broker);
-  const s = await broker.state(ctx, { brokerOrderId: order.brokerOrderId, reference: order.clientRef, quantity: order.quantity });
+  const s = await broker.state(ctx, { brokerOrderId: order.brokerOrderId, reference: order.clientRef, quantity: order.quantity, segment: segmentOf(order) });
 
-  if (s.symbol && s.symbol !== order.tradingSymbol) {
+  if (s.symbol && !sameInstrument(order, s.symbol)) {
     // The broker placed something other than what we sent: stop it and stop trading there.
     await event(order.id, MISMATCH, { expected: order.tradingSymbol, broker: s.symbol, brokerOrderId: s.brokerOrderId });
     logError("live.symbol-mismatch", new Error(`Broker reported ${s.symbol} for ${order.tradingSymbol}`), { orderId: order.id, broker: order.broker });
-    if (!FINAL.has(s.status) && s.brokerOrderId) await broker.cancel(ctx, s.brokerOrderId).catch(() => {});
+    if (!FINAL.has(s.status) && s.brokerOrderId) await broker.cancel(ctx, s.brokerOrderId, segmentOf(order)).catch(() => {});
     return prisma.liveOrder.update({
       where: { id: order.id },
       data: { brokerOrderId: s.brokerOrderId || order.brokerOrderId, brokerStatus: s.brokerStatus, status: FINAL.has(s.status) ? s.status : "OPEN", filledQuantity: s.filledQuantity, rejectReason: `The broker reported this order as ${s.symbol}, not ${order.tradingSymbol} — cancelled, and live orders on this broker are paused. Check your broker app.` },
@@ -242,7 +244,7 @@ export async function cancelLiveOrder(orderId: string, userId: string): Promise<
   if (!order.brokerOrderId) throw new LiveCheckError("The broker hasn't confirmed this order yet — refresh first.");
   const broker = liveBroker(order.broker);
   const ctx = await session(userId, order.broker);
-  const brokerStatus = await broker.cancel(ctx, order.brokerOrderId);
+  const brokerStatus = await broker.cancel(ctx, order.brokerOrderId, segmentOf(order));
   await event(order.id, "cancel_requested", { brokerStatus });
   return refreshLiveOrder(order.id, userId);
 }

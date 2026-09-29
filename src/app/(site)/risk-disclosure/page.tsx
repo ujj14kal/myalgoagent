@@ -43,6 +43,7 @@ const sections: LegalSection[] = [
     title: "Live orders",
     paragraphs: [
       "Live orders are real orders on your own broker account and can lose money. Market orders fill at whatever price is available; limit orders may not fill at all; stop orders can slip past their trigger in fast markets or gaps. Our checks (kill switch, per-order and daily limits, duplicate protection) reduce mistakes but can't prevent losses, and they depend on your broker and our systems being reachable. Your broker's records are the final word on what was ordered and filled — check them, and keep your broker's app available to act directly if needed.",
+      "A multi-leg options position is sent as separate orders, one leg at a time (buy legs first). Legs can fill at different moments and prices, and one can be rejected — for example for margin — after others have filled, leaving you with a position you didn't intend. If that happens we cancel the legs still open and show you the ones that filled; we don't close them for you. Margin for sold options is decided by your broker, not by us.",
     ],
   },
   {

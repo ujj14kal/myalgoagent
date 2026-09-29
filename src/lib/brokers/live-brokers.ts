@@ -12,17 +12,33 @@ import { cancelGrowwOrder, growwOrderState, placeGrowwOrder } from "./groww-orde
 
 export type LiveCtx = { creds: BrokerCreds; token: string };
 
+/** An NSE option contract, as the exchange identifies it. */
+export type FoContract = {
+  exchangeSymbol: string; // NSE's trading symbol, e.g. "NIFTY26O0622700CE" (weekly) / "NIFTY26NOV22700CE" (monthly)
+  token: string; // NSE F&O exchange token
+  underlying: string; // "NIFTY"
+  expiry: string; // yyyy-mm-dd
+  strike: number;
+  type: "CE" | "PE";
+};
+
+/** Cash-market orders ("EQ") or NSE futures & options ("FO"). */
+export type Segment = "EQ" | "FO";
+
 /** One order, already resolved to the exchange's identifiers. */
 export type LiveRequest = {
-  tradingSymbol: string; // plain NSE symbol, e.g. "RELIANCE"
-  series: string; // "EQ" (or "BE")
-  nseToken: string; // NSE exchange token, e.g. "2885"
+  tradingSymbol: string; // plain NSE symbol, e.g. "RELIANCE" (for F&O: the exchange symbol)
+  series: string; // "EQ" (or "BE"); unused for F&O
+  nseToken: string; // NSE exchange token, e.g. "2885" (for F&O: the contract's token)
   isin: string;
   tick: number;
   side: "BUY" | "SELL";
   quantity: number;
   orderType: "MARKET" | "LIMIT" | "SL" | "SL_M";
-  product: "CNC" | "MIS";
+  /** CNC = delivery, MIS = intraday (cash or F&O), NRML = F&O carried overnight. */
+  product: "CNC" | "MIS" | "NRML";
+  /** Set for F&O orders. */
+  fo?: FoContract;
   price?: number;
   triggerPrice?: number;
   reference: string; // our alphanumeric reference (idempotency / tag)
@@ -45,10 +61,19 @@ export type LiveBroker = {
   verified: boolean;
   /** Some brokers refuse market orders from algos (Angel One) — we send a protected limit instead. */
   marketOrders: boolean;
+  /** F&O orders: false = not supported yet; "intraday" = MIS only. */
+  fno: boolean | "intraday";
   place(ctx: LiveCtx, o: LiveRequest): Promise<{ brokerOrderId: string; brokerStatus: string; remark: string | null }>;
-  cancel(ctx: LiveCtx, brokerOrderId: string): Promise<string>;
-  state(ctx: LiveCtx, q: { brokerOrderId: string | null; reference: string; quantity: number }): Promise<LiveReadback>;
+  cancel(ctx: LiveCtx, brokerOrderId: string, segment?: Segment): Promise<string>;
+  state(ctx: LiveCtx, q: { brokerOrderId: string | null; reference: string; quantity: number; segment?: Segment }): Promise<LiveReadback>;
 };
+
+const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+/** Angel One's option symbols: underlying + DDMMMYY + strike + type, e.g. "NIFTY06OCT2622700CE". */
+export function angelOptionSymbol(c: FoContract): string {
+  const [y, m, d] = c.expiry.split("-");
+  return `${c.underlying}${d}${MONTHS[Number(m) - 1]}${y.slice(2)}${c.strike}${c.type}`;
+}
 
 // ---------- shared plumbing ----------
 
@@ -107,11 +132,12 @@ const groww: LiveBroker = {
   id: "groww",
   verified: false,
   marketOrders: true,
+  fno: true,
   place: (ctx, o) =>
     placeGrowwOrder(ctx.token, {
       tradingSymbol: o.tradingSymbol,
       exchange: "NSE",
-      segment: "CASH",
+      segment: o.fo ? "FNO" : "CASH",
       product: o.product,
       orderType: o.orderType,
       side: o.side,
@@ -120,9 +146,9 @@ const groww: LiveBroker = {
       triggerPrice: o.triggerPrice,
       reference: o.reference,
     }),
-  cancel: (ctx, id) => cancelGrowwOrder(ctx.token, id),
+  cancel: (ctx, id, segment) => cancelGrowwOrder(ctx.token, id, segment === "FO" ? "FNO" : "CASH"),
   async state(ctx, q) {
-    const s = await growwOrderState(ctx.token, { brokerOrderId: q.brokerOrderId, reference: q.reference, quantity: q.quantity });
+    const s = await growwOrderState(ctx.token, { brokerOrderId: q.brokerOrderId, reference: q.reference, quantity: q.quantity, segment: q.segment === "FO" ? "FNO" : "CASH" });
     return { ...s, symbol: null };
   },
 };
@@ -137,14 +163,15 @@ const zerodha: LiveBroker = {
   id: "zerodha",
   verified: false,
   marketOrders: true,
+  fno: true,
   async place(ctx, o) {
     const body = obj(
       await http(`${KITE}/orders/regular`, {
         method: "POST",
         headers: kiteHeaders(ctx),
         form: {
-          tradingsymbol: o.tradingSymbol,
-          exchange: "NSE",
+          tradingsymbol: o.fo ? o.fo.exchangeSymbol : o.tradingSymbol,
+          exchange: o.fo ? "NFO" : "NSE",
           transaction_type: o.side,
           order_type: kiteType[o.orderType],
           quantity: String(o.quantity),
@@ -191,6 +218,7 @@ const upstox: LiveBroker = {
   id: "upstox",
   verified: false,
   marketOrders: true,
+  fno: true,
   async place(ctx, o) {
     const body = obj(
       await http("https://api-hft.upstox.com/v2/order/place", {
@@ -198,11 +226,11 @@ const upstox: LiveBroker = {
         headers: upstoxHeaders(ctx),
         json: {
           quantity: o.quantity,
-          product: o.product === "CNC" ? "D" : "I",
+          product: o.product === "MIS" ? "I" : "D", // D = delivery (cash) / carry-forward (F&O)
           validity: "DAY",
           price: o.orderType === "LIMIT" || o.orderType === "SL" ? o.price : 0,
           tag: o.reference,
-          instrument_token: `NSE_EQ|${o.isin}`,
+          instrument_token: o.fo ? `NSE_FO|${o.fo.token}` : `NSE_EQ|${o.isin}`,
           order_type: upstoxType[o.orderType],
           transaction_type: o.side,
           disclosed_quantity: 0,
@@ -239,17 +267,18 @@ const fyers: LiveBroker = {
   id: "fyers",
   verified: false,
   marketOrders: true,
+  fno: true,
   async place(ctx, o) {
     const b = obj(
       await http(`${FYERS}/orders/sync`, {
         method: "POST",
         headers: fyersHeaders(ctx),
         json: {
-          symbol: `NSE:${o.tradingSymbol}-${o.series}`,
+          symbol: o.fo ? `NSE:${o.fo.exchangeSymbol}` : `NSE:${o.tradingSymbol}-${o.series}`,
           qty: o.quantity,
           type: fyersType[o.orderType],
           side: o.side === "BUY" ? 1 : -1,
-          productType: o.product === "CNC" ? "CNC" : "INTRADAY",
+          productType: o.product === "CNC" ? "CNC" : o.product === "NRML" ? "MARGIN" : "INTRADAY",
           limitPrice: o.orderType === "LIMIT" || o.orderType === "SL" ? o.price : 0,
           stopPrice: o.orderType === "SL" || o.orderType === "SL_M" ? o.triggerPrice : 0,
           validity: "DAY",
@@ -301,6 +330,7 @@ const angelone: LiveBroker = {
   verified: false,
   // Angel One rejects MARKET and IOC orders from algos; live/orders.ts sends a protected LIMIT instead.
   marketOrders: false,
+  fno: true,
   async place(ctx, o) {
     const stop = o.orderType === "SL" || o.orderType === "SL_M";
     const b = obj(
@@ -309,12 +339,12 @@ const angelone: LiveBroker = {
         headers: angelHeaders(ctx),
         json: {
           variety: stop ? "STOPLOSS" : "NORMAL",
-          tradingsymbol: `${o.tradingSymbol}-${o.series}`,
+          tradingsymbol: o.fo ? angelOptionSymbol(o.fo) : `${o.tradingSymbol}-${o.series}`,
           symboltoken: o.nseToken,
           transactiontype: o.side,
-          exchange: "NSE",
+          exchange: o.fo ? "NFO" : "NSE",
           ordertype: angelType[o.orderType],
-          producttype: o.product === "CNC" ? "DELIVERY" : "INTRADAY",
+          producttype: o.product === "CNC" ? "DELIVERY" : o.product === "NRML" ? "CARRYFORWARD" : "INTRADAY",
           duration: "DAY",
           price: String(o.price ?? 0),
           triggerprice: String(o.triggerPrice ?? 0),
@@ -370,6 +400,7 @@ const dhan: LiveBroker = {
   id: "dhan",
   verified: false,
   marketOrders: true,
+  fno: true,
   async place(ctx, o) {
     if (!ctx.creds.clientId) throw new BrokerError("missing_client_id");
     const b = obj(
@@ -380,8 +411,8 @@ const dhan: LiveBroker = {
           dhanClientId: ctx.creds.clientId,
           correlationId: o.reference,
           transactionType: o.side,
-          exchangeSegment: "NSE_EQ",
-          productType: o.product === "CNC" ? "CNC" : "INTRADAY",
+          exchangeSegment: o.fo ? "NSE_FNO" : "NSE_EQ",
+          productType: o.product === "CNC" ? "CNC" : o.product === "NRML" ? "MARGIN" : "INTRADAY",
           orderType: dhanType[o.orderType],
           validity: "DAY",
           securityId: o.nseToken,
@@ -426,6 +457,7 @@ const fivepaisa: LiveBroker = {
   id: "5paisa",
   verified: false,
   marketOrders: true,
+  fno: true,
   async place(ctx, o) {
     const clientCode = fpClientCode(ctx.token);
     const limit = o.orderType === "LIMIT" || o.orderType === "SL";
@@ -441,7 +473,7 @@ const fivepaisa: LiveBroker = {
               ClientCode: clientCode,
               OrderType: o.side === "BUY" ? "B" : "S",
               Exchange: "N",
-              ExchangeType: "C",
+              ExchangeType: o.fo ? "D" : "C", // C = cash, D = derivatives
               ScripCode: Number(o.nseToken),
               Price: limit ? o.price : 0,
               Qty: o.quantity,
@@ -497,13 +529,15 @@ const aliceblue: LiveBroker = {
   id: "aliceblue",
   verified: false,
   marketOrders: true,
+  // Intraday F&O only: its docs don't name the product for carrying F&O overnight.
+  fno: "intraday",
   async place(ctx, o) {
     const raw = await http(`${ALICE}/orders/placeorder`, {
       method: "POST",
       headers: aliceHeaders(ctx),
       json: [
         {
-          exchange: "NSE",
+          exchange: o.fo ? "NFO" : "NSE",
           instrumentId: o.nseToken,
           transactionType: o.side,
           quantity: o.quantity,
@@ -546,3 +580,24 @@ export const LIVE_NOT_YET: Partial<Record<BrokerId, string>> = {
 };
 
 export { mapWords as mapBrokerStatus };
+
+/** How an F&O order's instrument is stored: "NIFTY 2026-10-06 22700 CE". */
+export const foInstrumentLabel = (c: Pick<FoContract, "underlying" | "expiry" | "strike" | "type">) => `${c.underlying} ${c.expiry} ${c.strike} ${c.type}`;
+
+/**
+ * Whether the instrument a broker reports for an order is the one we sent.
+ * Cash orders compare plain symbols. Brokers name options differently
+ * ("NIFTY26O0622700CE", "NIFTY06OCT2622700CE", "NIFTY 22700 CE 06 OCT 26",
+ * "NIFTY-Oct2026-22700-CE"), so an option matches when the report names the
+ * same underlying, strike and call/put.
+ */
+export function sameInstrument(order: { exchange: string; tradingSymbol: string; instrumentSymbol: string }, reported: string): boolean {
+  if (order.exchange !== "NFO") return reported === order.tradingSymbol;
+  const [underlying, , strike, type] = order.instrumentSymbol.split(" ");
+  const r = reported.toUpperCase().replace(/^[A-Z]+:/, "").replace(/[^A-Z0-9.]/g, "");
+  if (!r.startsWith(underlying)) return false;
+  // Right after the underlying comes the expiry (digits or a month) — so NIFTY never matches NIFTYNXT50.
+  if (!/^(\d|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)/.test(r.slice(underlying.length))) return false;
+  const other = type === "CE" ? "PE" : "CE";
+  return r.includes(strike) && r.includes(type) && !r.includes(other);
+}

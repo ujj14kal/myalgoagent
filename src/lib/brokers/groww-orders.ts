@@ -13,8 +13,8 @@ const TIMEOUT_MS = 12_000;
 export type GrowwOrderInput = {
   tradingSymbol: string;
   exchange: "NSE" | "BSE";
-  segment: "CASH";
-  product: "CNC" | "MIS";
+  segment: "CASH" | "FNO";
+  product: "CNC" | "MIS" | "NRML";
   orderType: "MARKET" | "LIMIT" | "SL" | "SL_M";
   side: "BUY" | "SELL";
   quantity: number;

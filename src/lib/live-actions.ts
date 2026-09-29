@@ -9,6 +9,7 @@ import { BrokerError } from "@/lib/brokers/adapters";
 import { describeFailure } from "@/lib/brokers/failures";
 import { brokerById } from "@/lib/brokers/catalog";
 import { cancelLiveOrder, connectivityTest, LiveCheckError, refreshLiveOrder } from "@/lib/live/orders";
+import { placeBasket, previewBasket, type BasketInput, type BasketPreview } from "@/lib/live/options-basket";
 
 // The Live Trading page's actions. Results are returned, not thrown, so the
 // reason survives production builds.
@@ -75,5 +76,32 @@ export async function cancelMyLiveOrder(orderId: string): Promise<LiveResult> {
     return { ok: true, message: o.status === "CANCELLED" ? "Cancelled." : `Cancel sent — Groww says ${o.brokerStatus?.toLowerCase() ?? o.status.toLowerCase()}.` };
   } catch (err) {
     return explain(err, "live.cancel");
+  }
+}
+
+// ---------- options baskets (the user reviews a preview, then confirms) ----------
+
+export async function previewOptionsBasket(input: Omit<BasketInput, "userId">): Promise<LiveResult<BasketPreview>> {
+  const userId = await signedIn();
+  if (!userId) return { ok: false, error: "Sign in again." };
+  if (await checkRateLimit(`live-basket-preview:${userId}`, 30, 60_000)) return { ok: false, error: "Too many previews — wait a moment." };
+  try {
+    return { ok: true, data: await previewBasket({ ...input, userId }) };
+  } catch (err) {
+    return explain(err, "live.basket.preview", brokerById(input.broker)?.name);
+  }
+}
+
+export async function placeOptionsBasket(input: Omit<BasketInput, "userId">): Promise<LiveResult<{ message: string; failedAt: number | null }>> {
+  const userId = await signedIn();
+  if (!userId) return { ok: false, error: "Sign in again." };
+  if (await checkRateLimit(`live-basket:${userId}`, 5, 10 * 60_000)) return { ok: false, error: "Too many baskets sent — wait a few minutes." };
+  try {
+    const r = await placeBasket({ ...input, userId });
+    revalidatePath("/app/live-trading");
+    revalidatePath("/app/orders");
+    return { ok: true, data: { message: r.message, failedAt: r.failedAt } };
+  } catch (err) {
+    return explain(err, "live.basket", brokerById(input.broker)?.name);
   }
 }

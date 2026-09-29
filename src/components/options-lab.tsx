@@ -12,6 +12,7 @@ import {
   type OptionLeg,
 } from "@/lib/options/positions";
 import OptionChain, { type ChainContext } from "@/components/option-chain";
+import LiveBasket, { type BasketBroker } from "@/components/options/live-basket";
 
 // Options Lab: a multi-leg payoff, breakeven and Greeks calculator. Works on
 // typed-in (or theoretical) premiums today; once a live option chain is
@@ -45,7 +46,7 @@ function livePrice(ctx: ChainContext, type: "CE" | "PE", strike: number): { prem
   return premium ? { premium, iv: q.iv || null } : null;
 }
 
-export default function OptionsLab({ live = false }: { live?: boolean }) {
+export default function OptionsLab({ live = false, basketBrokers = [] }: { live?: boolean; basketBrokers?: BasketBroker[] }) {
   const [s, setS] = useState<Settings>({ spot: 25000, step: 50, expiryDays: 7, ivPct: 13, ratePct: 6.5, lots: 1, lotSize: 75 });
   const [template, setTemplate] = useState("iron-condor");
   const [legs, setLegs] = useState<OptionLeg[]>(() =>
@@ -229,6 +230,11 @@ export default function OptionsLab({ live = false }: { live?: boolean }) {
             <Stat label="Breakevens" value={summary.breakevens.length ? summary.breakevens.map((b) => b.toLocaleString("en-IN", { maximumFractionDigits: 1 })).join(" · ") : "—"} />
           </div>
           <PayoffChart legs={legs} spot={s.spot} rate={rate} breakevens={summary.breakevens} />
+          {live && ctx && basketBrokers.length > 0 && (
+            <div className="mt-4">
+              <LiveBasket brokers={basketBrokers} underlying={ctx.underlying} expiry={ctx.expiry} legs={legs} />
+            </div>
+          )}
           <div className="mt-4 grid gap-3 sm:grid-cols-4">
             <Stat small label="Delta" value={greeks.delta.toFixed(1)} hint="₹ P&L for a ₹1 move up" />
             <Stat small label="Gamma" value={greeks.gamma.toFixed(3)} hint="How fast delta changes" />
