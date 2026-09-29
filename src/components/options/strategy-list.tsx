@@ -2,13 +2,18 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { FlaskConical, Pencil, Plus, Trash2 } from "lucide-react";
+import { Activity, FlaskConical, Pencil, Plus, Trash2 } from "lucide-react";
 import StrategyEditor from "./strategy-editor";
-import { deleteOptionStrategy, startOptionBacktest, type OptionStrategyInput } from "@/lib/option-strategy-actions";
+import { deleteOptionStrategy, startOptionBacktest, startOptionForwardTest, type OptionStrategyInput } from "@/lib/option-strategy-actions";
 
 const toTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-const EXPIRY = { WEEKLY_CURRENT: "nearest expiry", WEEKLY_NEXT: "next expiry", MONTHLY: "monthly expiry" } as const;
-const legText = (l: OptionStrategyInput["legs"][number]) => `${l.side === "BUY" ? "Buy" : "Sell"} ${l.lots}× ${l.offset === 0 ? "ATM" : l.offset > 0 ? `ATM+${l.offset}` : `ATM${l.offset}`} ${l.type}`;
+const EXPIRY = {
+  WEEKLY_CURRENT: "nearest expiry",
+  WEEKLY_NEXT: "next expiry",
+  MONTHLY: "monthly expiry",
+} as const;
+const legText = (l: OptionStrategyInput["legs"][number]) =>
+  `${l.side === "BUY" ? "Buy" : "Sell"} ${l.lots}× ${l.offset === 0 ? "ATM" : l.offset > 0 ? `ATM+${l.offset}` : `ATM${l.offset}`} ${l.type}`;
 const isoDaysAgo = (n: number) => new Date(Date.now() + 5.5 * 3_600_000 - n * 86_400_000).toISOString().slice(0, 10);
 
 function Launcher({ id }: { id: string }) {
@@ -43,7 +48,13 @@ function Launcher({ id }: { id: string }) {
         disabled={pending}
         onClick={() =>
           start(async () => {
-            const r = await startOptionBacktest({ strategyId: id, fromDate: from, toDate: to, brokeragePerOrder: brokerage, slippagePct: slippage });
+            const r = await startOptionBacktest({
+              strategyId: id,
+              fromDate: from,
+              toDate: to,
+              brokeragePerOrder: brokerage,
+              slippagePct: slippage,
+            });
             if (!r.ok) return setError(r.error);
             router.push(`/app/options/backtests/${r.data!.runId}`);
           })
@@ -70,7 +81,11 @@ export default function StrategyList({ strategies }: { strategies: (OptionStrate
           <StrategyEditor onDone={strategies.length ? () => setEditing(null) : undefined} />
         </section>
       ) : (
-        <button type="button" onClick={() => setEditing("new")} className="inline-flex items-center gap-1.5 rounded-full bg-brand-primary px-4 py-2 text-sm font-semibold text-white">
+        <button
+          type="button"
+          onClick={() => setEditing("new")}
+          className="inline-flex items-center gap-1.5 rounded-full bg-brand-primary px-4 py-2 text-sm font-semibold text-white"
+        >
           <Plus size={15} /> New options strategy
         </button>
       )}
@@ -91,8 +106,26 @@ export default function StrategyList({ strategies }: { strategies: (OptionStrate
                   <p className="mt-1 text-xs text-brand-navy/70">{s.legs.map(legText).join(" · ")}</p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button type="button" onClick={() => setTesting(testing === s.id ? null : s.id)} className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-brand-primary ring-1 ring-brand-primary/30">
+                  <button
+                    type="button"
+                    onClick={() => setTesting(testing === s.id ? null : s.id)}
+                    className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-brand-primary ring-1 ring-brand-primary/30"
+                  >
                     <FlaskConical size={13} /> Backtest
+                  </button>
+                  <button
+                    type="button"
+                    title="Hypothetical trades on live option prices each day — no orders"
+                    onClick={() =>
+                      start(async () => {
+                        const r = await startOptionForwardTest(s.id);
+                        if (!r.ok) return window.alert(r.error);
+                        router.push(`/app/options/forward/${r.data!.id}`);
+                      })
+                    }
+                    className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-brand-primary ring-1 ring-brand-primary/30"
+                  >
+                    <Activity size={13} /> Forward test
                   </button>
                   <button type="button" onClick={() => setEditing(s.id)} aria-label="Edit" className="rounded-full p-2 text-brand-navy/45 hover:text-brand-primary">
                     <Pencil size={14} />

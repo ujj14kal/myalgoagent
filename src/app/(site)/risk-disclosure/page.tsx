@@ -82,7 +82,9 @@ const sections: LegalSection[] = [
     id: "options-risk",
     title: "Options",
     paragraphs: [
-      "Options are complex and can lose value quickly; buyers can lose the entire premium paid, and sellers can face losses far larger than the premium received — in some positions, unlimited. The Options Lab is a calculator: its premiums, payoffs and Greeks are model estimates (Black–Scholes) that can differ materially from real market prices, especially near expiry or in fast markets. It does not place or simulate options trades.",
+      "Options are complex and can lose value quickly; buyers can lose the entire premium paid, and sellers can face losses far larger than the premium received — in some positions, unlimited. SEBI's studies found that 9 out of 10 individual traders in equity futures and options incurred net losses. Trading options costs money in brokerage, taxes and the bid–ask spread, and on expiry day prices can move sharply in minutes.",
+      "Where live option prices aren't available, the Options Lab's premiums, payoffs and Greeks are model estimates (Black–Scholes) that can differ materially from real prices. Where they are, the chain's prices, IV and Greeks come from the data feed and can be delayed or stale.",
+      "Options backtests and options forward tests are hypothetical. Backtests replay real historical option prices minute by minute, but fills are modelled at candle prices with your brokerage and slippage assumptions, P&L is shown at today's lot size, days without a price for every leg are skipped, and a stop-loss or target on the whole position is checked on each minute's closing prices — real fills, liquidity and slippage around expiry can be much worse. Forward tests apply the same rules to live prices, checked about every 5 minutes during market hours; no orders are placed and no money is involved.",
     ],
   },
   {

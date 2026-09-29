@@ -209,14 +209,14 @@ export class MarketExtras {
   }
 
   /** Upcoming expiry dates (yyyy-mm-dd) for an option underlying ("NIFTY", "RELIANCE"). */
-  async expiries(underlying: string): Promise<string[]> {
+  async expiries(underlying: string, opts: { includeToday?: boolean } = {}): Promise<string[]> {
     const ist = new Date(Date.now() + 5.5 * 3_600_000);
     const today = ist.toISOString().slice(0, 10);
     // An expiry day's contracts stop trading at 15:30 IST.
     const afterClose = ist.getUTCHours() * 60 + ist.getUTCMinutes() >= 15 * 60 + 30;
     return csvRecords(await this.td.request("history", "getSymbolExpiryList", { symbol: underlying, response: "csv" }, 3600))
       .map((r) => isoDate(r.expiry))
-      .filter((d): d is string => !!d && (d > today || (d === today && !afterClose)));
+      .filter((d): d is string => !!d && (d > today || (d === today && (!afterClose || !!opts.includeToday))));
   }
 
   /** The full option chain for one expiry, with IV and Greeks. */

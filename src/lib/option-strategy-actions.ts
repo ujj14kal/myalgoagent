@@ -8,6 +8,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { logError } from "@/lib/logger";
 import { marketExtrasFor } from "@/lib/market-data";
 import { continueRun, tradingDays, type RunConfig } from "@/lib/options/backtest-runner";
+import { checkOptionForwardTest } from "@/lib/options/forward-runner";
 import type { ExpiryRule, RiskUnit, StrategyLeg } from "@/lib/options/backtest-engine";
 
 // Options strategies (multi-leg, ATM-relative) and their backtests on real
@@ -176,6 +177,69 @@ export async function deleteOptionBacktest(runId: string): Promise<OptResult> {
   const uid = await userId();
   if (!uid) return { ok: false, error: "Sign in again." };
   await prisma.optionBacktestRun.deleteMany({ where: { id: runId, userId: uid } });
+  revalidatePath("/app/options/strategies");
+  return { ok: true };
+}
+
+// ---------- forward tests (hypothetical, live option prices, no orders) ----------
+
+export async function startOptionForwardTest(strategyId: string): Promise<OptResult<{ id: string }>> {
+  const uid = await userId();
+  if (!uid) return { ok: false, error: "Sign in again." };
+  const extras = marketExtrasFor(uid);
+  if (!extras) return { ok: false, error: "Options forward tests need the live market-data feed, which isn't enabled for your account yet." };
+  const strategy = await prisma.optionStrategy.findFirst({ where: { id: strategyId, userId: uid } });
+  if (!strategy) return { ok: false, error: "Strategy not found." };
+  if ((await prisma.optionForwardTest.count({ where: { userId: uid, status: "ACTIVE" } })) >= 10) return { ok: false, error: "You can run up to 10 options forward tests at once — stop one first." };
+  const lotSize = await extras.lotSize(strategy.underlying).catch(() => null);
+  if (!lotSize) return { ok: false, error: `${strategy.underlying} has no options listed on NSE.` };
+  const config: RunConfig = {
+    underlying: strategy.underlying,
+    legs: strategy.legs as unknown as StrategyLeg[],
+    expiryRule: strategy.expiryRule as ExpiryRule,
+    entryMinute: strategy.entryMinute,
+    exitMinute: strategy.exitMinute,
+    weekdays: strategy.weekdays,
+    stopLossUnit: strategy.stopLossUnit as RiskUnit | null,
+    stopLossValue: strategy.stopLossValue,
+    targetUnit: strategy.targetUnit as RiskUnit | null,
+    targetValue: strategy.targetValue,
+    lotSize,
+  };
+  const test = await prisma.optionForwardTest.create({ data: { userId: uid, strategyId: strategy.id, strategyName: strategy.name, config: config as unknown as Prisma.InputJsonValue } });
+  revalidatePath("/app/options/strategies");
+  return { ok: true, data: { id: test.id } };
+}
+
+export async function stopOptionForwardTest(id: string): Promise<OptResult> {
+  const uid = await userId();
+  if (!uid) return { ok: false, error: "Sign in again." };
+  await prisma.optionForwardTest.updateMany({ where: { id, userId: uid, status: "ACTIVE" }, data: { status: "STOPPED", stoppedAt: new Date() } });
+  revalidatePath(`/app/options/forward/${id}`);
+  revalidatePath("/app/options/strategies");
+  return { ok: true };
+}
+
+export async function checkOptionForwardTestNow(id: string): Promise<OptResult> {
+  const uid = await userId();
+  if (!uid) return { ok: false, error: "Sign in again." };
+  if (await checkRateLimit(`opt-forward-check:${uid}`, 20, 60_000)) return { ok: false, error: "Checking too often — wait a moment." };
+  const found = await prisma.optionForwardTest.findFirst({ where: { id, userId: uid }, select: { id: true } });
+  if (!found) return { ok: false, error: "Forward test not found." };
+  try {
+    await checkOptionForwardTest(found.id);
+  } catch (err) {
+    logError("options.forward.check", err, { id });
+    return { ok: false, error: "Couldn't reach the data feed — try again in a moment." };
+  }
+  revalidatePath(`/app/options/forward/${id}`);
+  return { ok: true };
+}
+
+export async function deleteOptionForwardTest(id: string): Promise<OptResult> {
+  const uid = await userId();
+  if (!uid) return { ok: false, error: "Sign in again." };
+  await prisma.optionForwardTest.deleteMany({ where: { id, userId: uid } });
   revalidatePath("/app/options/strategies");
   return { ok: true };
 }
