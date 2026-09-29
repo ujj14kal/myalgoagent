@@ -2,8 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { MessageSquareText, Pencil, PencilLine, Sigma, Trash2 } from "lucide-react";
 import CustomIndicatorEditor from "./editor";
+import DrawIndicator from "./draw";
+import DescribeIndicator from "./describe";
 import { deleteCustomIndicator } from "@/lib/custom-indicator-actions";
 import type { CustomIndicatorDef } from "@/lib/custom-indicator";
 
@@ -12,22 +14,46 @@ export type SavedIndicator = { id: string; name: string; description: string | n
 export type Prefill = { name: string; formula: string; pane: "price" | "separate"; description: string | null };
 
 export default function CustomIndicatorList({ items, instruments, prefill }: { items: SavedIndicator[]; instruments: { id: string; symbol: string; name: string }[]; prefill?: Prefill | null }) {
-  const [editing, setEditing] = useState<string | "new" | null>(items.length && !prefill ? null : "new");
+  const [editing, setEditing] = useState<string | null>(null);
+  const [how, setHow] = useState<"draw" | "formula" | "describe">(prefill ? "formula" : "draw");
   const [, start] = useTransition();
   const router = useRouter();
   return (
     <div className="space-y-4">
-      {editing === "new" ? (
-        <section className="surface p-5">
-          <p className="mb-3 text-sm font-semibold text-brand-navy">New custom indicator</p>
-          {prefill && <p className="mb-3 rounded-lg bg-brand-primary/[0.06] px-3 py-2 text-xs text-brand-navy/70">Drafted by your assistant — preview it on a chart, adjust anything, then save.</p>}
-          <CustomIndicatorEditor instruments={instruments} initial={prefill ?? undefined} onDone={items.length ? () => setEditing(null) : undefined} />
-        </section>
-      ) : (
-        <button type="button" onClick={() => setEditing("new")} className="inline-flex items-center gap-1.5 rounded-full bg-brand-primary px-4 py-2 text-sm font-semibold text-white">
-          <Plus size={15} /> New custom indicator
-        </button>
-      )}
+      <section className="surface p-5">
+        <p className="text-sm font-semibold text-brand-navy">Create a custom indicator</p>
+        <div className="mt-3 flex flex-wrap gap-1.5" role="tablist">
+          {(
+            [
+              ["draw", "Draw on a chart", PencilLine],
+              ["formula", "Write a formula", Sigma],
+              ["describe", "Describe it", MessageSquareText],
+            ] as const
+          ).map(([k, label, Icon]) => (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={how === k}
+              onClick={() => setHow(k)}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold ring-1 ${how === k ? "bg-brand-navy text-white ring-brand-navy" : "text-brand-navy/65 ring-brand-navy/15"}`}
+            >
+              <Icon size={13} /> {label}
+            </button>
+          ))}
+        </div>
+        <div className="mt-4">
+          {how === "draw" && <DrawIndicator instruments={instruments} />}
+          {how === "formula" && (
+            <>
+              {prefill && <p className="mb-3 rounded-lg bg-brand-primary/[0.06] px-3 py-2 text-xs text-brand-navy/70">Drafted by your assistant — preview it on a chart, adjust anything, then save.</p>}
+              <CustomIndicatorEditor instruments={instruments} initial={prefill ?? undefined} />
+            </>
+          )}
+          {how === "describe" && <DescribeIndicator />}
+        </div>
+      </section>
+      {items.length > 0 && <p className="pt-2 text-sm font-semibold text-brand-navy">Your custom indicators</p>}
       {items.map((i) => (
         <section key={i.id} className="surface p-4">
           {editing === i.id && i.def.type === "formula" ? (
