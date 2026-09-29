@@ -1,3 +1,4 @@
+import { TrueDataProvider } from "./providers/truedata";
 import { YahooFinanceProvider } from "./providers/yahoo";
 import { parseAllowlist, selectProvider, type MarketDataUse } from "./select";
 import { fixedBucket, fourHourBucket, resampleCandles } from "./resample";
@@ -25,8 +26,14 @@ function withDerivedTimeframes(p: MarketDataProvider): MarketDataProvider {
 
 const yahoo = withDerivedTimeframes(new YahooFinanceProvider());
 
-/** The licensed feed. Stays null until its adapter is added and configured — wrap it with withDerivedTimeframes too. */
-const licensed: MarketDataProvider | null = null;
+const trueData = TrueDataProvider.fromEnv();
+
+/**
+ * The licensed feed — null unless MARKET_DATA_TRUEDATA_USER/_PASSWORD are set.
+ * Allow-listed accounts get TrueData only: a failed request is retried inside
+ * the provider and then surfaces as an error, never silently swapped for Yahoo.
+ */
+const licensed: MarketDataProvider | null = trueData ? withDerivedTimeframes(trueData) : null;
 
 export function marketDataFor(userId: string | null | undefined, use: MarketDataUse): MarketDataProvider {
   return selectProvider({
