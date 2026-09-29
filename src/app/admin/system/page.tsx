@@ -1,4 +1,5 @@
-import { Bell, Bug, Database, DollarSign, Globe, Mail, Rocket, Server, ShieldAlert } from "lucide-react";
+import { Activity, Bell, Bug, Database, DollarSign, Globe, Mail, Rocket, Server, ShieldAlert } from "lucide-react";
+import { licensedFeedStatus } from "@/lib/market-data";
 import { requireStaff } from "@/lib/admin/access";
 import { getAlarms, getCost, getDatabase, getDeploys, getEmailStatus, getRecentLogs, getSecurityFindings, load } from "@/lib/admin/aws";
 import RefreshCost from "@/components/admin/refresh-cost";
@@ -209,6 +210,8 @@ export default async function SystemPage() {
         </Card>
       </div>
 
+      <MarketFeedCard />
+
       <Card title="Broker static IP" icon={Globe}>
         {!staticIp ? (
           <p className="text-sm text-brand-navy/60">Not configured — broker calls go out directly from Amplify (no fixed IP). Live orders need the relay.</p>
@@ -250,5 +253,32 @@ export default async function SystemPage() {
         )}
       </Card>
     </div>
+  );
+}
+
+/** The licensed market-data feed (TrueData): configured, answering, or down with the reason. */
+function MarketFeedCard() {
+  const feed = licensedFeedStatus();
+  const allow = (process.env.MARKET_DATA_LICENSED_USER_IDS ?? "").split(",").filter((x) => x.trim()).length;
+  return (
+    <Card title="Market data feed" icon={Activity}>
+      {!feed.configured ? (
+        <p className="text-sm text-brand-navy/60">No licensed feed configured — everyone is on the standard data. Add MARKET_DATA_TRUEDATA_USER/_PASSWORD to switch it on.</p>
+      ) : feed.available ? (
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <Pill tone="green" dot>TrueData answering</Pill>
+          <span className="text-brand-navy/60">
+            {allow} account{allow === 1 ? "" : "s"} allowed · trading paths {process.env.MARKET_DATA_LICENSED_FOR_TRADING === "true" ? "on the feed" : "on standard data"}
+          </span>
+        </div>
+      ) : (
+        <div className="space-y-1 text-sm">
+          <Pill tone="red" dot>TrueData down — everyone on standard data</Pill>
+          <p className="text-brand-navy/60">
+            {feed.reason ?? "login refused"}. Rechecked automatically{feed.recheckAt ? ` at ${ist(new Date(feed.recheckAt))}` : ""}; live features switch back on by themselves when it answers.
+          </p>
+        </div>
+      )}
+    </Card>
   );
 }

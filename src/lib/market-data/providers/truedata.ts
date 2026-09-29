@@ -193,11 +193,18 @@ export function groupDaily(candles: Candle[], by: "week" | "month"): Candle[] {
 
 type Token = { value: string; expiresAt: number };
 
+/** The feed itself is gone (subscription ended, login refused) — as opposed to one request failing. */
+export class FeedDownError extends Error {}
+const RECHECK_MS = 10 * 60_000;
+
 export class TrueDataProvider implements MarketDataProvider {
   readonly name = "TrueData";
   readonly isOfficial = true;
   readonly depth = "extended" as const;
   private token: Token | null = null;
+  /** While the login is refused, the feed counts as down until this time; then one login is tried again. */
+  private downUntil = 0;
+  private downReason: string | null = null;
   private tokenPromise: Promise<string> | null = null;
   private gate: Promise<void> = Promise.resolve();
 
@@ -218,14 +225,38 @@ export class TrueDataProvider implements MarketDataProvider {
       cache: "no-store",
     });
     const data = (await res.json().catch(() => null)) as { access_token?: string; expires_in?: number; error_description?: string } | null;
-    if (!res.ok || !data?.access_token) throw new Error(`TrueData login failed: ${data?.error_description ?? res.status}`);
+    if (!res.ok || !data?.access_token) {
+      const reason = data?.error_description ?? `HTTP ${res.status}`;
+      // A refused login (expired subscription, changed password) means the feed is gone, not a hiccup.
+      if (res.status === 400 || res.status === 401 || res.status === 403) {
+        this.downUntil = Date.now() + RECHECK_MS;
+        this.downReason = reason;
+        logWarn("truedata", "feed down: login refused", { reason });
+        throw new FeedDownError(`TrueData login refused: ${reason}`);
+      }
+      throw new Error(`TrueData login failed: ${reason}`);
+    }
+    if (this.downReason) logWarn("truedata", "feed back up", { was: this.downReason });
+    this.downUntil = 0;
+    this.downReason = null;
     // Tokens last ≤ 3600 s per the docs (and all reset ~04:00 IST) — renew a minute early.
     const ttl = Math.min(data.expires_in ?? 3600, 3600) - 60;
     this.token = { value: data.access_token, expiresAt: Date.now() + ttl * 1000 };
     return data.access_token;
   }
 
+  /** False while the feed is down (login refused); the app then serves everyone from the fallback source. */
+  isAvailable(): boolean {
+    return Date.now() >= this.downUntil;
+  }
+
+  /** Why the feed is down, for the admin portal. */
+  status(): { available: boolean; reason: string | null; recheckAt: number | null } {
+    return { available: this.isAvailable(), reason: this.downReason, recheckAt: this.downUntil > Date.now() ? this.downUntil : null };
+  }
+
   private async accessToken(): Promise<string> {
+    if (!this.isAvailable()) throw new FeedDownError(`TrueData is unavailable: ${this.downReason ?? "login refused"}`);
     if (this.token && this.token.expiresAt > Date.now()) return this.token.value;
     this.tokenPromise ??= this.login().finally(() => (this.tokenPromise = null));
     return this.tokenPromise;
@@ -262,6 +293,7 @@ export class TrueDataProvider implements MarketDataProvider {
         });
         body = await res.text();
       } catch (err) {
+        if (err instanceof FeedDownError) throw err;
         // Network error, timeout or a failed login — all worth another try.
         lastError = err;
         logWarn("truedata", "request failed, retrying", { attempt, path, symbol: params.symbol, error: String(err) });
