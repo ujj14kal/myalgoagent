@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { friendlyError } from "@/lib/friendly-error";
 import Link from "next/link";
 import { startPaperSession } from "@/lib/paper-actions";
 import { describeExecutionConfig, type StrategyExecutionConfig } from "@/lib/describe-strategy-config";
@@ -39,7 +40,7 @@ export default function PaperSessionForm({ strategies }: { strategies: StrategyO
         if (err && typeof err === "object" && "digest" in err && String(err.digest).startsWith("NEXT_REDIRECT")) {
           throw err;
         }
-        setError(err instanceof Error ? err.message : "Something went wrong");
+        setError(friendlyError(err, "Couldn't start the forward test — please try again."));
       }
     });
   }

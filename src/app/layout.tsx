@@ -3,6 +3,7 @@ import { Inter, Geist_Mono } from "next/font/google";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import Script from "next/script";
 import GlobalErrorListener from "@/components/global-error-listener";
+import NewVersionNotice from "@/components/new-version-notice";
 import "./globals.css";
 
 const inter = Inter({
@@ -110,6 +111,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           />
         ))}
         <GlobalErrorListener />
+        <NewVersionNotice />
         {children}
         {process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID && (
           <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID} />

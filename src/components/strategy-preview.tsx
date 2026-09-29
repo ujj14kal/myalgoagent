@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { friendlyError } from "@/lib/friendly-error";
 import { ArrowDownRight, ArrowUpRight, PlayCircle, RefreshCw } from "lucide-react";
 import CandlestickChart from "@/components/candlestick-chart";
 import StrategyReplay from "@/components/strategy-replay";
@@ -36,7 +37,7 @@ export default function StrategyPreview({ buildInput, direction }: { buildInput:
   const run = () => {
     setError(null);
     startTransition(async () => {
-      const res = await previewStrategy(buildInput()).catch(() => ({ ok: false as const, error: "We couldn't run the demo. Please try again." }));
+      const res = await previewStrategy(buildInput()).catch((err: unknown) => ({ ok: false as const, error: friendlyError(err, "We couldn't run the demo. Please try again.") }));
       if (res.ok) setPreview(res.preview);
       else {
         setPreview(null);

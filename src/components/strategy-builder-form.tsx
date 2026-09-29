@@ -1,5 +1,6 @@
 "use client";
 import InstrumentCombobox from "@/components/instrument-combobox";
+import { friendlyError } from "@/lib/friendly-error";
 import WebhookGuide from "@/components/webhook-guide";
 
 import { useEffect, useRef, useState, useTransition } from "react";
@@ -129,7 +130,17 @@ function BuilderSection({
   );
 }
 
-interface StrategyInitial {
+export const NEW_STRATEGY_DRAFT_KEY = "maa:new-strategy-draft";
+
+/** Whether a rule uses the time of day (a time window, or a candle pattern limited to certain times). */
+function hasTimeRule(node: ConditionNode): boolean {
+  if (node.kind === "group") return node.children.some(hasTimeRule);
+  if (node.kind === "not") return hasTimeRule(node.child);
+  if (node.kind !== "signal") return false;
+  return node.signal.family === "TIME_WINDOW" || (node.signal.family === "CANDLE_PATTERN" && !!node.signal.window);
+}
+
+export interface StrategyInitial {
   name: string;
   instrumentId: string;
   mode: "NO_CODE" | "CODE" | "WEBHOOK";
@@ -279,7 +290,7 @@ export default function StrategyBuilderForm({
   const [maxPyramidEntries, setMaxPyramidEntries] = useState(initial?.maxPyramidEntries ?? 1);
   const [timeframe, setTimeframe] = useState<string>(initial?.timeframe ?? "1d");
   const [noEntryAfterMinute, setNoEntryAfterMinute] = useState<number | null>(initial?.noEntryAfterMinute ?? null);
-  // Intraday strategies square off at 15:20 by default, like a broker's intraday product.
+  // Intraday strategies square off at 15:15 by default — many brokers only allow intraday until then.
   const [squareOffMinute, setSquareOffMinute] = useState<number | null>(
     initial ? (initial.squareOffMinute ?? null) : DEFAULT_SQUARE_OFF_MINUTE,
   );
@@ -290,6 +301,19 @@ export default function StrategyBuilderForm({
   const [orderType, setOrderType] = useState<"MARKET" | "LIMIT">(initial?.orderType === "LIMIT" ? "LIMIT" : "MARKET");
   const [limitMode, setLimitMode] = useState<"PERCENT" | "PRICE">(initial?.limitMode === "PRICE" ? "PRICE" : "PERCENT");
   const [limitValue, setLimitValue] = useState<number | null>(initial?.limitValue ?? 0.2);
+
+  // A time-of-day rule ("Enter at 09:20", "Exit at 15:00") can't work on daily candles,
+  // so choosing one moves the strategy to 5-minute candles and says so.
+  const [switchedForTime, setSwitchedForTime] = useState(false);
+  useEffect(() => {
+    if (mode !== "NO_CODE" || timeframe !== "1d") return;
+    if (hasTimeRule(entryCondition) || (exitConditionOpen && hasTimeRule(exitCondition))) {
+      chooseTimeframe("5m");
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reacting to the user's rule choice
+      setSwitchedForTime(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the rules or timeframe change
+  }, [entryCondition, exitCondition, exitConditionOpen, timeframe, mode]);
 
   /** Daily candles can only be Delivery; moving to an intraday timeframe suggests Intraday. */
   function chooseTimeframe(tf: string) {
@@ -450,6 +474,14 @@ export default function StrategyBuilderForm({
   }
   useEffect(() => {
     buildInputRef.current = buildInput;
+    // A new strategy in progress is kept in this tab, so a reload (e.g. after an update) doesn't lose it.
+    if (!strategyId) {
+      try {
+        sessionStorage.setItem(NEW_STRATEGY_DRAFT_KEY, JSON.stringify(buildInput()));
+      } catch {
+        // storage unavailable (private mode etc.) — nothing to keep
+      }
+    }
   });
 
   function submit(input: StrategyInput) {
@@ -472,9 +504,13 @@ export default function StrategyBuilderForm({
         }
       } catch (err) {
         if (err && typeof err === "object" && "digest" in err && String(err.digest).startsWith("NEXT_REDIRECT")) {
+          // Saved — the kept draft is no longer needed.
+          try {
+            sessionStorage.removeItem(NEW_STRATEGY_DRAFT_KEY);
+          } catch {}
           throw err;
         }
-        setFeasibilityIssues([{ message: err instanceof Error ? err.message : "Something went wrong" }]);
+        setFeasibilityIssues([{ message: friendlyError(err, "Couldn't save the strategy — please try again.") }]);
       }
     });
   }
@@ -735,6 +771,12 @@ export default function StrategyBuilderForm({
               subtitle="When to open a position"
               sectionRef={entryRef}
             >
+              {switchedForTime && timeframe !== "1d" && (
+                <p className="mb-3 rounded-lg bg-brand-gold/10 px-3 py-2 text-xs text-brand-navy/75 ring-1 ring-brand-gold/25">
+                  Switched to {STRATEGY_TIMEFRAMES.find((t) => t.value === timeframe)?.label ?? timeframe} candles — time-of-day rules need an intraday timeframe. You can pick another one
+                  (1m to 4H) in Position.
+                </p>
+              )}
               {mode === "NO_CODE" ? (
                 entryMode === "SIMPLE" ? (
                   <SimpleConditionPicker node={entryCondition} onChange={setEntryCondition} instruments={instruments} categories={ALL_CATEGORIES} purpose="entry" />
