@@ -18,9 +18,10 @@ export interface WebhookActionResult {
  * same one-way pattern used for password-reset/magic-link tokens
  * (src/lib/account-actions.ts).
  */
-export async function regenerateWebhookToken(strategyId: string): Promise<WebhookActionResult> {
+export async function regenerateWebhookToken(strategyId: string, confirmedOwnAlerts: boolean): Promise<WebhookActionResult> {
   const session = await auth();
   if (!session?.user?.id) return { error: "Unauthorized" };
+  if (!confirmedOwnAlerts) return { error: "Confirm the alerts come from a strategy or indicator you wrote or understand." };
 
   try {
     await enforceRateLimit(`webhook-token:${session.user.id}`, 10, 60_000);

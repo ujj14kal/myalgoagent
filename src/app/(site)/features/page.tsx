@@ -99,7 +99,7 @@ const groups: Group[] = [
     icon: Bell,
     items: [
       "Alerts for signals, fills, stopped sessions and risk-limit breaches",
-      "Portfolio, order and position dashboards",
+      "Your real portfolio, orders and positions from your connected broker, in one place",
     ],
     soon: ["Audit logs for authentication, strategy and trading actions", "CSV export of trades and backtest results"],
   },

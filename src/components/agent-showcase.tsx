@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Agent2D, { type AgentPose } from "@/components/robot/agent-2d";
 
 const JOBS: { pose: AgentPose; label: string; when: string }[] = [
-  { pose: "analyzing", label: "Watching", when: "Tracks your live forward tests and portfolio." },
+  { pose: "analyzing", label: "Watching", when: "Keeps an eye on your forward tests and your broker account." },
   { pose: "working", label: "Building", when: "Keeps your strategies saved, drafts included." },
   { pose: "thinking", label: "Inspecting", when: "Runs backtests and session syncs." },
   { pose: "guarding", label: "Guarding", when: "Enforces your risk limits on the server." },

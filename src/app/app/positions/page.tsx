@@ -1,91 +1,83 @@
 import Link from "next/link";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { marketDataFor } from "@/lib/market-data";
-import EmptyState from "@/components/empty-state";
 import { BriefcaseBusiness } from "lucide-react";
+import { auth } from "@/lib/auth";
+import EmptyState from "@/components/empty-state";
 import PageHeader from "@/components/ui/page-header";
-import StatusBadge from "@/components/ui/status-badge";
-import { formatPct, formatPrice, formatSignedINR, toneOf, TONE_TEXT } from "@/lib/format";
+import { readableBrokers } from "@/lib/brokers/connected";
+import { loadBrokerAccount } from "@/lib/brokers/account-load";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { formatSignedINR, toneOf, TONE_TEXT } from "@/lib/format";
 
 export const metadata = { title: "Positions", robots: { index: false } };
+export const dynamic = "force-dynamic";
 
+const price = (v: number | null) => (v == null ? "—" : `₹${v.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`);
+
+/** Real open positions from the user's connected brokers. */
 export default async function PositionsPage() {
   const session = await auth();
-  const market = marketDataFor(session?.user?.id, "trading");
-  if (!session?.user?.id) return null;
-
-  const sessions = await prisma.paperSession.findMany({
-    where: { userId: session.user.id, positionQuantity: { not: null } },
-    orderBy: { updatedAt: "desc" },
-  });
-
-  const positions = await Promise.all(
-    sessions.map(async (s) => {
-      let latestClose = s.positionEntryPrice ?? 0;
-      try {
-        const candles = await market.getHistoricalCandles(s.instrumentSymbol, "1mo", "1d");
-        if (candles.length > 0) latestClose = candles.at(-1)!.close;
-      } catch {
-        // fall back to entry price if the live quote can't be fetched
-      }
-      const quantity = s.positionQuantity ?? 0;
-      const entryPrice = s.positionEntryPrice ?? 0;
-      const priceDiff = s.direction === "SHORT" ? entryPrice - latestClose : latestClose - entryPrice;
-      const unrealizedPnl = priceDiff * quantity;
-      const unrealizedPnlPct = entryPrice > 0 ? (unrealizedPnl / (entryPrice * quantity)) * 100 : 0;
-      return { session: s, latestClose, quantity, entryPrice, unrealizedPnl, unrealizedPnlPct };
-    }),
-  );
+  const userId = session?.user?.id;
+  if (!userId) return null;
+  const brokers = await readableBrokers(userId);
+  const limited = brokers.length ? await checkRateLimit(`positions:${userId}`, 20, 60_000) : null;
+  const accounts = limited ? [] : await Promise.all(brokers.map((b) => loadBrokerAccount(userId, b.id)));
+  const rows = accounts.flatMap((a) => ("error" in a || !a.positions?.ok ? [] : a.positions.data.map((p) => ({ ...p, broker: a.name }))));
+  const errors = accounts.flatMap((a, i) => ("error" in a ? [`${brokers[i].name}: ${a.error}`] : a.positions && !a.positions.ok ? [`${a.name}: ${a.positions.error}`] : []));
 
   return (
     <div>
-      <PageHeader title="Positions" icon={BriefcaseBusiness} description={<>Hypothetical positions currently open in your forward tests.</>} />
-
-      {positions.length === 0 ? (
+      <PageHeader title="Positions" icon={BriefcaseBusiness} description="Your real positions today, as your connected brokers report them. Forward-test positions are hypothetical and are shown inside each forward test." />
+      {brokers.length === 0 ? (
         <div className="mt-8">
-          <EmptyState pose="idle" title="No open positions right now." description="Positions from active forward testing sessions will show up here." ctaLabel="Go to Forward Testing" ctaHref="/app/forward-testing" />
+          <EmptyState pose="idle" title="No broker connected for today." description="Connect a broker (or log in for today) to see your real positions." ctaLabel="Broker Connections" ctaHref="/app/broker-connections" />
         </div>
       ) : (
-        <div className="mt-6 overflow-x-auto surface">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Session</th>
-                <th>Instrument</th>
-                <th>Side</th>
-                <th className="num-cell">Qty</th>
-                <th className="num-cell">Entry</th>
-                <th className="num-cell">Last close</th>
-                <th className="num-cell">Unrealised P&amp;L</th>
-                <th className="num-cell">P&amp;L %</th>
-              </tr>
-            </thead>
-            <tbody>
-              {positions.map((p) => {
-                const tone = toneOf(p.unrealizedPnl);
-                return (
-                  <tr key={p.session.id}>
-                    <td>
-                      <Link href={`/app/forward-testing/${p.session.id}`} className="font-medium text-brand-primary hover:underline">
-                        {p.session.strategyName}
-                      </Link>
-                    </td>
-                    <td className="font-medium">{p.session.instrumentSymbol}</td>
-                    <td>
-                      <StatusBadge status={p.session.direction === "SHORT" ? "SHORT" : "LONG"} />
-                    </td>
-                    <td className="num-cell">{p.quantity}</td>
-                    <td className="num-cell">₹{formatPrice(p.entryPrice)}</td>
-                    <td className="num-cell">₹{formatPrice(p.latestClose)}</td>
-                    <td className={`num-cell font-semibold ${TONE_TEXT[tone]}`}>{formatSignedINR(p.unrealizedPnl, 2)}</td>
-                    <td className={`num-cell font-semibold ${TONE_TEXT[tone]}`}>{formatPct(p.unrealizedPnlPct)}</td>
+        <>
+          {limited && <p className="mt-6 text-sm text-brand-sell">Refreshing too often — wait a moment.</p>}
+          {errors.map((e) => (
+            <p key={e} className="mt-4 text-sm text-brand-sell">
+              {e}
+            </p>
+          ))}
+          {rows.length === 0 && !limited ? (
+            <p className="surface mt-6 p-6 text-center text-sm text-brand-navy/50">No open positions today.</p>
+          ) : (
+            <div className="mt-6 overflow-x-auto surface">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Broker</th>
+                    <th>Instrument</th>
+                    <th>Product</th>
+                    <th className="num-cell">Qty</th>
+                    <th className="num-cell">Avg price</th>
+                    <th className="num-cell">Last price</th>
+                    <th className="num-cell">P&amp;L</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr key={`${r.broker}-${r.symbol}-${i}`}>
+                      <td>{r.broker}</td>
+                      <td className="font-medium">{r.symbol}</td>
+                      <td className="text-xs text-brand-navy/60">{r.product ?? "—"}</td>
+                      <td className="num-cell">{r.quantity}</td>
+                      <td className="num-cell">{price(r.avgPrice)}</td>
+                      <td className="num-cell">{price(r.ltp)}</td>
+                      <td className={`num-cell font-semibold ${r.pnl == null ? "text-brand-navy/40" : TONE_TEXT[toneOf(r.pnl)]}`}>{r.pnl == null ? "—" : formatSignedINR(r.pnl, 2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="mt-3 text-xs text-brand-navy/45">
+            Read-only, as reported right now.{" "}
+            <Link href="/app/broker-account" className="font-semibold text-brand-primary hover:underline">
+              Full broker account →
+            </Link>
+          </p>
+        </>
       )}
     </div>
   );

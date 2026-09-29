@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { regenerateWebhookToken, setWebhookEnabled } from "@/lib/webhook-actions";
 import WebhookGuide from "@/components/webhook-guide";
 
@@ -29,12 +29,12 @@ export default function WebhookPanel({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const autoStarted = useRef(false);
+  const [confirmed, setConfirmed] = useState(false);
 
   function generate() {
     setError(null);
     startTransition(async () => {
-      const result = await regenerateWebhookToken(strategyId);
+      const result = await regenerateWebhookToken(strategyId, confirmed);
       if (result.error) {
         setError(result.error);
         return;
@@ -45,14 +45,6 @@ export default function WebhookPanel({
       }
     });
   }
-
-  // A strategy without a URL yet gets one straight away — shown once, since only a hash of it is kept.
-  useEffect(() => {
-    if (hasToken || autoStarted.current) return;
-    autoStarted.current = true;
-    generate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on first view of a strategy with no URL
-  }, []);
 
   function toggleEnabled() {
     const next = !enabled;
@@ -107,10 +99,17 @@ export default function WebhookPanel({
               ? "A webhook URL is already configured. Regenerating replaces it — the old URL stops working immediately."
               : "Generate a URL, then paste it as a webhook in your TradingView alert."}
           </p>
+          <label className="mt-2 flex items-start gap-2 text-xs text-brand-navy/70">
+            <input type="checkbox" className="mt-0.5" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+            <span>
+              The alerts I send here come from a TradingView strategy or indicator that I wrote or understand — not someone else&apos;s signals. Only
+              TradingView&apos;s own servers can send them, and at most one signal per candle is acted on.
+            </span>
+          </label>
           <button
             type="button"
             onClick={generate}
-            disabled={isPending}
+            disabled={isPending || !confirmed}
             className="mt-2 rounded-full border border-brand-primary px-4 py-1.5 text-sm font-semibold text-brand-primary hover:bg-brand-primary/5 disabled:opacity-50"
           >
             {hasToken ? "Regenerate webhook URL" : "Generate webhook URL"}

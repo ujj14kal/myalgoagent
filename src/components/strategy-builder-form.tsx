@@ -723,8 +723,8 @@ export default function StrategyBuilderForm({
             </p>
             <p className="mt-3 text-xs text-brand-navy/40">
               {strategyId
-                ? "Your webhook URL is on this strategy's page (Webhook setup). It was shown once when it was created — if you didn't copy it, press Regenerate there to get a new one."
-                : "Create the strategy and its page opens with your webhook URL ready to copy into a TradingView alert. It's shown only once, so copy it then."}
+                ? "Your webhook URL is on this strategy's page (Webhook setup). It's shown once when generated — if you didn't copy it, regenerate it there."
+                : "Create the strategy, then on its page confirm the alerts are your own and generate your webhook URL. It's shown only once, so copy it then."}
             </p>
           </BuilderSection>
         ) : (

@@ -9,7 +9,7 @@ const STEPS = [
   {
     icon: ClipboardCopy,
     title: "Copy your private webhook URL",
-    body: "The strategy's page shows it under Webhook setup. It's shown only once — copy it straight away (you can always regenerate a new one).",
+    body: "On the strategy's page, under Webhook setup, confirm the alerts come from a strategy or indicator you wrote or understand, then generate the URL. It's shown only once — copy it straight away (you can regenerate a new one).",
   },
   {
     icon: BellRing,
@@ -19,7 +19,7 @@ const STEPS = [
   {
     icon: LineChart,
     title: "MyAlgoAgent follows the alerts",
-    body: "BUY opens the position and SELL closes it, at the latest price (a short strategy is the reverse). Your stop-loss and target still apply while it's open. Every alert is listed under Recent signals — including any we couldn't read, with the reason.",
+    body: "BUY opens the position and SELL closes it, at the latest price (a short strategy is the reverse). Your stop-loss and target still apply while it's open. Only alerts from TradingView's own servers are accepted, and at most one per candle of your strategy's timeframe. Every alert is listed under Recent signals — including any ignored, with the reason.",
   },
   {
     icon: ShieldCheck,

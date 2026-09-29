@@ -7,6 +7,7 @@ import { parseTradingViewPayload } from "@/lib/webhooks/tradingview";
 import { getOrCreateActivePaperSession } from "@/lib/webhooks/session";
 import { applyWebhookSignal } from "@/lib/webhooks/apply-signal";
 import { logError } from "@/lib/logger";
+import { isTradingViewIp, sameCandle } from "@/lib/webhooks/guard";
 
 // A TradingView alert is a one-line message or a tiny JSON object; anything
 // near this size is not a real alert.
@@ -88,6 +89,15 @@ async function handleWebhook(request: NextRequest, { params }: { params: Promise
   }
 
   const bodyText = await request.text();
+
+  // Only TradingView's own servers may send signals — a strategy follows the user's
+  // alerts, not buy/sell requests typed by hand. (Local development can opt out.)
+  if (!isTradingViewIp(ip) && process.env.WEBHOOK_ALLOW_ANY_IP !== "true") {
+    await prisma.webhookAlert.create({
+      data: { strategyId: strategy.id, rawPayload: sanitizeForStorage(bodyText.slice(0, 2000)), parsedAction: null, parseError: "Ignored: not sent from TradingView's alert servers" },
+    });
+    return NextResponse.json({ ok: false, error: "Signals are accepted only from TradingView alerts" }, { status: 403 });
+  }
   if (bodyText.length > MAX_WEBHOOK_BODY_CHARS) {
     return NextResponse.json({ ok: false, error: "Payload too large" }, { status: 413 });
   }
@@ -107,6 +117,13 @@ async function handleWebhook(request: NextRequest, { params }: { params: Promise
 
   if (!parsed.action) {
     return NextResponse.json({ ok: false, error: parsed.error }, { status: 400 });
+  }
+
+  // At most one signal per candle of the strategy's timeframe.
+  const lastExecuted = await prisma.webhookAlert.findFirst({ where: { strategyId: strategy.id, executed: true, id: { not: alert.id } }, orderBy: { receivedAt: "desc" }, select: { receivedAt: true } });
+  if (lastExecuted && sameCandle(lastExecuted.receivedAt, alert.receivedAt, strategy.timeframe)) {
+    await prisma.webhookAlert.update({ where: { id: alert.id }, data: { parseError: `Ignored: a signal was already acted on in this ${strategy.timeframe === "1d" ? "day" : `${strategy.timeframe} candle`}` } });
+    return NextResponse.json({ ok: false, error: "One signal per candle" }, { status: 200 });
   }
 
   try {

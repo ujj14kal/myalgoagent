@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { BROKERS, brokerById, callbackUrl } from "@/lib/brokers/catalog";
 import { decodeFailure, describeFailure } from "@/lib/brokers/failures";
 import { callbackOrigin } from "@/lib/brokers/service";
-import { getPaperSessionRows, summarizePortfolio } from "@/lib/portfolio";
+import { getPaperSessionRows } from "@/lib/portfolio";
 import { compile } from "@/lib/strategy-compile";
 import { isNeverExitCondition, type ConditionNode } from "@/lib/strategy/types";
 import { conditionToText } from "@/lib/strategy/format";
@@ -875,14 +875,14 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
       return { result: rows.map((r) => ({ ...r, link: `/app/backtests/${r.id}`, createdAt: r.createdAt.toISOString().slice(0, 10) })) };
     }
     case "get_my_forward_tests": {
+      // Each forward test on its own — hypothetical results per strategy, never pooled into an account.
       const rows = await getPaperSessionRows(userId);
-      const summary = summarizePortfolio(rows);
       return {
         result: {
-          portfolio: summary,
+          note: "Hypothetical results, one per strategy. Don't add them up into a portfolio or balance.",
           sessions: rows.slice(0, 15).map((r) => ({
             id: r.session.id, strategy: r.session.strategyName, instrument: r.session.instrumentSymbol, status: r.session.status,
-            startingCapital: r.session.startingCapital, equity: Math.round(r.equity), pnlPct: Number(r.pnlPct.toFixed(2)),
+            notionalCapital: r.session.startingCapital, notionalValue: Math.round(r.equity), pnlPct: Number(r.pnlPct.toFixed(2)),
             inPosition: r.session.positionQuantity != null, link: `/app/forward-testing/${r.session.id}`,
           })),
         },

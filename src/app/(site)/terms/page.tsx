@@ -67,6 +67,8 @@ const sections: LegalSection[] = [
     title: "Prohibited use",
     paragraphs: [
       "You may not use the platform for unlawful purposes, to circumvent broker or exchange rules, or to interfere with the platform's security or operation.",
+      "Webhook strategies follow alerts from your own TradingView account. Use them only with a strategy or indicator you wrote or understand — not to relay another person's or service's trading signals — and keep your webhook URL private. Signals are accepted only from TradingView's alert servers, at most one per candle of the strategy's timeframe, and run as forward tests.",
+      "Forward tests apply a strategy's own rules (or, for webhook strategies, your own alerts) to new prices. They aren't a way to practise placing trades by hand, and their hypothetical results are shown per strategy, never as a balance or account.",
     ],
   },
   {

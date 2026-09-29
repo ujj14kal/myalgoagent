@@ -26,15 +26,8 @@ const STEPS: TourStep[] = [
     id: "portfolio-chart",
     target: '[data-tour="portfolio-chart"]',
     pose: "analyzing",
-    title: "Your portfolio, over time",
-    body: "This tracks your combined forward-testing equity as your strategies run, built from your real order history — not a simulated demo feed.",
-  },
-  {
-    id: "pnl-summary",
-    target: '[data-tour="pnl-summary"]',
-    pose: "talk",
-    title: "P&L at a glance",
-    body: "Today, this week, this month and all-time realised P&L — green is up, red is down, grey is flat. No digging through a spreadsheet.",
+    title: "Your forward tests",
+    body: "Each strategy you forward test shows its own hypothetical result here — its rules applied to new prices as they arrive. Nothing is pooled into a balance and no money is involved.",
   },
   {
     id: "strategies-list",

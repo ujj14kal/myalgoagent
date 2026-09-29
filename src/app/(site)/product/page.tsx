@@ -135,7 +135,7 @@ const sections: LegalSection[] = [
     id: "monitoring",
     title: "Alerts, portfolio monitoring, order tracking and reporting",
     paragraphs: [
-      "Users receive alerts for signals, fills and risk-limit breaches, and can review positions, P&L, orders and a full trade history.",
+      "Users receive alerts for signals, fills and risk-limit breaches, see their real holdings, positions and orders from their connected broker, and review each forward test's hypothetical trades inside that forward test.",
     ],
     soon: ["Alerts for rejected broker orders", "CSV exports for further analysis"],
   },

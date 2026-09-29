@@ -29,7 +29,7 @@ const capabilities = [
   { title: "Broker connections", text: "Link your own account at 9 Indian brokers with your own API key — encrypted, verified on connect." },
   { title: "Watch your strategy trade", text: "An animated replay ticks off every condition on the signal candle and plays out the entry, take-profit, stop-loss and trailing stop." },
   { title: "Options Lab", text: "Multi-leg options payoffs, breakevens, max profit and loss, and Greeks before you trade." },
-  { title: "Portfolio & order tracking", text: "Positions, P&L, orders and fills in one dashboard." },
+  { title: "Your broker account, in one place", text: "Real holdings, positions, funds and orders from your connected broker." },
   { title: "Alerts & notifications", text: "Signal, fill and risk-limit alerts, delivered in the app as they happen." },
 ];
 
