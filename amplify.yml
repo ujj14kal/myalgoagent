@@ -14,12 +14,12 @@ frontend:
         - npx vitest run
         # Amplify Hosting only exposes console-configured env vars to the
         # build phase, not to the Next.js SSR compute runtime — Next.js
-        # server code only reads vars that are present in .env.production.
-        # Only NON-secret settings are written here. Secrets (database URL,
-        # auth secret, broker encryption key, feed login…) live encrypted in
-        # Parameter Store under /myalgoagent/app/ and are loaded at server
-        # start (src/lib/runtime-secrets.ts), so they never enter the build output.
-        - env | grep -E '^(AUTH_URL|AUTH_GOOGLE_ID|AUTH_TRUST_HOST|NEXT_PUBLIC_[A-Z0-9_]*|MARKET_DATA_LICENSED_USER_IDS|MARKET_DATA_LICENSED_FOR_TRADING|BROKER_EGRESS_URL)=' >> .env.production || true
+        # server code only reads vars that are actually present in
+        # .env.production at build time. See:
+        # https://docs.aws.amazon.com/amplify/latest/userguide/ssr-environment-variables.html
+        # MARKET_DATA_ = the licensed data feed's settings (allow-listed accounts, credentials).
+        # BROKER_ = the key that encrypts users' broker API keys/tokens at rest.
+        - env | grep -e AUTH_ -e DATABASE_URL -e NEXT_PUBLIC_ -e PURGE_SECRET -e MARKET_DATA_ -e BROKER_ >> .env.production
         - npm run build
   artifacts:
     baseDirectory: .next
