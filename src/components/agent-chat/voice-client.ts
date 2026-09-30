@@ -1,13 +1,14 @@
 "use client";
 
 import { audioEventFrame, readTranscribeFrame, toPcm16 } from "@/lib/ai/transcribe-stream";
+import { speechChunks, toSpeech } from "@/lib/ai/speech-text";
 
 // Browser side of voice: microphone → Amazon Transcribe (streamed over a
 // pre-signed WebSocket, the audio never touches our server) and agent replies
 // → Amazon Polly (streamed MP3 from /api/agent/speech).
 
 export type ListenHandlers = {
-  /** Everything heard so far in this session (final words plus the current guess). */
+  /** Everything heard so far in the current turn (final words plus the current guess). */
   onTranscript: (text: string, final: boolean) => void;
   /** Microphone loudness 0–1, for the listening animation. */
   onLevel?: (level: number) => void;
@@ -16,7 +17,14 @@ export type ListenHandlers = {
   onEnd?: () => void;
 };
 
-export type Listener = { stop: () => void };
+export type Listener = {
+  stop: () => void;
+  /**
+   * Marks everything heard so far as handled, so the next transcript starts a new turn.
+   * Lets one microphone session carry a whole conversation.
+   */
+  endTurn: () => void;
+};
 
 export function voiceSupported(): boolean {
   return typeof window !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof WebSocket !== "undefined" && typeof AudioContext !== "undefined";
@@ -51,6 +59,10 @@ export async function startListening(h: ListenHandlers): Promise<Listener> {
   ws.binaryType = "arraybuffer";
 
   const finals: string[] = [];
+  let base = 0; // finals before this index belong to turns already handled
+  let partialPending = false; // the last thing heard was an unfinished guess
+  let skipFinal = false; // a guess was handled early: drop the final that completes it
+  const turnText = (partial = "") => [...finals.slice(base), partial].join(" ").trim();
   let stopped = false;
   let ended = false;
   const finish = () => {
@@ -91,8 +103,16 @@ export async function startListening(h: ListenHandlers): Promise<Listener> {
       h.onError("Voice input stopped unexpectedly. Please try again.");
       return stop();
     }
-    if (!u.partial) finals.push(u.text);
-    h.onTranscript([...finals, u.partial ? u.text : ""].join(" ").trim(), !u.partial);
+    partialPending = u.partial;
+    if (!u.partial) {
+      finals.push(u.text);
+      if (skipFinal) {
+        skipFinal = false;
+        base = finals.length;
+        return;
+      }
+    }
+    h.onTranscript(turnText(u.partial ? u.text : ""), !u.partial);
   };
   ws.onclose = () => {
     stopped = true;
@@ -109,13 +129,18 @@ export async function startListening(h: ListenHandlers): Promise<Listener> {
   source.connect(processor);
   processor.connect(ctx.destination);
   setTimeout(stop, (data.maxSeconds ?? 60) * 1000);
-  return { stop };
+  return {
+    stop,
+    endTurn: () => {
+      base = finals.length;
+      skipFinal = partialPending;
+    },
+  };
 }
 
 // ---------- speaking ----------
 
 let player: HTMLAudioElement | null = null;
-let current: { id: string; onEnd?: () => void } | null = null;
 
 function getPlayer(): HTMLAudioElement {
   if (!player) {
@@ -160,6 +185,21 @@ export function unlockAudio() {
   a.play().catch(() => {});
 }
 
+type Playing = {
+  id: string;
+  onEnd?: () => void;
+  abort: AbortController;
+  /** Pieces after the first are fetched ahead while the one before plays. */
+  ahead: Map<number, Promise<string | null>>;
+};
+let playing: Playing | null = null;
+
+function release(p: Playing) {
+  p.abort.abort();
+  for (const pending of p.ahead.values()) pending.then((u) => u && URL.revokeObjectURL(u));
+  p.ahead.clear();
+}
+
 export function stopSpeaking() {
   const a = player;
   if (a) {
@@ -167,38 +207,84 @@ export function stopSpeaking() {
     a.removeAttribute("src");
     a.load();
   }
-  const c = current;
-  current = null;
+  const c = playing;
+  playing = null;
+  if (c) release(c);
   c?.onEnd?.();
 }
 
 export function speakingId(): string | null {
-  return current?.id ?? null;
+  return playing?.id ?? null;
 }
 
-/** Reads one of the agent's replies aloud (streams, so it starts quickly). Stops anything already playing. */
-export function speakMessage(messageId: string, h: { onStart?: () => void; onEnd?: () => void; onError?: (message: string) => void } = {}) {
+/**
+ * Reads one of the agent's replies aloud. Given the reply's text it is voiced a
+ * sentence or two at a time — the first piece starts as soon as it is made and the
+ * next is fetched while it plays — so speech begins much sooner than if the whole
+ * reply had to be made first. Stops anything already playing.
+ */
+export function speakMessage(messageId: string, h: { onStart?: () => void; onEnd?: () => void; onError?: (message: string) => void } = {}, content?: string) {
   stopSpeaking();
   const a = getPlayer();
-  current = { id: messageId, onEnd: h.onEnd };
-  const mine = () => current?.id === messageId;
-  a.onplaying = () => mine() && h.onStart?.();
+  const pieces = content ? speechChunks(toSpeech(content)) : [];
+  const total = Math.max(pieces.length, 1);
+  const urlOf = (n: number) => `/api/agent/speech?m=${encodeURIComponent(messageId)}${pieces.length ? `&c=${n}` : ""}`;
+  const me: Playing = { id: messageId, onEnd: h.onEnd, abort: new AbortController(), ahead: new Map() };
+  playing = me;
+  const mine = () => playing === me;
+  let n = 0;
+  let started = false;
+
+  const fetchAhead = (k: number) => {
+    if (k >= total || me.ahead.has(k)) return;
+    me.ahead.set(
+      k,
+      fetch(urlOf(k), { signal: me.abort.signal })
+        .then((r) => (r.ok ? r.blob() : null))
+        .then((b) => (b ? URL.createObjectURL(b) : null))
+        .catch(() => null)
+    );
+  };
+  const playPiece = async (k: number) => {
+    if (!mine()) return;
+    if (k === 0) a.src = urlOf(0);
+    else {
+      const ready = await me.ahead.get(k);
+      if (!mine()) return;
+      a.src = ready ?? urlOf(k);
+    }
+    fetchAhead(k + 1);
+    a.play().catch(() => {
+      if (!mine()) return;
+      playing = null;
+      release(me);
+      h.onError?.("Your browser blocked audio. Tap the speaker to play it.");
+      h.onEnd?.();
+    });
+  };
+
+  a.onplaying = () => {
+    if (!mine() || started) return;
+    started = true;
+    h.onStart?.();
+  };
   a.onended = () => {
     if (!mine()) return;
-    current = null;
+    if (n + 1 < total) {
+      n++;
+      void playPiece(n);
+      return;
+    }
+    playing = null;
+    release(me);
     h.onEnd?.();
   };
   a.onerror = () => {
     if (!mine()) return;
-    current = null;
+    playing = null;
+    release(me);
     h.onError?.("Voice playback isn't available right now.");
     h.onEnd?.();
   };
-  a.src = `/api/agent/speech?m=${encodeURIComponent(messageId)}`;
-  a.play().catch(() => {
-    if (!mine()) return;
-    current = null;
-    h.onError?.("Your browser blocked audio. Tap the speaker to play it.");
-    h.onEnd?.();
-  });
+  void playPiece(0);
 }

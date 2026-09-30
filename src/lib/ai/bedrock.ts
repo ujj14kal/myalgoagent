@@ -96,12 +96,14 @@ async function converseMantle({
   turns,
   tools,
   runTool,
+  fast,
 }: {
   model: string;
   system: string;
   turns: ChatTurn[];
   tools?: MantleTool[];
   runTool?: ToolRunner;
+  fast?: boolean;
 }): Promise<AgentReply> {
   const started = Date.now();
   const signal = AbortSignal.timeout(AI_LIMITS.timeoutMs);
@@ -143,6 +145,7 @@ async function converseMantle({
       temperature: 0.3,
       tools: useTools ? tools : undefined,
       signal,
+      reasoningEffort: fast ? "low" : undefined,
     });
     inputTokens += res.inputTokens ?? 0;
     outputTokens += res.outputTokens ?? 0;
@@ -192,6 +195,8 @@ export async function converse(args: {
   turns: ChatTurn[];
   tools?: MantleTool[];
   runTool?: ToolRunner;
+  /** Spoken conversation: answer with less deliberation so the reply comes back sooner. */
+  fast?: boolean;
 }): Promise<AgentReply> {
   // Tools run on the OpenAI-compatible endpoint; the runtime path answers without them.
   const reply = await (args.model.startsWith(MANTLE_PREFIX) ? converseMantle(args) : converseRuntime(args));

@@ -215,12 +215,12 @@ function HeaderButton({
 }
 
 /** 🔊 under a reply — reads it aloud in the agent's voice; tap again to stop. */
-function ReadAloud({ messageId }: { messageId: string }) {
+function ReadAloud({ messageId, content }: { messageId: string; content: string }) {
   const [state, setState] = useState<"idle" | "loading" | "playing">("idle");
   const toggle = () => {
     if (state !== "idle") return stopSpeaking();
     setState("loading");
-    speakMessage(messageId, { onStart: () => setState("playing"), onEnd: () => setState("idle") });
+    speakMessage(messageId, { onStart: () => setState("playing"), onEnd: () => setState("idle") }, content);
   };
   useEffect(() => () => {
     if (state !== "idle") stopSpeaking();
@@ -242,7 +242,7 @@ function ReadAloud({ messageId }: { messageId: string }) {
 }
 
 /** 👍 / 👎 under a reply — saved instantly, click again to undo. */
-function RateReply({ messageId, initial }: { messageId: string; initial: 1 | -1 | null }) {
+function RateReply({ messageId, content, initial }: { messageId: string; content: string; initial: 1 | -1 | null }) {
   const [rating, setRating] = useState<1 | -1 | null>(initial);
   const [thanks, setThanks] = useState(false);
   const rate = async (value: 1 | -1) => {
@@ -276,7 +276,7 @@ function RateReply({ messageId, initial }: { messageId: string; initial: 1 | -1 
   );
   return (
     <div className="mt-1 flex items-center gap-0.5 pl-[42px]">
-      <ReadAloud messageId={messageId} />
+      <ReadAloud messageId={messageId} content={content} />
       {btn(1, "Helpful", <ThumbsUp size={12} />)}
       {btn(-1, "Not helpful", <ThumbsDown size={12} />)}
       <AnimatePresence>
@@ -872,7 +872,7 @@ export default function AgentChatPanel({
                                 />
                               </div>
                               </div>
-                              {!m.id.startsWith("pending-") && <RateReply messageId={m.id} initial={m.rating} />}
+                              {!m.id.startsWith("pending-") && <RateReply messageId={m.id} content={m.content} initial={m.rating} />}
                             </motion.li>
                           )
                         )}

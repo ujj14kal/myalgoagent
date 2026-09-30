@@ -5,17 +5,26 @@ import { AnimatePresence, motion } from "motion/react";
 import { Hand, Mic, Square, X } from "lucide-react";
 import Agent2D, { type AgentPose } from "@/components/robot/agent-2d";
 import { toSpeech } from "@/lib/ai/speech-text";
+import { endOfTurnDelay, isEcho, wordCount } from "@/lib/ai/turn-taking";
 import { speakMessage, startListening, stopSpeaking, type Listener } from "./voice-client";
 
 type Phase = "connecting" | "listening" | "thinking" | "speaking" | "review" | "idle";
 
-/** Quiet time after the last words before the question is sent, like a natural pause. */
-const END_OF_TURN_MS = 1300;
+/** A fresh microphone session starts this long before the old one's time limit, so there's never a gap. */
+const RENEW_MS = 50_000;
+/** With nobody talking for this long the microphone is released (it's billed while it streams). */
+const IDLE_MS = 90_000;
+/** After the agent stops talking, its own last words may still be arriving from the microphone. */
+const ECHO_GRACE_MS = 1200;
 
 /**
- * Hands-free conversation: listen → send → read the reply aloud → listen again.
- * It goes through exactly the same agent as typing (same rules, tools and
- * review windows); when a review window opens it waits, then carries on.
+ * Hands-free conversation with the microphone open the whole time:
+ *  - you can talk over the agent to interrupt it (it stops and listens);
+ *  - if you add something while it's still thinking, that answer is dropped and
+ *    your follow-up goes next — the conversation history carries the context;
+ *  - the agent's own voice coming back through the speakers isn't mistaken for you.
+ * It goes through exactly the same agent as typing (same rules, tools and review
+ * windows); when a review window opens it waits, then carries on.
  */
 export default function VoiceMode({
   agentName,
@@ -41,16 +50,30 @@ export default function VoiceMode({
   const [problem, setProblem] = useState<string | null>(null);
 
   const listener = useRef<Listener | null>(null);
+  const sessionSeq = useRef(0);
+  const activeSession = useRef(0);
+  const failures = useRef(0);
+  const renewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const turnTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heardRef = useRef("");
+  const captionRef = useRef("");
+  const echoUntil = useRef(0);
+  const lastActivity = useRef(0);
   const sentAfterReply = useRef<string | null>(lastReply?.id ?? null);
-  const alive = useRef(true);
   const lastReplyIdRef = useRef<string | null>(lastReply?.id ?? null);
+  const awaiting = useRef(false); // a question is out and its answer hasn't come back
+  const superseded = useRef(false); // you spoke again: don't read the answer to the earlier question
+  const queued = useRef(""); // what you said while an answer was still on its way
+  const barged = useRef(false); // speech was cut short by you, not finished
+  const alive = useRef(true);
+  const sessionEndedRef = useRef<() => void>(() => {});
+  const isPendingRef = useRef(isPending);
   const reviewOpenRef = useRef(reviewOpen);
+  const phaseRef = useRef<Phase>("connecting");
   useEffect(() => {
     lastReplyIdRef.current = lastReply?.id ?? null;
-  }, [lastReply?.id]);
-  const phaseRef = useRef<Phase>("connecting");
+    isPendingRef.current = isPending;
+  });
   const setPhaseBoth = (p: Phase) => {
     phaseRef.current = p;
     setPhase(p);
@@ -61,113 +84,241 @@ export default function VoiceMode({
     turnTimer.current = null;
   };
 
-  const stopListening = () => {
-    clearTurnTimer();
-    listener.current?.stop();
-    listener.current = null;
-    setLevel(0);
-  };
-
-  const sendHeard = useCallback(() => {
-    const text = heardRef.current.trim();
-    stopListening();
-    if (!text) {
-      setPhaseBoth("idle");
-      return;
-    }
+  /** Puts a question to the agent. */
+  const dispatch = (text: string) => {
+    lastActivity.current = Date.now();
     sentAfterReply.current = lastReplyIdRef.current;
+    awaiting.current = true;
+    superseded.current = false;
+    setHeard(text);
     setCaption("");
+    captionRef.current = "";
     setPhaseBoth("thinking");
     onSend(text);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onSend]);
+  };
 
-  const listen = useCallback(async () => {
-    if (!alive.current) return;
-    stopSpeaking();
-    stopListening();
-    setProblem(null);
-    setHeard("");
+  /** The turn is over: send what was heard (after whatever was said while an answer was on its way). */
+  const sendHeard = () => {
+    clearTurnTimer();
+    if (phaseRef.current !== "listening") return;
+    const text = heardRef.current.trim();
+    if (!text) return;
+    listener.current?.endTurn();
     heardRef.current = "";
-    setPhaseBoth("connecting");
-    try {
-      const l = await startListening({
-        onTranscript: (text, final) => {
-          heardRef.current = text;
-          setHeard(text);
-          clearTurnTimer();
-          // Send after a short pause once a phrase is complete.
-          if (final) turnTimer.current = setTimeout(sendHeard, END_OF_TURN_MS);
-        },
-        onLevel: setLevel,
-        onError: (m) => setProblem(m),
-        onEnd: () => {
-          // Timed out or closed while still listening: send what we have, or wait for a tap.
-          if (phaseRef.current === "listening") {
-            if (heardRef.current.trim()) sendHeard();
-            else setPhaseBoth("idle");
-          }
-        },
-      });
-      if (!alive.current) return l.stop();
-      listener.current = l;
+    const full = [queued.current, text].filter(Boolean).join(" ");
+    if (awaiting.current || isPendingRef.current) {
+      // The earlier answer is still coming: hold this until it lands, then send straight away.
+      queued.current = full;
+      setHeard(full);
+      setPhaseBoth("thinking");
+      return;
+    }
+    queued.current = "";
+    dispatch(full);
+  };
+  const sendHeardRef = useRef(sendHeard);
+  useEffect(() => {
+    sendHeardRef.current = sendHeard;
+  });
+
+  const onTranscript = (text: string, final: boolean) => {
+    const p = phaseRef.current;
+    if (p === "connecting") return;
+    if (p === "review") {
+      if (final) listener.current?.endTurn(); // not for the agent: drop it
+      return;
+    }
+    const agentVoiceStillAround = p === "speaking" || Date.now() < echoUntil.current;
+    if (agentVoiceStillAround && isEcho(text, captionRef.current)) {
+      if (final) listener.current?.endTurn();
+      return;
+    }
+    if (p === "speaking") {
+      // You're talking over the agent: it stops and listens.
+      barged.current = true;
+      stopSpeaking();
       setPhaseBoth("listening");
+    } else if (p === "thinking") {
+      // You added something while it was still working: the earlier answer is no longer wanted.
+      if (!final && wordCount(text) < 2) return;
+      superseded.current = true;
+      setPhaseBoth("listening");
+    } else if (p === "idle") {
+      setPhaseBoth("listening");
+    }
+    lastActivity.current = Date.now();
+    heardRef.current = text;
+    setHeard(text);
+    clearTurnTimer();
+    // A finished phrase ends the turn after a short pause — longer if it sounds unfinished.
+    if (final) turnTimer.current = setTimeout(() => sendHeardRef.current(), endOfTurnDelay(text));
+  };
+  const onTranscriptRef = useRef(onTranscript);
+  useEffect(() => {
+    onTranscriptRef.current = onTranscript;
+  });
+
+  /** Opens a microphone session. Its events only count while it is the current one. */
+  const connect = useCallback(async () => {
+    const token = ++sessionSeq.current;
+    const l = await startListening({
+      onTranscript: (t, f) => token === activeSession.current && onTranscriptRef.current(t, f),
+      onLevel: (v) => token === activeSession.current && setLevel(v),
+      onError: (m) => token === activeSession.current && setProblem(m),
+      onEnd: () => token === activeSession.current && sessionEndedRef.current(),
+    });
+    return { l, token };
+  }, []);
+
+  const scheduleRenew = () => {
+    if (renewTimer.current) clearTimeout(renewTimer.current);
+    renewTimer.current = setTimeout(async () => {
+      if (!alive.current) return;
+      try {
+        const { l, token } = await connect();
+        if (!alive.current) return l.stop();
+        const old = listener.current;
+        activeSession.current = token;
+        listener.current = l;
+        old?.stop(); // its end is ignored: it's no longer the current session
+        scheduleRenew();
+      } catch {
+        // Keep the old session; if it runs out, sessionEnded starts a new one.
+      }
+    }, RENEW_MS);
+  };
+
+  /** Starts listening (first time, or after it stopped). The phase is only touched when nothing else is going on. */
+  const begin = useCallback(async () => {
+    if (!alive.current || listener.current) return;
+    setProblem(null);
+    if (phaseRef.current === "idle" || phaseRef.current === "connecting") setPhaseBoth("connecting");
+    try {
+      const { l, token } = await connect();
+      if (!alive.current) return l.stop();
+      activeSession.current = token;
+      listener.current = l;
+      lastActivity.current = Date.now();
+      failures.current = 0;
+      if (phaseRef.current === "connecting" || phaseRef.current === "idle") setPhaseBoth("listening");
+      scheduleRenew();
     } catch (err) {
       setProblem(err instanceof Error ? err.message : "Voice isn't available right now.");
-      setPhaseBoth("idle");
+      if (phaseRef.current === "connecting") setPhaseBoth("idle");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sendHeard]);
+  }, [connect]);
+
+  /** The current session ended by itself (time limit or dropped connection). */
+  const sessionEnded = () => {
+    listener.current = null;
+    setLevel(0);
+    if (!alive.current) return;
+    if (phaseRef.current === "listening" && heardRef.current.trim()) sendHeardRef.current();
+    if (++failures.current > 3) {
+      setProblem("Voice input stopped. Tap the mic to start again.");
+      if (phaseRef.current === "listening") setPhaseBoth("idle");
+      return;
+    }
+    void begin();
+  };
+  useEffect(() => {
+    sessionEndedRef.current = sessionEnded;
+  });
 
   // Start listening as soon as voice mode opens; clean everything up on exit.
   useEffect(() => {
     alive.current = true;
-    const t = setTimeout(listen, 0);
+    const t = setTimeout(() => void begin(), 0);
     return () => {
       alive.current = false;
       clearTimeout(t);
-      stopListening();
+      clearTurnTimer();
+      if (renewTimer.current) clearTimeout(renewTimer.current);
+      activeSession.current = -1;
+      listener.current?.stop();
+      listener.current = null;
       stopSpeaking();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Nobody has said anything for a while: let the microphone go until they tap it again.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!alive.current || phaseRef.current !== "listening" || !listener.current || heardRef.current) return;
+      if (Date.now() - lastActivity.current < IDLE_MS) return;
+      if (renewTimer.current) clearTimeout(renewTimer.current);
+      activeSession.current = -1; // its end is ignored
+      listener.current.stop();
+      listener.current = null;
+      setLevel(0);
+      setPhaseBoth("idle");
+    }, 10_000);
+    return () => clearInterval(id);
+  }, []);
+
   const afterSpeaking = useCallback(() => {
     if (!alive.current) return;
-    if (reviewOpenRef.current) setPhaseBoth("review");
-    else listen();
-  }, [listen]);
+    if (barged.current) {
+      barged.current = false; // you cut it short: you're already being heard
+      return;
+    }
+    echoUntil.current = Date.now() + ECHO_GRACE_MS;
+    lastActivity.current = Date.now();
+    if (reviewOpenRef.current) {
+      setPhaseBoth("review");
+      return;
+    }
+    setPhaseBoth("listening");
+    if (!listener.current) void begin();
+  }, [begin]);
 
   useEffect(() => {
     reviewOpenRef.current = reviewOpen;
     // The review window closed without leaving the page: carry on the conversation.
     if (!reviewOpen && phaseRef.current === "review") {
-      const t = setTimeout(listen, 0);
+      const t = setTimeout(() => {
+        setPhaseBoth("listening");
+        if (!listener.current) void begin();
+      }, 0);
       return () => clearTimeout(t);
     }
-  }, [reviewOpen, listen]);
+  }, [reviewOpen, begin]);
 
-  // A new reply arrived: read it aloud.
+  // An answer arrived: read it aloud — unless you've already moved on.
   useEffect(() => {
-    if (phaseRef.current !== "thinking" || isPending || !lastReply || lastReply.id === sentAfterReply.current) return;
+    if (isPending || !awaiting.current || !lastReply || lastReply.id === sentAfterReply.current) return;
+    awaiting.current = false;
     sentAfterReply.current = lastReply.id;
     const t = setTimeout(() => {
-      setCaption(toSpeech(lastReply.content));
+      if (!alive.current) return;
+      if (queued.current && !heardRef.current) {
+        // You said something while it was thinking: skip this answer and send your follow-up now.
+        const next = queued.current;
+        queued.current = "";
+        dispatch(next);
+        return;
+      }
+      if (superseded.current || phaseRef.current !== "thinking") return; // you're mid-sentence: your follow-up goes when you finish
+      const spoken = toSpeech(lastReply.content);
+      setCaption(spoken);
+      captionRef.current = spoken;
       setPhaseBoth("speaking");
-      speakMessage(lastReply.id, {
-        onEnd: afterSpeaking,
-        onError: (m) => setProblem(m),
-      });
+      speakMessage(lastReply.id, { onEnd: afterSpeaking, onError: (m) => setProblem(m) }, lastReply.content);
     }, 0);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastReply, isPending, afterSpeaking]);
 
-  // Sending failed (rate limit, network): show why and wait for a tap.
+  // Sending failed (rate limit, network): show why; the microphone stays open.
   useEffect(() => {
-    if (!sendError || phaseRef.current !== "thinking") return;
+    if (!sendError || !awaiting.current) return;
     const t = setTimeout(() => {
+      awaiting.current = false;
+      queued.current = "";
       setProblem(sendError);
-      setPhaseBoth("idle");
+      setPhaseBoth("listening");
     }, 0);
     return () => clearTimeout(t);
   }, [sendError]);
@@ -175,10 +326,15 @@ export default function VoiceMode({
   const primary = () => {
     if (phase === "listening") return heardRef.current.trim() ? sendHeard() : undefined;
     if (phase === "speaking") {
-      stopSpeaking(); // its onEnd carries on listening
+      barged.current = true;
+      stopSpeaking();
+      setPhaseBoth("listening");
       return;
     }
-    if (phase === "idle" || phase === "review") listen();
+    if (phase === "idle" || phase === "review") {
+      setPhaseBoth(listener.current ? "listening" : "connecting");
+      if (!listener.current) void begin();
+    }
   };
 
   const pose: AgentPose =
@@ -191,9 +347,9 @@ export default function VoiceMode({
         ? "Listening… pause when you're done"
         : "Listening — go ahead"
       : phase === "thinking"
-      ? "Thinking…"
+      ? "Thinking… you can keep talking"
       : phase === "speaking"
-      ? `${agentName} is speaking — tap to interrupt`
+      ? `${agentName} is speaking — talk any time to interrupt`
       : phase === "review"
       ? "Review the window, then I'll keep listening"
       : "Tap the mic to talk";
@@ -288,7 +444,7 @@ export default function VoiceMode({
         </motion.button>
       </div>
       <p className="relative mt-3 text-center text-[10.5px] leading-snug text-brand-navy/50">
-        Voice uses Amazon Transcribe and Amazon Polly. Replies are AI-generated and not investment advice.
+        Voice uses Amazon Transcribe and Amazon Polly; headphones avoid echo. Replies are AI-generated and not investment advice.
       </p>
     </motion.div>
   );

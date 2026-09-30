@@ -62,6 +62,7 @@ export async function mantleChat({
   temperature,
   tools,
   signal,
+  reasoningEffort,
 }: {
   model: string;
   messages: MantleMessage[];
@@ -69,17 +70,23 @@ export async function mantleChat({
   temperature: number;
   tools?: MantleTool[];
   signal?: AbortSignal;
+  /** Less thinking before answering — much faster for spoken replies. Dropped if the endpoint doesn't accept it. */
+  reasoningEffort?: "low" | "medium" | "high";
 }): Promise<MantleResult> {
   const path = "/v1/chat/completions";
-  const body = JSON.stringify({
-    model,
-    messages,
-    max_tokens: maxTokens,
-    temperature,
-    ...(tools?.length ? { tools, tool_choice: "auto" } : {}),
-  });
+  let effort = reasoningEffort;
+  const makeBody = () =>
+    JSON.stringify({
+      model,
+      messages,
+      max_tokens: maxTokens,
+      temperature,
+      ...(effort ? { reasoning_effort: effort } : {}),
+      ...(tools?.length ? { tools, tool_choice: "auto" } : {}),
+    });
 
   for (let attempt = 0; ; attempt++) {
+    const body = makeBody();
     const signed = await getSigner().sign({
       method: "POST",
       protocol: "https:",
@@ -101,9 +108,16 @@ export async function mantleChat({
         outputTokens: data.usage?.completion_tokens ?? null,
       };
     }
+    const errText = await res.text();
+    // The endpoint rejected the speed setting: ask again without it rather than fail the reply.
+    if (res.status === 400 && effort && /reasoning/i.test(errText)) {
+      effort = undefined;
+      attempt--;
+      continue;
+    }
     const retryable = res.status === 429 || res.status >= 500;
     if (!retryable || attempt >= 1) {
-      throw new Error(`bedrock-mantle ${res.status}: ${(await res.text()).slice(0, 300)}`);
+      throw new Error(`bedrock-mantle ${res.status}: ${errText.slice(0, 300)}`);
     }
     await new Promise((r) => setTimeout(r, 600));
   }

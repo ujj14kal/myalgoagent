@@ -172,6 +172,7 @@ export async function sendAgentMessage(input: {
       tools: AGENT_TOOLS,
       runTool: (name: string, args: string) => runAgentTool(userId, name, args),
       system: buildSystemPrompt(agentName, userContext, { voice: input?.voice === true }),
+      fast: input?.voice === true,
       turns: [
         ...history.reverse().map((m) => {
           // Let the agent know what happened to anything it proposed earlier.
