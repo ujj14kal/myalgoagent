@@ -331,6 +331,24 @@ export async function refreshCost(): Promise<AdminResult> {
 // ---------------- live trading ----------------
 
 /** Owner-only: allow (or stop) real orders for an account. */
+/** Assign (or clear) the static IP a user registers at their broker. One IP per client. */
+export async function setStaticIp(userId: string, ip: string | null): Promise<AdminResult> {
+  return run("team", async (staff) => {
+    const u = await targetUser(userId, staff);
+    const value = ip?.trim() || null;
+    if (value && !/^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/.test(value)) return { ok: false, error: "That isn't a valid IPv4 address." };
+    if (value) {
+      const taken = await prisma.user.findFirst({ where: { liveStaticIp: value, id: { not: u.id } }, select: { email: true } });
+      if (taken) return { ok: false, error: `${value} is already assigned to ${taken.email}. Brokers allow one client per static IP.` };
+    }
+    await prisma.user.update({ where: { id: u.id }, data: { liveStaticIp: value } });
+    await audit(staff, value ? "user.static-ip" : "user.static-ip-clear", { type: "user", id: u.id }, value ? `Assigned static IP ${value} to ${u.email}` : `Cleared the static IP of ${u.email}`);
+    revalidatePath("/admin", "layout");
+    revalidatePath("/app/live-trading");
+    return { ok: true, message: value ? `${value} is now assigned to ${u.email}.` : `Static IP cleared for ${u.email}.` };
+  });
+}
+
 export async function setLiveTrading(userId: string, enabled: boolean): Promise<AdminResult> {
   return run("team", async (staff) => {
     const u = await targetUser(userId, staff);

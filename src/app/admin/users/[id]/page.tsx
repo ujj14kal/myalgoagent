@@ -10,6 +10,7 @@ import { avatarInitials } from "@/lib/avatar";
 import UserActions from "@/components/admin/user-actions";
 import BrokerDisconnect from "@/components/admin/broker-disconnect";
 import LiveToggle from "@/components/admin/live-toggle";
+import StaticIpControl from "@/components/admin/static-ip-control";
 import { Card, Pill, TICKET_LABEL, TICKET_TONE, ago, ist } from "@/components/admin/ui";
 
 
@@ -37,6 +38,7 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
       suspendedAt: true,
       suspendedReason: true,
       liveTradingEnabledAt: true,
+      liveStaticIp: true,
       deletionScheduledFor: true,
       agentName: true,
       accounts: { select: { provider: true } },
@@ -99,6 +101,7 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
             <div className="flex-1">
               <UserActions userId={u.id} status={u.status} canManage={can(staff.role, "users.manage")} isSelf={u.id === staff.id} protectedOwner={role === "OWNER"} />
             </div>
+            {can(staff.role, "team") && <StaticIpControl userId={u.id} ip={u.liveStaticIp} />}
             {can(staff.role, "team") && <LiveToggle userId={u.id} enabled={!!u.liveTradingEnabledAt} />}
           </div>
           {u.status === "SUSPENDED" && u.suspendedReason && (

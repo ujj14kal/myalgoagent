@@ -62,9 +62,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <AgentChatProvider agentName={agentName}>
     <TutorialProvider initialAgentName={dbUser.agentName} tutorialCompleted={!!dbUser.tutorialCompletedAt}>
       <AgentToastProvider agentName={agentName}>
-        <div className="app-canvas flex min-h-screen">
+        <div className="app-canvas flex min-h-screen overflow-x-clip">
           <AppSidebar agentName={agentName} liveSessions={liveSessions} />
-          <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
             <AppTopbar user={session.user} unreadCount={unreadCount} agentName={agentName} liveSessions={liveSessions} isStaff={isStaff} brokers={brokers} />
             {announcement && <AnnouncementBanner {...announcement} />}
             <main className="mx-auto w-full max-w-[1400px] flex-1 p-4 md:p-6 lg:p-8">{children}</main>

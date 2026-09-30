@@ -98,11 +98,11 @@ export default async function Page() {
                 <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${relay ? "bg-brand-buy/10 text-[#0b6b30]" : "bg-brand-sell/10 text-[#9b1111]"}`}>{relay ? "active" : "not set up"}</span>
               </p>
               <p className="mt-2 text-xs leading-relaxed text-brand-navy/60">
-                {user?.liveStaticIp ? "This IP is yours alone." : "Shared for now — your own IP comes with the paid plan."} Register it as the static IP in each broker&apos;s API / developer settings: brokers only accept orders from the IP registered on your account.
+                This IP is assigned to your account only. Register it as the static IP in each broker&apos;s API / developer settings: brokers only accept orders from the IP registered on your account.
               </p>
             </>
           ) : (
-            <p className="mt-3 text-sm text-brand-navy/60">No static IP is set up yet, so brokers would reject live orders.</p>
+            <p className="mt-3 text-sm text-brand-navy/60">No static IP is assigned to your account yet. It comes with the live trading plan — we&apos;ll email it to you, and it will show here. Brokers reject live orders without one.</p>
           )}
           <ul className="mt-4 space-y-2 border-t border-black/[0.05] pt-3 text-sm">
             {[

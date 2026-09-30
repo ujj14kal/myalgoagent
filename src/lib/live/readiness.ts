@@ -43,7 +43,7 @@ export async function checkReadiness(userId: string, brokerId: string): Promise<
   const expected = registeredStaticIp(user?.liveStaticIp);
   try {
     const { ip, viaRelay } = await currentEgressIp();
-    add("Orders leave from your static IP", !!expected && ip === expected, expected ? `Brokers see ${ip}${ip === expected ? "" : ` — expected ${expected}`}` : `No static IP is set up yet (brokers see ${ip}${viaRelay ? "" : ", which changes"}).`);
+    add("Orders leave from your static IP", !!expected && ip === expected, expected ? `Brokers see ${ip}${ip === expected ? "" : ` — expected ${expected}`}` : `No static IP is assigned to your account yet${viaRelay ? "" : ` (brokers see ${ip}, which changes)`}.`);
   } catch {
     add("Orders leave from your static IP", false, "Couldn't reach the static-IP route.");
   }

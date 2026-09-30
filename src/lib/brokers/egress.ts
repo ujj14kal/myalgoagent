@@ -57,13 +57,10 @@ export async function currentEgressIp(): Promise<{ ip: string; viaRelay: boolean
 }
 
 /**
- * The static IP brokers should see for this user — their own once per-user IPs
- * are assigned, otherwise the platform's shared one (BROKER_STATIC_IP, or the
- * relay's address). Null when no static IP is set up.
+ * The static IP assigned to this user (set per account in the admin portal).
+ * Brokers tie a static IP to one client, so there's deliberately no shared
+ * fallback: an account without its own IP has none to register.
  */
 export function registeredStaticIp(userIp?: string | null): string | null {
-  if (userIp) return userIp;
-  if (process.env.BROKER_STATIC_IP) return process.env.BROKER_STATIC_IP;
-  const m = process.env.BROKER_EGRESS_URL?.match(/\/\/([\d.]+)(?::\d+)?/);
-  return m?.[1] ?? null;
+  return userIp || null;
 }
