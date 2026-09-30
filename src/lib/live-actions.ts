@@ -108,13 +108,14 @@ export async function placeOptionsBasket(input: Omit<BasketInput, "userId">): Pr
 
 // ---------- live deployments (strategies trading on the broker) ----------
 
-export async function goLive(input: { strategyId: string; broker: string; capital: number; mode: "AUTO" | "CONFIRM"; acknowledged: boolean }): Promise<LiveResult<{ id: string }>> {
+/** Take a strategy live. Orders are always sent automatically when its rules fire — the user authored every rule. */
+export async function goLive(input: { strategyId: string; broker: string; capital: number; acknowledged: boolean }): Promise<LiveResult<{ id: string }>> {
   const userId = await signedIn();
   if (!userId) return { ok: false, error: "Sign in again." };
   if (!input.acknowledged) return { ok: false, error: "Confirm you understand this places real orders on your account." };
   if (await checkRateLimit(`live-deploy:${userId}`, 10, 10 * 60_000)) return { ok: false, error: "Too many attempts — wait a few minutes." };
   try {
-    const d = await startDeployment(userId, input);
+    const d = await startDeployment(userId, { ...input, mode: "AUTO" });
     revalidatePath("/app/live-trading");
     revalidatePath("/app/dashboard");
     return { ok: true, data: { id: d.id } };

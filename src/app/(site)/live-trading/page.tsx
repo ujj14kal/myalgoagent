@@ -40,7 +40,7 @@ const sections: LegalSection[] = [
       "Live trading switched on for your account, with your risk limits and kill switch in place",
       "Logged in at your broker today, and a passed readiness check (it places no order)",
       "An explicit risk acknowledgment each time you press Go Live",
-      "Your choice of mode: confirm each order yourself, or let the strategy send its orders automatically",
+      "Orders are sent automatically when your own rules fire — every rule, the capital and the broker are yours to set",
       "You can pause, resume, exit the position or stop a live strategy at any time",
     ],
   },

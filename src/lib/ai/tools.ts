@@ -817,7 +817,7 @@ async function brokerGuide(userId: string, rawBroker?: string) {
           },
         }
       : {}),
-    liveOrders: "Rolling out account by account (see Live Trading). Real orders need the static IP shown on the Live Trading page registered on the user's broker account (a SEBI rule). 'Check I'm ready' verifies a broker without placing any order; 'Go Live' on a strategy page runs it live (Confirm or Automatic mode).",
+    liveOrders: "Rolling out account by account (see Live Trading). Real orders need the static IP shown on the Live Trading page registered on the user's broker account (a SEBI rule). 'Check I'm ready' verifies a broker without placing any order; 'Go Live' on a strategy page runs it live; its orders are sent automatically when its rules fire.",
   };
 }
 

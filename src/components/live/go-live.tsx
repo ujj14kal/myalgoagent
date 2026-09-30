@@ -33,7 +33,6 @@ export default function GoLive({
   const usable = brokers.filter((b) => b.ready && !liveOn.includes(b.id));
   const [broker, setBroker] = useState(usable[0]?.id ?? "");
   const [capital, setCapital] = useState(100000);
-  const [mode, setMode] = useState<"CONFIRM" | "AUTO">("CONFIRM");
   const [ack, setAck] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -93,26 +92,13 @@ export default function GoLive({
               <input type="number" min={1000} step={1000} value={capital} onChange={(e) => setCapital(Number(e.target.value))} className="w-full rounded-lg border border-brand-navy/15 px-3 py-2" />
               <span className="mt-1 block text-xs text-brand-navy/50">Used with the strategy&apos;s position size. Your per-order and daily limits in Risk Controls still apply.</span>
             </label>
-            <div>
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-brand-navy/45">When the rules fire</span>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {(
-                  [
-                    ["CONFIRM", "I confirm each order", "You get a notification; nothing is sent until you tap Send."],
-                    ["AUTO", "Send orders automatically", "Orders go to your broker as soon as the rules fire."],
-                  ] as const
-                ).map(([m, t, d]) => (
-                  <button key={m} type="button" onClick={() => setMode(m)} className={`rounded-xl p-3 text-left ring-1 ${mode === m ? "bg-brand-primary/[0.06] ring-brand-primary" : "ring-black/10"}`}>
-                    <span className="block text-sm font-semibold text-brand-navy">{t}</span>
-                    <span className="block text-xs text-brand-navy/55">{d}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+            <p className="rounded-xl bg-brand-primary/[0.05] px-3 py-2 text-xs leading-relaxed text-brand-navy/70">
+              <strong className="font-semibold text-brand-navy">Orders are sent automatically.</strong> When your strategy&apos;s entry or exit rules fire, the order goes straight to your broker — no extra tap needed. Pause or stop it any time from Live Trading.
+            </p>
             <label className="flex items-start gap-2 text-xs text-brand-navy/75">
               <input type="checkbox" className="mt-0.5" checked={ack} onChange={(e) => setAck(e.target.checked)} />
               <span>
-                I understand this places real orders on my broker account from this strategy&apos;s rules, that I can lose money, that I can pause or stop it at any time from Live Trading, and that I decided to deploy it — this isn&apos;t advice.
+                I understand this automatically places real orders on my broker account whenever this strategy&apos;s rules fire, that I can lose money, that I can pause or stop it at any time from Live Trading, and that I decided to deploy it — this isn&apos;t advice.
               </span>
             </label>
             {error && <p className="rounded-lg bg-brand-sell/5 px-3 py-2 text-sm text-brand-sell">{error}</p>}
@@ -121,7 +107,7 @@ export default function GoLive({
               disabled={!ack || pending || !broker}
               onClick={() =>
                 start(async () => {
-                  const r = await goLive({ strategyId, broker, capital, mode, acknowledged: ack });
+                  const r = await goLive({ strategyId, broker, capital, acknowledged: ack });
                   if (!r.ok) return setError(r.error);
                   router.push("/app/live-trading");
                 })
