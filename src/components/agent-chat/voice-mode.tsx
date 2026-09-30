@@ -31,6 +31,7 @@ export default function VoiceMode({
   onSend,
   isPending,
   lastReply,
+  firstSpeech,
   reviewOpen,
   sendError,
   onExit,
@@ -39,6 +40,8 @@ export default function VoiceMode({
   onSend: (text: string) => void;
   isPending: boolean;
   lastReply: { id: string; content: string } | null;
+  /** The first sentence of the latest reply, already made into audio by the server. */
+  firstSpeech: { messageId: string; mp3: string } | null;
   reviewOpen: boolean;
   sendError: string | null;
   onExit: () => void;
@@ -70,9 +73,11 @@ export default function VoiceMode({
   const isPendingRef = useRef(isPending);
   const reviewOpenRef = useRef(reviewOpen);
   const phaseRef = useRef<Phase>("connecting");
+  const firstSpeechRef = useRef(firstSpeech);
   useEffect(() => {
     lastReplyIdRef.current = lastReply?.id ?? null;
     isPendingRef.current = isPending;
+    firstSpeechRef.current = firstSpeech;
   });
   const setPhaseBoth = (p: Phase) => {
     phaseRef.current = p;
@@ -305,7 +310,8 @@ export default function VoiceMode({
       setCaption(spoken);
       captionRef.current = spoken;
       setPhaseBoth("speaking");
-      speakMessage(lastReply.id, { onEnd: afterSpeaking, onError: (m) => setProblem(m) }, lastReply.content);
+      const first = firstSpeechRef.current?.messageId === lastReply.id ? firstSpeechRef.current.mp3 : undefined;
+      speakMessage(lastReply.id, { onEnd: afterSpeaking, onError: (m) => setProblem(m) }, lastReply.content, first);
     }, 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps

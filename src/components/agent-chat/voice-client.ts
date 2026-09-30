@@ -223,13 +223,29 @@ export function speakingId(): string | null {
  * next is fetched while it plays — so speech begins much sooner than if the whole
  * reply had to be made first. Stops anything already playing.
  */
-export function speakMessage(messageId: string, h: { onStart?: () => void; onEnd?: () => void; onError?: (message: string) => void } = {}, content?: string) {
+export function speakMessage(
+  messageId: string,
+  h: { onStart?: () => void; onEnd?: () => void; onError?: (message: string) => void } = {},
+  content?: string,
+  /** The first piece's audio (MP3, base64) when the reply already carried it — starts without a request. */
+  firstAudio?: string
+) {
   stopSpeaking();
   const a = getPlayer();
   const pieces = content ? speechChunks(toSpeech(content)) : [];
   const total = Math.max(pieces.length, 1);
   const urlOf = (n: number) => `/api/agent/speech?m=${encodeURIComponent(messageId)}${pieces.length ? `&c=${n}` : ""}`;
   const me: Playing = { id: messageId, onEnd: h.onEnd, abort: new AbortController(), ahead: new Map() };
+  if (firstAudio && pieces.length) {
+    try {
+      const bin = atob(firstAudio);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      me.ahead.set(0, Promise.resolve(URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }))));
+    } catch {
+      /* unreadable audio: it will be fetched instead */
+    }
+  }
   playing = me;
   const mine = () => playing === me;
   let n = 0;
@@ -247,7 +263,7 @@ export function speakMessage(messageId: string, h: { onStart?: () => void; onEnd
   };
   const playPiece = async (k: number) => {
     if (!mine()) return;
-    if (k === 0) a.src = urlOf(0);
+    if (k === 0 && !me.ahead.has(0)) a.src = urlOf(0);
     else {
       const ready = await me.ahead.get(k);
       if (!mine()) return;

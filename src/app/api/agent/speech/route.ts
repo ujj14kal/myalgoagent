@@ -1,31 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PollyClient, SynthesizeSpeechCommand, type Engine, type LanguageCode, type VoiceId } from "@aws-sdk/client-polly";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { logError } from "@/lib/logger";
 import { AI_VOICE } from "@/lib/ai/config";
+import { synthesizeStream } from "@/lib/ai/speech-synth";
 import { speechChunks, toSpeech } from "@/lib/ai/speech-text";
 
 // Reads one of the agent's replies aloud. Takes a message id, not free text, so
 // it can only ever voice the user's own agent replies. With `c` it returns just
 // piece number c of the reply (see speechChunks), so the browser can start on the
 // first sentence while the rest is still being made.
-
-const clients = new Map<string, PollyClient>();
-const polly = (region: string) => {
-  let c = clients.get(region);
-  if (!c) clients.set(region, (c = new PollyClient({ region })));
-  return c;
-};
-
-async function synthesize(text: string, region: string, engine: Engine) {
-  const res = await polly(region).send(
-    new SynthesizeSpeechCommand({ Text: text, VoiceId: AI_VOICE.voiceId as VoiceId, Engine: engine, OutputFormat: "mp3", SampleRate: "24000", LanguageCode: AI_VOICE.languageCode as LanguageCode })
-  );
-  if (!res.AudioStream) throw new Error("Polly returned no audio");
-  return res.AudioStream.transformToWebStream();
-}
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -61,15 +45,9 @@ export async function GET(request: NextRequest) {
 
   let audio: ReadableStream;
   try {
-    audio = await synthesize(text, AI_VOICE.primary.region, AI_VOICE.primary.engine);
-  } catch (err) {
-    logError("agent-voice:speak-primary", err, { userId });
-    try {
-      audio = await synthesize(text, AI_VOICE.fallback.region, AI_VOICE.fallback.engine);
-    } catch (err2) {
-      logError("agent-voice:speak", err2, { userId });
-      return NextResponse.json({ error: "Voice isn't available right now." }, { status: 502 });
-    }
+    audio = await synthesizeStream(text, { userId });
+  } catch {
+    return NextResponse.json({ error: "Voice isn't available right now." }, { status: 502 });
   }
   // Streamed, so playback starts before the whole reply is synthesised.
   return new Response(audio, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "private, max-age=3600" } });

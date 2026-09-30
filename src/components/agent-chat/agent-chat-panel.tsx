@@ -397,6 +397,8 @@ export default function AgentChatPanel({
   const [view, setView] = useState<"chat" | "history">("chat");
   const [history, setHistory] = useState<AgentConversationSummary[]>([]);
   const [justReplied, setJustReplied] = useState(false);
+  /** Voice mode: the first sentence of the latest reply, already made by the server. */
+  const [firstSpeech, setFirstSpeech] = useState<{ messageId: string; mp3: string } | null>(null);
   const [isPending, startTransition] = useTransition();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -600,6 +602,7 @@ export default function AgentChatPanel({
           return;
         }
         setConversationId(res.conversationId);
+        setFirstSpeech(res.speech ? { messageId: res.reply.id, mp3: res.speech.mp3 } : null);
         setMessages((m) => [...m.filter((x) => x.id !== optimistic.id), res.userMessage, res.reply]);
         setJustReplied(true);
         // The agent prepared something — open the review straight away.
@@ -767,6 +770,7 @@ export default function AgentChatPanel({
                   onSend={(t) => send(t, false, true)}
                   isPending={isPending}
                   lastReply={messages.filter((m) => m.role === "assistant").at(-1) ?? null}
+                  firstSpeech={firstSpeech}
                   reviewOpen={!!reviewing}
                   sendError={error}
                   onExit={() => setVoiceOn(false)}

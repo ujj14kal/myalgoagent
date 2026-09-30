@@ -6,7 +6,9 @@ import { prisma } from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { logError } from "@/lib/logger";
 import { DEFAULT_AGENT_NAME } from "@/lib/agent-constants";
-import { AI_BLOCKED_REPLY as BLOCKED_REPLY, AI_LIMITS, AI_MODELS } from "@/lib/ai/config";
+import { AI_BLOCKED_REPLY as BLOCKED_REPLY, AI_LIMITS, AI_MODELS, AI_VOICE } from "@/lib/ai/config";
+import { speechChunks, toSpeech } from "@/lib/ai/speech-text";
+import { synthesizeBytes } from "@/lib/ai/speech-synth";
 import { buildSystemPrompt } from "@/lib/ai/system-prompt";
 import { converse } from "@/lib/ai/bedrock";
 import { AGENT_TOOLS, runAgentTool } from "@/lib/ai/tools";
@@ -98,7 +100,17 @@ export async function sendAgentMessage(input: {
   text: string;
   /** Spoken (voice mode): the agent allows for mis-heard words and answers in short spoken sentences. */
   voice?: boolean;
-}): Promise<{ ok: true; conversationId: string; userMessage: AgentChatMessage; reply: AgentChatMessage } | Fail> {
+}): Promise<
+  | {
+      ok: true;
+      conversationId: string;
+      userMessage: AgentChatMessage;
+      reply: AgentChatMessage;
+      /** Voice mode: the first sentence of the reply as MP3, so it can start playing without another request. */
+      speech?: { text: string; mp3: string };
+    }
+  | Fail
+> {
   const session = await auth();
   if (!session?.user?.id) return { ok: false, error: "Not signed in." };
   const userId = session.user.id;
@@ -183,13 +195,28 @@ export async function sendAgentMessage(input: {
         { role: "user" as const, text: forModel(raw) },
       ],
     };
+    // Voice: start making the first sentence's audio while the reply goes through its safety
+    // checks. The audio is only handed back if those checks pass and the text is unchanged.
+    let candidate: { text: string; audio: Promise<Uint8Array | null> } | null = null;
+    const onCandidate = input?.voice
+      ? (t: string) => {
+          const piece = speechChunks(toSpeech(t))[0];
+          if (!piece) return;
+          candidate = {
+            text: piece,
+            audio: checkRateLimit(`agent-speak:${userId}`, AI_VOICE.speakPerDay, 24 * 60 * 60_000)
+              .then((limited) => (limited ? null : synthesizeBytes(piece, { userId })))
+              .catch(() => null),
+          };
+        }
+      : undefined;
     let reply;
     try {
       try {
-        reply = await converse({ model: AI_MODELS.main, ...request });
+        reply = await converse({ model: AI_MODELS.main, onCandidate, ...request });
       } catch (err) {
         logError("agent-chat:bedrock-main", err, { userId, conversationId, model: AI_MODELS.main });
-        reply = await converse({ model: AI_MODELS.fallback, ...request });
+        reply = await converse({ model: AI_MODELS.fallback, onCandidate, ...request });
       }
     } catch (err) {
       logError("agent-chat:bedrock", err, { userId, conversationId });
@@ -206,22 +233,34 @@ export async function sendAgentMessage(input: {
       : reply.proposal
         ? honestProposalReply(reply.text, reply.proposal)
         : reply.text || BLOCKED_REPLY;
-    const saved = await prisma.agentMessage.create({
-      data: {
-        conversationId,
-        role: "ASSISTANT",
-        content,
-        model: reply.model,
-        inputTokens: reply.inputTokens,
-        outputTokens: reply.outputTokens,
-        latencyMs: reply.latencyMs,
-        guardrailHit: reply.guardrailHit,
-        ...(reply.proposal && !reply.guardrailHit ? { proposal: reply.proposal as unknown as Prisma.InputJsonValue } : {}),
-      },
-    });
-    await prisma.agentConversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } });
+    const [saved] = await Promise.all([
+      prisma.agentMessage.create({
+        data: {
+          conversationId,
+          role: "ASSISTANT",
+          content,
+          model: reply.model,
+          inputTokens: reply.inputTokens,
+          outputTokens: reply.outputTokens,
+          latencyMs: reply.latencyMs,
+          guardrailHit: reply.guardrailHit,
+          ...(reply.proposal && !reply.guardrailHit ? { proposal: reply.proposal as unknown as Prisma.InputJsonValue } : {}),
+        },
+      }),
+      prisma.agentConversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } }),
+    ]);
 
-    return { ok: true, conversationId, userMessage: toMessage(userMessage), reply: toMessage(saved) };
+    let speech: { text: string; mp3: string } | undefined;
+    if (input?.voice && !reply.guardrailHit && content) {
+      const first = speechChunks(toSpeech(content))[0];
+      const prepared = candidate as { text: string; audio: Promise<Uint8Array | null> } | null;
+      if (first && prepared && prepared.text === first) {
+        const bytes = await prepared.audio;
+        if (bytes) speech = { text: first, mp3: Buffer.from(bytes).toString("base64") };
+      }
+    }
+
+    return { ok: true, conversationId, userMessage: toMessage(userMessage), reply: toMessage(saved), ...(speech ? { speech } : {}) };
   } catch (err) {
     logError("agent-chat:send", err, { userId });
     return { ok: false, error: "Something went wrong. Please refresh the page and try again." };

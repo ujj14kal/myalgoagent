@@ -97,6 +97,7 @@ async function converseMantle({
   tools,
   runTool,
   fast,
+  onCandidate,
 }: {
   model: string;
   system: string;
@@ -104,6 +105,7 @@ async function converseMantle({
   tools?: MantleTool[];
   runTool?: ToolRunner;
   fast?: boolean;
+  onCandidate?: (text: string) => void;
 }): Promise<AgentReply> {
   const started = Date.now();
   const signal = AbortSignal.timeout(AI_LIMITS.timeoutMs);
@@ -176,6 +178,9 @@ async function converseMantle({
     }
   }
 
+  // The reply is ready but not yet checked: the caller may start preparing its voice
+  // meanwhile. Nothing made from it is released until the checks below pass.
+  onCandidate?.(text);
   const output = await checkGuardrail(text, "OUTPUT", signal);
   if (output.blocked) return { ...blocked(), inputTokens, outputTokens };
   return {
@@ -197,6 +202,8 @@ export async function converse(args: {
   runTool?: ToolRunner;
   /** Spoken conversation: answer with less deliberation so the reply comes back sooner. */
   fast?: boolean;
+  /** Called with the finished reply just before the safety checks on it (see converseMantle). */
+  onCandidate?: (text: string) => void;
 }): Promise<AgentReply> {
   // Tools run on the OpenAI-compatible endpoint; the runtime path answers without them.
   const reply = await (args.model.startsWith(MANTLE_PREFIX) ? converseMantle(args) : converseRuntime(args));
