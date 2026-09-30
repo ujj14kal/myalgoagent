@@ -128,13 +128,22 @@ export function closedCandles<T extends { time: number }>(candles: T[], timefram
   return closesAt <= nowSec ? candles : candles.slice(0, -1);
 }
 
-export async function syncPaperSession(session: PaperSessionState, allowNewEntries: boolean, market: MarketDataProvider): Promise<SyncResult> {
+export async function syncPaperSession(
+  session: PaperSessionState,
+  allowNewEntries: boolean,
+  market: MarketDataProvider,
+  opts: { includeForming?: boolean } = {},
+): Promise<SyncResult> {
   const timeframe = (session.timeframe ?? "1d") as CandleInterval;
   const range = paperSyncRange(timeframe);
-  // Only act on candles that have closed: the provider also returns the one
-  // still forming, and acting on it (then marking it synced) would both trade
-  // on a half-built candle and skip how it actually closed.
-  const candles = closedCandles(await market.getHistoricalCandles(session.instrumentSymbol, range, timeframe), timeframe);
+  const fetched = await market.getHistoricalCandles(session.instrumentSymbol, range, timeframe);
+  // A candle is only ever acted on once it has closed. A rule that fires on a
+  // candle fills at the NEXT candle's open, so a candle is processed only once
+  // its successor exists: forward tests wait for that next candle to close;
+  // live deployments (includeForming) use the one forming right now, so the
+  // order goes out at its open instead of a candle late.
+  const candles = opts.includeForming ? fetched : closedCandles(fetched, timeframe);
+  const actionable = opts.includeForming ? closedCandles(fetched, timeframe).length : candles.length - 1;
   const aux = await fetchAuxCandles(session.entryCondition, session.exitCondition, session.instrumentSymbol, range, timeframe, market);
 
   const { entry, exit } = evaluateConditionsPerBar(candles, session.entryCondition, session.exitCondition, aux);
@@ -220,7 +229,7 @@ export async function syncPaperSession(session: PaperSessionState, allowNewEntri
   let suppressedEntrySignal = false;
   let sizeTooSmall = false;
 
-  for (let i = 0; i < candles.length; i++) {
+  for (let i = 0; i < Math.min(actionable, candles.length - 1); i++) {
     if (session.lastSyncedTime !== null && candles[i].time <= session.lastSyncedTime) continue;
 
     if (!allowNewEntries && !state.position && entry[i]) {
