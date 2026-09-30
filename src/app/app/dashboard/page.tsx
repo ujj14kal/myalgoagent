@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Activity, Braces, FlaskConical, Landmark, Layers, LineChart, ShieldCheck, Sparkles, Star, Zap } from "lucide-react";
+import { Activity, Braces, FlaskConical, Landmark, Layers, LineChart, Radio, ShieldCheck, Sparkles, Star, Zap } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
@@ -27,6 +27,12 @@ import QuickActions from "@/components/dashboard/quick-actions";
 import { Card, CardHeader } from "@/components/ui/card";
 
 export const metadata = { title: "Dashboard", robots: { index: false } };
+
+/** Midnight IST today. */
+function istToday() {
+  const ist = new Date(Date.now() + 5.5 * 3_600_000);
+  return new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate()) - 5.5 * 3_600_000);
+}
 
 /** Logged in at the broker for today (its session hasn't expired). */
 function loggedInToday(b: { status: string; tokenExpiresAt: Date | null }) {
@@ -68,7 +74,11 @@ export default async function DashboardPage() {
   const todayPnlPct = totalStarting > 0 ? (pnl.today / totalStarting) * 100 : 0;
   const tests = [...rows].sort((a, b) => Number(b.session.status === "ACTIVE") - Number(a.session.status === "ACTIVE") || b.pnlPct - a.pnlPct).slice(0, 6);
   const best = rows.filter((r) => r.session.status === "ACTIVE").sort((a, b) => b.pnlPct - a.pnlPct)[0];
-  const brokerRows = await prisma.brokerConnection.findMany({ where: { userId }, select: { broker: true, status: true, tokenExpiresAt: true } });
+  const [brokerRows, liveDeployments, liveOrdersToday] = await Promise.all([
+    prisma.brokerConnection.findMany({ where: { userId }, select: { broker: true, status: true, tokenExpiresAt: true } }),
+    prisma.liveDeployment.findMany({ where: { userId, status: { in: ["ACTIVE", "PAUSED"] } }, orderBy: { startedAt: "desc" }, take: 8 }),
+    prisma.liveOrder.findMany({ where: { userId, createdAt: { gte: istToday() } }, orderBy: { createdAt: "desc" }, take: 6, select: { id: true, side: true, quantity: true, tradingSymbol: true, status: true, filledQuantity: true, averagePrice: true, createdAt: true } }),
+  ]);
 
   const isNewAccount = strategyCount === 0;
   const liveCount = rows.filter((r) => r.session.status === "ACTIVE").length;
@@ -118,6 +128,65 @@ export default async function DashboardPage() {
       />
 
       {isNewAccount && <DashboardEmptyState agentName={agentName} />}
+
+      {(liveDeployments.length > 0 || liveOrdersToday.length > 0) && (
+        <Card className="p-5">
+          <CardHeader
+            title="Live now"
+            subtitle="Real orders on your broker account"
+            icon={Radio}
+            action={<Link href="/app/live-trading" className="text-xs font-semibold text-brand-primary hover:underline">Live Trading →</Link>}
+          />
+          <div className="mt-3 grid gap-5 lg:grid-cols-2">
+            <div>
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-brand-navy/45">Live strategies</p>
+              {liveDeployments.length === 0 ? (
+                <p className="text-sm text-brand-navy/50">None running.</p>
+              ) : (
+                <ul className="divide-y divide-black/[0.04]">
+                  {liveDeployments.map((d) => {
+                    const waiting = ((d.pendingSignals as unknown as unknown[]) ?? []).length;
+                    return (
+                      <li key={d.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
+                        <span className={`h-2 w-2 rounded-full ${d.status === "ACTIVE" ? "animate-pulse bg-brand-buy" : "bg-brand-gold"}`} />
+                        <span className="font-semibold text-brand-navy">{d.strategyName}</span>
+                        <span className="text-xs text-brand-navy/50">
+                          {d.instrumentSymbol.replace(/\.NS$/, "")} · {brokerById(d.broker)?.name ?? d.broker}
+                        </span>
+                        <span className="ml-auto text-xs text-brand-navy/65">
+                          {d.status === "PAUSED" ? "paused" : d.positionQty > 0 ? `holding ${d.positionQty}` : "watching"}
+                          {waiting > 0 && <span className="ml-1 font-semibold text-brand-primary">· {waiting} to confirm</span>}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+            <div>
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-brand-navy/45">Today&apos;s live orders</p>
+              {liveOrdersToday.length === 0 ? (
+                <p className="text-sm text-brand-navy/50">No live orders today.</p>
+              ) : (
+                <ul className="divide-y divide-black/[0.04]">
+                  {liveOrdersToday.map((o) => (
+                    <li key={o.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
+                      <span className={`text-xs font-bold ${o.side === "BUY" ? "text-[#0b6b30]" : "text-[#9b1111]"}`}>{o.side}</span>
+                      <span className="text-brand-navy">
+                        {o.quantity} × {o.tradingSymbol}
+                      </span>
+                      <span className="ml-auto text-xs text-brand-navy/60">
+                        {o.status.replace("_", " ").toLowerCase()}
+                        {o.filledQuantity > 0 && o.averagePrice ? ` @ ₹${o.averagePrice.toFixed(2)}` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="p-5 lg:col-span-2">

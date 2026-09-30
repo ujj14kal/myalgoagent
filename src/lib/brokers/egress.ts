@@ -55,3 +55,15 @@ export async function currentEgressIp(): Promise<{ ip: string; viaRelay: boolean
   const res = await brokerFetch("https://checkip.amazonaws.com", { signal: AbortSignal.timeout(8000), cache: "no-store" });
   return { ip: (await res.text()).trim(), viaRelay: egressEnabled() };
 }
+
+/**
+ * The static IP brokers should see for this user — their own once per-user IPs
+ * are assigned, otherwise the platform's shared one (BROKER_STATIC_IP, or the
+ * relay's address). Null when no static IP is set up.
+ */
+export function registeredStaticIp(userIp?: string | null): string | null {
+  if (userIp) return userIp;
+  if (process.env.BROKER_STATIC_IP) return process.env.BROKER_STATIC_IP;
+  const m = process.env.BROKER_EGRESS_URL?.match(/\/\/([\d.]+)(?::\d+)?/);
+  return m?.[1] ?? null;
+}

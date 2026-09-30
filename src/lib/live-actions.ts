@@ -8,7 +8,9 @@ import { logError } from "@/lib/logger";
 import { BrokerError } from "@/lib/brokers/adapters";
 import { describeFailure } from "@/lib/brokers/failures";
 import { brokerById } from "@/lib/brokers/catalog";
-import { cancelLiveOrder, connectivityTest, LiveCheckError, refreshLiveOrder } from "@/lib/live/orders";
+import { cancelLiveOrder, LiveCheckError, refreshLiveOrder } from "@/lib/live/orders";
+import { checkReadiness, type Readiness } from "@/lib/live/readiness";
+import { confirmSignal, dismissSignal, exitNow, setDeploymentStatus, startDeployment } from "@/lib/live/deployments";
 import { placeBasket, previewBasket, type BasketInput, type BasketPreview } from "@/lib/live/options-basket";
 
 // The Live Trading page's actions. Results are returned, not thrown, so the
@@ -31,19 +33,17 @@ function explain(err: unknown, context: string, broker = "your broker"): { ok: f
   return { ok: false, error: `Something went wrong — it's been logged. Check the order in ${broker === "your broker" ? "your broker's app" : `your ${broker} app`} before retrying.` };
 }
 
-export type TestStep = { step: string; ok: boolean; detail?: string };
-
-export async function runConnectivityTest(broker: string, instrumentSymbol: string): Promise<LiveResult<TestStep[]>> {
+/** "Ready to go live?" — checks the whole order path without placing any order. */
+export async function runReadinessCheck(broker: string): Promise<LiveResult<Readiness>> {
   const userId = await signedIn();
   if (!userId) return { ok: false, error: "Sign in again." };
-  if (await checkRateLimit(`live-test:${userId}`, 5, 10 * 60_000)) return { ok: false, error: "Too many test orders — try again in a few minutes." };
+  if (await checkRateLimit(`live-ready:${userId}`, 10, 5 * 60_000)) return { ok: false, error: "Checked too often — try again in a few minutes." };
   try {
-    const { steps } = await connectivityTest(userId, broker, instrumentSymbol);
+    const r = await checkReadiness(userId, broker);
     revalidatePath("/app/live-trading");
-    revalidatePath("/app/orders");
-    return { ok: true, data: steps };
+    return { ok: true, data: r };
   } catch (err) {
-    return explain(err, "live.test", brokerById(broker)?.name);
+    return explain(err, "live.readiness", brokerById(broker)?.name);
   }
 }
 
@@ -103,5 +103,72 @@ export async function placeOptionsBasket(input: Omit<BasketInput, "userId">): Pr
     return { ok: true, data: { message: r.message, failedAt: r.failedAt } };
   } catch (err) {
     return explain(err, "live.basket", brokerById(input.broker)?.name);
+  }
+}
+
+// ---------- live deployments (strategies trading on the broker) ----------
+
+export async function goLive(input: { strategyId: string; broker: string; capital: number; mode: "AUTO" | "CONFIRM"; acknowledged: boolean }): Promise<LiveResult<{ id: string }>> {
+  const userId = await signedIn();
+  if (!userId) return { ok: false, error: "Sign in again." };
+  if (!input.acknowledged) return { ok: false, error: "Confirm you understand this places real orders on your account." };
+  if (await checkRateLimit(`live-deploy:${userId}`, 10, 10 * 60_000)) return { ok: false, error: "Too many attempts — wait a few minutes." };
+  try {
+    const d = await startDeployment(userId, input);
+    revalidatePath("/app/live-trading");
+    revalidatePath("/app/dashboard");
+    return { ok: true, data: { id: d.id } };
+  } catch (err) {
+    return explain(err, "live.deploy", brokerById(input.broker)?.name);
+  }
+}
+
+export async function setDeployment(id: string, status: "ACTIVE" | "PAUSED" | "STOPPED"): Promise<LiveResult> {
+  const userId = await signedIn();
+  if (!userId) return { ok: false, error: "Sign in again." };
+  try {
+    await setDeploymentStatus(userId, id, status);
+    revalidatePath("/app/live-trading");
+    revalidatePath("/app/dashboard");
+    return { ok: true };
+  } catch (err) {
+    return explain(err, "live.deploy.status");
+  }
+}
+
+export async function confirmDeploymentSignal(id: string, index: number): Promise<LiveResult> {
+  const userId = await signedIn();
+  if (!userId) return { ok: false, error: "Sign in again." };
+  if (await checkRateLimit(`live-confirm:${userId}`, 20, 60_000)) return { ok: false, error: "Too fast — wait a moment." };
+  try {
+    const o = await confirmSignal(userId, id, index);
+    revalidatePath("/app/live-trading");
+    return o.status === "REJECTED" || o.status === "FAILED" ? { ok: false, error: `Not accepted: ${o.rejectReason ?? o.status}` } : { ok: true, message: "Sent to your broker." };
+  } catch (err) {
+    return explain(err, "live.deploy.confirm");
+  }
+}
+
+export async function dismissDeploymentSignal(id: string, index: number): Promise<LiveResult> {
+  const userId = await signedIn();
+  if (!userId) return { ok: false, error: "Sign in again." };
+  try {
+    await dismissSignal(userId, id, index);
+    revalidatePath("/app/live-trading");
+    return { ok: true };
+  } catch (err) {
+    return explain(err, "live.deploy.dismiss");
+  }
+}
+
+export async function exitDeploymentNow(id: string): Promise<LiveResult> {
+  const userId = await signedIn();
+  if (!userId) return { ok: false, error: "Sign in again." };
+  try {
+    const o = await exitNow(userId, id);
+    revalidatePath("/app/live-trading");
+    return o.status === "REJECTED" || o.status === "FAILED" ? { ok: false, error: `Not accepted: ${o.rejectReason ?? o.status}` } : { ok: true, message: "Exit order sent." };
+  } catch (err) {
+    return explain(err, "live.deploy.exit");
   }
 }

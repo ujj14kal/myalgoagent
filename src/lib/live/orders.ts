@@ -35,8 +35,10 @@ export type PlaceInput = {
   product: "CNC" | "MIS";
   price?: number;
   triggerPrice?: number;
-  purpose: "test" | "entry" | "exit" | "manual";
+  purpose: "entry" | "exit" | "manual" | "strategy";
   reason?: string;
+  /** Set when a live deployment places the order. */
+  deploymentId?: string;
 };
 
 const IST_MS = 330 * 60_000;
@@ -165,6 +167,7 @@ export async function placeLiveOrder(input: PlaceInput): Promise<LiveOrder> {
       triggerPrice: triggerPrice ?? null,
       purpose: input.purpose,
       reason: note,
+      deploymentId: input.deploymentId ?? null,
     },
   });
   await event(order.id, "created", { side: input.side, quantity: input.quantity, orderType, price: price ?? null, triggerPrice: triggerPrice ?? null, purpose: input.purpose, nseToken: eq.token, tick: eq.tick });
@@ -247,42 +250,4 @@ export async function cancelLiveOrder(orderId: string, userId: string): Promise<
   const brokerStatus = await broker.cancel(ctx, order.brokerOrderId, segmentOf(order));
   await event(order.id, "cancel_requested", { brokerStatus });
   return refreshLiveOrder(order.id, userId);
-}
-
-const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/**
- * End-to-end check without trading: a 1-share limit BUY about 8% below the
- * last price (inside the exchange's price band, so it rests instead of being
- * rejected, but far enough away not to fill), read back, then cancelled.
- */
-export async function connectivityTest(userId: string, brokerId: string, instrumentSymbol: string) {
-  const name = brokerById(brokerId)?.name ?? brokerId;
-  const steps: { step: string; ok: boolean; detail?: string }[] = [];
-  const eq = await resolve(instrumentSymbol);
-  const last = await lastPrice(userId, instrumentSymbol);
-  const price = onTick(last * 0.92, eq.tick, "down");
-  steps.push({ step: `Last price ₹${last.toFixed(2)} → test limit buy 1 share at ₹${price} (tick ₹${eq.tick})`, ok: true });
-  let order = await placeLiveOrder({ userId, broker: brokerId, instrumentSymbol, side: "BUY", quantity: 1, orderType: "LIMIT", product: "CNC", price, purpose: "test", reason: "Connectivity test (placed far from the market, then cancelled)" });
-  if (order.status !== "OPEN") {
-    steps.push({ step: `Place the order at ${name} through the static IP`, ok: false, detail: order.rejectReason ?? order.status });
-    return { order, steps };
-  }
-  steps.push({ step: `${name} accepted the order from the static IP`, ok: true, detail: `Order ${order.brokerOrderId}` });
-  await pause(1500);
-  order = await refreshLiveOrder(order.id, userId);
-  const mismatch = order.rejectReason?.includes("reported this order as");
-  steps.push({ step: "Read it back and check it's the right stock", ok: !mismatch, detail: mismatch ? order.rejectReason! : (order.brokerStatus ?? order.status) });
-  if (mismatch) return { order, steps };
-  if (order.status === "OPEN" || order.status === "TRIGGER_PENDING") {
-    order = await cancelLiveOrder(order.id, userId);
-    for (let i = 0; i < 3 && order.status === "OPEN"; i++) {
-      await pause(1500);
-      order = await refreshLiveOrder(order.id, userId);
-    }
-    steps.push({ step: "Cancel it", ok: order.status === "CANCELLED", detail: order.brokerStatus ?? order.status });
-  } else {
-    steps.push({ step: "Cancel it", ok: false, detail: `Order is ${order.status.toLowerCase().replace("_", " ")} — check it in your ${name} app.` });
-  }
-  return { order, steps };
 }

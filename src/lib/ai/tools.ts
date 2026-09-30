@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { registeredStaticIp } from "@/lib/brokers/egress";
 import { BROKERS, brokerById, callbackUrl } from "@/lib/brokers/catalog";
 import { decodeFailure, describeFailure } from "@/lib/brokers/failures";
 import { callbackOrigin } from "@/lib/brokers/service";
@@ -135,6 +136,14 @@ export const AGENT_TOOLS: MantleTool[] = [
       name: "get_my_broker_account",
       description: "The user's real broker account as their broker reports it now (read-only): funds/margin, holdings, positions, today's orders. Only when they ask about their account.",
       parameters: { type: "object", properties: { broker: { type: "string", description: "broker id (groww, zerodha, upstox…); first connected one if omitted" } } },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_my_live_trading",
+      description: "The user's live trading status (read-only): whether it's on, the static IP to register, each broker's login/readiness, their live strategies (mode, status, position, signals waiting) and today's live orders.",
+      parameters: { type: "object", properties: {} },
     },
   },
   {
@@ -808,7 +817,7 @@ async function brokerGuide(userId: string, rawBroker?: string) {
           },
         }
       : {}),
-    liveOrders: "Rolling out account by account (see Live Trading). Real orders need the static IP shown on the admin/Live Trading setup registered on the user's broker account (a SEBI rule, one per client).",
+    liveOrders: "Rolling out account by account (see Live Trading). Real orders need the static IP shown on the Live Trading page registered on the user's broker account (a SEBI rule). 'Check I'm ready' verifies a broker without placing any order; 'Go Live' on a strategy page runs it live (Confirm or Automatic mode).",
   };
 }
 
@@ -919,6 +928,28 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
       return { result: await getOptionChainSummary(userId, str(a.underlying), str(a.expiry) || undefined).catch(() => ({ error: "Couldn't load the option chain right now." })) };
     case "get_my_broker_account":
       return { result: await getBrokerAccount(userId, str(a.broker) || undefined).catch(() => ({ error: "Couldn't read the broker account right now." })) };
+    case "get_my_live_trading": {
+      const [u, conns, deps, orders] = await Promise.all([
+        prisma.user.findUnique({ where: { id: userId }, select: { liveTradingEnabledAt: true, liveStaticIp: true } }),
+        prisma.brokerConnection.findMany({ where: { userId }, select: { broker: true, status: true, tokenExpiresAt: true, liveReadyAt: true } }),
+        prisma.liveDeployment.findMany({ where: { userId, status: { in: ["ACTIVE", "PAUSED"] } }, select: { strategyName: true, instrumentSymbol: true, broker: true, mode: true, status: true, positionQty: true, positionAvgPrice: true, pendingSignals: true, lastError: true } }),
+        prisma.liveOrder.findMany({ where: { userId, createdAt: { gte: new Date(Date.now() - 86_400_000) } }, orderBy: { createdAt: "desc" }, take: 10, select: { side: true, quantity: true, tradingSymbol: true, status: true, filledQuantity: true, averagePrice: true, createdAt: true } }),
+      ]);
+      const now = Date.now();
+      return {
+        result: {
+          liveTradingOn: !!u?.liveTradingEnabledAt,
+          staticIpToRegister: registeredStaticIp(u?.liveStaticIp),
+          brokers: conns.map((c) => ({
+            broker: c.broker,
+            loggedInToday: c.status === "CONNECTED" && !!c.tokenExpiresAt && c.tokenExpiresAt.getTime() > now,
+            readinessPassedWithin24h: !!c.liveReadyAt && now - c.liveReadyAt.getTime() < 86_400_000,
+          })),
+          liveStrategies: deps.map((d) => ({ ...d, pendingSignals: ((d.pendingSignals as unknown as unknown[]) ?? []).length })),
+          recentLiveOrders: orders,
+        },
+      };
+    }
     case "list_custom_indicators": {
       const rows = await prisma.customIndicator.findMany({ where: { userId }, orderBy: { name: "asc" }, select: { name: true, description: true, def: true } });
       return { result: rows.map((r) => ({ name: r.name, definition: describeCustom(r.def as unknown as CustomIndicatorDef), description: r.description })) };

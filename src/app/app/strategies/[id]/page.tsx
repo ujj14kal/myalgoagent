@@ -18,6 +18,8 @@ import StrategyStatusControls from "@/components/strategy-status-controls";
 import WebhookPanel from "@/components/webhook-panel";
 import { Layers } from "lucide-react";
 import PageHeader from "@/components/ui/page-header";
+import GoLive from "@/components/live/go-live";
+import { brokerReadiness } from "@/lib/live/broker-readiness";
 import StatusBadge from "@/components/ui/status-badge";
 
 export const metadata = { title: "Strategy", robots: { index: false } };
@@ -43,6 +45,13 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
   if (!strategy) notFound();
 
   const isWebhook = strategy.mode === "WEBHOOK";
+  // Go live: brokers logged in today and checked ready in the last 24 hours.
+  const [liveUser, liveConns, liveDeployments] = await Promise.all([
+    prisma.user.findUnique({ where: { id: session.user.id }, select: { liveTradingEnabledAt: true } }),
+    prisma.brokerConnection.findMany({ where: { userId: session.user.id }, select: { broker: true, status: true, tokenExpiresAt: true, liveReadyAt: true } }),
+    prisma.liveDeployment.findMany({ where: { strategyId: strategy.id, status: { in: ["ACTIVE", "PAUSED"] } }, select: { broker: true } }),
+  ]);
+  const goLiveBrokers = brokerReadiness(liveConns);
   const entryCondition = strategy.entryCondition as unknown as ConditionNode;
   const exitCondition = strategy.exitCondition as unknown as ConditionNode;
 
@@ -111,7 +120,22 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
             <StatusBadge status={strategy.direction === "SHORT" ? "SHORT" : "LONG"} />
           </span>
         }
-        actions={<StrategyStatusControls strategyId={strategy.id} status={strategy.status} />}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            {!isWebhook && (
+              <GoLive
+                strategyId={strategy.id}
+                strategyName={strategy.name}
+                symbol={strategy.instrument.symbol}
+                brokers={goLiveBrokers}
+                enabled={!!liveUser?.liveTradingEnabledAt}
+                liveOn={liveDeployments.map((d) => d.broker)}
+                blocker={!strategy.instrument.symbol.endsWith(".NS") ? "Indices can't be traded directly — live strategies trade NSE stocks." : strategy.status === "DELETED" ? "This strategy has been deleted." : null}
+              />
+            )}
+            <StrategyStatusControls strategyId={strategy.id} status={strategy.status} />
+          </div>
+        }
       />
 
       {!isWebhook && (
