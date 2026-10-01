@@ -18,8 +18,16 @@ import { LiveCheckError, session } from "./orders";
 export type ReadinessStep = { step: string; ok: boolean; detail?: string };
 export type Readiness = { ready: boolean; steps: ReadinessStep[]; checkedAt: string };
 
-const msg = (err: unknown, broker: string) =>
-  err instanceof BrokerError ? (err.failure.detail ?? describeFailure(err.failure, broker).title) : err instanceof LiveCheckError ? err.message : "No answer";
+const msg = (err: unknown, broker: string) => {
+  if (err instanceof BrokerError) {
+    // The broker refusing a read is nearly always an expired login (they end every day) or an IP that isn't registered there.
+    if (err.failure.code === "session_rejected") {
+      return `${broker} refused the request. Log in to ${broker} again for today and run the check again — if it still fails, check that this static IP is registered on your ${broker} account.${err.failure.detail ? ` (${broker} said: “${err.failure.detail}”)` : ""}`;
+    }
+    return err.failure.detail ?? describeFailure(err.failure, broker).title;
+  }
+  return err instanceof LiveCheckError ? err.message : "No answer";
+};
 
 export async function checkReadiness(userId: string, brokerId: string): Promise<Readiness> {
   const name = brokerById(brokerId)?.name ?? brokerId;

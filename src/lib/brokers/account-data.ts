@@ -96,6 +96,16 @@ function trade(r: Record<string, unknown>): AccountTrade {
 const growwGet = async (ctx: LiveCtx, path: string) =>
   obj(obj(await http(`https://api.groww.in/v1${path}`, { headers: { Authorization: `Bearer ${ctx.token}`, "X-API-VERSION": "1.0" } })).payload);
 
+/**
+ * Cash and F&O are separate calls. One failing is fine (an account without F&O answers only
+ * for cash); both failing means the broker refused us, and that must show — not read as "no orders".
+ */
+async function bothSegments<T>(a: Promise<T>, b: Promise<T>): Promise<[T | Record<string, never>, T | Record<string, never>]> {
+  const [x, y] = await Promise.allSettled([a, b]);
+  if (x.status === "rejected" && y.status === "rejected") throw x.reason;
+  return [x.status === "fulfilled" ? x.value : {}, y.status === "fulfilled" ? y.value : {}];
+}
+
 const groww: AccountReader = {
   async funds(ctx) {
     const p = await growwGet(ctx, "/margins/detail/user");
@@ -103,11 +113,11 @@ const groww: AccountReader = {
   },
   holdings: async (ctx) => rows((await growwGet(ctx, "/holdings/user")).holdings).map(holding),
   async positions(ctx) {
-    const [cash, fno] = await Promise.all([growwGet(ctx, "/positions/user?segment=CASH").catch(() => ({})), growwGet(ctx, "/positions/user?segment=FNO").catch(() => ({}))]);
+    const [cash, fno] = await bothSegments(growwGet(ctx, "/positions/user?segment=CASH"), growwGet(ctx, "/positions/user?segment=FNO"));
     return [...rows(obj(cash).positions), ...rows(obj(fno).positions)].map(position);
   },
   async orders(ctx) {
-    const [cash, fno] = await Promise.all([growwGet(ctx, "/order/list?segment=CASH&page=0&page_size=100").catch(() => ({})), growwGet(ctx, "/order/list?segment=FNO&page=0&page_size=100").catch(() => ({}))]);
+    const [cash, fno] = await bothSegments(growwGet(ctx, "/order/list?segment=CASH&page=0&page_size=100"), growwGet(ctx, "/order/list?segment=FNO&page=0&page_size=100"));
     return [...rows(obj(cash).order_list), ...rows(obj(fno).order_list)].map(order);
   },
 };

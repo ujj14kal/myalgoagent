@@ -37,3 +37,21 @@ describe("nextIstClock", () => {
 it("builds the callback URL users paste into their broker app", () => {
   expect(callbackUrl("https://myalgoagent.com/", "dhan")).toBe("https://myalgoagent.com/api/brokers/dhan/callback");
 });
+
+describe("istWallClock", () => {
+  it("reads an offset-less time as IST, whatever the server's time zone", async () => {
+    const { istWallClock } = await import("./adapters");
+    expect(istWallClock("2026-10-01T06:00:00")?.toISOString()).toBe("2026-10-01T00:30:00.000Z");
+  });
+  it("leaves a time that already has an offset alone", async () => {
+    const { istWallClock } = await import("./adapters");
+    expect(istWallClock("2026-10-01T06:00:00Z")?.toISOString()).toBe("2026-10-01T06:00:00.000Z");
+    expect(istWallClock("2026-10-01T06:00:00+05:30")?.toISOString()).toBe("2026-10-01T00:30:00.000Z");
+  });
+  it("returns null for nothing or nonsense", async () => {
+    const { istWallClock } = await import("./adapters");
+    expect(istWallClock(undefined)).toBeNull();
+    expect(istWallClock("")).toBeNull();
+    expect(istWallClock("not a date")).toBeNull();
+  });
+});

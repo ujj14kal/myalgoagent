@@ -91,6 +91,17 @@ export function nextIstClock(hour: number, minute: number, now = new Date()): Da
   return new Date(target);
 }
 
+/**
+ * A broker's expiry timestamp. Several brokers send an IST wall-clock time with no
+ * offset ("2026-10-01T06:00:00"), which a server running in UTC would read 5½ hours
+ * late — leaving a login that has already expired looking valid. No offset means IST.
+ */
+export function istWallClock(raw: string | null | undefined): Date | null {
+  if (!raw) return null;
+  const d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(raw) ? raw : `${raw}+05:30`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function need(v: string | undefined, code: FailureCode = "bad_keys"): string {
   if (!v) throw new BrokerError(code);
   return v;
@@ -119,11 +130,10 @@ const dhan: BrokerAdapter = {
     const accessToken = str(body.accessToken);
     if (status >= 400 || !accessToken) fail(status, body, "unknown");
     // expiryTime is an IST wall-clock time without an offset.
-    const raw = str(body.expiryTime);
-    const parsed = raw ? new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(raw) ? raw : `${raw}+05:30`) : null;
+    const parsed = istWallClock(str(body.expiryTime));
     return {
       accessToken,
-      expiresAt: parsed && !Number.isNaN(parsed.getTime()) ? parsed : new Date(Date.now() + 24 * 3_600_000),
+      expiresAt: parsed ?? new Date(Date.now() + 24 * 3_600_000),
       accountName: str(body.dhanClientName),
       brokerClientId: str(body.dhanClientId) ?? c.clientId,
     };
@@ -331,8 +341,9 @@ const groww: BrokerAdapter = {
     const payload = obj(body.payload);
     const accessToken = str(body.token) ?? str(payload.token);
     if (status >= 400 || !accessToken) fail(status, body, totp ? "bad_keys" : "approval_needed");
-    const expiry = new Date(str(body.expiry) ?? str(payload.expiry) ?? "");
-    return { accessToken, expiresAt: Number.isNaN(expiry.getTime()) ? nextIstClock(6, 0) : expiry };
+    // Groww sends the expiry as an IST wall-clock time (06:00 the next morning), without an offset.
+    const expiry = istWallClock(str(body.expiry) ?? str(payload.expiry));
+    return { accessToken, expiresAt: expiry ?? nextIstClock(6, 0) };
   },
   async profile(_c, accessToken) {
     const { status, body } = await call("https://api.groww.in/v1/margins/detail/user", { headers: { ...GROWW_HEADERS, Authorization: `Bearer ${accessToken}` } });
