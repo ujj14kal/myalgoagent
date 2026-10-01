@@ -43,23 +43,25 @@ describe("instrument symbols", () => {
   });
 });
 
-import { afterEach, vi } from "vitest";
+import { beforeEach, vi } from "vitest";
 import { placeGrowwOrder } from "./groww-orders";
+import { brokerFetch } from "./egress";
+
+// The test never reaches the network, whatever the environment (the build machine routes broker calls through the static-IP relay).
+vi.mock("./egress", () => ({ brokerFetch: vi.fn() }));
 
 describe("what Groww receives for every kind of order", () => {
-  afterEach(() => vi.unstubAllGlobals());
-
   const sent: Record<string, unknown>[] = [];
   function stubGroww() {
     sent.length = 0;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (_url: string, init: { body?: string }) => {
-        sent.push(JSON.parse(init.body ?? "{}"));
-        return { status: 200, text: async () => JSON.stringify({ status: "SUCCESS", payload: { groww_order_id: "GLT123", order_status: "NEW", remark: null } }) };
-      }),
-    );
+    vi.mocked(brokerFetch).mockImplementation((async (_url: string, init: { body?: string }) => {
+      sent.push(JSON.parse(init.body ?? "{}"));
+      return { status: 200, text: async () => JSON.stringify({ status: "SUCCESS", payload: { groww_order_id: "GLT123", order_status: "NEW", remark: null } }) };
+    }) as never);
   }
+  beforeEach(() => {
+    vi.mocked(brokerFetch).mockReset();
+  });
 
   const types = ["MARKET", "LIMIT", "SL", "SL_M"] as const;
   const products = ["MIS", "CNC"] as const;
