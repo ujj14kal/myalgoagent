@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { runDailyJob, runMarketHoursJob } from "@/lib/scheduled-jobs";
+import { runDailyJob, runLiveJob, runMarketHoursJob } from "@/lib/scheduled-jobs";
 import type { AdminRole, AnnouncementLevel, TicketPriority, TicketStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { assertStaff, isBuiltInOwner, StaffError, type Capability, type Staff } from "@/lib/admin/access";
@@ -308,13 +308,13 @@ export async function setJobSchedule(job: JobName, enabled: boolean): Promise<Ad
 export async function runJobNow(job: JobName): Promise<AdminResult> {
   return run("system", async (staff) => {
     if (!JOBS[job]) return { ok: false, error: "Unknown job." };
-    const summary = job === "paper-sync" ? await recordJob(job, runMarketHoursJob) : await recordJob(job, runDailyJob);
+    const summary = job === "paper-sync" ? await recordJob(job, runMarketHoursJob) : job === "live-deployments" ? await recordJob(job, runLiveJob) : await recordJob(job, runDailyJob);
     await audit(staff, "job.run", { type: "job", id: job }, `Ran ${JOBS[job].label} manually`, summary);
     revalidatePath("/admin", "layout");
     const s = summary as unknown as Record<string, number>;
     return {
       ok: true,
-      message: job === "paper-sync" ? `Synced ${s.synced} of ${s.total} active session${s.total === 1 ? "" : "s"}${s.failed ? ` (${s.failed} failed)` : ""}.` : `Purged ${s.purged} account${s.purged === 1 ? "" : "s"}${s.failed ? `, ${s.failed} failed` : ""}.`,
+      message: job === "live-deployments" ? `Checked ${s.total} live strateg${s.total === 1 ? "y" : "ies"}${s.acted ? `, ${s.acted} sent an order` : ""}${s.failed ? ` (${s.failed} failed)` : ""}.` : job === "paper-sync" ? `Synced ${s.synced} of ${s.total} active session${s.total === 1 ? "" : "s"}${s.failed ? ` (${s.failed} failed)` : ""}.` : `Purged ${s.purged} account${s.purged === 1 ? "" : "s"}${s.failed ? `, ${s.failed} failed` : ""}.`,
     };
   });
 }

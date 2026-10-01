@@ -198,11 +198,20 @@ async function send(d: LiveDeployment, o: { side: "BUY" | "SELL"; quantity: numb
   return order;
 }
 
+/** A check started this recently owns the strategy; a second run (schedules can overlap) skips it. */
+const CLAIM_MS = 25_000;
+
 /** One pass for one deployment: reconcile fills, run the rules on the newest candle, act on what they decided. */
 export async function runDeployment(id: string): Promise<"idle" | "acted" | "paused"> {
   const d = await prisma.liveDeployment.findUnique({ where: { id } });
   if (!d || d.status !== "ACTIVE") return "idle";
   if (!inMarketWindow(new Date())) return "idle";
+  // One check at a time per strategy: if another run took it moments ago (or is still going), leave it.
+  const claimed = await prisma.liveDeployment.updateMany({
+    where: { id, status: "ACTIVE", OR: [{ lastCheckedAt: null }, { lastCheckedAt: { lt: new Date(Date.now() - CLAIM_MS) } }] },
+    data: { lastCheckedAt: new Date() },
+  });
+  if (claimed.count === 0) return "idle";
 
   const real = await reconcile(d);
   const state = d.engineState as unknown as PaperSessionState;

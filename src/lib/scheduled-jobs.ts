@@ -9,18 +9,19 @@ import { runLiveDeployments } from "@/lib/live/deployments";
 // What each scheduled job does — shared by the EventBridge-triggered routes and
 // the admin portal's "Run now", so both always do the same thing.
 
-/** Every 5 min in market hours: live strategies first (real orders are time-sensitive), then equity and options forward tests. */
+/** Every minute in market hours: the user's live strategies, which send real orders (time-sensitive, so on their own schedule). */
+export async function runLiveJob() {
+  return runLiveDeployments(45_000);
+}
+
+/** Every 5 min in market hours: equity forward tests, then options forward tests. */
 export async function runMarketHoursJob() {
-  const live = await runLiveDeployments(20_000).catch((err) => {
-    logError("live.deployments.scheduled", err);
-    return null;
-  });
   const equity = await runScheduledPaperSync();
   const options = await runScheduledOptionForwardTests(20_000).catch((err) => {
     logError("options.forward.scheduled", err);
     return { total: 0, checked: 0, failed: -1, ms: 0 };
   });
-  return { ...equity, options, live };
+  return { ...equity, options };
 }
 
 /** Daily: purge accounts past their deletion date, then add newly listed NSE stocks. */

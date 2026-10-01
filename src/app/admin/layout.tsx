@@ -19,7 +19,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const [openCases, openFeedback, failedJobs] = await Promise.all([
     prisma.supportCase.count({ where: { status: "OPEN" } }),
     prisma.feedback.count({ where: { status: "OPEN" } }),
-    prisma.jobRun.count({ where: { ok: false, job: { in: ["paper-sync", "purge-deleted-accounts"] }, startedAt: { gte: daysAgo(1) } } }),
+    prisma.jobRun.count({ where: { ok: false, job: { in: ["paper-sync", "live-deployments", "purge-deleted-accounts"] }, startedAt: { gte: daysAgo(1) } } }),
   ]);
 
   const items: AdminNavItem[] = [

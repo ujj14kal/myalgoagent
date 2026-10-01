@@ -3,11 +3,12 @@ import { logError } from "@/lib/logger";
 import { internalSecretMatches } from "@/lib/internal-auth";
 import { inMarketWindow } from "@/lib/paper/market-window";
 import { recordJob } from "@/lib/jobs";
-import { runMarketHoursJob } from "@/lib/scheduled-jobs";
+import { runLiveJob, runMarketHoursJob } from "@/lib/scheduled-jobs";
 
-// Called every few minutes on weekdays by an EventBridge schedule, so open
-// forward-test trades close on their own when a stop-loss, target or trailing stop
-// is hit — the user doesn't have to open the session and press Sync.
+// Called on weekdays by EventBridge schedules, so open forward-test trades close on
+// their own when a stop-loss, target or trailing stop is hit — the user doesn't have
+// to open the session and press Sync. `?only=live` runs just the live strategies
+// (every minute); without it, the forward tests (every 5 minutes).
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -20,6 +21,7 @@ export async function POST(req: NextRequest) {
   if (!force && !inMarketWindow(new Date())) return NextResponse.json({ skipped: "market closed" });
 
   try {
+    if (req.nextUrl.searchParams.get("only") === "live") return NextResponse.json(await recordJob("live-deployments", runLiveJob));
     return NextResponse.json(await recordJob("paper-sync", runMarketHoursJob));
   } catch (err) {
     logError("api/internal/sync-paper-sessions", err);
