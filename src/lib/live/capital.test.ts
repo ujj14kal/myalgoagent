@@ -26,3 +26,30 @@ describe("capitalProblem", () => {
     expect(msg).toContain("5×");
   });
 });
+
+import { fitToOrderLimit, killSwitchBlocks } from "./capital";
+
+describe("fitToOrderLimit", () => {
+  it("leaves an order inside the limit alone", () => {
+    expect(fitToOrderLimit(10, 295, 25_000)).toEqual({ quantity: 10, reduced: false });
+  });
+  it("shrinks an over-limit order to what fits", () => {
+    expect(fitToOrderLimit(500, 295, 25_000)).toEqual({ quantity: 84, reduced: true });
+  });
+  it("returns zero when even one share is over the limit", () => {
+    expect(fitToOrderLimit(1, 30_000, 25_000)).toEqual({ quantity: 0, reduced: true });
+  });
+});
+
+describe("killSwitchBlocks", () => {
+  it("blocks buys and every strategy entry, long or short", () => {
+    expect(killSwitchBlocks("BUY", "strategy")).toBe(true);
+    expect(killSwitchBlocks("SELL", "strategy")).toBe(true); // a short strategy opens with a SELL
+    expect(killSwitchBlocks("BUY", "manual")).toBe(true);
+  });
+  it("never blocks an exit, in either direction", () => {
+    expect(killSwitchBlocks("SELL", "exit")).toBe(false);
+    expect(killSwitchBlocks("BUY", "exit")).toBe(false); // closing a short
+    expect(killSwitchBlocks("SELL", "manual")).toBe(false); // selling something you hold
+  });
+});

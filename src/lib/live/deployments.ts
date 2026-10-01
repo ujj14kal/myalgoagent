@@ -1,4 +1,4 @@
-import { capitalProblem, INTRADAY_BUYING_POWER } from "@/lib/live/capital";
+import { capitalProblem, fitToOrderLimit, INTRADAY_BUYING_POWER } from "@/lib/live/capital";
 import "server-only";
 import type { LiveDeployment, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -11,7 +11,7 @@ import { closedCandles, syncPaperSession, type NewPaperOrder, type PaperSessionS
 import { inMarketWindow } from "@/lib/paper/market-window";
 import { rangeFor } from "@/lib/strategy/session";
 import type { ConditionNode } from "@/lib/strategy";
-import { LiveCheckError, placeLiveOrder, refreshLiveOrder } from "./orders";
+import { LIVE_DEFAULTS, LiveCheckError, placeLiveOrder, refreshLiveOrder } from "./orders";
 
 // Live deployments: a strategy trading on the user's own broker. The forward-
 // testing engine decides (same rules, same risk exits, same square-off); every
@@ -206,7 +206,8 @@ export async function runDeployment(id: string): Promise<"idle" | "acted" | "pau
 
   const real = await reconcile(d);
   const state = d.engineState as unknown as PaperSessionState;
-  const risk = await prisma.riskSettings.findUnique({ where: { userId: d.userId }, select: { killSwitchEnabled: true } });
+  const risk = await prisma.riskSettings.findUnique({ where: { userId: d.userId }, select: { killSwitchEnabled: true, liveMaxOrderValue: true } });
+  const maxOrderValue = risk?.liveMaxOrderValue ?? LIVE_DEFAULTS.maxOrderValue;
   const market = marketDataFor(d.userId, "trading");
   let result;
   try {
@@ -223,10 +224,22 @@ export async function runDeployment(id: string): Promise<"idle" | "acted" | "pau
   for (const o of result.newOrders as NewPaperOrder[]) {
     const opening = o.reason === "entry_rule" || o.reason === "pyramid";
     // Exits close what's really held; nothing to close = nothing to send.
-    const quantity = opening ? o.quantity : real.qty;
+    let quantity = opening ? o.quantity : real.qty;
     if (quantity <= 0) continue;
     if (opening && (real.qty > 0 || real.working)) continue; // one position at a time
-    const sig: PendingSignal = { side: o.side, quantity, reason: reasonText(o.reason), signalTime: o.signalTime, createdAt: new Date().toISOString(), purpose: opening ? "strategy" : "exit" };
+    let note = "";
+    if (opening) {
+      // The user's per-order limit still applies: shrink an over-limit order instead of having it refused (which would pause the strategy).
+      const fit = fitToOrderLimit(quantity, o.price, maxOrderValue);
+      if (fit.quantity < 1) {
+        await prisma.liveDeployment.update({ where: { id }, data: { status: "PAUSED", lastError: `One share costs about ₹${Math.round(o.price).toLocaleString("en-IN")}, above your ₹${maxOrderValue.toLocaleString("en-IN")} per-order limit — raise it in Risk Controls.` } });
+        await notify(d.userId, `“${d.strategyName}” paused — one share is above your per-order limit (Risk Controls).`, "RISK_EVENT");
+        return "paused";
+      }
+      if (fit.reduced) note = ` (reduced from ${quantity} to ${fit.quantity} shares to fit your ₹${maxOrderValue.toLocaleString("en-IN")} per-order limit)`;
+      quantity = fit.quantity;
+    }
+    const sig: PendingSignal = { side: o.side, quantity, reason: reasonText(o.reason) + note, signalTime: o.signalTime, createdAt: new Date().toISOString(), purpose: opening ? "strategy" : "exit" };
     if (d.mode === "AUTO") {
       try {
         await send(d, sig);

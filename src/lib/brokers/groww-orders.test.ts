@@ -42,3 +42,49 @@ describe("instrument symbols", () => {
     expect(growwSymbolOf("AAPL")).toBeNull();
   });
 });
+
+import { afterEach, vi } from "vitest";
+import { placeGrowwOrder } from "./groww-orders";
+
+describe("what Groww receives for every kind of order", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const sent: Record<string, unknown>[] = [];
+  function stubGroww() {
+    sent.length = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: { body?: string }) => {
+        sent.push(JSON.parse(init.body ?? "{}"));
+        return { status: 200, text: async () => JSON.stringify({ status: "SUCCESS", payload: { groww_order_id: "GLT123", order_status: "NEW", remark: null } }) };
+      }),
+    );
+  }
+
+  const types = ["MARKET", "LIMIT", "SL", "SL_M"] as const;
+  const products = ["MIS", "CNC"] as const;
+  const sides = ["BUY", "SELL"] as const;
+
+  for (const orderType of types) {
+    for (const product of products) {
+      for (const side of sides) {
+        it(`${side} ${orderType} ${product}`, async () => {
+          stubGroww();
+          const r = await placeGrowwOrder("tok", { tradingSymbol: "TARIL", exchange: "NSE", segment: "CASH", product, orderType, side, quantity: 3, price: 294.85, triggerPrice: 295.5, reference: "mwtestref0001" });
+          expect(r.brokerOrderId).toBe("GLT123");
+          const b = sent[0];
+          expect(b).toMatchObject({ trading_symbol: "TARIL", quantity: 3, exchange: "NSE", segment: "CASH", product, order_type: orderType, transaction_type: side, validity: "DAY", order_reference_id: "mwtestref0001" });
+          // A market order carries no price; a stop order carries a trigger.
+          expect(b.price).toBe(orderType === "LIMIT" || orderType === "SL" ? 294.85 : 0);
+          expect(b.trigger_price).toBe(orderType === "SL" || orderType === "SL_M" ? 295.5 : undefined);
+        });
+      }
+    }
+  }
+
+  it("refuses a malformed reference before anything is sent", async () => {
+    stubGroww();
+    await expect(placeGrowwOrder("tok", { tradingSymbol: "TARIL", exchange: "NSE", segment: "CASH", product: "MIS", orderType: "MARKET", side: "BUY", quantity: 1, reference: "bad ref!" })).rejects.toThrow();
+    expect(sent.length).toBe(0);
+  });
+});

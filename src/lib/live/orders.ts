@@ -1,3 +1,4 @@
+import { killSwitchBlocks } from "@/lib/live/capital";
 import "server-only";
 import { randomBytes } from "node:crypto";
 import type { LiveOrder, LiveOrderSide, Prisma } from "@prisma/client";
@@ -110,7 +111,7 @@ async function preflight(input: PlaceInput) {
   const exit = input.purpose === "exit";
   const risk = user.riskSettings;
   if (!exit) {
-    if (risk?.killSwitchEnabled && input.side === "BUY") throw new LiveCheckError("The kill switch is on — new positions are blocked. Turn it off in Risk Controls first.");
+    if (risk?.killSwitchEnabled && killSwitchBlocks(input.side, input.purpose)) throw new LiveCheckError("The kill switch is on — new positions are blocked. Turn it off in Risk Controls first.");
     const ref = input.price ?? (await lastPrice(input.userId, input.instrumentSymbol));
     const value = ref * input.quantity;
     const maxValue = risk?.liveMaxOrderValue ?? LIVE_DEFAULTS.maxOrderValue;

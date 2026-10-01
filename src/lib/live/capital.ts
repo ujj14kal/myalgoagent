@@ -20,3 +20,21 @@ export function capitalProblem(sizing: PositionSizing, capital: number, price: n
   const what = sizing.mode === "FIXED_QUANTITY" ? `${wanted} share${wanted === 1 ? "" : "s"}` : sizing.mode === "PERCENT_OF_CAPITAL" ? `${sizing.value}% of the capital per trade` : "a share";
   return `${rupees(capital)} isn't enough: ${label} costs about ${px} a share, and this strategy needs ${what}. Set the capital to at least ${rupees(need)}${leverage > 1 ? ` (intraday buying power of up to ${leverage}×)` : ""}, or it would never enter a trade.`;
 }
+
+/**
+ * A strategy sizes its own order; the user's per-order value limit still applies. Rather than let an
+ * over-limit order be refused (which would pause the whole strategy), shrink it to fit.
+ */
+export function fitToOrderLimit(quantity: number, price: number, maxValue: number): { quantity: number; reduced: boolean } {
+  if (!(price > 0) || quantity * price <= maxValue) return { quantity, reduced: false };
+  return { quantity: Math.max(0, Math.floor(maxValue / price)), reduced: true };
+}
+
+/**
+ * Does the kill switch stop this order? It stops anything that opens a position — a buy, or a
+ * strategy's entry in either direction (a short strategy opens with a SELL). Exits are never stopped.
+ */
+export function killSwitchBlocks(side: "BUY" | "SELL", purpose: "entry" | "exit" | "manual" | "strategy"): boolean {
+  if (purpose === "exit") return false;
+  return side === "BUY" || purpose === "entry" || purpose === "strategy";
+}
