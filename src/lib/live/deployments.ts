@@ -1,3 +1,4 @@
+import { capitalProblem } from "@/lib/live/capital";
 import "server-only";
 import type { LiveDeployment, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -63,6 +64,10 @@ export async function startDeployment(userId: string, input: { strategyId: strin
   const market = marketDataFor(userId, "trading");
   const candles = closedCandles(await market.getHistoricalCandles(s.instrument.symbol, rangeFor(s.timeframe, "1mo", market.depth), tf), tf);
   if (!candles.length) throw new LiveCheckError("No recent prices for this stock.");
+  // A strategy whose capital can't buy its first position would watch forever and never trade.
+  const sizing = { mode: s.positionSizingMode, value: s.positionSizingValue };
+  const tooSmall = capitalProblem(sizing, input.capital, candles.at(-1)!.close * 1.0005, s.instrument.symbol.replace(/\.NS$/, ""));
+  if (tooSmall) throw new LiveCheckError(tooSmall);
 
   const state: PaperSessionState = {
     instrumentSymbol: s.instrument.symbol,
