@@ -19,4 +19,10 @@ describe("capitalProblem", () => {
     expect(capitalProblem({ mode: "PERCENT_OF_CAPITAL", value: 10 }, 1000, 295, "TARIL")).toContain("at least ₹2,950");
     expect(capitalProblem({ mode: "PERCENT_OF_CAPITAL", value: 10 }, 3000, 295, "TARIL")).toBeNull();
   });
+  it("counts intraday buying power: ₹250 is enough for a ₹295 share at 5× (the ₹60-margin case)", () => {
+    expect(capitalProblem({ mode: "FIXED_QUANTITY", value: 1 }, 250, 295, "TARIL", 5)).toBeNull();
+    const msg = capitalProblem({ mode: "FIXED_QUANTITY", value: 1 }, 50, 295, "TARIL", 5);
+    expect(msg).toContain("at least ₹59");
+    expect(msg).toContain("5×");
+  });
 });

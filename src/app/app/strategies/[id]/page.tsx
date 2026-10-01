@@ -130,6 +130,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
                 brokers={goLiveBrokers}
                 enabled={!!liveUser?.liveTradingEnabledAt}
                 liveOn={liveDeployments.map((d) => d.broker)}
+                intraday={strategy.productType === "INTRADAY"}
                 blocker={!strategy.instrument.symbol.endsWith(".NS") ? "Indices can't be traded directly — live strategies trade NSE stocks." : strategy.status === "DELETED" ? "This strategy has been deleted." : null}
               />
             )}

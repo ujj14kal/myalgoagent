@@ -20,6 +20,7 @@ export default function GoLive({
   enabled,
   liveOn,
   blocker,
+  intraday = false,
 }: {
   strategyId: string;
   strategyName: string;
@@ -28,6 +29,7 @@ export default function GoLive({
   enabled: boolean;
   liveOn: string[];
   blocker: string | null;
+  intraday?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const usable = brokers.filter((b) => b.ready && !liveOn.includes(b.id));
@@ -90,7 +92,12 @@ export default function GoLive({
             <label className="block text-sm">
               <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-brand-navy/45">Capital this strategy may use (₹)</span>
               <input type="number" min={1000} step={1000} value={capital} onChange={(e) => setCapital(Number(e.target.value))} className="w-full rounded-lg border border-brand-navy/15 px-3 py-2" />
-              <span className="mt-1 block text-xs text-brand-navy/50">Used with the strategy&apos;s position size. Your per-order and daily limits in Risk Controls still apply.</span>
+              <span className="mt-1 block text-xs text-brand-navy/50">
+                {intraday
+                  ? "Intraday trades are margin trades: orders are sized with up to 5× this amount as buying power (your broker decides the margin it really needs and refuses an order it can't cover). "
+                  : "Used with the strategy's position size. "}
+                Your per-order and daily limits in Risk Controls still apply.
+              </span>
             </label>
             <p className="rounded-xl bg-brand-primary/[0.05] px-3 py-2 text-xs leading-relaxed text-brand-navy/70">
               <strong className="font-semibold text-brand-navy">Orders are sent automatically.</strong> When your strategy&apos;s entry or exit rules fire, the order goes straight to your broker — no extra tap needed. Pause or stop it any time from Live Trading.

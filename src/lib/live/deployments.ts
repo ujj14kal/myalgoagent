@@ -1,4 +1,4 @@
-import { capitalProblem } from "@/lib/live/capital";
+import { capitalProblem, INTRADAY_BUYING_POWER } from "@/lib/live/capital";
 import "server-only";
 import type { LiveDeployment, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -66,7 +66,9 @@ export async function startDeployment(userId: string, input: { strategyId: strin
   if (!candles.length) throw new LiveCheckError("No recent prices for this stock.");
   // A strategy whose capital can't buy its first position would watch forever and never trade.
   const sizing = { mode: s.positionSizingMode, value: s.positionSizingValue };
-  const tooSmall = capitalProblem(sizing, input.capital, candles.at(-1)!.close * 1.0005, s.instrument.symbol.replace(/\.NS$/, ""));
+  // Intraday trades are margin trades: the broker lends buying power, so the engine may size up to that multiple of the capital.
+  const leverage = s.productType === "INTRADAY" ? INTRADAY_BUYING_POWER : 1;
+  const tooSmall = capitalProblem(sizing, input.capital, candles.at(-1)!.close * 1.0005, s.instrument.symbol.replace(/\.NS$/, ""), leverage);
   if (tooSmall) throw new LiveCheckError(tooSmall);
 
   const state: PaperSessionState = {
@@ -90,7 +92,7 @@ export async function startDeployment(userId: string, input: { strategyId: strin
     orderType: "MARKET",
     limitMode: null,
     limitValue: null,
-    cash: input.capital,
+    cash: input.capital * leverage,
     positionEntryTime: null,
     positionEntryPrice: null,
     positionQuantity: null,
