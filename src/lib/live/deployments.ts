@@ -199,7 +199,7 @@ async function send(d: LiveDeployment, o: { side: "BUY" | "SELL"; quantity: numb
 }
 
 /** A check started this recently owns the strategy; a second run (schedules can overlap) skips it. */
-const CLAIM_MS = 25_000;
+const CLAIM_MS = 10_000;
 
 /** One pass for one deployment: reconcile fills, run the rules on the newest candle, act on what they decided. */
 export async function runDeployment(id: string): Promise<"idle" | "acted" | "paused"> {

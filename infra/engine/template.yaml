@@ -1,0 +1,144 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  MyAlgoAgent live-strategy engine on ECS Fargate (ARM64). Phase 1: runs in the default VPC and sends broker
+  calls through the existing static-IP relay, so the registered IP does not change. Phase 2 (after 6 Oct): a NAT
+  gateway in front of private subnets. The Amplify every-minute job stays as the cheap backup.
+
+Parameters:
+  VpcId: { Type: AWS::EC2::VPC::Id }
+  SubnetIds: { Type: List<AWS::EC2::Subnet::Id> }
+  BrokerEgressUrl: { Type: String }
+  LicensedUserIds: { Type: String }
+  DesiredCount: { Type: Number, Default: 0, Description: "0 until the image is built, then 1" }
+
+Resources:
+  Repo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: myalgoagent-engine
+      ImageScanningConfiguration: { ScanOnPush: true }
+      LifecyclePolicy:
+        LifecyclePolicyText: '{"rules":[{"rulePriority":1,"description":"keep the last 5","selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":5},"action":{"type":"expire"}}]}'
+
+  Logs:
+    Type: AWS::Logs::LogGroup
+    Properties: { LogGroupName: /myalgoagent/engine, RetentionInDays: 90 }
+
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties: { ClusterName: myalgoagent }
+
+  SourceBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub myalgoagent-engine-src-${AWS::AccountId}
+      PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }
+      BucketEncryption: { ServerSideEncryptionConfiguration: [{ ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 } }] }
+      LifecycleConfiguration: { Rules: [{ Id: expire, Status: Enabled, ExpirationInDays: 14 }] }
+
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [{ Effect: Allow, Principal: { Service: ecs-tasks.amazonaws.com }, Action: "sts:AssumeRole" }] }
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy]
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [{ Effect: Allow, Principal: { Service: ecs-tasks.amazonaws.com }, Action: "sts:AssumeRole" }] }
+      Policies:
+        - PolicyName: read-app-secrets
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadAppSecrets
+                Effect: Allow
+                Action: [ssm:GetParametersByPath, ssm:GetParameter, ssm:GetParameters]
+                Resource:
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/myalgoagent/app
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/myalgoagent/app/*
+              - Sid: DecryptViaSsm
+                Effect: Allow
+                Action: kms:Decrypt
+                Resource: "*"
+                Condition: { StringEquals: { "kms:ViaService": !Sub "ssm.${AWS::Region}.amazonaws.com" } }
+
+  Sg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Live engine - outbound only, nothing can connect in
+      VpcId: !Ref VpcId
+      SecurityGroupEgress: [{ IpProtocol: "-1", CidrIp: 0.0.0.0/0 }]
+
+  Task:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: myalgoagent-engine
+      RequiresCompatibilities: [FARGATE]
+      NetworkMode: awsvpc
+      Cpu: "256"
+      Memory: "512"
+      RuntimePlatform: { CpuArchitecture: ARM64, OperatingSystemFamily: LINUX }
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ContainerDefinitions:
+        - Name: engine
+          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/myalgoagent-engine:latest
+          Essential: true
+          Environment:
+            - { Name: NODE_ENV, Value: production }
+            - { Name: TZ, Value: Asia/Kolkata }
+            - { Name: APP_SECRETS_PATH, Value: /myalgoagent/app }
+            - { Name: BROKER_EGRESS_URL, Value: !Ref BrokerEgressUrl }
+            - { Name: MARKET_DATA_LICENSED_USER_IDS, Value: !Ref LicensedUserIds }
+          LogConfiguration:
+            LogDriver: awslogs
+            Options: { awslogs-group: !Ref Logs, awslogs-region: !Ref "AWS::Region", awslogs-stream-prefix: engine }
+
+  Service:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: myalgoagent-engine
+      Cluster: !Ref Cluster
+      LaunchType: FARGATE
+      DesiredCount: !Ref DesiredCount
+      TaskDefinition: !Ref Task
+      DeploymentConfiguration: { MinimumHealthyPercent: 0, MaximumPercent: 100 }
+      NetworkConfiguration:
+        AwsvpcConfiguration: { AssignPublicIp: ENABLED, Subnets: !Ref SubnetIds, SecurityGroups: [!Ref Sg] }
+
+  BuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [{ Effect: Allow, Principal: { Service: codebuild.amazonaws.com }, Action: "sts:AssumeRole" }] }
+      Policies:
+        - PolicyName: build-and-push
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - { Effect: Allow, Action: "ecr:GetAuthorizationToken", Resource: "*" }
+              - { Effect: Allow, Action: [ecr:BatchCheckLayerAvailability, ecr:InitiateLayerUpload, ecr:UploadLayerPart, ecr:CompleteLayerUpload, ecr:PutImage, ecr:BatchGetImage, ecr:GetDownloadUrlForLayer], Resource: !GetAtt Repo.Arn }
+              - { Effect: Allow, Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents], Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*" }
+              - { Effect: Allow, Action: ["s3:GetObject", "s3:GetObjectVersion"], Resource: !Sub "${SourceBucket.Arn}/*" }
+
+  Build:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: myalgoagent-engine-build
+      ServiceRole: !GetAtt BuildRole.Arn
+      Artifacts: { Type: NO_ARTIFACTS }
+      Environment:
+        Type: ARM_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux-aarch64-standard:3.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - { Name: ECR_REPO, Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/myalgoagent-engine" }
+          - { Name: TAG, Value: manual }
+      Source: { Type: S3, Location: !Sub "${SourceBucket}/source.zip", BuildSpec: infra/engine/buildspec.yml }
+      TimeoutInMinutes: 20
+
+Outputs:
+  Repo: { Value: !GetAtt Repo.RepositoryUri }
+  SourceBucket: { Value: !Ref SourceBucket }
+  BuildProject: { Value: !Ref Build }
