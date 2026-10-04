@@ -1,6 +1,7 @@
 // Read-only check before the market opens: is everything ready for live orders?
 //   AWS_PROFILE=myalgoagent npx tsx --conditions=react-server scripts/preopen-check.ts
 // Prints no secrets and changes nothing.
+export {}; // makes this file a module, so its helpers don't clash with the engine's
 process.env.APP_SECRETS_PATH ??= "/myalgoagent/app";
 
 const IST = (d: Date | null) => (d ? d.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", hour12: false }) : "never");
