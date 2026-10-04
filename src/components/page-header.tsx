@@ -5,7 +5,7 @@ export default function PageHeader({
 }: {
   eyebrow?: string;
   title: string;
-  description?: string;
+  description?: React.ReactNode;
 }) {
   // Not wrapped in <Reveal>: this is the first thing on the page, and fading
   // it in from invisible delays the page's main content for every visitor.

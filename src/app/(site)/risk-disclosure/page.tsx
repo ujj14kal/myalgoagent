@@ -3,6 +3,7 @@ import Link from "next/link";
 import LegalPage, { type LegalSection } from "@/components/legal-page";
 import { Callout } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
+import CompanyLink from "@/components/company-link";
 
 export const metadata: Metadata = pageMetadata({
   title: "Risk Disclosure",
@@ -61,7 +62,7 @@ const sections: LegalSection[] = [
     title: "Regulatory status",
     body: (
       <Callout tone="gold">
-        MyAlgoAgent and Shagoon Softech Pvt. Ltd. are not registered as
+        MyAlgoAgent and <CompanyLink /> are not registered as
         a stock broker, investment advisor, portfolio manager or
         research analyst with SEBI or any other regulator. Live trading
         through a connected broker API is subject to applicable Indian

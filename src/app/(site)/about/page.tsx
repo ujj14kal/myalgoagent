@@ -3,6 +3,7 @@ import PageHeader from "@/components/page-header";
 import { Breadcrumbs, Prose } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 import Reveal from "@/components/reveal";
+import CompanyLink from "@/components/company-link";
 
 export const metadata: Metadata = pageMetadata({
   title: "About",
@@ -20,7 +21,7 @@ export default function AboutPage() {
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/about", label: "About" }]} />
-      <PageHeader eyebrow="About" title="About MyAlgoAgent" description="Built by Shagoon Softech." />
+      <PageHeader eyebrow="About" title="About MyAlgoAgent" description={<>Built by <CompanyLink>Shagoon Softech</CompanyLink>.</>} />
       <Reveal>
       <Prose>
         <h2>Our focus</h2>
@@ -40,16 +41,13 @@ export default function AboutPage() {
 
         <h2>Company</h2>
         <p>
-          MyAlgoAgent is developed and operated by Shagoon Softech Pvt.
-          Ltd. For company or product inquiries, see the{" "}
+          MyAlgoAgent is developed and operated by <CompanyLink />. For company or product inquiries, see the{" "}
           <a href="/contact">Contact</a> page.
         </p>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/brand/shagoon-softech-logo.svg"
-          alt="Shagoon Softech Pvt. Ltd."
-          className="mt-4 h-8 w-auto"
-        />
+        <CompanyLink className="mt-4 inline-block">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/shagoon-softech-logo.svg" alt="Shagoon Softech Pvt. Ltd." className="h-8 w-auto" />
+        </CompanyLink>
       </Prose>
       </Reveal>
     </>

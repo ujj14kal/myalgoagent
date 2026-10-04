@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Logo from "@/components/logo";
+import CompanyLink from "@/components/company-link";
 
 const columns = [
   {
@@ -72,17 +73,15 @@ export default function Footer() {
             <span className="text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
               A product of
             </span>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/brand/shagoon-softech-logo.svg"
-              alt="Shagoon Softech Pvt. Ltd."
-              className="h-5 w-auto opacity-80"
-            />
+            <CompanyLink className="inline-flex" aria-label="Shagoon Softech Pvt. Ltd. — company website">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/brand/shagoon-softech-logo.svg" alt="Shagoon Softech Pvt. Ltd." className="h-5 w-auto opacity-80 transition-opacity hover:opacity-100" />
+            </CompanyLink>
           </div>
         </div>
 
         <div className="mt-6 flex flex-col gap-2 border-t border-black/5 pt-6 text-xs text-brand-navy/50 sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} MyAlgoAgent™, a product of Shagoon Softech Pvt. Ltd. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} MyAlgoAgent™, a product of <CompanyLink /> All rights reserved.</p>
           <p>
             Algo trading involves risk. Backtested and historical results do
             not guarantee future performance.

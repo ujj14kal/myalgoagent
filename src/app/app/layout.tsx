@@ -12,6 +12,7 @@ import AgentChatButton from "@/components/agent-chat/agent-chat-button";
 import { DEFAULT_AGENT_NAME } from "@/lib/agent-constants";
 import AnnouncementBanner from "@/components/announcement-banner";
 import { isBuiltInOwner } from "@/lib/admin/access";
+import CompanyLink from "@/components/company-link";
 
 export const metadata = {
   robots: { index: false, follow: false },
@@ -69,7 +70,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             {announcement && <AnnouncementBanner {...announcement} />}
             <main className="mx-auto w-full max-w-[1400px] flex-1 p-4 md:p-6 lg:p-8">{children}</main>
             <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-black/5 px-6 pb-20 pt-3 text-xs text-brand-navy/40 md:py-3">
-              <span>© {new Date().getFullYear()} MyAlgoAgent™, a product of Shagoon Softech Pvt. Ltd.</span>
+              <span>© {new Date().getFullYear()} MyAlgoAgent™, a product of <CompanyLink className="hover:text-brand-primary" /></span>
               <span className="flex items-center gap-3">
                 <a href="/terms" className="hover:text-brand-primary">Terms</a>
                 <a href="/privacy-policy" className="hover:text-brand-primary">Privacy Policy</a>

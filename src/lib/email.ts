@@ -44,7 +44,7 @@ export async function sendEmail({
 }
 
 function wrap(body: string): string {
-  return `<div style="font-family:sans-serif;font-size:15px;line-height:1.5;color:#0e1b2d;max-width:480px;margin:0 auto;padding:24px;">${body}<p style="margin-top:32px;font-size:12px;color:#888;">MyAlgoAgent — a product of Shagoon Softech Pvt. Ltd.</p></div>`;
+  return `<div style="font-family:sans-serif;font-size:15px;line-height:1.5;color:#0e1b2d;max-width:480px;margin:0 auto;padding:24px;">${body}<p style="margin-top:32px;font-size:12px;color:#888;">MyAlgoAgent — a product of <a href="https://shagoonsoftech.com" style="color:#888;">Shagoon Softech Pvt. Ltd.</a></p></div>`;
 }
 
 export async function sendMagicLinkEmail(to: string, url: string) {

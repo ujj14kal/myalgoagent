@@ -2,6 +2,7 @@ import Link from "next/link";
 import Reveal from "@/components/reveal";
 import { Breadcrumbs } from "@/components/section";
 import ComingSoonTag, { ComingSoonList } from "@/components/coming-soon-tag";
+import { withCompanyLinks } from "@/components/company-link";
 
 export interface LegalSection {
   id: string;
@@ -75,7 +76,7 @@ export default function LegalPage({
                     <>
                       {section.paragraphs?.map((p, pi) => (
                         <p key={pi} className="mt-3 text-sm leading-relaxed text-brand-navy/70">
-                          {p}
+                          {withCompanyLinks(p)}
                         </p>
                       ))}
                       {section.bullets && (
@@ -83,7 +84,7 @@ export default function LegalPage({
                           {section.bullets.map((item) => (
                             <li key={item} className="relative pl-5 text-sm leading-relaxed text-brand-navy/70">
                               <span className="absolute left-0 top-2 h-1.5 w-1.5 rounded-sm bg-brand-primary" />
-                              {item}
+                              {withCompanyLinks(item)}
                             </li>
                           ))}
                         </ul>
