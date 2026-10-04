@@ -1,3 +1,5 @@
+import Pager from "@/components/ui/pager";
+import { pageWindow, readPageQuery } from "@/lib/pagination";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -16,17 +18,23 @@ const TYPE_META: Record<string, { label: string; cls: string; Icon: typeof Bell 
   ANNOUNCEMENT: { label: "Announcement", cls: "bg-brand-blue-light text-[#23408f]", Icon: Megaphone },
 };
 
-export default async function NotificationsPage() {
+export default async function NotificationsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await auth();
   if (!session?.user?.id) return null;
 
+  // Only the page being shown is read from the database; the unread count covers all of them.
+  const [total, unreadCount] = await Promise.all([
+    prisma.notification.count({ where: { userId: session.user.id } }),
+    prisma.notification.count({ where: { userId: session.user.id, read: false } }),
+  ]);
+  const { page, size } = readPageQuery(await searchParams);
+  const win = pageWindow(total, page, size);
   const notifications = await prisma.notification.findMany({
     where: { userId: session.user.id },
     orderBy: { createdAt: "desc" },
-    take: 100,
+    skip: win.skip,
+    take: win.take,
   });
-
-  const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
     <div>
@@ -76,6 +84,7 @@ export default async function NotificationsPage() {
           })}
         </ul>
       )}
+      <Pager basePath="/app/notifications" window={win} />
     </div>
   );
 }

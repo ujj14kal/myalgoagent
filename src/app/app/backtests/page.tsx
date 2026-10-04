@@ -1,3 +1,5 @@
+import Pager from "@/components/ui/pager";
+import { pageWindow, readPageQuery } from "@/lib/pagination";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -10,10 +12,14 @@ import PageHeader from "@/components/ui/page-header";
 
 export const metadata = { title: "Backtests", robots: { index: false } };
 
-export default async function BacktestsPage() {
+export default async function BacktestsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await auth();
   if (!session?.user?.id) return null;
 
+  // Past runs are paged in the database, not all loaded.
+  const totalRuns = await prisma.backtestRun.count({ where: { userId: session.user.id } });
+  const { page, size } = readPageQuery(await searchParams);
+  const win = pageWindow(totalRuns, page, size);
   const [strategies, runs] = await Promise.all([
     prisma.strategy.findMany({
       // Deleted strategies never belong in a "pick one to run" list — that
@@ -25,6 +31,8 @@ export default async function BacktestsPage() {
     prisma.backtestRun.findMany({
       where: { userId: session.user.id },
       orderBy: { createdAt: "desc" },
+      skip: win.skip,
+      take: win.take,
     }),
   ]);
 
@@ -71,7 +79,7 @@ export default async function BacktestsPage() {
           <div className="mb-3 flex items-center gap-2">
             <History size={16} className="text-brand-primary" />
             <h2 className="text-sm font-semibold text-brand-navy">Past runs</h2>
-            <span className="rounded-full bg-brand-navy/[0.06] px-2 py-0.5 text-xs font-semibold text-brand-navy/55">{runs.length}</span>
+            <span className="rounded-full bg-brand-navy/[0.06] px-2 py-0.5 text-xs font-semibold text-brand-navy/55">{totalRuns}</span>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {runs.map((r) => {
@@ -101,6 +109,7 @@ export default async function BacktestsPage() {
               );
             })}
           </div>
+          <Pager basePath="/app/backtests" window={win} />
         </section>
       )}
     </div>

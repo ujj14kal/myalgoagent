@@ -8,22 +8,24 @@ import StrategyBoardColumn, { StrategyRowCard, type StrategyCard } from "@/compo
 
 export const metadata = { title: "Strategies", robots: { index: false } };
 
-export default async function StrategiesPage() {
+const STEP = 12;
+const STATUSES = ["ACTIVE", "DRAFT", "DELETED", "ARCHIVED"] as const;
+
+export default async function StrategiesPage({ searchParams }: { searchParams: Promise<{ limit?: string }> }) {
   const session = await auth();
   if (!session?.user?.id) return null;
+  const asked = Number.parseInt((await searchParams).limit ?? "", 10);
+  const limit = Number.isFinite(asked) ? Math.min(Math.max(asked, STEP), 480) : STEP;
 
-  const strategies = await prisma.strategy.findMany({
-    where: { userId: session.user.id },
-    include: { instrument: true },
-    orderBy: { updatedAt: "desc" },
-  });
-
-  const byStatus = new Map<string, StrategyCard[]>();
-  for (const s of strategies) {
-    const list = byStatus.get(s.status) ?? [];
-    list.push(s);
-    byStatus.set(s.status, list);
-  }
+  // Each list reads only what it shows (the newest `limit`), plus a count to know if there is more.
+  const userId = session.user.id;
+  const [lists, counts] = await Promise.all([
+    Promise.all(STATUSES.map((status) => prisma.strategy.findMany({ where: { userId, status }, include: { instrument: true }, orderBy: { updatedAt: "desc" }, take: limit }))),
+    Promise.all(STATUSES.map((status) => prisma.strategy.count({ where: { userId, status } }))),
+  ]);
+  const byStatus = new Map<string, StrategyCard[]>(STATUSES.map((s, i) => [s, lists[i]]));
+  const strategies = lists.flat();
+  const hiddenMore = counts.some((c) => c > limit);
   const archived = byStatus.get("ARCHIVED") ?? [];
 
   return (
@@ -78,11 +80,20 @@ export default async function StrategiesPage() {
         </div>
       )}
 
+      {hiddenMore && (
+        <p className="mt-6 text-center text-xs text-brand-navy/55">
+          Showing the newest {limit} in each list.{" "}
+          <Link href={`/app/strategies?limit=${limit + STEP}`} className="font-semibold text-brand-primary hover:underline">
+            Show {STEP} more
+          </Link>
+        </p>
+      )}
+
       {archived.length > 0 && (
         <div className="mt-8">
           <div className="flex items-baseline gap-2">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-navy/50">Archived</h2>
-            <span className="text-xs text-brand-navy/30">{archived.length}</span>
+            <span className="text-xs text-brand-navy/30">{counts[STATUSES.indexOf("ARCHIVED")]}</span>
           </div>
           <p className="mt-0.5 text-xs text-brand-navy/40">Sidelined on purpose — fully intact, restore anytime.</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

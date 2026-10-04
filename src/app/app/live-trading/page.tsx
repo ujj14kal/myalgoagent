@@ -1,3 +1,5 @@
+import { explainLive } from "@/lib/live/explain-live";
+import type { ConditionNode } from "@/lib/strategy/types";
 import Link from "next/link";
 import { CheckCircle2, CircleAlert, Globe, ListOrdered, Plug, Radio, Rocket, ShieldCheck } from "lucide-react";
 import { auth } from "@/lib/auth";
@@ -68,6 +70,28 @@ export default async function Page() {
   }));
   const checkable = connections.filter((c) => c.loggedIn && c.adapter).map((c) => ({ id: c.broker, name: c.name }));
   const liveNow = deployments.filter((d) => d.status !== "STOPPED");
+  // What each live strategy is doing, and why it hasn't traded (computed here so the clock isn't read during render).
+  const now = new Date(nowMs);
+  const statusOf = new Map(
+    liveNow.map((d) => {
+      const st = d.engineState as unknown as { direction: "LONG" | "SHORT"; entryCondition: ConditionNode; exitCondition: ConditionNode };
+      const status = explainLive({
+        status: d.status as "ACTIVE" | "PAUSED" | "STOPPED",
+        now,
+        startedAt: d.startedAt,
+        lastCheckedAt: d.lastCheckedAt,
+        lastError: d.lastError,
+        positionQty: d.positionQty,
+        positionAvgPrice: d.positionAvgPrice,
+        direction: st.direction,
+        entryCondition: st.entryCondition,
+        exitCondition: st.exitCondition,
+        symbol: d.instrumentSymbol,
+        lastOrder: orders.find((o) => o.deploymentId === d.id) ?? null,
+      });
+      return [d.id, status] as const;
+    }),
+  );
 
   return (
     <div className="min-w-0 space-y-6">
@@ -184,11 +208,17 @@ export default async function Page() {
                     <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${DEPLOY_STYLE[d.status]}`}>{d.status.toLowerCase()}</span>
                     <span className="rounded-full bg-brand-navy/[0.05] px-2 py-0.5 text-[11px] font-semibold text-brand-navy/60">{d.mode === "AUTO" ? "automatic orders" : "you confirm each order"}</span>
                   </div>
-                  <p className="text-xs text-brand-navy/60">
-                    {d.positionQty > 0 ? `Holding ${d.positionQty} @ ₹${d.positionAvgPrice?.toFixed(2) ?? "—"}` : "No open position"} ·{" "}
-                    {d.lastCheckedAt ? `last checked ${when(d.lastCheckedAt)}` : "waiting for the first check"}
-                  </p>
-                  {d.lastError && <p className="break-words rounded-lg bg-brand-sell/5 px-3 py-1.5 text-xs text-brand-sell">{d.lastError}</p>}
+                  {(() => {
+                    const st = statusOf.get(d.id)!;
+                    const tone = st.tone === "warn" ? "bg-brand-gold/10 ring-brand-gold/25 text-[#6f5a22]" : st.tone === "ok" ? "bg-brand-buy/[0.07] ring-brand-buy/20 text-[#0b6b30]" : "bg-brand-navy/[0.04] ring-black/5 text-brand-navy/70";
+                    return (
+                      <div className={`min-w-0 rounded-lg px-3 py-2 text-xs ring-1 ${tone}`}>
+                        <p className="font-semibold">{st.headline}</p>
+                        {st.detail && <p className="mt-0.5 break-words text-[11px] opacity-90">{st.detail}</p>}
+                      </div>
+                    );
+                  })()}
+                  {d.lastError && d.status === "ACTIVE" && <p className="break-words rounded-lg bg-brand-sell/5 px-3 py-1.5 text-xs text-brand-sell">{d.lastError}</p>}
                   {pending.map((sig, i) => (
                     <div key={`${sig.signalTime}-${i}`} className="flex flex-wrap items-center gap-2 rounded-lg bg-brand-primary/[0.05] px-3 py-2 text-sm">
                       <span className={`font-bold ${sig.side === "BUY" ? "text-[#0b6b30]" : "text-[#9b1111]"}`}>{sig.side}</span>

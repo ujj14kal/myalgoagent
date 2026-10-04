@@ -10,7 +10,7 @@ import BrokerLogos from "@/components/broker-logos";
 export const metadata: Metadata = pageMetadata({
   title: "Features",
   description:
-    "Strategy builder, 46 technical indicators, realistic backtesting, forward testing, risk controls, connections to 9 Indian brokers and an AI agent — with live broker execution coming soon.",
+    "Strategy builder, 46 technical indicators, realistic backtesting, forward testing, risk controls, connections to 9 Indian brokers and an AI agent — and live trading on your own broker, switched on account by account.",
   path: "/features",
 });
 
@@ -73,13 +73,11 @@ const groups: Group[] = [
     items: [
       "Forward testing with notional capital and hypothetical fills on the strategy's own candles — daily or intraday — updated automatically during market hours, with stops and trailing stops closing trades on their own",
       "Broker connections for Dhan, Zerodha, Upstox, Fyers, Angel One, Groww, ICICI Direct, 5paisa and Alice Blue — your own API key, encrypted, verified on connect",
+      "A readiness check for each broker — login, static IP, account access and order book — that places no order",
+      "Go Live: a tested strategy keeps running on MyAlgoAgent and sends its orders to your broker automatically — intraday or delivery, within your per-order and daily limits — with pause, exit-now, stop and a kill switch. Switched on account by account",
+      "Order lifecycle tracking: pending, submitted, filled, rejected, cancelled — with each order's full history",
     ],
-    soon: [
-      "Live trading via your connected broker, with explicit user authorization",
-      "Kotak Neo connection",
-      "Order lifecycle tracking: pending, submitted, filled, rejected, cancelled",
-      "Position and P&L reconciliation with the connected broker",
-    ],
+    soon: ["Kotak Neo connection", "Position and P&L reconciliation with the connected broker"],
   },
   {
     title: "Risk Management",
@@ -110,8 +108,10 @@ const groups: Group[] = [
       "Build multi-leg options positions — spreads, straddles, strangles, iron condors and more — from ready-made templates or leg by leg",
       "Payoff chart at expiry and today, net credit or debit, max profit and loss, and exact breakevens",
       "Position Greeks: delta, gamma, theta and vega",
+      "Options backtests on real historical option prices, and forward tests on live prices with no orders placed",
+      "Send the legs as real orders to your broker after a priced preview — buy legs first, open legs cancelled if one is refused",
     ],
-    soon: ["Live option chain with real premiums, IV and open interest", "Options backtesting and forward testing", "Live options orders through your broker"],
+    soon: ["Live option chain with real premiums, IV and open interest for every account"],
   },
   {
     title: "Your AI agent",

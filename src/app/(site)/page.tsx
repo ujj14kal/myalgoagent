@@ -18,7 +18,7 @@ const workflow = [
   { step: "03", title: "Backtesting", text: "Simulate the strategy against history with fees, slippage and realistic fills.", icon: "chart" as const },
   { step: "04", title: "Forward Testing", text: "Run the strategy forward on daily or intraday candles using notional capital only.", icon: "layers" as const },
   { step: "05", title: "Risk Controls", text: "Set a loss limit, a losing-streak limit and a kill switch before going further.", icon: "shield" as const },
-  { step: "06", title: "Broker & Live Execution", text: "Connect your own broker account today; placing live orders with your explicit authorization is next.", icon: "route" as const, soon: true },
+  { step: "06", title: "Broker & Live Execution", text: "Connect your own broker, run a readiness check (it places no order), then press Go Live: the strategy keeps running here and sends its orders to your broker automatically, inside your limits and behind a kill switch.", icon: "route" as const },
 ];
 
 const capabilities = [
@@ -31,13 +31,16 @@ const capabilities = [
   { title: "Options Lab", text: "Multi-leg options payoffs, breakevens, max profit and loss, and Greeks before you trade." },
   { title: "Your broker account, in one place", text: "Real holdings, positions, funds and orders from your connected broker." },
   { title: "Alerts & notifications", text: "Signal, fill and risk-limit alerts, delivered in the app as they happen." },
+  { title: "Go Live on your own broker", text: "A tested strategy keeps running here and sends its orders to your broker automatically — intraday or delivery, within your per-order and daily limits, with pause, exit-now, stop and a kill switch. Switched on account by account." },
+  { title: "Custom indicators", text: "Write a formula, draw a line on the chart or describe it to your agent — then use it in rules, backtests and forward tests." },
+  { title: "An AI agent you can talk to", text: "Type or speak: it drafts strategies, backtests and limits for you to review, reads the market and your account, and never places an order on its own." },
 ];
 
 const faqs = [
   { q: "Can I test without risking real capital?", a: "Yes. Forward testing runs a strategy forward on daily or intraday candles using notional capital only." },
   { q: "Does a successful backtest guarantee results?", a: "No. Historical and backtested results are illustrative and cannot guarantee future performance." },
   { q: "Can I connect my broker?", a: "Yes — Dhan, Zerodha, Upstox, Fyers, Angel One, Groww, ICICI Direct, 5paisa and Alice Blue today, with your own API key. You log in on your broker’s own page; we never see your password or 2FA." },
-  { q: "How is live trading authorized?", a: "Live order placement is coming soon. It will use your connected broker account and always need your explicit authorization. You can disconnect the broker or use the kill switch at any time." },
+  { q: "How is live trading authorized?", a: "You start it yourself. Live trading is switched on account by account; you connect your own broker, pass a readiness check that places no order, and press Go Live after acknowledging the risk. From then on the strategy’s orders go to your broker automatically whenever its rules trigger, checked first against your limits and the kill switch. You can pause it, exit the position, stop it or disconnect the broker at any time." },
 ];
 
 function Icon({ name, size = 18 }: { name: "radio" | "braces" | "chart" | "layers" | "shield" | "route" | "check" | "arrow" | "gauge" | "lock" | "stop" | "mic"; size?: number }) {
@@ -89,7 +92,7 @@ export default function Home() {
             <p className="mt-5 max-w-xl text-lg text-brand-navy/70">
               MyAlgoAgent brings strategy building, realistic backtesting,
               and forward testing into one risk-managed workflow — connect
-              your own broker today, with live execution coming soon.
+              your own broker, and take a tested strategy live on it — inside the limits you set.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-5">
               <Link

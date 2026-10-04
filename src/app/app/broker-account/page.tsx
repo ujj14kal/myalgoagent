@@ -9,6 +9,7 @@ import { brokerById } from "@/lib/brokers/catalog";
 import { ACCOUNT_READERS } from "@/lib/brokers/account-data";
 import { loadBrokerAccount, type Section } from "@/lib/brokers/account-load";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { classifyOrder, classifyPosition, type Source } from "@/lib/live/classify";
 import { formatINR, formatSignedINR, toneOf, TONE_TEXT } from "@/lib/format";
 
 export const metadata = { title: "Broker Account", robots: { index: false } };
@@ -16,6 +17,27 @@ export const dynamic = "force-dynamic";
 
 const price = (v: number | null) => (v == null ? "—" : `₹${v.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`);
 const pnl = (v: number | null) => (v == null ? <span className="text-brand-navy/35">—</span> : <span className={TONE_TEXT[toneOf(v)]}>{formatSignedINR(v, 2)}</span>);
+
+const SOURCE_STYLE: Record<Source, string> = {
+  MAA: "bg-brand-primary/10 text-brand-primary",
+  MANUAL: "bg-brand-navy/[0.06] text-brand-navy/65",
+  MIXED: "bg-brand-gold/15 text-[#6f5a22]",
+  UNKNOWN: "bg-brand-gold/15 text-[#6f5a22] ring-1 ring-brand-gold/30",
+};
+const SOURCE_HINT: Record<Source, string> = {
+  MAA: "Sent by a MyAlgoAgent strategy — its broker order id is in our record of orders we sent.",
+  MANUAL: "Not sent by MyAlgoAgent: we keep a complete record of what we send, and this isn't in it — so it was placed at your broker directly (or by another tool).",
+  MIXED: "Part of this position comes from MyAlgoAgent orders and part does not.",
+  UNKNOWN: "We have an order that never got a broker id (the broker's answer was lost) which could be this one, so we can't say.",
+};
+function SourcePill({ source, strategy }: { source: Source; strategy?: string | null }) {
+  return (
+    <span title={SOURCE_HINT[source]} className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[10.5px] font-bold ${SOURCE_STYLE[source]}`}>
+      {source}
+      {strategy ? <span className="ml-1 font-medium opacity-70">· {strategy}</span> : null}
+    </span>
+  );
+}
 
 function Part<T>({ title, section, empty, children }: { title: string; section: Section<T>; empty: string; children: (data: T) => React.ReactNode }) {
   if (section === null) return null;
@@ -60,6 +82,14 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ b
   }
   const limited = await checkRateLimit(`broker-account:${userId}`, 20, 60_000);
   const acct = limited ? { error: "Refreshing too often — wait a moment." } : await loadBrokerAccount(userId, broker);
+  // Everything MyAlgoAgent ever sent to this broker: what lets us say which orders and positions are ours.
+  const sent = await prisma.liveOrder.findMany({
+    where: { userId, broker },
+    orderBy: { createdAt: "desc" },
+    take: 2000,
+    select: { brokerOrderId: true, tradingSymbol: true, side: true, quantity: true, filledQuantity: true, status: true, createdAt: true, deployment: { select: { strategyName: true } } },
+  });
+  const ours = sent.map((o) => ({ ...o, side: o.side as "BUY" | "SELL", strategyName: o.deployment?.strategyName ?? null }));
 
   return (
     <div className="space-y-5">
@@ -137,6 +167,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ b
                     <th>Last price</th>
                     <th>P&amp;L</th>
                     <th>Realised</th>
+                    <th>Placed by</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -149,6 +180,9 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ b
                       <td>{price(r.ltp)}</td>
                       <td>{pnl(r.pnl)}</td>
                       <td>{pnl(r.realised)}</td>
+                      <td>
+                        <SourcePill source={classifyPosition(r, ours, now)} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -167,6 +201,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ b
                     <th>Price</th>
                     <th>Avg fill</th>
                     <th>Status</th>
+                    <th>Placed by</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -181,6 +216,12 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ b
                       <td>{price(r.price)}</td>
                       <td>{price(r.avgPrice)}</td>
                       <td className="text-xs">{r.status}</td>
+                      <td>
+                        {(() => {
+                          const c = classifyOrder(r, ours);
+                          return <SourcePill source={c.source} strategy={c.strategyName} />;
+                        })()}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
