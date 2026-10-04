@@ -26,7 +26,9 @@ if [ "${1:-}" != "--push" ]; then echo "built and smoke-tested $VERSION (not pus
 REGION="${AWS_REGION:-ap-south-1}"
 ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
 REPO="$ACCOUNT.dkr.ecr.$REGION.amazonaws.com/myalgoagent-engine"
-(cd "$WORK" && tar --uid 0 --gid 0 -czf layer.tar.gz app)
+# Files must be owned by root in the image; macOS (bsdtar) and Linux (GNU tar) spell that differently.
+if tar --version 2>/dev/null | grep -q GNU; then OWN="--owner=0 --group=0"; else OWN="--uid 0 --gid 0"; fi
+(cd "$WORK" && tar $OWN -czf layer.tar.gz app)
 export DOCKER_CONFIG="$(mktemp -d)"; echo '{}' > "$DOCKER_CONFIG/config.json" # an old Docker Desktop setting breaks crane otherwise
 aws ecr get-login-password --region "$REGION" | crane auth login "$ACCOUNT.dkr.ecr.$REGION.amazonaws.com" -u AWS --password-stdin
 crane --platform linux/arm64 append -b node:22-slim -f "$WORK/layer.tar.gz" -t "${REPO}:base-$VERSION"
