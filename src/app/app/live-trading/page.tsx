@@ -7,6 +7,8 @@ import { prisma } from "@/lib/prisma";
 import PageHeader from "@/components/ui/page-header";
 import ReadinessCheck from "@/components/live/readiness-check";
 import CopyIp from "@/components/live/copy-ip";
+import EngineFeed from "@/components/live/engine-feed";
+import AutoRefresh from "@/components/live/auto-refresh";
 import { DeploymentControls, PendingSignalActions } from "@/components/live/deployment-controls";
 import { CancelOrder, RefreshOrders } from "@/components/live/order-actions";
 import { egressEnabled, registeredStaticIp } from "@/lib/brokers/egress";
@@ -95,6 +97,7 @@ export default async function Page() {
 
   return (
     <div className="min-w-0 space-y-6">
+      <AutoRefresh seconds={15} />
       <PageHeader
         title="Live Trading"
         icon={Radio}
@@ -108,6 +111,8 @@ export default async function Page() {
           Live trading isn&apos;t switched on for your account yet. You can connect brokers and check readiness now; strategies can go live once it&apos;s on.
         </p>
       )}
+
+      {(liveNow.length > 0 || enabled) && <EngineFeed strategies={deployments.map((d) => ({ id: d.id, name: d.strategyName }))} />}
 
       <div className="grid gap-5 lg:grid-cols-2">
         <section className="surface min-w-0 p-5">

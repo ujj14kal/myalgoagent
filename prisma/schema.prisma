@@ -36,18 +36,18 @@ model User {
   deletionRequestedAt  DateTime?
   deletionScheduledFor DateTime?
 
-  adminRole       AdminRole?
-  suspendedAt     DateTime?
-  suspendedReason String?
+  adminRole            AdminRole?
+  suspendedAt          DateTime?
+  suspendedReason      String?
   // Last time the user opened the app (updated at most every few minutes).
-  lastSeenAt      DateTime?
+  lastSeenAt           DateTime?
   // Real orders are off for every account until an owner switches them on
   // (admin portal), and only then after the user confirms on Live Trading.
   liveTradingEnabledAt DateTime?
   // The account's own static IP — one client, one IP (a broker/SEBI rule), so
   // unique. Not assigned yet: it comes with the paid plan once the Fargate +
   // NAT setup is live; until then everyone trades from the shared relay IP.
-  liveStaticIp         String?   @unique
+  liveStaticIp         String?    @unique
   liveTermsAcceptedAt  DateTime?
 
   agentName           String?
@@ -78,6 +78,7 @@ model User {
   brokerConnections   BrokerConnection[]
   liveOrders          LiveOrder[]
   liveDeployments     LiveDeployment[]
+  liveEngineLogs      LiveEngineLog[]
   optionStrategies    OptionStrategy[]
   optionBacktestRuns  OptionBacktestRun[]
   optionForwardTests  OptionForwardTest[]
@@ -397,12 +398,12 @@ model Strategy {
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  instrument    Instrument     @relation(fields: [instrumentId], references: [id])
-  backtestRuns  BacktestRun[]
-  paperSessions PaperSession[]
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instrument      Instrument       @relation(fields: [instrumentId], references: [id])
+  backtestRuns    BacktestRun[]
+  paperSessions   PaperSession[]
   liveDeployments LiveDeployment[]
-  webhookAlerts WebhookAlert[]
+  webhookAlerts   WebhookAlert[]
 
   @@unique([userId, nameNormalized])
 }
@@ -528,21 +529,21 @@ model PaperSession {
   maxPyramidEntries        Int                @default(1)
   // Candle timeframe the strategy runs on ("1d", "15m", "3m", "4h" …). Intraday
   // timeframes enable time-of-day rules; the session fields apply only to them.
-  timeframe           String             @default("1d")
+  timeframe                String             @default("1d")
   // IST minute of day: no new entries at/after it; open positions squared off at it.
-  noEntryAfterMinute  Int?
-  squareOffMinute     Int?
+  noEntryAfterMinute       Int?
+  squareOffMinute          Int?
   // INTRADAY (squared off the same day) or DELIVERY (may be held overnight, long only).
-  productType         String             @default("DELIVERY")
+  productType              String             @default("DELIVERY")
   // Entry orders: MARKET (next candle's open) or LIMIT (a DAY order at a % from the
   // signal price, or a fixed ₹ price).
-  orderType           String             @default("MARKET")
-  limitMode           String?
-  limitValue          Float?
+  orderType                String             @default("MARKET")
+  limitMode                String?
+  limitValue               Float?
   // A resting limit entry order carried between syncs.
-  pendingLimitPrice      Float?
-  pendingLimitExpiresDay Int?
-  pendingLimitFromTime   Int?
+  pendingLimitPrice        Float?
+  pendingLimitExpiresDay   Int?
+  pendingLimitFromTime     Int?
   // Alert-only sessions detect and notify on entry/exit signals without
   // ever placing an order or touching cash/position state.
   alertOnly                Boolean            @default(false)
@@ -740,13 +741,13 @@ model BrokerConnection {
   apiKeyHint     String // last 4 characters, for display
   brokerClientId String? // the user's client/user ID at the broker (not secret)
 
-  accessTokenEnc String?
-  tokenExpiresAt DateTime?
+  accessTokenEnc  String?
+  tokenExpiresAt  DateTime?
   // Last live-readiness check (no orders placed): when it passed, and each step's result.
   liveReadyAt     DateTime?
   liveReadyDetail Json?
-  accountName    String?
-  connectedAt    DateTime?
+  accountName     String?
+  connectedAt     DateTime?
 
   // One pending broker login at a time: the callback must match this state
   // and arrive within a few minutes of the login being started.
@@ -759,7 +760,7 @@ model BrokerConnection {
   loginMethod       String?
   // sha256 of this user's private Upstox notifier path, so the approval
   // webhook can find the right connection without revealing anything.
-  notifierTokenHash String?   @unique
+  notifierTokenHash String? @unique
 
   lastError     String?
   lastCheckedAt DateTime?
@@ -853,27 +854,27 @@ model LiveOrderEvent {
 // it can be replayed on any day: e.g. "sell the ATM straddle on the current
 // weekly NIFTY expiry at 09:20, exit at 15:15 or on a ₹3,000 combined loss".
 model OptionStrategy {
-  id          String   @id @default(cuid())
-  userId      String
-  name        String
+  id            String   @id @default(cuid())
+  userId        String
+  name          String
   // Option underlying as the exchange names it: NIFTY, BANKNIFTY, RELIANCE…
-  underlying  String
+  underlying    String
   // [{ type: "CE"|"PE", side: "BUY"|"SELL", offset: strikes from ATM (+ above), lots }]
-  legs        Json
+  legs          Json
   // WEEKLY_CURRENT (nearest expiry), WEEKLY_NEXT, MONTHLY (last expiry of the month).
-  expiryRule  String   @default("WEEKLY_CURRENT")
+  expiryRule    String   @default("WEEKLY_CURRENT")
   // IST minutes of day: entry and square-off.
-  entryMinute Int      @default(560)
-  exitMinute  Int      @default(915)
+  entryMinute   Int      @default(560)
+  exitMinute    Int      @default(915)
   // Days of the week to trade (1 = Monday … 5 = Friday).
-  weekdays    Int[]    @default([1, 2, 3, 4, 5])
+  weekdays      Int[]    @default([1, 2, 3, 4, 5])
   // Stop-loss / target on the combined position: RUPEES, or PREMIUM_PCT (% of the premium paid/received).
   stopLossUnit  String?
   stopLossValue Float?
   targetUnit    String?
   targetValue   Float?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   runs         OptionBacktestRun[]
@@ -999,4 +1000,21 @@ model LiveDeployment {
 
   @@index([status])
   @@index([userId])
+}
+
+/// What the live engine did, in plain English, with a timestamp — shown on the Live Trading page.
+model LiveEngineLog {
+  id           String   @id @default(cuid())
+  userId       String
+  /// The live strategy it is about; none for account-wide lines (e.g. the engine starting).
+  deploymentId String?
+  at           DateTime @default(now())
+  /// INFO (routine), OK (something went right), WARN (needs a look), ERROR (something failed).
+  level        String
+  message      String
+  detail       Json?
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, at])
+  @@index([deploymentId, at])
 }

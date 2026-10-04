@@ -11,7 +11,9 @@ import { closedCandles, syncPaperSession, type NewPaperOrder, type PaperSessionS
 import { inMarketWindow } from "@/lib/paper/market-window";
 import { rangeFor } from "@/lib/strategy/session";
 import type { ConditionNode } from "@/lib/strategy";
-import { LIVE_DEFAULTS, LiveCheckError, placeLiveOrder, refreshLiveOrder } from "./orders";
+import { event, LIVE_DEFAULTS, LiveCheckError, placeLiveOrder, refreshLiveOrder } from "./orders";
+import { liveLog, liveLogThrottled, plainReason } from "./engine-log";
+import { conditionToText } from "@/lib/strategy/format";
 
 // Live deployments: a strategy trading on the user's own broker. The forward-
 // testing engine decides (same rules, same risk exits, same square-off); every
@@ -23,6 +25,14 @@ import { LIVE_DEFAULTS, LiveCheckError, placeLiveOrder, refreshLiveOrder } from 
 export type PendingSignal = { side: "BUY" | "SELL"; quantity: number; reason: string; signalTime: number; createdAt: string; purpose: "strategy" | "exit" };
 const READY_WITHIN_MS = 24 * 3_600_000;
 const FINAL = new Set(["FILLED", "CANCELLED", "REJECTED", "FAILED"]);
+/** An order with no broker id and no record at the broker this long after being sent never arrived. */
+const UNCONFIRMED_MS = 3 * 60_000;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const stock = (d: { instrumentSymbol: string }) => d.instrumentSymbol.replace(/\.NS$/, "");
+const brokerName = (d: { broker: string }) => brokerById(d.broker)?.name ?? d.broker;
+const rupees = (n: number | null | undefined) => (n == null ? "" : `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`);
+const lg = (d: { userId: string; id: string }, level: "INFO" | "OK" | "WARN" | "ERROR", message: string) => liveLog(d.userId, d.id, level, message);
 
 const REASON: Record<string, string> = {
   entry_rule: "entry rule",
@@ -116,6 +126,7 @@ export async function startDeployment(userId: string, input: { strategyId: strin
       lastSyncedTime: state.lastSyncedTime,
     },
   });
+  await lg(d, "OK", `Went live on ${name} with ${rupees(input.capital)} of capital (${s.productType === "INTRADAY" ? "intraday" : "delivery"}). ${input.mode === "AUTO" ? "Orders are sent automatically when the rules fire." : "Each signal waits for your confirmation."} Enter when: ${conditionToText(state.entryCondition)}. Exit when: ${conditionToText(state.exitCondition)}. It is checked every few seconds while the market is open.`);
   await notify(userId, `“${s.name}” is live on ${name} (${input.mode === "AUTO" ? "orders go out automatically" : "each signal waits for your confirmation"}).`);
   return d;
 }
@@ -130,6 +141,7 @@ export async function setDeploymentStatus(userId: string, id: string, status: "A
   if (!d) throw new LiveCheckError("Deployment not found.");
   if (d.status === "STOPPED") throw new LiveCheckError("This deployment is stopped — start it again from the strategy.");
   // Resuming after a rejected order: line the engine up with what's really held.
+  await lg(d, status === "ACTIVE" ? "INFO" : "WARN", status === "ACTIVE" ? "You resumed this strategy." : status === "PAUSED" ? "You paused this strategy: it sends no orders until you resume it." : "You stopped this strategy. It sends no more orders; a position it opened stays open until you close it.");
   const real = status === "ACTIVE" ? await reconcile(d) : null;
   const engineState = real && real.qty === 0 && !real.working ? (flatten(d.engineState as unknown as PaperSessionState) as unknown as Prisma.InputJsonValue) : undefined;
   return prisma.liveDeployment.update({
@@ -150,13 +162,24 @@ async function reconcile(d: LiveDeployment): Promise<{ qty: number; avg: number 
   const orders = await prisma.liveOrder.findMany({ where: { deploymentId: d.id }, orderBy: { createdAt: "asc" } });
   let working = false;
   for (const o of orders) {
-    if (FINAL.has(o.status) || !o.brokerOrderId) continue;
+    if (FINAL.has(o.status)) continue;
+    const before = { status: o.status, filled: o.filledQuantity };
     try {
+      // An order whose answer was lost has no broker id yet: it is looked up by our reference.
       const fresh = await refreshLiveOrder(o.id, d.userId);
       Object.assign(o, fresh);
       if (!FINAL.has(fresh.status)) working = true;
+      if (fresh.status !== before.status || fresh.filledQuantity !== before.filled) await logOrderChange(d, fresh);
     } catch {
-      working = true;
+      if (!o.brokerOrderId && Date.now() - o.createdAt.getTime() > UNCONFIRMED_MS) {
+        // The broker has no record of it after several minutes: it never arrived, so it must not block the strategy forever.
+        const failed = await prisma.liveOrder.update({ where: { id: o.id }, data: { status: "FAILED", rejectReason: "No record of this order at the broker after 3 minutes — treated as not placed.", closedAt: new Date() } });
+        await event(o.id, "error", { code: "never_arrived", detail: "no record at the broker after 3 minutes" });
+        Object.assign(o, failed);
+        await lg(d, "WARN", `${brokerName(d)} has no record of the ${o.side} ${o.quantity} ${stock(d)} order we tried to send, so it is treated as not placed. Check ${brokerName(d)} to be sure.`);
+      } else {
+        working = true;
+      }
     }
   }
   // Net filled quantity (long: buys add; short: sells add) and the average price of the open part.
@@ -178,8 +201,17 @@ async function reconcile(d: LiveDeployment): Promise<{ qty: number; avg: number 
   return { qty, avg: qty ? cost / qty : null, working };
 }
 
+async function logOrderChange(d: LiveDeployment, o: { side: string; quantity: number; filledQuantity: number; averagePrice: number | null; status: string; rejectReason: string | null; brokerOrderId: string | null }) {
+  const what = `${o.side} ${o.quantity} ${stock(d)}`;
+  if (o.status === "FILLED") return lg(d, "OK", `${brokerName(d)} confirms the ${what} order is filled${o.averagePrice ? ` at ${rupees(o.averagePrice)}` : ""}.`);
+  if (o.status === "PARTIALLY_FILLED") return lg(d, "INFO", `${brokerName(d)} has filled ${o.filledQuantity} of ${o.quantity} so far on the ${what} order.`);
+  if (o.status === "REJECTED" || o.status === "FAILED") return lg(d, "ERROR", `${brokerName(d)} refused the ${what} order: ${plainReason(o.rejectReason, brokerName(d))}.`);
+  if (o.status === "CANCELLED") return lg(d, "WARN", `The ${what} order was cancelled${o.filledQuantity ? ` after ${o.filledQuantity} filled` : ""}.`);
+}
+
 async function send(d: LiveDeployment, o: { side: "BUY" | "SELL"; quantity: number; purpose: "strategy" | "exit"; reason: string }) {
-  const order = await placeLiveOrder({
+  const what = `${o.side} ${o.quantity} ${stock(d)}`;
+  const placed = await placeLiveOrder({
     userId: d.userId,
     broker: d.broker,
     instrumentSymbol: d.instrumentSymbol,
@@ -191,9 +223,24 @@ async function send(d: LiveDeployment, o: { side: "BUY" | "SELL"; quantity: numb
     reason: `Strategy “${d.strategyName}”: ${o.reason}`,
     deploymentId: d.id,
   });
+  if (placed.status === "OPEN") await lg(d, "INFO", `Sent ${what} to ${brokerName(d)} (${d.product === "MIS" ? "intraday" : "delivery"}${placed.orderType === "MARKET" ? ", market order" : ", protected limit order"}). ${brokerName(d)} accepted it${placed.brokerOrderId ? ` as order ${placed.brokerOrderId}` : ""}. Reason: ${o.reason}.`);
+  else if (placed.status === "CREATED") await lg(d, "WARN", `Sent ${what} but ${brokerName(d)} didn't answer in time. We'll look it up by its reference and will not send it twice.`);
+  // Confirm quickly instead of waiting for the next check: most market orders fill within a second or two.
+  let order = placed;
+  for (let i = 0; i < 4 && !FINAL.has(order.status); i++) {
+    await sleep(1500);
+    try {
+      order = await refreshLiveOrder(order.id, d.userId);
+    } catch {
+      break;
+    }
+  }
+  if (order.status !== placed.status || order.filledQuantity !== placed.filledQuantity || FINAL.has(order.status)) await logOrderChange(d, order);
+  else if (placed.status === "OPEN") await lg(d, "INFO", `The ${what} order is still open at ${brokerName(d)}; checking it again on the next pass.`);
   if (order.status === "REJECTED" || order.status === "FAILED") {
-    await prisma.liveDeployment.update({ where: { id: d.id }, data: { status: "PAUSED", lastError: `${o.side} ${o.quantity} was not accepted: ${order.rejectReason ?? order.status}` } });
-    await notify(d.userId, `“${d.strategyName}” paused — the broker didn't accept a ${o.side} order: ${order.rejectReason ?? order.status}.`, "RISK_EVENT");
+    await prisma.liveDeployment.update({ where: { id: d.id }, data: { status: "PAUSED", lastError: `${o.side} ${o.quantity} was not accepted: ${plainReason(order.rejectReason ?? order.status, brokerName(d))}` } });
+    await lg(d, "ERROR", `Paused: no more orders are sent until you resume. ${plainReason(order.rejectReason ?? order.status, brokerName(d))}.`);
+    await notify(d.userId, `“${d.strategyName}” paused — ${brokerName(d)} didn't accept a ${o.side} order: ${plainReason(order.rejectReason ?? order.status, brokerName(d))}.`, "RISK_EVENT");
   }
   return order;
 }
@@ -224,6 +271,7 @@ export async function runDeployment(id: string): Promise<"idle" | "acted" | "pau
     result = await syncPaperSession(state, !risk?.killSwitchEnabled, market, { includeForming: true });
   } catch (err) {
     logError("live.deployment.sync", err, { id });
+    await liveLogThrottled(`price:${id}`, 5 * 60_000, d.userId, id, "WARN", `Couldn't read ${stock(d)} prices this time. Nothing is sent while prices are unavailable; trying again in a few seconds.`);
     await prisma.liveDeployment.update({ where: { id }, data: { lastCheckedAt: new Date(), lastError: "Couldn't read prices this time — will retry." } });
     return "idle";
   }
@@ -235,16 +283,22 @@ export async function runDeployment(id: string): Promise<"idle" | "acted" | "pau
     // Exits close what's really held; nothing to close = nothing to send.
     let quantity = opening ? o.quantity : real.qty;
     if (quantity <= 0) continue;
-    if (opening && (real.qty > 0 || real.working)) continue; // one position at a time
+    if (opening && (real.qty > 0 || real.working)) {
+      await liveLogThrottled(`skip:${id}`, 5 * 60_000, d.userId, id, "INFO", `The entry rules fired, but ${real.working ? "an earlier order is still being settled" : "the position is already open"}, so no second order was sent (one position at a time).`);
+      continue;
+    }
+    await lg(d, "INFO", `${opening ? "Entry" : "Exit"} signal: ${reasonText(o.reason)} at about ${rupees(o.price)}.`);
     let note = "";
     if (opening) {
       // The user's per-order limit still applies: shrink an over-limit order instead of having it refused (which would pause the strategy).
       const fit = fitToOrderLimit(quantity, o.price, maxOrderValue);
       if (fit.quantity < 1) {
+        await lg(d, "ERROR", `One share costs about ${rupees(o.price)}, above your ${rupees(maxOrderValue)} per-order limit, so nothing was sent and the strategy is paused. Raise the limit in Risk Controls and resume.`);
         await prisma.liveDeployment.update({ where: { id }, data: { status: "PAUSED", lastError: `One share costs about ₹${Math.round(o.price).toLocaleString("en-IN")}, above your ₹${maxOrderValue.toLocaleString("en-IN")} per-order limit — raise it in Risk Controls.` } });
         await notify(d.userId, `“${d.strategyName}” paused — one share is above your per-order limit (Risk Controls).`, "RISK_EVENT");
         return "paused";
       }
+      if (fit.reduced) await lg(d, "WARN", `Order size cut from ${quantity} to ${fit.quantity} shares to stay inside your ${rupees(maxOrderValue)} per-order limit.`);
       if (fit.reduced) note = ` (reduced from ${quantity} to ${fit.quantity} shares to fit your ₹${maxOrderValue.toLocaleString("en-IN")} per-order limit)`;
       quantity = fit.quantity;
     }
@@ -256,12 +310,14 @@ export async function runDeployment(id: string): Promise<"idle" | "acted" | "pau
       } catch (err) {
         const why = err instanceof LiveCheckError ? err.message : err instanceof BrokerError ? (err.failure.detail ?? err.failure.code) : "unexpected error";
         if (!(err instanceof LiveCheckError) && !(err instanceof BrokerError)) logError("live.deployment.send", err, { id });
+        await lg(d, "ERROR", `The ${sig.side} ${sig.quantity} ${stock(d)} order was not sent: ${plainReason(why, brokerName(d))}. Paused until you resume.`);
         await prisma.liveDeployment.update({ where: { id }, data: { status: "PAUSED", lastError: `${sig.side} ${sig.quantity} not sent: ${why}` } });
         await notify(d.userId, `“${d.strategyName}” paused — a ${sig.side} order couldn't be sent: ${why}`, "RISK_EVENT");
         break;
       }
     } else {
       pending.push(sig);
+      await lg(d, "INFO", `${sig.side} ${sig.quantity} ${stock(d)} is waiting for your confirmation on Live Trading (${sig.reason}).`);
       await notify(d.userId, `“${d.strategyName}”: ${sig.side} ${sig.quantity} ${d.instrumentSymbol.replace(/\.NS$/, "")} (${sig.reason}) — confirm on Live Trading to send it.`);
       acted = true;
     }
@@ -292,6 +348,11 @@ export async function runDeployment(id: string): Promise<"idle" | "acted" | "pau
       ...(current?.status === "ACTIVE" ? { lastError: null } : {}),
     },
   });
+  if (!acted && current?.status === "ACTIVE") {
+    const held = after.qty > 0 ? `holding ${after.qty} ${stock(d)}${after.avg ? ` bought at ${rupees(after.avg)}` : ""}` : "no open position";
+    const sk = risk?.killSwitchEnabled ? " The kill switch is on, so no new entries are sent." : "";
+    await liveLogThrottled(`pass:${id}`, 60_000, d.userId, id, "INFO", `Checked ${stock(d)} against the rules: ${held}; nothing to do yet.${sk}`);
+  }
   return current?.status === "PAUSED" ? "paused" : acted ? "acted" : "idle";
 }
 
@@ -308,6 +369,8 @@ export async function runLiveDeployments(budgetMs = 20_000) {
     } catch (err) {
       failed++;
       logError("live.deployment", err, { id: d.id });
+      const row = await prisma.liveDeployment.findUnique({ where: { id: d.id }, select: { userId: true } }).catch(() => null);
+      if (row) await liveLogThrottled(`crash:${d.id}`, 5 * 60_000, row.userId, d.id, "ERROR", "Something unexpected went wrong while checking this strategy. It was not paused and will be retried in a few seconds; our team has been alerted through the logs.");
     }
   }
   if (failed) logWarn("live.deployments", "some deployments failed this pass", { failed });
@@ -350,5 +413,6 @@ export async function exitNow(userId: string, id: string) {
   const real = await reconcile(d);
   if (real.qty <= 0) throw new LiveCheckError("There's no open position to close.");
   const closeSide = (d.engineState as unknown as PaperSessionState).direction === "SHORT" ? "BUY" : "SELL";
+  await lg(d, "INFO", `You asked to close the position now: sending ${closeSide} ${real.qty} ${stock(d)}.`);
   return send(d, { side: closeSide, quantity: real.qty, purpose: "exit", reason: "closed by you" });
 }

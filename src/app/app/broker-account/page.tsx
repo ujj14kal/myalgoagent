@@ -3,6 +3,7 @@ import { Landmark } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import PageHeader from "@/components/ui/page-header";
+import AutoRefresh from "@/components/live/auto-refresh";
 import StatCard from "@/components/ui/stat-card";
 import EmptyState from "@/components/empty-state";
 import { brokerById } from "@/lib/brokers/catalog";
@@ -93,6 +94,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ b
 
   return (
     <div className="space-y-5">
+      <AutoRefresh seconds={20} />
       {header}
       {usable.length > 1 && (
         <div className="flex flex-wrap gap-1.5">

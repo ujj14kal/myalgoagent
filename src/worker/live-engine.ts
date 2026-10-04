@@ -17,6 +17,7 @@ async function main() {
   const { recordEngineBeat } = await import("@/lib/live/engine-heartbeat");
   const { inMarketWindow } = await import("@/lib/paper/market-window");
   const { logError } = await import("@/lib/logger");
+  const { logForActiveUsers, pruneEngineLog } = await import("@/lib/live/engine-log");
   const { egressEnabled, currentEgressIp } = await import("@/lib/brokers/egress");
 
   if (process.env.ENGINE_DRY_RUN === "1") {
@@ -34,10 +35,21 @@ async function main() {
   const ip = await currentEgressIp().catch(() => null);
   log("engine started", { viaRelay: egressEnabled(), brokersSeeIp: ip?.ip ?? null, everyMs: INTERVAL_MS });
 
+  await logForActiveUsers("INFO", "The live engine started. It checks your running strategies every 15 seconds while the market is open.");
+  let wasOpen: boolean | null = null;
+  let prunedDay = "";
   while (!stop) {
     const started = Date.now();
     try {
-      if (inMarketWindow(new Date())) {
+      const open = inMarketWindow(new Date());
+      if (wasOpen !== null && open !== wasOpen) await logForActiveUsers("INFO", open ? "The market is open. Your running strategies are being watched every 15 seconds." : "The market is closed. The engine rests until the next session; no orders are sent.");
+      wasOpen = open;
+      const day = new Date().toISOString().slice(0, 10);
+      if (day !== prunedDay) {
+        prunedDay = day;
+        await pruneEngineLog(14).catch(() => 0);
+      }
+      if (open) {
         const r = await runLiveDeployments(40_000);
         await recordEngineBeat({ total: r.total, acted: r.acted, failed: r.failed });
         if (r.acted || r.failed) log("pass", r);
