@@ -2,6 +2,8 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: Lets GitHub Actions (this repository, main branch only) push the engine image and roll out the Fargate service. No stored keys.
 Parameters:
   Repository: { Type: String, Default: ujj14kal/myalgoagent }
+  # GitHub now puts the owner's and repository's permanent ids in the token (repo:owner@id/name@id); this repository's:
+  ImmutableRepository: { Type: String, Default: "ujj14kal@85072622/myalgoagent@1353622998" }
 Resources:
   GitHubOidc:
     Type: AWS::IAM::OIDCProvider
@@ -22,7 +24,10 @@ Resources:
             Action: sts:AssumeRoleWithWebIdentity
             Condition:
               StringEquals: { "token.actions.githubusercontent.com:aud": sts.amazonaws.com }
-              StringLike: { "token.actions.githubusercontent.com:sub": !Sub "repo:${Repository}:ref:refs/heads/main" }
+              StringLike:
+                "token.actions.githubusercontent.com:sub":
+                  - !Sub "repo:${Repository}:ref:refs/heads/main"
+                  - !Sub "repo:${ImmutableRepository}:ref:refs/heads/main"
       Policies:
         - PolicyName: engine-release
           PolicyDocument:
