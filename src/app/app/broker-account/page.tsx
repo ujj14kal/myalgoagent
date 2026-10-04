@@ -124,12 +124,40 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ b
                 <>
                   <StatCard label="Available to trade" value={acct.funds.data.available == null ? "—" : formatINR(acct.funds.data.available)} />
                   <StatCard label="Margin used" value={acct.funds.data.used == null ? "—" : formatINR(acct.funds.data.used)} />
-                  <StatCard label="Account value" value={acct.funds.data.total == null ? "—" : formatINR(acct.funds.data.total)} />
+                  {acct.funds.data.total != null ? (
+                    <StatCard label="Account value" value={formatINR(acct.funds.data.total)} />
+                  ) : acct.funds.data.available != null && acct.funds.data.used != null ? (
+                    <StatCard label="Account value (estimate)" value={formatINR(acct.funds.data.available + acct.funds.data.used)} sub="Your broker doesn't state a total; this is available + margin used" />
+                  ) : (
+                    <StatCard label="Account value" value="—" />
+                  )}
                 </>
               ) : (
                 <p className="text-sm text-brand-sell sm:col-span-3">Funds: {acct.funds.error}</p>
               )}
             </div>
+          )}
+          {acct.funds?.ok && acct.funds.data.lines && acct.funds.data.lines.length > 0 && (
+            <details className="surface px-4 py-3 text-sm">
+              <summary className="cursor-pointer font-semibold text-brand-navy">How these figures match {acct.name}</summary>
+              <p className="mt-2 text-xs text-brand-navy/60">Every figure {acct.name} sent, under its own name. “Available to trade” is the broker&apos;s cash/margin-available figure and “Margin used” its margin-used figure; nothing is added or guessed except the labelled estimate.</p>
+              <table className="data-table mt-2">
+                <thead>
+                  <tr>
+                    <th>{acct.name} field</th>
+                    <th>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {acct.funds.data.lines.map((l) => (
+                    <tr key={l.name}>
+                      <td className="font-mono text-xs">{l.name}</td>
+                      <td>{formatINR(l.value)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
           )}
           <Part title="Holdings" section={acct.holdings} empty="No holdings.">
             {(h) => (

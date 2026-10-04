@@ -9,6 +9,7 @@ import {
   payoffNow,
   positionGreeks,
   summarize,
+  type FigureSource,
   type OptionLeg,
 } from "@/lib/options/positions";
 import OptionChain, { type ChainContext } from "@/components/option-chain";
@@ -63,7 +64,7 @@ export default function OptionsLab({ live = false, basketBrokers = [] }: { live?
       ctx
         ? built.map((l) => {
             const q = livePrice(ctx, l.type, l.strike);
-            return q ? { ...l, premium: q.premium, iv: q.iv ?? l.iv } : l;
+            return q ? { ...l, premium: q.premium, premiumSource: "market" as const, iv: q.iv ?? l.iv, ivSource: q.iv ? ("market" as const) : ("assumed" as const) } : l;
           })
         : built,
     );
@@ -198,7 +199,8 @@ export default function OptionsLab({ live = false, basketBrokers = [] }: { live?
                     <Num value={l.strike} onChange={(v) => setLeg(i, { strike: v })} />
                   </td>
                   <td className="py-1.5 pr-2">
-                    <Num value={l.premium} onChange={(v) => setLeg(i, { premium: v })} />
+                    <Num value={l.premium} onChange={(v) => setLeg(i, { premium: v, premiumSource: "typed" })} />
+                    <SourceTag source={l.premiumSource ?? "calculated"} />
                   </td>
                   <td className="py-1.5 pr-2">
                     <Num value={l.lots} step="1" onChange={(v) => setLeg(i, { lots: v })} />
@@ -207,7 +209,8 @@ export default function OptionsLab({ live = false, basketBrokers = [] }: { live?
                     <Num value={l.expiryDays} step="1" onChange={(v) => setLeg(i, { expiryDays: v })} />
                   </td>
                   <td className="py-1.5 pr-2">
-                    <Num value={Math.round(l.iv * 1000) / 10} onChange={(v) => setLeg(i, { iv: v / 100 })} />
+                    <Num value={Math.round(l.iv * 1000) / 10} onChange={(v) => setLeg(i, { iv: v / 100, ivSource: "typed" })} />
+                    <SourceTag source={l.ivSource ?? "assumed"} />
                   </td>
                   <td className="py-1.5 text-right">
                     <button type="button" onClick={() => setLegs((ls) => ls.filter((_, j) => j !== i))} aria-label="Remove leg" className="text-brand-navy/35 hover:text-brand-sell">
@@ -235,7 +238,10 @@ export default function OptionsLab({ live = false, basketBrokers = [] }: { live?
               <LiveBasket brokers={basketBrokers} underlying={ctx.underlying} expiry={ctx.expiry} legs={legs} />
             </div>
           )}
-          <div className="mt-4 grid gap-3 sm:grid-cols-4">
+          <p className="mt-4 text-[11px] text-brand-navy/55">
+            <strong className="font-semibold">Greeks below: calculated by us</strong> (Black–Scholes, from each leg&apos;s IV, the spot and the days left) — not figures from your broker. The strikes, prices and IV marked “market” come from the live feed.
+          </p>
+          <div className="mt-2 grid gap-3 sm:grid-cols-4">
             <Stat small label="Delta" value={greeks.delta.toFixed(1)} hint="₹ P&L for a ₹1 move up" />
             <Stat small label="Gamma" value={greeks.gamma.toFixed(3)} hint="How fast delta changes" />
             <Stat small label="Theta / day" value={inr(greeks.theta)} hint="Time decay per day" />
@@ -244,6 +250,21 @@ export default function OptionsLab({ live = false, basketBrokers = [] }: { live?
         </section>
       )}
     </div>
+  );
+}
+
+const SOURCE_TEXT: Record<FigureSource, { label: string; cls: string; title: string }> = {
+  market: { label: "market", cls: "text-[#0b6b30]", title: "From the live market data feed" },
+  calculated: { label: "calculated", cls: "text-brand-primary", title: "Our Black–Scholes estimate at the IV set above" },
+  assumed: { label: "assumed", cls: "text-[#8a7437]", title: "A setting we assumed — the feed gave no figure for this strike" },
+  typed: { label: "typed by you", cls: "text-brand-navy/50", title: "You entered this" },
+};
+function SourceTag({ source }: { source: FigureSource }) {
+  const s = SOURCE_TEXT[source];
+  return (
+    <span title={s.title} className={`mt-0.5 block text-[10px] font-semibold ${s.cls}`}>
+      {s.label}
+    </span>
   );
 }
 

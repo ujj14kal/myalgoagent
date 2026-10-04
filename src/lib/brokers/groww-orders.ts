@@ -57,6 +57,8 @@ async function groww(token: string, method: "GET" | "POST", path: string, body?:
     // gateway error page
   }
   if (res.status === 401 || res.status === 403) throw new BrokerError("session_rejected", brokerMessage(json) ?? `Groww answered ${res.status}`);
+  // Too many requests: Groww did not process it, so it is safe to try again shortly.
+  if (res.status === 429) throw new BrokerError("rate_limited", brokerMessage(json));
   if (res.status >= 500) throw new BrokerError("unreachable", brokerMessage(json));
   if (res.status >= 400 || json.status === "FAILURE") throw new BrokerError("unknown", brokerMessage(json) ?? `Groww answered ${res.status}`);
   return obj(json.payload);

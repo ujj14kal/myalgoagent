@@ -14,6 +14,6 @@ export function plainReason(raw: string | null | undefined, broker = "your broke
   if (/market.*(closed|not open)|outside.*(market|trading)/i.test(r)) return "the market is closed";
   if (/circuit|price band|freeze/i.test(r)) return `the stock is outside its allowed price range or frozen (${r.slice(0, 100)})`;
   if (/quantity/i.test(r)) return `the quantity wasn't accepted (${r.slice(0, 120)})`;
-  if (/rate limit|too many requests|429/i.test(r)) return `${broker} is limiting how fast we can send requests — it will retry`;
+  if (/rate[ _]?limit|too many requests|429/i.test(r)) return `${broker} is limiting how fast we can send requests — we tried again a few times and it still wasn't accepted`;
   return r.length > 200 ? `${r.slice(0, 197)}…` : r;
 }

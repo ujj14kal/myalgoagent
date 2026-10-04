@@ -7,8 +7,13 @@ import { blackScholes, daysToYears, type Greeks, type OptionType } from "./black
 
 export type Side = "BUY" | "SELL";
 
+/** Where a figure came from: the exchange feed ("market"), our Black–Scholes maths ("calculated"), a setting we assumed ("assumed"), or the user's own entry ("typed"). A leg with no source is a model price at the IV setting. */
+export type FigureSource = "market" | "calculated" | "assumed" | "typed";
+
 export type OptionLeg = {
   kind: "OPTION";
+  premiumSource?: FigureSource;
+  ivSource?: FigureSource;
   type: OptionType;
   side: Side;
   strike: number;

@@ -135,6 +135,20 @@ async function preflight(input: PlaceInput) {
 }
 
 /** Record, check and send a real order. Returns the stored order (FAILED/REJECTED ones included). */
+const RETRY_WAITS_MS = [1000, 2000, 3000];
+/** A "too many requests" answer means the broker did not take the order, so the same order (same reference) is sent again a moment later. Any other failure is left alone: a lost answer is looked up by reference, never resent. */
+export async function placeWithRetry<T>(attempt: () => Promise<T>, orderId: string, waits: number[] = RETRY_WAITS_MS): Promise<T> {
+  for (let i = 0; ; i++) {
+    try {
+      return await attempt();
+    } catch (err) {
+      if (!(err instanceof BrokerError) || err.failure.code !== "rate_limited" || i >= waits.length) throw err;
+      await event(orderId, "retry", { reason: "rate_limited", attempt: i + 1 });
+      await new Promise((r) => setTimeout(r, waits[i]));
+    }
+  }
+}
+
 export async function placeLiveOrder(input: PlaceInput): Promise<LiveOrder> {
   const { email, broker, eq } = await preflight(input);
   const ctx = await session(input.userId, input.broker);
@@ -173,7 +187,7 @@ export async function placeLiveOrder(input: PlaceInput): Promise<LiveOrder> {
   });
   await event(order.id, "created", { side: input.side, quantity: input.quantity, orderType, price: price ?? null, triggerPrice: triggerPrice ?? null, purpose: input.purpose, nseToken: eq.token, tick: eq.tick });
   try {
-    const r = await broker.place(ctx, {
+    const r = await placeWithRetry(() => broker.place(ctx, {
       tradingSymbol: eq.symbol,
       series: eq.series,
       nseToken: eq.token,
@@ -186,7 +200,7 @@ export async function placeLiveOrder(input: PlaceInput): Promise<LiveOrder> {
       price,
       triggerPrice,
       reference: order.clientRef,
-    });
+    }), order.id);
     await event(order.id, "submitted", { brokerOrderId: r.brokerOrderId, brokerStatus: r.brokerStatus, remark: r.remark });
     return prisma.liveOrder.update({ where: { id: order.id }, data: { brokerOrderId: r.brokerOrderId, brokerStatus: r.brokerStatus, status: "OPEN", submittedAt: new Date() } });
   } catch (err) {

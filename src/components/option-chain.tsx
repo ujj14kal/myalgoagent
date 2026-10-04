@@ -57,7 +57,7 @@ export default function OptionChain({ onAdd, onContext }: { onAdd: (leg: OptionL
   const [data, setData] = useState<ChainResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [all, setAll] = useState(false);
+  const [window_, setWindow] = useState<number>(12); // strikes shown each side of the money; 0 = all
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
@@ -101,17 +101,17 @@ export default function OptionChain({ onAdd, onContext }: { onAdd: (leg: OptionL
 
   const shown = useMemo(() => {
     if (!data) return [];
-    if (all || atm == null) return data.rows;
+    if (window_ === 0 || atm == null) return data.rows;
     const i = data.rows.findIndex((r) => r.strike === atm);
-    return data.rows.slice(Math.max(0, i - 12), i + 13);
-  }, [data, all, atm]);
+    return data.rows.slice(Math.max(0, i - window_), i + window_ + 1);
+  }, [data, window_, atm]);
   const maxOi = Math.max(1, ...shown.flatMap((r) => [r.call.oi ?? 0, r.put.oi ?? 0]));
 
   const add = (row: ChainRow, type: "CE" | "PE", side: "BUY" | "SELL") => {
     const q = type === "CE" ? row.call : row.put;
     const premium = (side === "BUY" ? q.ask : q.bid) ?? q.ltp;
     if (!premium || !data) return;
-    onAdd({ kind: "OPTION", type, side, strike: row.strike, premium, lots: 1, lotSize: data.lotSize ?? 1, expiryDays: Math.max(data.daysToExpiry, 0.01), iv: q.iv || atmIv || 0.15 });
+    onAdd({ kind: "OPTION", type, side, strike: row.strike, premium, premiumSource: "market", ivSource: q.iv ? "market" : "assumed", lots: 1, lotSize: data.lotSize ?? 1, expiryDays: Math.max(data.daysToExpiry, 0.01), iv: q.iv || atmIv || 0.15 });
   };
 
   const btn = "rounded px-1.5 py-0.5 text-[10px] font-bold";
@@ -249,10 +249,17 @@ export default function OptionChain({ onAdd, onContext }: { onAdd: (leg: OptionL
             </table>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-[11px] text-brand-navy/45">
-            <span>Shaded = in the money · B/S adds a leg below at the ask/bid · IV and Greeks from the feed · refreshes every 5 s in market hours</span>
-            <button type="button" onClick={() => setAll((a) => !a)} className="font-semibold text-brand-primary">
-              {all ? "Strikes near the money" : `All ${data.rows.length} strikes`}
-            </button>
+            <span>Shaded = in the money · B/S adds a leg below at the ask/bid · <strong className="font-semibold">Source: market data feed</strong> (OI, IV, delta and prices are the feed&apos;s own, not calculated by us) · refreshes every 5 s in market hours</span>
+            <label className="flex items-center gap-1.5 font-semibold text-brand-primary">
+              Strikes shown
+              <select value={window_} onChange={(e) => setWindow(Number(e.target.value))} className="rounded border border-brand-navy/15 bg-white px-1.5 py-0.5 text-[11px] text-brand-navy">
+                <option value={6}>±6 from the money</option>
+                <option value={12}>±12 from the money</option>
+                <option value={25}>±25 from the money</option>
+                <option value={0}>All {data.rows.length}</option>
+              </select>
+              <span className="font-normal text-brand-navy/45">({shown.length} listed)</span>
+            </label>
           </div>
         </>
       )}

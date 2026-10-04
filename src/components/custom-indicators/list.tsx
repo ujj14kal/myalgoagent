@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { MessageSquareText, Pencil, PencilLine, Sigma, Trash2 } from "lucide-react";
 import CustomIndicatorEditor from "./editor";
 import DrawIndicator from "./draw";
 import DescribeIndicator from "./describe";
 import { deleteCustomIndicator } from "@/lib/custom-indicator-actions";
-import type { CustomIndicatorDef } from "@/lib/custom-indicator";
+import { CUSTOM_CLASSES, classifyCustom, type CustomClass, type CustomIndicatorDef } from "@/lib/custom-indicator";
 
 export type SavedIndicator = { id: string; name: string; description: string | null; def: CustomIndicatorDef; summary: string };
 
@@ -17,7 +17,12 @@ export default function CustomIndicatorList({ items, instruments, prefill }: { i
   const [editing, setEditing] = useState<string | null>(null);
   const [how, setHow] = useState<"draw" | "formula" | "describe">(prefill ? "formula" : "draw");
   const [, start] = useTransition();
+  const [kind, setKind] = useState<CustomClass | "all">("all");
+  const [q, setQ] = useState("");
+  const [shown, setShown] = useState(10);
   const router = useRouter();
+  const counts = useMemo(() => Object.fromEntries(CUSTOM_CLASSES.map((c) => [c, items.filter((i) => classifyCustom(i.def) === c).length])) as Record<CustomClass, number>, [items]);
+  const visible = useMemo(() => items.filter((i) => (kind === "all" || classifyCustom(i.def) === kind) && (!q.trim() || `${i.name} ${i.description ?? ""} ${i.summary}`.toLowerCase().includes(q.trim().toLowerCase()))), [items, kind, q]);
   return (
     <div className="space-y-4">
       <section className="surface p-5">
@@ -53,8 +58,24 @@ export default function CustomIndicatorList({ items, instruments, prefill }: { i
           {how === "describe" && <DescribeIndicator />}
         </div>
       </section>
-      {items.length > 0 && <p className="pt-2 text-sm font-semibold text-brand-navy">Your custom indicators</p>}
-      {items.map((i) => (
+      {items.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 pt-2">
+          <p className="mr-2 text-sm font-semibold text-brand-navy">Your custom indicators ({visible.length})</p>
+          {(["all", ...CUSTOM_CLASSES.filter((c) => counts[c] > 0)] as const).map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => (setKind(c), setShown(10))}
+              className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 ${kind === c ? "bg-brand-navy text-white ring-brand-navy" : "text-brand-navy/65 ring-brand-navy/15"}`}
+            >
+              {c === "all" ? `All (${items.length})` : `${c} (${counts[c]})`}
+            </button>
+          ))}
+          <input value={q} onChange={(e) => (setQ(e.target.value), setShown(10))} placeholder="Search…" aria-label="Search your indicators" className="ml-auto w-44 rounded-full border border-brand-navy/15 px-3 py-1 text-xs outline-none focus:border-brand-primary" />
+        </div>
+      )}
+      {items.length > 0 && visible.length === 0 && <p className="text-sm text-brand-navy/50">None match.</p>}
+      {visible.slice(0, shown).map((i) => (
         <section key={i.id} className="surface p-4">
           {editing === i.id && i.def.type === "formula" ? (
             <CustomIndicatorEditor instruments={instruments} initial={{ id: i.id, name: i.name, description: i.description, formula: i.def.formula, pane: i.def.pane }} onDone={() => setEditing(null)} />
@@ -64,7 +85,7 @@ export default function CustomIndicatorList({ items, instruments, prefill }: { i
                 <p className="font-semibold text-brand-navy">
                   {i.name}{" "}
                   <span className="ml-1 rounded-full bg-brand-navy/[0.05] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-navy/55">
-                    {i.def.type === "line" ? "drawn line" : i.def.pane === "price" ? "on price" : "own pane"}
+                    {classifyCustom(i.def)}
                   </span>
                 </p>
                 <p className="mt-1 break-all font-mono text-xs text-brand-navy/70">{i.summary}</p>
@@ -89,6 +110,11 @@ export default function CustomIndicatorList({ items, instruments, prefill }: { i
           )}
         </section>
       ))}
+      {visible.length > shown && (
+        <button type="button" onClick={() => setShown((n) => n + 10)} className="text-sm font-semibold text-brand-primary">
+          Show more ({visible.length - shown} left)
+        </button>
+      )}
     </div>
   );
 }

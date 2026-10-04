@@ -8,7 +8,8 @@ import { ANGEL, angelHeaders, arr, DHAN, dhanHeaders, FIVEPAISA, fpClientCode, f
 // broker names fields differently, so each reader maps them onto one shape.
 
 export type AccountProfile = { name: string | null; clientId: string | null; email: string | null };
-export type AccountFunds = { available: number | null; used: number | null; total: number | null };
+/** `lines` is every figure the broker sent, under its own name, so the page can show how the three headline numbers were reached. */
+export type AccountFunds = { available: number | null; used: number | null; total: number | null; lines?: { name: string; value: number }[] };
 export type AccountHolding = { symbol: string; exchange: string | null; quantity: number; avgPrice: number | null; ltp: number | null; pnl: number | null };
 export type AccountPosition = { symbol: string; exchange: string | null; product: string | null; quantity: number; avgPrice: number | null; ltp: number | null; pnl: number | null; realised: number | null };
 export type AccountOrder = { id: string; symbol: string; side: string; quantity: number; filled: number; price: number | null; avgPrice: number | null; status: string; time: string | null };
@@ -43,6 +44,16 @@ const sideOf = (v: unknown) => {
   return s === "1" || s.startsWith("B") ? "BUY" : s === "-1" || s.startsWith("S") ? "SELL" : s;
 };
 const rows = (v: unknown) => arr(v).map(obj);
+/** Every numeric field of a broker's funds reply (one level of nesting), under the broker's own names. */
+export function numericLines(r: Record<string, unknown>, prefix = "", depth = 0): { name: string; value: number }[] {
+  const out: { name: string; value: number }[] = [];
+  for (const [k, v] of Object.entries(r)) {
+    const nv = num(v);
+    if (nv !== null && typeof v !== "boolean") out.push({ name: `${prefix}${k}`, value: nv });
+    else if (depth < 1 && v && typeof v === "object" && !Array.isArray(v)) out.push(...numericLines(v as Record<string, unknown>, `${prefix}${k}.`, depth + 1));
+  }
+  return out;
+}
 
 function holding(r: Record<string, unknown>): AccountHolding {
   return {
@@ -109,7 +120,8 @@ async function bothSegments<T>(a: Promise<T>, b: Promise<T>): Promise<[T | Recor
 const groww: AccountReader = {
   async funds(ctx) {
     const p = await growwGet(ctx, "/margins/detail/user");
-    return { available: n(p, "clear_cash", "available_margin", "net_margin_available"), used: n(p, "net_margin_used", "margin_used"), total: n(p, "total_margin", "clear_cash") };
+    // Groww states no account total, so none is shown as if it were one (the page offers an estimate, labelled as such).
+    return { available: n(p, "clear_cash", "available_margin", "net_margin_available"), used: n(p, "net_margin_used", "margin_used"), total: n(p, "total_margin"), lines: numericLines(p) };
   },
   holdings: async (ctx) => rows((await growwGet(ctx, "/holdings/user")).holdings).map(holding),
   async positions(ctx) {

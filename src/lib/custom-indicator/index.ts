@@ -27,6 +27,15 @@ export function computeCustomSeries(candles: Candle[], def: CustomIndicatorDef):
 /** Where it draws: formulas choose; lines are always on the price chart. */
 export const customPane = (def: CustomIndicatorDef): "price" | "separate" => (def.type === "formula" ? def.pane : "price");
 
+export type CustomClass = "Overlay on price" | "Own-pane indicator" | "Trendline" | "Horizontal level";
+export const CUSTOM_CLASSES: CustomClass[] = ["Overlay on price", "Own-pane indicator", "Trendline", "Horizontal level"];
+
+/** What kind of indicator this is, worked out from its definition (so it can't drift from what it does). */
+export function classifyCustom(def: CustomIndicatorDef): CustomClass {
+  if (def.type === "formula") return def.pane === "price" ? "Overlay on price" : "Own-pane indicator";
+  return def.points[0].price === def.points[1].price ? "Horizontal level" : "Trendline";
+}
+
 /** A one-line description shown wherever the indicator appears. */
 export function describeCustom(def: CustomIndicatorDef): string {
   if (def.type === "formula") return def.formula;
