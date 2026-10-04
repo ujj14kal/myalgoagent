@@ -6,7 +6,16 @@ const INTERVAL_MS = 15_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const log = (msg: string, extra: Record<string, unknown> = {}) => console.log(JSON.stringify({ at: new Date().toISOString(), msg, ...extra }));
 
+const VERSION = process.env.ENGINE_VERSION ?? "dev";
+
 async function main() {
+  if (process.env.ENGINE_SMOKE === "1") {
+    // Release gate: prove the bundle and its database client load, then stop. Nothing connects.
+    await import("@/lib/live/deployments");
+    await import("@/lib/live/engine-heartbeat");
+    log("smoke ok", { version: VERSION });
+    return;
+  }
   process.env.APP_SECRETS_PATH ??= "/myalgoagent/app";
   const { ensureRuntimeSecrets } = await import("@/lib/runtime-secrets");
   await ensureRuntimeSecrets();
@@ -33,7 +42,7 @@ async function main() {
     log("stopping");
   });
   const ip = await currentEgressIp().catch(() => null);
-  log("engine started", { viaRelay: egressEnabled(), brokersSeeIp: ip?.ip ?? null, everyMs: INTERVAL_MS });
+  log("engine started", { version: VERSION, viaRelay: egressEnabled(), brokersSeeIp: ip?.ip ?? null, everyMs: INTERVAL_MS });
 
   await logForActiveUsers("INFO", "The live engine started. It checks your running strategies every 15 seconds while the market is open.");
   let wasOpen: boolean | null = null;

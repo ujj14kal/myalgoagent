@@ -20,3 +20,7 @@ CodeBuild's concurrent-build quota on this account is 0, so the image is assembl
 
 Stack: `aws cloudformation deploy --stack-name myalgoagent-engine --template-file infra/engine/template.yaml --capabilities CAPABILITY_IAM --parameter-overrides …` (parameters are listed at the top of template.yaml).
 Logs: `aws logs tail /myalgoagent/engine --since 10m`. Stop: `aws ecs update-service … --desired-count 0` (the Amplify backup takes over within ~1 minute).
+
+## Automatic release (GitHub Actions)
+`.github/workflows/engine-release.yml` runs typecheck, lint, all tests and `scripts/build-engine.sh` (bundle + smoke test) on every push to main; then, if the repository variable `ENGINE_DEPLOY_ROLE_ARN` is set, pushes the image (`:latest` and `:<git sha>`) and rolls the service out, waiting until it is stable. The ECS circuit breaker rolls a failing task back. The running version is logged at start (`engine started … version`).
+One-time setup: deploy `infra/engine/github-deploy-role.yaml` (`aws cloudformation deploy --stack-name myalgoagent-engine-deploy --template-file infra/engine/github-deploy-role.yaml --capabilities CAPABILITY_NAMED_IAM`), then add the `RoleArn` output as the repository variable `ENGINE_DEPLOY_ROLE_ARN`. Apply the updated `template.yaml` too (rolling deploys with rollback). Manual build: `scripts/build-engine.sh --push`.

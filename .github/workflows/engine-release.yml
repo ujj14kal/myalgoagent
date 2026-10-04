@@ -1,0 +1,61 @@
+# Releases the live-strategy engine (AWS Fargate) automatically: only after the same checks as CI pass,
+# and only if the engine's own code or what it depends on changed. A failed new task rolls back by itself
+# (ECS deployment circuit breaker), so a bad build can't take live trading down.
+# Needs the repository variable ENGINE_DEPLOY_ROLE_ARN (from infra/engine/github-deploy-role.yaml); without it the release job is skipped.
+name: Engine release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: engine-release
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npx next typegen && npx tsc --noEmit
+      - run: npm run lint
+      - run: npx vitest run
+      - name: Build the engine and smoke-test it
+        run: ./scripts/build-engine.sh
+
+  release:
+    needs: checks
+    if: vars.ENGINE_DEPLOY_ROLE_ARN != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      AWS_REGION: ap-south-1
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - uses: imjasonh/setup-crane@v0.4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.ENGINE_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-1
+      - name: Build, smoke-test and push the image
+        run: ./scripts/build-engine.sh --push
+      - name: Roll out to Fargate and wait until it is healthy
+        run: |
+          aws ecs update-service --cluster myalgoagent --service myalgoagent-engine --force-new-deployment >/dev/null
+          aws ecs wait services-stable --cluster myalgoagent --services myalgoagent-engine
+          aws ecs describe-services --cluster myalgoagent --services myalgoagent-engine --query 'services[0].deployments[].[status,rolloutState,runningCount]' --output text

@@ -1,0 +1,38 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Lets GitHub Actions (this repository, main branch only) push the engine image and roll out the Fargate service. No stored keys.
+Parameters:
+  Repository: { Type: String, Default: ujj14kal/myalgoagent }
+Resources:
+  GitHubOidc:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+      ThumbprintList: [6938fd4d98bab03faadb97b34396831e3780aea1]
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: myalgoagent-engine-deploy
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Federated: !Ref GitHubOidc }
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals: { "token.actions.githubusercontent.com:aud": sts.amazonaws.com }
+              StringLike: { "token.actions.githubusercontent.com:sub": !Sub "repo:${Repository}:ref:refs/heads/main" }
+      Policies:
+        - PolicyName: engine-release
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - { Effect: Allow, Action: "ecr:GetAuthorizationToken", Resource: "*" }
+              - Effect: Allow
+                Action: [ecr:BatchCheckLayerAvailability, ecr:InitiateLayerUpload, ecr:UploadLayerPart, ecr:CompleteLayerUpload, ecr:PutImage, ecr:BatchGetImage, ecr:GetDownloadUrlForLayer]
+                Resource: !Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/myalgoagent-engine"
+              - { Effect: Allow, Action: [ecs:UpdateService, ecs:DescribeServices], Resource: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/myalgoagent/myalgoagent-engine" }
+              - { Effect: Allow, Action: sts:GetCallerIdentity, Resource: "*" }
+Outputs:
+  RoleArn: { Value: !GetAtt DeployRole.Arn }
