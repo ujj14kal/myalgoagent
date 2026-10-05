@@ -124,7 +124,7 @@ describe("what stops a workspace from being published", () => {
   it("an entry plan that buys more than the plan", () => {
     expect(errs(def({ entryPlan: { firstPercent: 60, levels: [{ trigger: "PULLBACK", unit: "PERCENT", value: 3, allocationPercent: 60 }] } })).join(" ")).toMatch(/100%/);
   });
-  it("a swing workspace on intraday candles", () => expect(errs(def({ style: "SWING", timeframe: "15m", productType: "INTRADAY" })).join(" ")).toMatch(/daily candles/));
+  it("a swing workspace on intraday candles", () => expect(errs(def({ style: "SWING", timeframe: "15m", productType: "INTRADAY" })).join(" ")).toMatch(/daily or weekly candles/));
   it("a short held overnight", () => expect(errs(def({ direction: "SHORT" })).join(" ")).toMatch(/overnight/));
 });
 

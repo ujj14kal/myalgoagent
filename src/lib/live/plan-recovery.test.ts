@@ -156,14 +156,15 @@ describe("storing an entry plan", () => {
 
 describe("swing and positional styles", () => {
   const ok = { timeframe: "1d", productType: "DELIVERY", direction: "LONG" };
-  it("accept daily, delivery, long", () => {
+  it("accept daily or weekly, delivery, long", () => {
     expect(styleProblem("SWING", ok)).toBeNull();
+    expect(styleProblem("POSITIONAL", { ...ok, timeframe: "1wk" })).toBeNull();
     expect(styleProblem("POSITIONAL", ok)).toBeNull();
     expect(styleProblem("INTRADAY", { timeframe: "5m", productType: "INTRADAY", direction: "SHORT" })).toBeNull();
     expect(styleProblem(null, { timeframe: "5m", productType: "INTRADAY", direction: "SHORT" })).toBeNull();
   });
   it("explain what is wrong", () => {
-    expect(styleProblem("SWING", { ...ok, timeframe: "15m" })).toMatch(/daily candles/);
+    expect(styleProblem("SWING", { ...ok, timeframe: "15m" })).toMatch(/daily or weekly candles/);
     expect(styleProblem("SWING", { ...ok, productType: "INTRADAY" })).toMatch(/delivery/);
     expect(styleProblem("POSITIONAL", { ...ok, direction: "SHORT" })).toMatch(/long only/);
   });

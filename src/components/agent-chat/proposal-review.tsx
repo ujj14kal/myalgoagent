@@ -1,4 +1,5 @@
 "use client";
+import { isIntraday } from "@/lib/market-data/timeframes";
 import { describeTargets } from "@/lib/describe-targets";
 import { describeEntryPlan } from "@/lib/describe-entry-plan";
 import { STYLE_LABEL } from "@/lib/strategy/style";
@@ -523,7 +524,7 @@ function StrategyFields({
             value={draft.timeframe ?? "1d"}
             onChange={(e) => {
               const timeframe = e.target.value;
-              const intraday = timeframe !== "1d";
+              const intraday = isIntraday(timeframe as CandleInterval);
               onChange({
                 ...draft,
                 timeframe,
@@ -541,7 +542,7 @@ function StrategyFields({
             ))}
           </select>
         </Field>
-        {(draft.timeframe ?? "1d") !== "1d" && (
+        {isIntraday((draft.timeframe ?? "1d") as CandleInterval) && (
           <>
             <Field label="No new entries after">
               <input
@@ -565,11 +566,11 @@ function StrategyFields({
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Product">
           <select
-            value={draft.productType ?? ((draft.timeframe ?? "1d") === "1d" ? "DELIVERY" : "INTRADAY")}
+            value={draft.productType ?? (isIntraday((draft.timeframe ?? "1d") as CandleInterval) ? "INTRADAY" : "DELIVERY")}
             onChange={(e) => set("productType", e.target.value)}
             className={inputCls}
           >
-            <option value="INTRADAY" disabled={(draft.timeframe ?? "1d") === "1d"}>
+            <option value="INTRADAY" disabled={!isIntraday((draft.timeframe ?? "1d") as CandleInterval)}>
               Intraday
             </option>
             <option value="DELIVERY">Delivery</option>

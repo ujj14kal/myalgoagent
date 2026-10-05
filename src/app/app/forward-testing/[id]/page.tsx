@@ -82,7 +82,7 @@ export default async function PaperSessionDetailPage({ params }: { params: Promi
 
       <p className="mb-4 flex items-center gap-2 rounded-xl border border-brand-gold/30 bg-brand-gold/[0.08] px-4 py-2.5 text-xs font-medium text-brand-navy/70">
         <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-gold" />
-        Hypothetical results on {paperSession.timeframe === "1d" ? "daily" : `${paperSession.timeframe === "60m" ? "1H" : paperSession.timeframe === "4h" ? "4H" : paperSession.timeframe}`} candles, updated about every 5 minutes during market hours (or when you press Sync) — not tick-by-tick. No orders are sent and no money is involved.
+        Hypothetical results on {paperSession.timeframe === "1d" ? "daily" : paperSession.timeframe === "1wk" ? "weekly" : `${paperSession.timeframe === "60m" ? "1H" : paperSession.timeframe === "4h" ? "4H" : paperSession.timeframe}`} candles, updated about every 5 minutes during market hours (or when you press Sync) — not tick-by-tick. No orders are sent and no money is involved.
       </p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

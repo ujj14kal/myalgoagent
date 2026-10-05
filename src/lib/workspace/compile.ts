@@ -1,3 +1,5 @@
+import type { CandleInterval } from "@/lib/market-data";
+import { isIntraday } from "@/lib/market-data/timeframes";
 import { checkConditionFeasibility } from "@/lib/strategy/validate-sanity";
 import { validateConditionNode } from "@/lib/strategy/validate";
 import { conditionToText } from "@/lib/strategy/format";
@@ -185,9 +187,9 @@ export function compileWorkspace(def: WorkspaceDefinition, memberStrategies: Mem
   const planProblem = validateEntryPlan(def.entryPlan ?? undefined, def.maxPyramidEntries);
   if (planProblem) issues.push({ where: "Entry plan", message: planProblem });
   if (def.maxPyramidEntries < 1) issues.push({ where: "Entry plan", message: "Max entries per position must be at least 1." });
-  const styleIssue = styleProblem(def.style, { timeframe: def.timeframe, productType: def.productType ?? (def.timeframe === "1d" ? "DELIVERY" : "INTRADAY"), direction: def.direction });
+  const styleIssue = styleProblem(def.style, { timeframe: def.timeframe, productType: def.productType ?? (isIntraday(def.timeframe as CandleInterval) ? "INTRADAY" : "DELIVERY"), direction: def.direction });
   if (styleIssue) issues.push({ where: "Setup", message: styleIssue });
-  if (def.direction === "SHORT" && (def.productType ?? (def.timeframe === "1d" ? "DELIVERY" : "INTRADAY")) === "DELIVERY") issues.push({ where: "Setup", message: "A short position can't be held overnight in the cash market: choose intraday, or go long." });
+  if (def.direction === "SHORT" && (def.productType ?? (isIntraday(def.timeframe as CandleInterval) ? "INTRADAY" : "DELIVERY")) === "DELIVERY") issues.push({ where: "Setup", message: "A short position can't be held overnight in the cash market: choose intraday, or go long." });
 
   return { entryCondition: entry, exitCondition: exitRule ?? NEVER_EXIT_CONDITION, errors: issues, warnings };
 }

@@ -1,4 +1,5 @@
 "use client";
+import { isIntraday } from "@/lib/market-data/timeframes";
 import InstrumentCombobox from "@/components/instrument-combobox";
 import { friendlyError } from "@/lib/friendly-error";
 import WebhookGuide from "@/components/webhook-guide";
@@ -307,7 +308,7 @@ export default function StrategyBuilderForm({
   const [squareOffMinute, setSquareOffMinute] = useState<number | null>(
     initial ? (initial.squareOffMinute ?? null) : DEFAULT_SQUARE_OFF_MINUTE,
   );
-  const intraday = timeframe !== "1d";
+  const intraday = isIntraday(timeframe as CandleInterval);
   const [productType, setProductType] = useState<"INTRADAY" | "DELIVERY">(
     initial?.productType === "INTRADAY" || initial?.productType === "DELIVERY" ? initial.productType : defaultProduct(initial?.timeframe ?? "1d"),
   );
@@ -319,7 +320,7 @@ export default function StrategyBuilderForm({
   // so choosing one moves the strategy to 5-minute candles and says so.
   const [switchedForTime, setSwitchedForTime] = useState(false);
   useEffect(() => {
-    if (mode !== "NO_CODE" || timeframe !== "1d") return;
+    if (mode !== "NO_CODE" || isIntraday(timeframe as CandleInterval)) return;
     if (hasTimeRule(entryCondition) || (exitConditionOpen && hasTimeRule(exitCondition))) {
       chooseTimeframe("5m");
       // eslint-disable-next-line react-hooks/set-state-in-effect -- reacting to the user's rule choice
@@ -330,8 +331,8 @@ export default function StrategyBuilderForm({
 
   /** Daily candles can only be Delivery; moving to an intraday timeframe suggests Intraday. */
   function chooseTimeframe(tf: string) {
-    if (tf === "1d") setProductType("DELIVERY");
-    else if (timeframe === "1d") setProductType("INTRADAY");
+    if (!isIntraday(tf as CandleInterval)) setProductType("DELIVERY");
+    else if (!isIntraday(timeframe as CandleInterval)) setProductType("INTRADAY");
     setTimeframe(tf);
   }
   const [stopLoss, setStopLoss] = useState<RiskLegState>(
@@ -348,7 +349,7 @@ export default function StrategyBuilderForm({
   function chooseStyle(next: "STANDARD" | "SWING" | "POSITIONAL") {
     setStyle(next);
     if (next === "STANDARD") return;
-    setTimeframe("1d");
+    if (isIntraday(timeframe as CandleInterval)) setTimeframe("1d");
     setProductType("DELIVERY");
     setDirection("LONG");
     setNoEntryAfterMinute(null);
@@ -678,7 +679,7 @@ export default function StrategyBuilderForm({
                 />
                 <p className="mt-1.5 text-xs text-brand-navy/40">
                   {swingish
-                    ? "Held overnight: daily candles, delivery, long only. Your rules can still read a weekly or monthly trend as another timeframe. Pair it with an entry plan and staged targets below."
+                    ? "Held overnight: daily or weekly candles, delivery, long only. Your rules can still read a longer trend as another timeframe. Pair it with an entry plan and staged targets below."
                     : "Choose Swing or Positional for strategies that build and leave a position over days or months."}
                 </p>
               </div>
@@ -696,8 +697,8 @@ export default function StrategyBuilderForm({
                       role="radio"
                       aria-checked={timeframe === t.value}
                       onClick={() => chooseTimeframe(t.value)}
-                      disabled={swingish && t.value !== "1d"}
-                      title={swingish && t.value !== "1d" ? "Swing and positional strategies run on daily candles." : undefined}
+                      disabled={swingish && isIntraday(t.value)}
+                      title={swingish && isIntraday(t.value) ? "Swing and positional strategies run on daily or weekly candles." : undefined}
                       className={`min-w-[44px] rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                         timeframe === t.value ? "border-brand-primary bg-brand-primary text-white" : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
                       }`}
@@ -711,7 +712,9 @@ export default function StrategyBuilderForm({
                     ? `Checks the rules on every ${STRATEGY_TIMEFRAMES.find((t) => t.value === timeframe)?.label} candle. Intraday history is limited: about ${
                         timeframe === "1m" || timeframe === "3m" ? "7 days" : timeframe === "60m" || timeframe === "4h" ? "1 year" : "60 days"
                       } for backtests on the current data source.`
-                    : "Checks the rules once per day, on each daily candle."}
+                    : timeframe === "1wk"
+                      ? "Checks the rules once a week, when the week's last session has closed; orders go out at the next Monday open. Needs years of history, so indicators are ready."
+                      : "Checks the rules once per day, on each daily candle."}
                 </p>
               </div>
             )}
@@ -840,7 +843,7 @@ export default function StrategyBuilderForm({
               subtitle="When to open a position"
               sectionRef={entryRef}
             >
-              {switchedForTime && timeframe !== "1d" && (
+              {switchedForTime && isIntraday(timeframe as CandleInterval) && (
                 <p className="mb-3 rounded-lg bg-brand-gold/10 px-3 py-2 text-xs text-brand-navy/75 ring-1 ring-brand-gold/25">
                   Switched to {STRATEGY_TIMEFRAMES.find((t) => t.value === timeframe)?.label ?? timeframe} candles — time-of-day rules need an intraday timeframe. You can pick another one
                   (1m to 4H) in Position.

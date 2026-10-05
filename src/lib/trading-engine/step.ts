@@ -475,6 +475,22 @@ export type StepResult = {
  *    entry is assumed to have gone on to the stop, never the other way round), and the stops and targets are
  *    recomputed from the blended average entry.
  */
+/**
+ * Trading days between two candles of a series: the number of times the IST day changes along the way. A gap of a
+ * weekend or holiday between daily candles is still one trading day; a weekly (or longer) candle stands for the
+ * sessions it covers (5 a week). Used for a plan's waiting periods and holding limit, so "30 days" means 30 sessions
+ * whatever the candle size.
+ */
+export function tradingDaysBetween(candles: Candle[], fromIdx: number, toIdx: number): number {
+  let days = 0;
+  for (let k = fromIdx + 1; k <= toIdx && k < candles.length; k++) {
+    const gap = istDayAndMinute(candles[k].time).day - istDayAndMinute(candles[k - 1].time).day;
+    if (gap <= 0) continue;
+    days += gap <= 4 ? 1 : Math.max(1, Math.round((gap * 5) / 7));
+  }
+  return days;
+}
+
 export function stepBar(candles: Candle[], i: number, entrySignal: boolean, exitSignal: boolean, state: EngineState, config: EngineConfig): StepResult {
   const plan = config.entryPlan;
   const pos0 = state.position;
@@ -485,7 +501,7 @@ export function stepBar(candles: Candle[], i: number, entrySignal: boolean, exit
   const bar = candles[i];
   const slip = (side: "open" | "close") => 1 + ((side === "open") === !isShort ? 1 : -1) * (config.slippagePercent / 100);
 
-  if (plan.maxHoldDays !== undefined && i > pos0.entryIdx && istDayAndMinute(bar.time).day - istDayAndMinute(candles[pos0.entryIdx].time).day >= plan.maxHoldDays) {
+  if (plan.maxHoldDays !== undefined && i > pos0.entryIdx && tradingDaysBetween(candles, pos0.entryIdx, i) >= plan.maxHoldDays) {
     const trade = closeTrade(candles, pos0, i, bar.open * slip("close"), config.brokeragePercent, direction);
     return { state: { cash: state.cash + trade.netPnl, position: null }, trade, exitReason: "time_stop" };
   }
@@ -507,7 +523,7 @@ export function stepBar(candles: Candle[], i: number, entrySignal: boolean, exit
   };
 
   if (accumulating) {
-    const waited = istDayAndMinute(bar.time).day - istDayAndMinute(candles[pos0.entryIdx].time).day;
+    const waited = tradingDaysBetween(candles, pos0.entryIdx, i);
     const expired = (l: EntryLevel) => l.maxWaitDays !== undefined && waited > l.maxWaitDays;
     while (cursor < plan.levels.length && expired(plan.levels[cursor])) {
       cursor++;

@@ -1,3 +1,5 @@
+import { isIntraday } from "@/lib/market-data/timeframes";
+import type { CandleInterval } from "@/lib/market-data";
 import { prisma } from "@/lib/prisma";
 import { registeredStaticIp } from "@/lib/brokers/egress";
 import { BROKERS, brokerById, callbackUrl } from "@/lib/brokers/catalog";
@@ -116,7 +118,7 @@ const styleSchema = {
   type: "string",
   enum: ["intraday", "swing", "positional"],
   description:
-    "How long the strategy expects to hold. swing = days to weeks, positional = weeks to months (long-term investing). Swing and positional strategies are always delivery, long only and on daily candles (they may read a weekly or monthly trend as another timeframe inside their rules), and suit staged entries (entry_plan) and staged targets. Omit for ordinary strategies.",
+    "How long the strategy expects to hold. swing = days to weeks, positional = weeks to months (long-term investing). Swing and positional strategies are always delivery, long only and on daily (1d) or weekly (1wk) candles (they may read a weekly or monthly trend as another timeframe inside their rules), and suit staged entries (entry_plan) and staged targets. Omit for ordinary strategies.",
 };
 
 export const AGENT_TOOLS: MantleTool[] = [
@@ -265,7 +267,7 @@ export const AGENT_TOOLS: MantleTool[] = [
           entry: { anyOf: [{ type: "string" }, { type: "object" }], description: "Entry condition (see CONDITIONS)" },
           exit: { anyOf: [{ type: "string" }, { type: "object" }, { type: "null" }], description: "Exit condition (see CONDITIONS); null = no rule-based exit (needs a stop-loss, take-profit or trailing stop)" },
           max_entries: { type: "number", description: "Max entries per position (pyramiding); default 1" },
-          timeframe: { type: "string", enum: ["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d"], description: "Candle timeframe the strategy runs on. Use an intraday one (1m–4h) whenever the rules involve times of day; default 1d." },
+          timeframe: { type: "string", enum: ["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d", "1wk"], description: "Candle timeframe the strategy runs on (1wk = weekly: checked once a week after Friday's close, orders at the next Monday open; swing and positional strategies suit 1d or 1wk). Use an intraday one (1m–4h) whenever the rules involve times of day; default 1d." },
           no_entry_after: { type: ["string", "null"], description: "Intraday only: no new entries at/after this IST time, e.g. \"14:30\"" },
           product: { type: "string", enum: ["intraday", "delivery"], description: "Intraday (squared off the same day; needs a 1m–4h timeframe; required for short selling) or delivery (may be held overnight, long only). Default: intraday for intraday timeframes, delivery for 1d. MTF isn't available yet." },
           order_type: { type: "string", enum: ["market", "limit"], description: "Entry order type; default market" },
@@ -415,7 +417,7 @@ export const AGENT_TOOLS: MantleTool[] = [
             },
           },
           max_entries: { type: "number" },
-          timeframe: { type: "string", enum: ["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d"], description: "Candle timeframe the strategy runs on. Use an intraday one (1m–4h) whenever the rules involve times of day; default 1d." },
+          timeframe: { type: "string", enum: ["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d", "1wk"], description: "Candle timeframe the strategy runs on (1wk = weekly: checked once a week after Friday's close, orders at the next Monday open; swing and positional strategies suit 1d or 1wk). Use an intraday one (1m–4h) whenever the rules involve times of day; default 1d." },
           no_entry_after: { type: ["string", "null"], description: "Intraday only: no new entries at/after this IST time, e.g. \"14:30\"" },
           product: { type: "string", enum: ["intraday", "delivery"], description: "Intraday (squared off the same day; needs a 1m–4h timeframe; required for short selling) or delivery (may be held overnight, long only). Default: intraday for intraday timeframes, delivery for 1d. MTF isn't available yet." },
           order_type: { type: "string", enum: ["market", "limit"], description: "Entry order type; default market" },
@@ -577,7 +579,7 @@ function clockArg(v: unknown): number | null | undefined {
   return h * 60 + Number(m[2]);
 }
 
-const STRATEGY_TF = ["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d"];
+const STRATEGY_TF = ["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d", "1wk"];
 
 /** product / order_type / limit_* arguments → the saved order fields (undefined = unchanged). */
 function orderArgs(a: Record<string, unknown>) {
@@ -674,8 +676,9 @@ async function proposeStrategy(userId: string, a: Record<string, unknown>): Prom
     style = styleFrom(a.style);
     // Swing and positional strategies are held overnight: daily candles, delivery, no intraday session rules.
     const swingish = style === "SWING" || style === "POSITIONAL";
-    const timeframe = swingish ? "1d" : timeframeArg(a.timeframe) ?? "1d";
-    const intraday = timeframe !== "1d";
+    const tfArg = timeframeArg(a.timeframe);
+    const timeframe = swingish ? (tfArg === "1wk" ? "1wk" : "1d") : tfArg ?? "1d";
+    const intraday = isIntraday(timeframe as CandleInterval);
     const noEntry = clockArg(a.no_entry_after);
     const squareOff = clockArg(a.square_off_at);
     const order = orderArgs(a);
@@ -805,7 +808,7 @@ async function proposeStrategyUpdate(userId: string, a: Record<string, unknown>)
   let updSession;
   try {
     const timeframe = timeframeArg(a.timeframe) ?? s.timeframe;
-    const intraday = timeframe !== "1d";
+    const intraday = isIntraday(timeframe as CandleInterval);
     const noEntry = clockArg(a.no_entry_after);
     const squareOff = clockArg(a.square_off_at);
     const order = orderArgs(a);
@@ -816,7 +819,7 @@ async function proposeStrategyUpdate(userId: string, a: Record<string, unknown>)
       limitValue: order.orderType !== undefined ? order.limitValue ?? null : s.limitValue,
       timeframe,
       noEntryAfterMinute: intraday ? (noEntry === undefined ? s.noEntryAfterMinute : noEntry) : null,
-      squareOffMinute: intraday ? (squareOff === undefined ? (s.squareOffMinute ?? (s.timeframe === "1d" ? DEFAULT_SQUARE_OFF_MINUTE : null)) : squareOff) : null,
+      squareOffMinute: intraday ? (squareOff === undefined ? (s.squareOffMinute ?? (!isIntraday(s.timeframe as CandleInterval) ? DEFAULT_SQUARE_OFF_MINUTE : null)) : squareOff) : null,
     };
   } catch (err) {
     return { result: { error: `${readableIssues(err)} Fix it and call propose_strategy_update again.` } };
@@ -977,9 +980,10 @@ async function proposeWorkspace(userId: string, a: Record<string, unknown>): Pro
     if (str(a.instrument_symbol) && !instrument) return fix(`Unknown instrument "${str(a.instrument_symbol)}". Call list_instruments and use an exact symbol.`);
     const style = styleFrom(a.style);
     const swingish = (style === undefined ? base.style : style) === "SWING" || (style === undefined ? base.style : style) === "POSITIONAL";
-    const timeframe = swingish ? "1d" : timeframeArg(a.timeframe) ?? base.timeframe;
+    const tfArg = timeframeArg(a.timeframe);
+    const timeframe = swingish ? (tfArg === "1wk" ? "1wk" : isIntraday(base.timeframe as CandleInterval) ? "1d" : tfArg ?? base.timeframe) : tfArg ?? base.timeframe;
     const order = orderArgs(a);
-    const intraday = timeframe !== "1d";
+    const intraday = isIntraday(timeframe as CandleInterval);
     const sizing = sizingFrom(a.position_sizing, { mode: base.positionSizingMode, value: base.positionSizingValue });
     const pickLeg = (key: string, saved: WorkspaceDefinition["stopLoss"]) => (key in a ? (a[key] === null ? { enabled: false, unit: "PERCENT" as RiskUnitName, value: 0 } : leg(a[key])) : saved);
     const noEntry = clockArg(a.no_entry_after);

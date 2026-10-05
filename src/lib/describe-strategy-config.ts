@@ -26,7 +26,7 @@ export interface StrategyExecutionConfig {
   limitValue?: number | null;
 }
 
-const TIMEFRAME_LABEL: Record<string, string> = { "1m": "1-minute", "3m": "3-minute", "5m": "5-minute", "15m": "15-minute", "30m": "30-minute", "60m": "1-hour", "4h": "4-hour", "1d": "daily" };
+const TIMEFRAME_LABEL: Record<string, string> = { "1m": "1-minute", "3m": "3-minute", "5m": "5-minute", "15m": "15-minute", "30m": "30-minute", "60m": "1-hour", "4h": "4-hour", "1d": "daily", "1wk": "weekly" };
 const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
 const UNIT_SUFFIX: Record<RiskUnit, string> = {

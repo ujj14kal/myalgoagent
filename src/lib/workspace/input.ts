@@ -1,3 +1,5 @@
+import type { CandleInterval } from "@/lib/market-data";
+import { isIntraday } from "@/lib/market-data/timeframes";
 import type { ConditionNode } from "@/lib/strategy/types";
 import type { StrategyInput } from "@/lib/strategy-write";
 import type { WorkspaceDefinition } from "./types";
@@ -23,7 +25,7 @@ export function strategyInputFor(def: WorkspaceDefinition, entry: ConditionNode,
     timeframe: def.timeframe,
     noEntryAfterMinute: def.noEntryAfterMinute ?? null,
     squareOffMinute: def.squareOffMinute ?? null,
-    productType: def.productType ?? (def.timeframe === "1d" ? "DELIVERY" : "INTRADAY"),
+    productType: def.productType ?? (isIntraday(def.timeframe as CandleInterval) ? "INTRADAY" : "DELIVERY"),
     orderType: def.orderType ?? "MARKET",
     limitMode: def.orderType === "LIMIT" ? def.limitMode ?? "PERCENT" : null,
     limitValue: def.orderType === "LIMIT" ? def.limitValue ?? null : null,

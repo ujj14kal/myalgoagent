@@ -138,7 +138,7 @@ export interface SyncResult {
  * need history before the "new" bars to be correct); only bars after
  * `lastSyncedTime` are actually acted on.
  */
-const INTERVAL_SECONDS: Partial<Record<CandleInterval, number>> = { "1m": 60, "2m": 120, "3m": 180, "5m": 300, "15m": 900, "30m": 1800, "60m": 3600, "4h": 4 * 3600 };
+const INTERVAL_SECONDS: Partial<Record<CandleInterval, number>> = { "1m": 60, "2m": 120, "3m": 180, "5m": 300, "15m": 900, "30m": 1800, "60m": 3600, "4h": 4 * 3600, "1wk": 7 * 86_400 };
 const IST_OFFSET = 19_800;
 const MARKET_CLOSE_MINUTE = 15 * 60 + 30;
 
@@ -149,6 +149,13 @@ export function closedCandles<T extends { time: number }>(candles: T[], timefram
   if (!last) return candles;
   const istMidnight = Math.floor((last.time + IST_OFFSET) / 86_400) * 86_400 - IST_OFFSET;
   const sessionEnd = istMidnight + MARKET_CLOSE_MINUTE * 60;
+  if (timeframe === "1wk") {
+    // A weekly candle closes with the week's last session: Friday 15:30 IST of the week it starts in.
+    const istDay = Math.floor((last.time + IST_OFFSET) / 86_400);
+    const daysSinceMonday = (istDay + 3) % 7; // 1970-01-01 was a Thursday
+    const weekEnd = (istDay - daysSinceMonday + 4) * 86_400 - IST_OFFSET + MARKET_CLOSE_MINUTE * 60;
+    return weekEnd <= nowSec ? candles : candles.slice(0, -1);
+  }
   const step = INTERVAL_SECONDS[timeframe];
   const closesAt = step ? Math.min(last.time + step, sessionEnd) : sessionEnd;
   return closesAt <= nowSec ? candles : candles.slice(0, -1);
@@ -161,6 +168,19 @@ export function closedCandles<T extends { time: number }>(candles: T[], timefram
  * it can be found again on the next pass.
  */
 export function snapFormingCandle<T extends { time: number }>(candles: T[], timeframe: CandleInterval): T[] {
+  if (timeframe === "1wk") {
+    // Yahoo stamps the still-forming week with its latest trade time (Monday 15:15) instead of the week's start (Monday
+    // 00:00), so it would read differently on every pass. When the newest week's time of day differs from the one
+    // before it, move it to its Monday at that same time of day. Weeks stamped by their first session are left alone.
+    if (candles.length < 2) return candles;
+    const last = candles[candles.length - 1];
+    const prev = candles[candles.length - 2];
+    const tod = (t: number) => (((t + IST_OFFSET) % 86_400) + 86_400) % 86_400;
+    if (tod(last.time) === tod(prev.time)) return candles;
+    const istDay = Math.floor((last.time + IST_OFFSET) / 86_400);
+    const monday = istDay - ((istDay + 3) % 7);
+    return [...candles.slice(0, -1), { ...last, time: monday * 86_400 + tod(prev.time) - IST_OFFSET }];
+  }
   const step = INTERVAL_SECONDS[timeframe];
   if (!step || candles.length < 2) return candles;
   const last = candles[candles.length - 1];

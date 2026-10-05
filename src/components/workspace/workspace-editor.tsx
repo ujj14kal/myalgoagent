@@ -1,5 +1,7 @@
 "use client";
 
+import type { CandleInterval } from "@/lib/market-data";
+import { isIntraday } from "@/lib/market-data/timeframes";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Plus, Trash2 } from "lucide-react";
@@ -102,7 +104,7 @@ export default function WorkspaceEditor({
   const taken = new Set(def.members.map((m) => m.strategyId));
   const available = strategies.filter((s) => !taken.has(s.id) && s.mode !== "WEBHOOK");
   const stagedProblemPlan = stateToPlan(plan);
-  const intraday = def.timeframe !== "1d";
+  const intraday = isIntraday(def.timeframe as CandleInterval);
 
   /** The plan as it will be saved: the form's plan and target rows folded into the definition. */
   function current(): WorkspaceDefinition {
@@ -111,7 +113,7 @@ export default function WorkspaceEditor({
 
   function chooseStyle(next: "STANDARD" | "SWING" | "POSITIONAL") {
     if (next === "STANDARD") return change({ style: null });
-    change({ style: next, timeframe: "1d", productType: "DELIVERY", direction: "LONG", noEntryAfterMinute: null, squareOffMinute: null });
+    change({ style: next, timeframe: isIntraday(def.timeframe as CandleInterval) ? "1d" : def.timeframe, productType: "DELIVERY", direction: "LONG", noEntryAfterMinute: null, squareOffMinute: null });
   }
 
   function save(then?: () => void) {
@@ -197,14 +199,14 @@ export default function WorkspaceEditor({
                 </button>
               ))}
             </div>
-            <p className="mt-1.5 text-xs text-brand-navy/40">{swingish ? "Held overnight: daily candles, delivery, long only." : "Choose Swing or Positional for plans that build and leave a position over days or months."}</p>
+            <p className="mt-1.5 text-xs text-brand-navy/40">{swingish ? "Held overnight: daily or weekly candles, delivery, long only." : "Choose Swing or Positional for plans that build and leave a position over days or months."}</p>
           </div>
           <div>
             <label className={label}>Timeframe</label>
             <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Timeframe">
-              {["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d"].map((t) => (
-                <button key={t} type="button" role="radio" aria-checked={def.timeframe === t} disabled={swingish && t !== "1d"} onClick={() => change({ timeframe: t, productType: t === "1d" ? "DELIVERY" : "INTRADAY" })} className={pill(def.timeframe === t)}>
-                  {t === "60m" ? "1H" : t === "4h" ? "4H" : t === "1d" ? "1D" : t}
+              {["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d", "1wk"].map((t) => (
+                <button key={t} type="button" role="radio" aria-checked={def.timeframe === t} disabled={swingish && isIntraday(t as CandleInterval)} onClick={() => change({ timeframe: t, productType: isIntraday(t as CandleInterval) ? "INTRADAY" : "DELIVERY" })} className={pill(def.timeframe === t)}>
+                  {t === "60m" ? "1H" : t === "4h" ? "4H" : t === "1d" ? "1D" : t === "1wk" ? "1W" : t}
                 </button>
               ))}
             </div>

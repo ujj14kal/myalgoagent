@@ -5,7 +5,7 @@ import type { ConditionNode, FeasibilityIssue } from "./types";
 // A strategy's timeframe and intraday session rules, in one place, so saving,
 // validation, backtests, forward testing and the builder's demo all agree.
 
-/** Timeframes a strategy can run on (weekly/monthly are chart-only). */
+/** Timeframes a strategy can run on (monthly is chart-only). Weekly candles are acted on when the week has closed, and fill at the next Monday open. */
 export const STRATEGY_TIMEFRAMES: { value: CandleInterval; label: string }[] = [
   { value: "1m", label: "1m" },
   { value: "3m", label: "3m" },
@@ -15,6 +15,7 @@ export const STRATEGY_TIMEFRAMES: { value: CandleInterval; label: string }[] = [
   { value: "60m", label: "1H" },
   { value: "4h", label: "4H" },
   { value: "1d", label: "1D" },
+  { value: "1wk", label: "1W" },
 ];
 
 export const SESSION_OPEN_MINUTE = 9 * 60 + 15; // 09:15 IST
@@ -118,6 +119,7 @@ export function rangeFor(timeframe: string, desired: CandleRange, depth: History
 
 /** Enough recent history for a forward-testing sync: indicators need warm-up bars before the new ones. */
 export function paperSyncRange(timeframe: string, depth: HistoryDepth = "standard"): CandleRange {
+  if (timeframe === "1wk") return rangeFor(timeframe, "5y", depth); // weekly indicators need years of weekly candles to warm up
   return isIntraday(timeframe as CandleInterval) ? rangeFor(timeframe, "1mo", depth) : "3mo";
 }
 
@@ -177,10 +179,10 @@ export function checkSessionFeasibility(
   }
   if (!isIntraday(s.timeframe)) {
     if (entry && usesTimeOfDay(entry)) {
-      issues.push({ section: "entry", message: "Time-of-day rules need an intraday timeframe (1m to 4H) — on daily candles every candle covers the whole day. Change the timeframe in Position." });
+      issues.push({ section: "entry", message: "Time-of-day rules need an intraday timeframe (1m to 4H) — on daily and weekly candles every candle covers whole days. Change the timeframe in Position." });
     }
     if (exit && usesTimeOfDay(exit)) {
-      issues.push({ section: "exit", message: "Exit times need an intraday timeframe (1m to 4H) — on daily candles every candle covers the whole day. Change the timeframe in Position." });
+      issues.push({ section: "exit", message: "Exit times need an intraday timeframe (1m to 4H) — on daily and weekly candles every candle covers whole days. Change the timeframe in Position." });
     }
   }
   return issues;
