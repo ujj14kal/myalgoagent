@@ -1,3 +1,5 @@
+import { parseTargets } from "@/lib/trading-engine/targets-config";
+import { parseEntryPlan } from "@/lib/trading-engine/entry-plan-config";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -81,6 +83,8 @@ export default async function ForwardTestingPage() {
             targetEnabled: s.targetEnabled,
             targetUnit: s.targetUnit,
             targetValue: s.targetValue,
+            targets: parseTargets(s.targetsConfig),
+            entryPlan: parseEntryPlan(s.entryPlan),
             trailingSlEnabled: s.trailingSlEnabled,
             trailingSlUnit: s.trailingSlUnit,
             trailingSlValue: s.trailingSlValue,

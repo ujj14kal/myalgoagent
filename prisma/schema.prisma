@@ -377,6 +377,11 @@ model Strategy {
   targetEnabled       Boolean            @default(false)
   targetUnit          RiskUnit?
   targetValue         Float?
+  // Staged targets Target 1–3 (see TargetLevel): [{ unit, value, exitPercent, lock }]. When set they replace the single target above.
+  targetsConfig       Json?
+  // Swing / long-term: how long it expects to hold (INTRADAY, SWING or POSITIONAL; null = derived from the product) and its multi-level entry plan { firstPercent, levels, maxHoldDays }.
+  style               String?
+  entryPlan           Json?
   trailingSlEnabled   Boolean            @default(false)
   trailingSlUnit      RiskUnit?
   trailingSlValue     Float?
@@ -439,6 +444,8 @@ model BacktestRun {
   targetEnabled       Boolean            @default(false)
   targetUnit          RiskUnit?
   targetValue         Float?
+  targetsConfig       Json?
+  entryPlan           Json?
   trailingSlEnabled   Boolean            @default(false)
   trailingSlUnit      RiskUnit?
   trailingSlValue     Float?
@@ -523,6 +530,8 @@ model PaperSession {
   targetEnabled            Boolean            @default(false)
   targetUnit               RiskUnit?
   targetValue              Float?
+  targetsConfig            Json?
+  entryPlan                Json?
   trailingSlEnabled        Boolean            @default(false)
   trailingSlUnit           RiskUnit?
   trailingSlValue          Float?
@@ -561,6 +570,13 @@ model PaperSession {
   positionStopLossPrice    Float?
   positionTargetPrice      Float?
   positionPyramidCount     Int                @default(1)
+  // Staged targets: shares at entry, how many targets are already taken, and the stop they set.
+  positionInitialQuantity  Float?
+  positionTargetsHit       Int                @default(0)
+  positionLockedStop       Float?
+  // Entry plan: the whole size the plan aims to build and the first fill's price its levels are measured from.
+  positionPlannedQuantity  Float?
+  positionAnchorPrice      Float?
   lastSyncedTime           Int?
   status                   PaperSessionStatus @default(ACTIVE)
   createdAt                DateTime           @default(now())

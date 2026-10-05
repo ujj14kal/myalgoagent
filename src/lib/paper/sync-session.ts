@@ -8,6 +8,8 @@ import type { ConditionNode } from "@/lib/strategy";
 import { conditionToText } from "@/lib/strategy/format";
 import { explainPaperOrder, type ExplainContext } from "@/lib/paper/explain";
 import type { RiskUnit } from "@/lib/trading-engine/step";
+import { parseTargets } from "@/lib/trading-engine/targets-config";
+import { parseEntryPlan } from "@/lib/trading-engine/entry-plan-config";
 import type { Prisma } from "@prisma/client";
 
 // Not a Server Action module: the scheduled job (an internal API route) and
@@ -109,8 +111,10 @@ export async function syncPaperSessionFor(id: string, userId: string, opts: { sc
         trailingSl: paperSession.trailingSlEnabled
           ? { enabled: true, unit: paperSession.trailingSlUnit!, value: paperSession.trailingSlValue! }
           : null,
+        targets: parseTargets(paperSession.targetsConfig),
       },
       maxPyramidEntries: paperSession.maxPyramidEntries,
+      entryPlan: parseEntryPlan(paperSession.entryPlan) ?? null,
       timeframe: paperSession.timeframe,
       noEntryAfterMinute: paperSession.noEntryAfterMinute,
       squareOffMinute: paperSession.squareOffMinute,
@@ -130,6 +134,11 @@ export async function syncPaperSessionFor(id: string, userId: string, opts: { sc
       positionStopLossPrice: paperSession.positionStopLossPrice,
       positionTargetPrice: paperSession.positionTargetPrice,
       positionPyramidCount: paperSession.positionPyramidCount,
+      positionInitialQuantity: paperSession.positionInitialQuantity,
+      positionTargetsHit: paperSession.positionTargetsHit,
+      positionLockedStopPrice: paperSession.positionLockedStop,
+      positionPlannedQuantity: paperSession.positionPlannedQuantity,
+      positionAnchorPrice: paperSession.positionAnchorPrice,
       lastSyncedTime: paperSession.lastSyncedTime,
     },
     preCheck.allowNewEntries,
@@ -158,6 +167,7 @@ export async function syncPaperSessionFor(id: string, userId: string, opts: { sc
     exitRule: conditionToText(paperSession.exitCondition as unknown as ConditionNode),
     stopLoss: leg(paperSession.stopLossEnabled, paperSession.stopLossUnit, paperSession.stopLossValue),
     target: leg(paperSession.targetEnabled, paperSession.targetUnit, paperSession.targetValue),
+    targets: parseTargets(paperSession.targetsConfig),
     trailingStop: leg(paperSession.trailingSlEnabled, paperSession.trailingSlUnit, paperSession.trailingSlValue),
     intraday: isIntraday(paperSession.timeframe as CandleInterval),
   };
@@ -176,6 +186,11 @@ export async function syncPaperSessionFor(id: string, userId: string, opts: { sc
       positionStopLossPrice: result.position ? result.position.stopLossPrice : null,
       positionTargetPrice: result.position ? result.position.targetPrice : null,
       positionPyramidCount: result.position ? result.position.pyramidCount : 1,
+      positionInitialQuantity: result.position ? result.position.initialQuantity : null,
+      positionTargetsHit: result.position ? result.position.targetsHit : 0,
+      positionLockedStop: result.position ? result.position.lockedStopPrice : null,
+      positionPlannedQuantity: result.position ? result.position.plannedQuantity : null,
+      positionAnchorPrice: result.position ? result.position.anchorPrice : null,
       lastSyncedTime: result.lastSyncedTime,
       pendingLimitPrice: result.pendingEntry?.limitPrice ?? null,
       pendingLimitExpiresDay: result.pendingEntry?.expiresDay ?? null,

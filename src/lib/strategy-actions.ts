@@ -5,12 +5,15 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { enforceRateLimit } from "@/lib/rate-limit";
-import { toRiskLeg, type PositionSizingMode, type RiskLegInput } from "@/lib/trading-engine/step";
+import { toRiskLeg, type EntryPlan, type PositionSizingMode, type RiskLegInput, type TargetLevel } from "@/lib/trading-engine/step";
+import { entryPlanToStore } from "@/lib/trading-engine/entry-plan-config";
+import { parseStyle, styleProblem, type StrategyStyle } from "@/lib/strategy/style";
+import { targetsToStore } from "@/lib/trading-engine/targets-config";
 import { compile } from "@/lib/strategy-compile";
 import { normalizeSession } from "@/lib/strategy/session";
 import { isUniqueConstraintViolation } from "@/lib/prisma-errors";
 import type { ConditionNode } from "@/lib/strategy";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 export interface StrategyInput {
   name: string;
@@ -25,6 +28,12 @@ export interface StrategyInput {
   positionSizingValue: number | null;
   stopLoss: RiskLegInput;
   target: RiskLegInput;
+  /** Staged Target 1–3 (each sells a share of the position and locks profit on the rest); replaces the single take-profit. */
+  targets?: TargetLevel[];
+  /** Swing / positional: held for days to weeks or months. These run on daily candles as long-only delivery. */
+  style?: StrategyStyle;
+  /** Multi-level entry: the signal buys `firstPercent` of the planned size, each level buys its share as price reaches it; `maxHoldDays` closes the position after that many trading days. */
+  entryPlan?: EntryPlan;
   trailingSl: RiskLegInput;
   maxPyramidEntries: number;
   /** Candle timeframe the strategy runs on; omitted = daily. */
@@ -45,7 +54,20 @@ function riskFields(input: StrategyInput) {
   const stopLoss = toRiskLeg(input.stopLoss);
   const target = toRiskLeg(input.target);
   const trailingSl = toRiskLeg(input.trailingSl);
+  const staged = targetsToStore(input.targets, target.enabled);
+  if (staged.error) throw new Error(staged.error);
+  if (staged.json && input.mode === "WEBHOOK") throw new Error("Targets 1–3 aren't available for webhook strategies.");
+  const session = normalizeSession(input);
+  const style = parseStyle(input.style);
+  const styleIssue = styleProblem(style, { timeframe: session.timeframe, productType: session.productType, direction: input.direction });
+  if (styleIssue) throw new Error(styleIssue);
+  const plan = entryPlanToStore(input.entryPlan, input.maxPyramidEntries);
+  if (plan.error) throw new Error(plan.error);
+  if (plan.json && input.mode === "WEBHOOK") throw new Error("Entry plans aren't available for webhook strategies.");
   return {
+    style,
+    entryPlan: plan.json ? (plan.json as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+    targetsConfig: staged.json ? (staged.json as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
     direction: input.direction,
     positionSizingMode: input.positionSizingMode,
     positionSizingValue: input.positionSizingValue,

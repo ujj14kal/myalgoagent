@@ -1,4 +1,4 @@
-import type { PositionSizingMode, RiskUnit } from "@/lib/trading-engine/step";
+import type { EntryPlan, PositionSizingMode, RiskUnit, TargetLevel } from "@/lib/trading-engine/step";
 
 export interface StrategyExecutionConfig {
   positionSizingMode: PositionSizingMode;
@@ -9,6 +9,10 @@ export interface StrategyExecutionConfig {
   targetEnabled: boolean;
   targetUnit: RiskUnit | null;
   targetValue: number | null;
+  /** Staged Target 1-3, when the strategy uses them instead of one take-profit. */
+  targets?: TargetLevel[];
+  /** Multi-level entry plan, when the strategy builds its position in stages. */
+  entryPlan?: EntryPlan;
   trailingSlEnabled: boolean;
   trailingSlUnit: RiskUnit | null;
   trailingSlValue: number | null;
@@ -67,8 +71,10 @@ export function describeExecutionConfig(config: StrategyExecutionConfig): string
   const trailingSl = describeLeg(config.trailingSlEnabled, config.trailingSlUnit, config.trailingSlValue);
 
   parts.push(stopLoss ? `${stopLoss} stop-loss` : "no stop-loss");
-  parts.push(target ? `${target} target` : "no target");
+  if (config.targets?.length) parts.push(`${config.targets.length} staged target${config.targets.length === 1 ? "" : "s"} (${config.targets.map((t) => `${t.value}${UNIT_SUFFIX[t.unit]} sells ${t.exitPercent}%`).join(", ")}; ${config.targets.some((t) => t.lock.mode === "MARGIN") ? "profit locked with a margin" : "profit locked at each target"})`);
+  else parts.push(target ? `${target} target` : "no target");
   parts.push(trailingSl ? `${trailingSl} trailing stop` : "no trailing stop");
+  if (config.entryPlan && (config.entryPlan.levels.length > 0 || config.entryPlan.maxHoldDays)) parts.push(`${config.entryPlan.levels.length + 1}-step entry plan${config.entryPlan.maxHoldDays ? `, closed after ${config.entryPlan.maxHoldDays} days at most` : ""}`);
   parts.push(config.maxPyramidEntries > 1 ? `up to ${config.maxPyramidEntries} pyramided entries` : "no pyramiding");
   if (config.noEntryAfterMinute != null) parts.push(`no entries after ${hhmm(config.noEntryAfterMinute)}`);
   if (config.squareOffMinute != null) parts.push(`square-off at ${hhmm(config.squareOffMinute)}`);

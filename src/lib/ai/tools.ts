@@ -14,6 +14,14 @@ import type { MantleTool } from "./mantle";
 import { getBrokerAccount, getMarketOverview, getOptionChainSummary, getQuote } from "./market-tools";
 import { NEW_STRATEGY_ID, toStrategyInput, type AgentProposal, type PlanStep, type RiskUnitName, type SizingModeName } from "./proposals";
 import { DEFAULT_SQUARE_OFF_MINUTE } from "@/lib/strategy/session";
+import { targetsFrom } from "./targets-arg";
+import { entryPlanFrom, styleFrom } from "./entry-plan-arg";
+import { describeEntryPlan } from "@/lib/describe-entry-plan";
+import { parseEntryPlan } from "@/lib/trading-engine/entry-plan-config";
+import { styleProblem, STYLE_LABEL } from "@/lib/strategy/style";
+import { describeTargets } from "@/lib/describe-targets";
+import { parseTargets } from "@/lib/trading-engine/targets-config";
+import { validateEntryPlan, validateTargets } from "@/lib/trading-engine/step";
 
 // Tools the agent can call. Read tools answer from the user's own data.
 // "propose_*" tools never change anything: they validate a ready-to-run
@@ -51,6 +59,57 @@ const riskLegSchema = {
     unit: { type: "string", enum: ["PERCENT", "POINTS", "ATR_MULTIPLE"] },
   },
   required: ["value", "unit"],
+};
+
+const targetsSchema = {
+  type: "array",
+  maxItems: 3,
+  description:
+    "Staged targets, in order (Target 1, 2, 3). Each sells exit_percent of the ORIGINAL position when price reaches it, then locks profit on what is left: lock \"fixed\" = the rest is sold if price falls back to that target's own price; lock \"margin\" = the lock sits margin_value below it (above for a short), so price can pull back a little first. The total sold across targets is at most 100%; each target must be further from the entry than the one before; the lock never sits worse than the entry price. Use INSTEAD of take_profit, never together. Example: [{\"value\":5,\"unit\":\"PERCENT\",\"exit_percent\":25,\"lock\":\"fixed\"},{\"value\":10,\"unit\":\"PERCENT\",\"exit_percent\":25,\"lock\":\"margin\",\"margin_value\":1,\"margin_unit\":\"PERCENT\"}]. Not available for webhook strategies.",
+  items: {
+    type: "object",
+    properties: {
+      value: { type: "number", description: "Distance from the entry, e.g. 5 for 5%" },
+      unit: { type: "string", enum: ["PERCENT", "POINTS", "ATR_MULTIPLE"] },
+      exit_percent: { type: "number", description: "Share of the original position sold at this target, 1–100" },
+      lock: { type: "string", enum: ["fixed", "margin"], description: "How profit is locked once this target is taken; default fixed" },
+      margin_value: { type: "number", description: "Margin lock only: how far below the target (above, for a short) the lock sits" },
+      margin_unit: { type: "string", enum: ["PERCENT", "POINTS", "ATR_MULTIPLE"], description: "Margin lock only; default = the target's unit" },
+    },
+    required: ["value", "unit", "exit_percent"],
+  },
+};
+
+const entryPlanSchema = {
+  type: "object",
+  description:
+    "A multi-level entry plan, for swing and long-term strategies that build a position in stages. The entry rule buys first_percent of the PLANNED size; each further level buys its allocation_percent of the planned size when price reaches it, measured from the first fill's price: trigger \"pullback\" = price falls that far (for a short, rises) and the buy waits there; \"breakout\" = price rises that far (short: falls). The planned size comes from the position sizing, so first_percent + all allocation_percent is at most 100. Levels must move further out; at most 8 levels; levels can't be combined with max_entries above 1. max_wait_days withdraws a level that many trading days after the first entry. max_hold_days closes the position at the open that many trading days after the first entry. No further entries are bought once a staged target is taken. Example (buy a quarter now and a quarter at each 3% dip): {\"first_percent\":25,\"levels\":[{\"trigger\":\"pullback\",\"value\":3,\"unit\":\"PERCENT\",\"allocation_percent\":25},{\"trigger\":\"pullback\",\"value\":6,\"unit\":\"PERCENT\",\"allocation_percent\":25},{\"trigger\":\"pullback\",\"value\":9,\"unit\":\"PERCENT\",\"allocation_percent\":25}],\"max_hold_days\":60}. Not available for webhook strategies.",
+  properties: {
+    first_percent: { type: "number", description: "Share of the planned size bought when the entry rule fires, 1–100; default = whatever the levels leave" },
+    levels: {
+      type: "array",
+      maxItems: 8,
+      items: {
+        type: "object",
+        properties: {
+          trigger: { type: "string", enum: ["pullback", "breakout"], description: "default pullback" },
+          value: { type: "number", description: "Distance from the first fill, e.g. 3 for 3%" },
+          unit: { type: "string", enum: ["PERCENT", "POINTS", "ATR_MULTIPLE"] },
+          allocation_percent: { type: "number", description: "Share of the planned size bought at this level, 1–100" },
+          max_wait_days: { type: "number", description: "Withdraw this level this many trading days after the first entry" },
+        },
+        required: ["value", "unit", "allocation_percent"],
+      },
+    },
+    max_hold_days: { type: "number", description: "Close the position at the open this many trading days after the first entry" },
+  },
+};
+
+const styleSchema = {
+  type: "string",
+  enum: ["intraday", "swing", "positional"],
+  description:
+    "How long the strategy expects to hold. swing = days to weeks, positional = weeks to months (long-term investing). Swing and positional strategies are always delivery, long only and on daily candles (they may read a weekly or monthly trend as another timeframe inside their rules), and suit staged entries (entry_plan) and staged targets. Omit for ordinary strategies.",
 };
 
 export const AGENT_TOOLS: MantleTool[] = [
@@ -208,6 +267,9 @@ export const AGENT_TOOLS: MantleTool[] = [
           square_off_at: { type: ["string", "null"], description: "Intraday only: close open positions at this IST time, e.g. \"15:15\" (default 15:15 for intraday — many brokers only allow intraday until then; positions are never carried overnight)" },
           stop_loss: riskLegSchema,
           take_profit: riskLegSchema,
+          targets: targetsSchema,
+          entry_plan: entryPlanSchema,
+          style: styleSchema,
           trailing_stop: riskLegSchema,
           position_sizing: {
             type: "object",
@@ -334,6 +396,9 @@ export const AGENT_TOOLS: MantleTool[] = [
           add_to_exit: { anyOf: [{ type: "string" }, { type: "object" }], description: "An extra condition that ALSO closes the position (OR-ed with the saved exit rule)." },
           stop_loss: { anyOf: [riskLegSchema, { type: "null" }], description: "null removes it" },
           take_profit: { anyOf: [riskLegSchema, { type: "null" }], description: "null removes it" },
+          entry_plan: { anyOf: [entryPlanSchema, { type: "null" }], description: "Replaces the multi-level entry plan entirely; null removes it (back to one entry). Omit to keep the saved one." },
+          style: { anyOf: [styleSchema, { type: "null" }], description: "Changes the strategy style; null clears it. Omit to keep the saved one." },
+          targets: { anyOf: [targetsSchema, { type: "null" }], description: "Replaces the staged Target 1–3 entirely; null removes them. Omit to keep the saved ones. A strategy has either targets or a take_profit, never both — setting one of them requires clearing the other." },
           trailing_stop: { anyOf: [riskLegSchema, { type: "null" }], description: "null removes it" },
           position_sizing: {
             type: "object",
@@ -483,7 +548,7 @@ function readableIssues(err: unknown): string {
 
 type StrategyDraft = Extract<AgentProposal, { kind: "strategy" }>["draft"];
 
-const hasRiskLeg = (d: StrategyDraft) => d.stopLoss.enabled || d.target.enabled || d.trailingSl.enabled;
+const hasRiskLeg = (d: StrategyDraft) => d.stopLoss.enabled || d.target.enabled || d.trailingSl.enabled || !!d.targets?.length;
 
 function sizingFrom(v: unknown, fallback?: { mode: SizingModeName; value: number | null }) {
   const sizing = asObject(v);
@@ -556,6 +621,14 @@ function rulesFrom(a: Record<string, unknown>, needEntry: boolean): { entry?: Co
 }
 
 async function validateDraft(draft: StrategyDraft, webhook = false): Promise<string | null> {
+  const staged = validateTargets(draft.targets, draft.target.enabled);
+  if (staged) return staged;
+  const planProblem = validateEntryPlan(draft.entryPlan, draft.maxPyramidEntries ?? 1);
+  if (planProblem) return planProblem;
+  if (webhook && draft.entryPlan?.levels.length) return "Entry plans aren't available for webhook strategies.";
+  const styleIssue = styleProblem(draft.style, { timeframe: draft.timeframe ?? "1d", productType: draft.productType ?? "DELIVERY", direction: draft.direction });
+  if (styleIssue) return styleIssue;
+  if (webhook && draft.targets?.length) return "Targets 1–3 aren't available for webhook strategies.";
   if (!webhook && draft.entryCondition && draft.exitCondition === null && !hasRiskLeg(draft)) {
     return "With no rule-based exit, the strategy needs a stop-loss, take-profit or trailing stop — otherwise a position could never close.";
   }
@@ -580,13 +653,17 @@ async function proposeStrategy(userId: string, a: Record<string, unknown>): Prom
     return { result: { error: `${readableIssues(err)} Fix it and call propose_strategy again.` } };
   }
   let session;
+  let style: ReturnType<typeof styleFrom>;
   try {
-    const timeframe = timeframeArg(a.timeframe) ?? "1d";
+    style = styleFrom(a.style);
+    // Swing and positional strategies are held overnight: daily candles, delivery, no intraday session rules.
+    const swingish = style === "SWING" || style === "POSITIONAL";
+    const timeframe = swingish ? "1d" : timeframeArg(a.timeframe) ?? "1d";
     const intraday = timeframe !== "1d";
     const noEntry = clockArg(a.no_entry_after);
     const squareOff = clockArg(a.square_off_at);
     const order = orderArgs(a);
-    const productType = order.productType ?? (intraday ? "INTRADAY" : "DELIVERY");
+    const productType = swingish ? "DELIVERY" : order.productType ?? (intraday ? "INTRADAY" : "DELIVERY");
     session = {
       timeframe,
       noEntryAfterMinute: intraday ? noEntry ?? null : null,
@@ -600,6 +677,14 @@ async function proposeStrategy(userId: string, a: Record<string, unknown>): Prom
     return { result: { error: `${readableIssues(err)} Fix it and call propose_strategy again.` } };
   }
   const sizing = sizingFrom(a.position_sizing);
+  let stagedTargets: ReturnType<typeof targetsFrom>;
+  let plan: ReturnType<typeof entryPlanFrom>;
+  try {
+    stagedTargets = targetsFrom(a.targets);
+    plan = entryPlanFrom(a.entry_plan, Math.max(1, Math.floor(num(a.max_entries) ?? 1)));
+  } catch (err) {
+    return { result: { error: `${readableIssues(err)} Fix it and call propose_strategy again.` } };
+  }
   const draft: StrategyDraft = {
     name: await uniqueStrategyName(userId, str(a.name)),
     instrumentId: instrument?.id ?? null,
@@ -610,6 +695,9 @@ async function proposeStrategy(userId: string, a: Record<string, unknown>): Prom
     stopLoss: leg(a.stop_loss),
     target: leg(a.take_profit),
     trailingSl: leg(a.trailing_stop),
+    ...(stagedTargets?.length ? { targets: stagedTargets } : {}),
+    ...(style ? { style } : {}),
+    ...(plan ? { entryPlan: plan } : {}),
     positionSizingMode: sizing.mode,
     positionSizingValue: sizing.value,
     maxPyramidEntries: Math.max(1, Math.floor(num(a.max_entries) ?? 1)),
@@ -682,6 +770,20 @@ async function proposeStrategyUpdate(userId: string, a: Record<string, unknown>)
   const pickLeg = (key: string, saved: ReturnType<typeof legFrom>) =>
     key in a ? (a[key] === null ? { enabled: false, unit: "PERCENT" as RiskUnitName, value: 0 } : leg(a[key])) : saved;
   const sizing = sizingFrom(a.position_sizing, { mode: s.positionSizingMode, value: s.positionSizingValue });
+  let nextTargets;
+  let nextPlan: ReturnType<typeof parseEntryPlan>;
+  let nextStyle: ReturnType<typeof styleFrom>;
+  try {
+    // Omitted = keep the saved targets; null or an empty list removes them.
+    nextTargets = targetsFrom(a.targets) ?? parseTargets(s.targetsConfig);
+    // Omitted = keep the saved entry plan; null removes it.
+    const planArg = entryPlanFrom(a.entry_plan, Math.max(1, Math.floor(num(a.max_entries) ?? s.maxPyramidEntries)));
+    nextPlan = planArg === undefined ? parseEntryPlan(s.entryPlan) : planArg ?? undefined;
+    const styleArg = styleFrom(a.style);
+    nextStyle = styleArg === undefined ? (s.style as ReturnType<typeof styleFrom>) ?? null : styleArg;
+  } catch (err) {
+    return { result: { error: `${readableIssues(err)} Fix it and call propose_strategy_update again.` } };
+  }
   const newName = str(a.new_name);
   let updSession;
   try {
@@ -715,6 +817,9 @@ async function proposeStrategyUpdate(userId: string, a: Record<string, unknown>)
     stopLoss: pickLeg("stop_loss", legFrom(s.stopLossEnabled, s.stopLossUnit, s.stopLossValue)),
     target: pickLeg("take_profit", legFrom(s.targetEnabled, s.targetUnit, s.targetValue)),
     trailingSl: pickLeg("trailing_stop", legFrom(s.trailingSlEnabled, s.trailingSlUnit, s.trailingSlValue)),
+    ...(nextTargets.length ? { targets: nextTargets } : {}),
+    ...(nextStyle ? { style: nextStyle } : {}),
+    ...(nextPlan ? { entryPlan: nextPlan } : {}),
     positionSizingMode: sizing.mode,
     positionSizingValue: sizing.value,
     maxPyramidEntries: Math.max(1, Math.floor(num(a.max_entries) ?? s.maxPyramidEntries)),
@@ -859,6 +964,9 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
           exit: r.mode === "WEBHOOK" ? "TradingView alerts" : rule(r.exitCondition),
           stopLoss: legText(r.stopLossEnabled, r.stopLossUnit, r.stopLossValue),
           takeProfit: legText(r.targetEnabled, r.targetUnit, r.targetValue),
+          targets: describeTargets(parseTargets(r.targetsConfig)),
+          style: r.style ? STYLE_LABEL[r.style as keyof typeof STYLE_LABEL] ?? r.style : null,
+          entryPlan: parseEntryPlan(r.entryPlan) ? describeEntryPlan(parseEntryPlan(r.entryPlan)!, r.direction) : null,
           trailingStop: legText(r.trailingSlEnabled, r.trailingSlUnit, r.trailingSlValue),
           sizing: r.positionSizingMode + (r.positionSizingValue != null ? ` ${r.positionSizingValue}` : ""),
           maxEntries: r.maxPyramidEntries,

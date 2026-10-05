@@ -19,6 +19,8 @@ const sections: LegalSection[] = [
       "Maximum loss per session, as a percentage of its starting capital",
       "Maximum consecutive losses",
       "Per-strategy stop-loss, take-profit and trailing stop — in %, points or ATR multiples",
+      "Build a position in stages: a multi-level entry plan buys part on the signal and the rest as price reaches each level, with the stop measured from your average entry and an optional maximum holding period",
+      "Take profit in stages: up to three targets, each selling a share of the position and locking profit on the rest — at the target's own price or with a margin to pull back",
       "Per-strategy time rules for intraday: no new entries after a set time, and an automatic square-off so positions are never carried overnight",
     ],
     soon: [

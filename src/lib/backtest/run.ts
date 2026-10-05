@@ -15,6 +15,7 @@ import {
   type StrategyDirection,
   type IntradaySession,
   type EntryOrder,
+  type EntryPlan,
 } from "@/lib/trading-engine/step";
 
 const DEFAULT_ATR_PERIOD = 14;
@@ -29,11 +30,15 @@ export interface BacktestConfig {
   direction?: StrategyDirection;
   session?: IntradaySession;
   entryOrder?: EntryOrder;
+  /** Multi-level entry plan (swing): omitted = one entry per position. */
+  entryPlan?: EntryPlan;
 }
 
-function usesAtr(rm: RiskManagementConfig | undefined): boolean {
+function usesAtr(rm: RiskManagementConfig | undefined, plan?: EntryPlan): boolean {
+  if (plan?.levels.some((l) => l.unit === "ATR_MULTIPLE")) return true;
   if (!rm) return false;
-  return [rm.stopLoss, rm.target, rm.trailingSl].some((leg) => leg?.enabled && leg.unit === "ATR_MULTIPLE");
+  if ([rm.stopLoss, rm.target, rm.trailingSl].some((leg) => leg?.enabled && leg.unit === "ATR_MULTIPLE")) return true;
+  return (rm.targets ?? []).some((t) => t.unit === "ATR_MULTIPLE" || (t.lock.mode === "MARGIN" && t.lock.unit === "ATR_MULTIPLE"));
 }
 
 /** A closed trade, plus why it closed ("end_of_data" = still open when the data ran out). */
@@ -147,7 +152,7 @@ export function runBacktest(
   // indicator series like any other, reused here rather than duplicating
   // the ATR math.
   let atrByTime: Map<number, number> | null = null;
-  if (usesAtr(config.riskManagement)) {
+  if (usesAtr(config.riskManagement, config.entryPlan)) {
     const atrPoints = computeIndicatorSeries(candles, "ATR", [DEFAULT_ATR_PERIOD]);
     atrByTime = new Map(atrPoints.map((p) => [p.time, p.value]));
   }
@@ -163,6 +168,7 @@ export function runBacktest(
     direction: config.direction,
     session: config.session,
     entryOrder: config.entryOrder,
+    entryPlan: config.entryPlan,
   };
 
   const trades: BacktestTradeResult[] = [];

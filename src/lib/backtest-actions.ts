@@ -10,7 +10,9 @@ import { runBacktest } from "@/lib/backtest/run";
 import { fetchAuxCandles } from "@/lib/strategy-aux-data";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import type { ConditionNode } from "@/lib/strategy";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import { parseTargets } from "@/lib/trading-engine/targets-config";
+import { parseEntryPlan } from "@/lib/trading-engine/entry-plan-config";
 import { userMarketDataReady } from "@/lib/market-data/for-user";
 
 export interface RunBacktestInput {
@@ -67,6 +69,7 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
       trailingSl: strategy.trailingSlEnabled
         ? { enabled: true, unit: strategy.trailingSlUnit!, value: strategy.trailingSlValue! }
         : null,
+      targets: parseTargets(strategy.targetsConfig),
     };
 
     // Runs on the strategy's own timeframe; intraday history is limited by what
@@ -96,6 +99,7 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
         direction: strategy.direction,
         session: engineSession(strategy, entryCondition),
         entryOrder: engineEntryOrder(strategy),
+        entryPlan: parseEntryPlan(strategy.entryPlan),
       },
       aux,
     );
@@ -118,6 +122,8 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
         targetEnabled: strategy.targetEnabled,
         targetUnit: strategy.targetUnit,
         targetValue: strategy.targetValue,
+        targetsConfig: strategy.targetsConfig ?? Prisma.DbNull,
+        entryPlan: strategy.entryPlan ?? Prisma.DbNull,
         trailingSlEnabled: strategy.trailingSlEnabled,
         trailingSlUnit: strategy.trailingSlUnit,
         trailingSlValue: strategy.trailingSlValue,
