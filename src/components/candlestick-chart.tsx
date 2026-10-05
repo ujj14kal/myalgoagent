@@ -1,5 +1,6 @@
 "use client";
 
+import { istChartOptions } from "@/lib/chart-time";
 import { useEffect, useRef, useState } from "react";
 import {
   createChart,
@@ -285,7 +286,8 @@ export default function CandlestickChart({
       grid: { vertLines: { color: "#f0f1f5" }, horzLines: { color: "#f0f1f5" } },
       width: container.clientWidth,
       height: 420,
-      timeScale: { timeVisible: false, borderColor: "#e2e5ee" },
+      localization: istChartOptions.localization,
+      timeScale: { timeVisible: false, borderColor: "#e2e5ee", ...istChartOptions.timeScale },
       rightPriceScale: { borderColor: "#e2e5ee" },
     });
 

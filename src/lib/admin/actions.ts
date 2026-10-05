@@ -184,7 +184,7 @@ export async function scheduleUserDeletion(userId: string, rawReason: string): P
     await sendDeletionConfirmedEmail(u.email, when).catch((err) => logError("admin.deletion-email", err));
     await audit(staff, "user.schedule-deletion", { type: "user", id: u.id }, `Scheduled deletion of ${u.email}`, { reason, when: when.toISOString() });
     revalidatePath("/admin", "layout");
-    return { ok: true, message: `Deletion scheduled for ${when.toLocaleDateString("en-IN", { dateStyle: "medium" })}. Signing back in before then cancels it.` };
+    return { ok: true, message: `Deletion scheduled for ${when.toLocaleDateString("en-IN", { dateStyle: "medium", timeZone: "Asia/Kolkata" })}. Signing back in before then cancels it.` };
   });
 }
 

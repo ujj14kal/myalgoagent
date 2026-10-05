@@ -7,6 +7,7 @@ import { logError, logWarn } from "@/lib/logger";
 import { BrokerError } from "@/lib/brokers/adapters";
 import { accessTokenOf, credsOf } from "@/lib/brokers/service";
 import { egressEnabled } from "@/lib/brokers/egress";
+import { canRenewUnattended, renewUnattended } from "@/lib/brokers/keepalive";
 import { brokerById } from "@/lib/brokers/catalog";
 import { angelLtp, LIVE_BROKERS, LIVE_NOT_YET, sameInstrument, type LiveBroker, type LiveCtx, type Segment } from "@/lib/brokers/live-brokers";
 import { onTick } from "@/lib/brokers/nse-master";
@@ -69,7 +70,11 @@ export async function event(orderId: string, kind: string, detail?: Prisma.Input
 
 /** The broker session to trade with, or a plain reason why not. */
 export async function session(userId: string, broker: string): Promise<LiveCtx> {
-  const conn = await prisma.brokerConnection.findUnique({ where: { userId_broker: { userId, broker } } });
+  let conn = await prisma.brokerConnection.findUnique({ where: { userId_broker: { userId, broker } } });
+  // A broker we can sign in to without the user (Groww's TOTP key) never shows as logged out: renew on the spot if the background renewal hasn't yet.
+  if (conn && !(conn.status === "CONNECTED" && conn.tokenExpiresAt && conn.tokenExpiresAt > new Date()) && canRenewUnattended(conn) && (await renewUnattended(conn))) {
+    conn = await prisma.brokerConnection.findUnique({ where: { userId_broker: { userId, broker } } });
+  }
   const token = conn && conn.status === "CONNECTED" && conn.tokenExpiresAt && conn.tokenExpiresAt > new Date() ? accessTokenOf(conn) : null;
   const name = brokerById(broker)?.name ?? broker;
   if (!conn || !token) throw new LiveCheckError(`Connect ${name} for today first (Broker Connections).`);

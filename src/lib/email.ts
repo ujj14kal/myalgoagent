@@ -84,7 +84,7 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string) {
 }
 
 export async function sendDeletionConfirmedEmail(to: string, scheduledFor: Date) {
-  const dateStr = scheduledFor.toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" });
+  const dateStr = scheduledFor.toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Kolkata" });
   await sendEmail({
     to,
     subject: "Your MyAlgoAgent account deletion is scheduled",

@@ -1,5 +1,6 @@
 "use client";
 
+import { istChartOptions } from "@/lib/chart-time";
 import { useEffect, useRef } from "react";
 import { createChart, LineSeries, HistogramSeries, type IChartApi, type UTCTimestamp } from "lightweight-charts";
 import type { IndicatorPoint } from "@/lib/indicators";
@@ -41,7 +42,8 @@ export default function OscillatorPanel({
       grid: { vertLines: { color: "#f0f1f5" }, horzLines: { color: "#f0f1f5" } },
       width: containerRef.current.clientWidth,
       height: 140,
-      timeScale: { visible: false },
+      localization: istChartOptions.localization,
+      timeScale: { visible: false, ...istChartOptions.timeScale },
       rightPriceScale: { borderColor: "#e2e5ee" },
     });
 

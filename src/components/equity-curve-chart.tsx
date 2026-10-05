@@ -1,5 +1,6 @@
 "use client";
 
+import { istChartOptions } from "@/lib/chart-time";
 import { useEffect, useRef } from "react";
 import { AreaSeries, createChart, type IChartApi, type UTCTimestamp } from "lightweight-charts";
 import type { EquityPoint } from "@/lib/backtest/run";
@@ -34,7 +35,8 @@ export default function EquityCurveChart({ points, height = 240 }: { points: Equ
       grid: { vertLines: { visible: false }, horzLines: { color: "rgba(14, 27, 45, 0.05)" } },
       width: Math.max(containerRef.current.clientWidth, 1),
       height,
-      timeScale: { borderVisible: false },
+      localization: istChartOptions.localization,
+      timeScale: { borderVisible: false, ...istChartOptions.timeScale },
       rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.15, bottom: 0.08 } },
       crosshair: { horzLine: { labelBackgroundColor: "#471898" }, vertLine: { labelBackgroundColor: "#471898" } },
       handleScroll: false,

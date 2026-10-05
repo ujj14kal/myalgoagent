@@ -1,3 +1,4 @@
+import MarketRefresh from "@/components/markets/auto-refresh";
 import type { Prisma } from "@prisma/client";
 import Pager from "@/components/ui/pager";
 import { pageWindow, readPageQuery } from "@/lib/pagination";
@@ -43,6 +44,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
   return (
     <div>
+      <MarketRefresh seconds={5} />
       <PageHeader
         title="Orders"
         icon={ListOrdered}

@@ -1,3 +1,4 @@
+import MarketRefresh from "@/components/markets/auto-refresh";
 import Link from "next/link";
 import { Banknote, BriefcaseBusiness, Landmark, ListOrdered, PieChart, Wallet } from "lucide-react";
 import { auth } from "@/lib/auth";
@@ -24,11 +25,12 @@ export default async function PortfolioPage() {
   if (!userId) return null;
   const brokers = await readableBrokers(userId);
   const limited = brokers.length ? await checkRateLimit(`portfolio:${userId}`, 20, 60_000) : null;
-  const accounts = limited ? [] : await Promise.all(brokers.map((b) => loadBrokerAccount(userId, b.id)));
+  const accounts = limited ? [] : await Promise.all(brokers.map((b) => loadBrokerAccount(userId, b.id, ["funds", "holdings", "positions"])));
   const liveOrders = await prisma.liveOrder.count({ where: { userId, createdAt: { gte: daysAgo(1) } } });
 
   return (
     <div className="space-y-6">
+      <MarketRefresh seconds={10} />
       <PageHeader title="Portfolio" icon={Wallet} description="Your real holdings, positions and funds, read from your connected brokers. Forward-test results are hypothetical and stay inside each forward test." />
       {brokers.length === 0 ? (
         <EmptyState pose="idle" title="No broker connected for today." description="Connect a broker (or log in for today) to see your real portfolio here." ctaLabel="Broker Connections" ctaHref="/app/broker-connections" />

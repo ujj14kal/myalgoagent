@@ -346,8 +346,8 @@ export class TrueDataProvider implements MarketDataProvider {
             "history",
             "getbars",
             { symbol: tdSymbol, from: toTrueDataTime(from), to: toTrueDataTime(to), interval: tdInterval, response: "csv" },
-            // A window that ended before today never changes: keep it a day. Today's is refreshed every 30 s.
-            to < now - 86400 ? 86400 : 30,
+            // A window that ended before today never changes: keep it a day. Today's is always read fresh.
+            to < now - 86400 ? 86400 : 0,
           ),
           daily,
         ),

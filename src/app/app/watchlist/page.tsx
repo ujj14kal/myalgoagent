@@ -1,3 +1,4 @@
+import MarketRefresh from "@/components/markets/auto-refresh";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { marketDataFor } from "@/lib/market-data";
@@ -42,7 +43,8 @@ export default async function WatchlistPage() {
 
   return (
     <div>
-      <PageHeader title="Watchlist" icon={Star} description={<>Track instruments you&rsquo;re watching. Prices are the last daily close, refreshed on page load — not real-time.</>} />
+      <MarketRefresh seconds={10} />
+      <PageHeader title="Watchlist" icon={Star} description={<>Track instruments you&rsquo;re watching. Prices update by themselves every few seconds while the market is open, and show the last close after it.</>} />
       <div>
         <WatchlistManager
           watchlistItems={watchlistItems.map((w) => ({

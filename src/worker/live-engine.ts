@@ -28,6 +28,7 @@ async function main() {
   const { logError } = await import("@/lib/logger");
   const { logForActiveUsers, pruneEngineLog } = await import("@/lib/live/engine-log");
   const { egressEnabled, currentEgressIp } = await import("@/lib/brokers/egress");
+  const { runBrokerKeepAlive } = await import("@/lib/brokers/keepalive");
 
   if (process.env.ENGINE_DRY_RUN === "1") {
     const { prisma } = await import("@/lib/prisma");
@@ -47,12 +48,19 @@ async function main() {
   await logForActiveUsers("INFO", "The live engine started. It checks your running strategies every 15 seconds while the market is open.");
   let wasOpen: boolean | null = null;
   let prunedDay = "";
+  let lastKeepAlive = 0;
   while (!stop) {
     const started = Date.now();
     try {
       const open = inMarketWindow(new Date());
       if (wasOpen !== null && open !== wasOpen) await logForActiveUsers("INFO", open ? "The market is open. Your running strategies are being watched every 15 seconds." : "The market is closed. The engine rests until the next session; no orders are sent.");
       wasOpen = open;
+      // Around the clock, not just in market hours: sessions that can be renewed on their own are renewed before they end.
+      if (Date.now() - lastKeepAlive >= 5 * 60_000) {
+        lastKeepAlive = Date.now();
+        const k = await runBrokerKeepAlive().catch((err) => (logError("broker.keepalive", err), null));
+        if (k && (k.renewed || k.renewFailed || k.dropped || k.reminded)) log("broker keep-alive", k);
+      }
       const day = new Date().toISOString().slice(0, 10);
       if (day !== prunedDay) {
         prunedDay = day;

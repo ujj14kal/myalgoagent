@@ -797,7 +797,7 @@ export default function AgentChatPanel({
                               >
                                 <span className="block truncate font-medium text-brand-navy">{c.title}</span>
                                 <span className="text-[11px] text-brand-navy/45">
-                                  {new Date(c.updatedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+                                  {new Date(c.updatedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" })}
                                 </span>
                               </button>
                             </motion.li>

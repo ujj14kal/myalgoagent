@@ -137,7 +137,7 @@ export default async function PaperSessionDetailPage({ params }: { params: Promi
                   <td colSpan={6} className="px-4 py-8 text-center text-sm text-brand-navy/50">
                     No orders yet — watching for a signal since{" "}
                     {paperSession.lastSyncedTime
-                      ? new Date(paperSession.lastSyncedTime * 1000).toLocaleDateString("en-IN")
+                      ? new Date(paperSession.lastSyncedTime * 1000).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })
                       : "start"}
                     .
                   </td>
