@@ -94,7 +94,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ b
 
   return (
     <div className="space-y-5">
-      <AutoRefresh seconds={20} />
+      <AutoRefresh seconds={10} />
       {header}
       {usable.length > 1 && (
         <div className="flex flex-wrap gap-1.5">

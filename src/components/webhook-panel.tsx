@@ -154,7 +154,7 @@ export default function WebhookPanel({
                 {alerts.map((a) => (
                   <tr key={a.id} className="border-t border-black/5">
                     <td className="py-1.5 pr-3 whitespace-nowrap text-brand-navy/60">
-                      {new Date(a.receivedAt).toLocaleString()}
+                      {new Date(a.receivedAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", second: "2-digit", timeZone: "Asia/Kolkata" }) + " IST"}
                     </td>
                     <td className="max-w-[220px] truncate py-1.5 pr-3 text-brand-navy/60" title={a.rawPayload}>
                       {a.rawPayload || "(empty)"}

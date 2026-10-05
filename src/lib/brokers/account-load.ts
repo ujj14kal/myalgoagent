@@ -20,7 +20,7 @@ export type BrokerAccount = {
 };
 
 /** Everything the broker's API shares about the user's account; each part loads (or fails) on its own. */
-export async function loadBrokerAccount(userId: string, broker: string): Promise<BrokerAccount | { error: string }> {
+export async function loadBrokerAccount(userId: string, broker: string, only?: (keyof Omit<BrokerAccount, "broker" | "name">)[]): Promise<BrokerAccount | { error: string }> {
   const name = brokerById(broker)?.name ?? broker;
   const reader = ACCOUNT_READERS[broker as keyof typeof ACCOUNT_READERS];
   if (!reader) return { error: `Reading account data from ${name} isn't available yet.` };
@@ -31,7 +31,7 @@ export async function loadBrokerAccount(userId: string, broker: string): Promise
     return { error: err instanceof LiveCheckError ? err.message : `Couldn't open your ${name} session.` };
   }
   const run = async <T,>(fn: ((c: LiveCtx) => Promise<T>) | undefined, part: string): Promise<Section<T>> => {
-    if (!fn) return null;
+    if (!fn || (only && !only.includes(part as (typeof only)[number]))) return null;
     try {
       return { ok: true, data: await fn(ctx) };
     } catch (err) {

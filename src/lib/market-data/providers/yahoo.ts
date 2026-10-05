@@ -1,3 +1,4 @@
+import { inMarketWindow } from "@/lib/paper/market-window";
 import { fetchJsonWithRetry } from "@/lib/fetch-json-with-retry";
 import type {
   Candle,
@@ -52,7 +53,8 @@ export class YahooFinanceProvider implements MarketDataProvider {
       // Asking Yahoo not to compress at all sidesteps that ambiguity
       // everywhere, at the cost of a slightly larger response body.
       headers: { "User-Agent": "Mozilla/5.0 (compatible; MyAlgoAgent/1.0)", "Accept-Encoding": "identity" },
-      next: { revalidate: 60 },
+      // While the market is open every request goes to Yahoo, so a price that moved is never served from a minute-old copy.
+      ...(inMarketWindow(new Date()) ? { cache: "no-store" as const } : { next: { revalidate: 60 } }),
     });
 
     if (!res.ok) {

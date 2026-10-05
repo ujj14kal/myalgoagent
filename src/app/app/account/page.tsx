@@ -28,7 +28,7 @@ export default async function AccountPage() {
   ]);
   if (!user) return null;
 
-  const memberSince = user.createdAt.toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" });
+  const memberSince = user.createdAt.toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Kolkata" });
 
   return (
     <div>

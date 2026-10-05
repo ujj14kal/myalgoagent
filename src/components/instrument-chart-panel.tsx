@@ -328,7 +328,7 @@ export default function InstrumentChartPanel({
     const anchoredVwapOverlays = drawings
       .filter((d): d is Extract<Drawing, { kind: "anchoredVwap" }> => d.kind === "anchoredVwap")
       .map((d, idx) => ({
-        label: `Anchored VWAP (${new Date(d.anchorTime * 1000).toLocaleDateString("en-IN")})`,
+        label: `Anchored VWAP (${new Date(d.anchorTime * 1000).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })})`,
         color: ["#d60000", "#00a83e", "#6a35c2"][idx % 3],
         points: anchoredVwap(candles, d.anchorTime),
       }));

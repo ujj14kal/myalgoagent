@@ -1,3 +1,4 @@
+import MarketRefresh from "@/components/markets/auto-refresh";
 import Link from "next/link";
 import { Activity, Braces, FlaskConical, Landmark, Layers, LineChart, Radio, ShieldCheck, Sparkles, Star, Zap } from "lucide-react";
 import { auth } from "@/lib/auth";
@@ -118,6 +119,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <MarketRefresh seconds={15} />
       <AgentBriefing
         agentName={agentName}
         greeting={`${greetingFor(new Date())}, ${firstName}`}

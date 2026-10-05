@@ -6,6 +6,7 @@ import { runAccountPurge } from "@/lib/account-purge";
 import { syncInstrumentUniverse } from "@/lib/instruments/sync-universe";
 import { runLiveDeployments } from "@/lib/live/deployments";
 import { engineAlive } from "@/lib/live/engine-heartbeat";
+import { runBrokerKeepAlive } from "@/lib/brokers/keepalive";
 
 // What each scheduled job does — shared by the EventBridge-triggered routes and
 // the admin portal's "Run now", so both always do the same thing.
@@ -24,7 +25,11 @@ export async function runMarketHoursJob() {
     logError("options.forward.scheduled", err);
     return { total: 0, checked: 0, failed: -1, ms: 0 };
   });
-  return { ...equity, options };
+  const brokers = await runBrokerKeepAlive().catch((err) => {
+    logError("broker.keepalive", err);
+    return null;
+  });
+  return { ...equity, options, brokers };
 }
 
 /** Daily: purge accounts past their deletion date, then add newly listed NSE stocks. */
