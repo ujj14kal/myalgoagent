@@ -45,6 +45,7 @@ const SIZING_LABEL: Record<PositionSizingMode, string> = {
   FIXED_QUANTITY: "fixed quantity",
   FIXED_CAPITAL: "fixed capital",
   PERCENT_OF_CAPITAL: "% of capital",
+  RISK_PERCENT: "risk per position (% of capital)",
 };
 
 /** Human-readable one-line summary of a strategy's fixed execution/risk

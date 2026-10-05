@@ -6,6 +6,8 @@ export function describePositionSizing(mode: PositionSizingMode, value: number |
       return `${value ?? "?"} shares per trade`;
     case "FIXED_CAPITAL":
       return `₹${(value ?? 0).toLocaleString("en-IN")} per trade`;
+    case "RISK_PERCENT":
+      return `Risk ${value ?? "?"}% of capital per trade (shares sized from the stop-loss)`;
     case "PERCENT_OF_CAPITAL":
       return `${value ?? "?"}% of capital per trade`;
     case "FULL_CAPITAL":

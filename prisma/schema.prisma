@@ -418,6 +418,8 @@ enum PositionSizingMode {
   FIXED_QUANTITY
   FIXED_CAPITAL
   PERCENT_OF_CAPITAL
+  // Risk a set % of capital: shares are sized so the stop-loss distance adds up to that amount.
+  RISK_PERCENT
 }
 
 enum RiskUnit {
@@ -495,6 +497,8 @@ model BacktestTrade {
   netPnl        Float
   netPnlPct     Float
   holdingBars   Int
+  // A position built or sold in parts shows as one trade; its parts (entries, target sales) are kept here.
+  legs          Json?
 
   backtestRun BacktestRun @relation(fields: [backtestRunId], references: [id], onDelete: Cascade)
 }
@@ -577,6 +581,8 @@ model PaperSession {
   // Entry plan: the whole size the plan aims to build and the first fill's price its levels are measured from.
   positionPlannedQuantity  Float?
   positionAnchorPrice      Float?
+  // Entry plan: the next further entry that can still fill (levels that waited too long are skipped).
+  positionLevelCursor      Int                @default(0)
   lastSyncedTime           Int?
   status                   PaperSessionStatus @default(ACTIVE)
   createdAt                DateTime           @default(now())

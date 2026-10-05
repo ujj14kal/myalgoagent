@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { marketDataFor, type MarketDataProvider } from "@/lib/market-data";
 import { evaluateRisk } from "@/lib/risk/evaluate";
-import { computeQuantity, resolveRiskLevels, type PositionSizing, type RiskManagementConfig } from "@/lib/trading-engine/step";
+import { computeQuantity, resolveRiskLevels, stopDistanceFor, type PositionSizing, type RiskManagementConfig } from "@/lib/trading-engine/step";
 import type { PaperSession } from "@prisma/client";
 import type { WebhookAction } from "./tradingview";
 
@@ -103,7 +103,7 @@ export async function applyWebhookSignal(session: PaperSession, action: WebhookA
   const positionSizing: PositionSizing = { mode: session.positionSizingMode, value: session.positionSizingValue };
 
   if (opensPosition) {
-    const quantity = computeQuantity(session.cash, price, positionSizing);
+    const quantity = computeQuantity(session.cash, price, positionSizing, stopDistanceFor({ riskManagement: riskManagementFromSession(session) }, price, undefined));
     if (quantity <= 0) {
       return { executed: false, error: "Configured position size rounds to 0 shares at the current price" };
     }

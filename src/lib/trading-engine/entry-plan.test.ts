@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Candle } from "@/lib/market-data";
-import { entryLevelPrice, entrySlice, stepBar, validateEntryPlan, type EngineConfig, type EngineState, type EntryLevel, type EntryPlan, type TargetLevel } from "./step";
+import { entryLevelPrice, entrySlice, stepBar, validateEntryPlan, validatePositionSizing, type EngineConfig, type EngineState, type EntryLevel, type EntryPlan, type TargetLevel } from "./step";
 
 const bar = (i: number, open: number, high: number, low: number, close: number): Candle => ({ time: 1_700_000_000 + i * 86_400, open, high, low, close, volume: 1000 });
 const pull = (value: number, allocationPercent: number, extra: Partial<EntryLevel> = {}): EntryLevel => ({ trigger: "PULLBACK", unit: "PERCENT", value, allocationPercent, ...extra });
@@ -174,4 +174,47 @@ describe("multi-level entry (other shapes)", () => {
     expect(steps.some((s) => s.entryLevel)).toBe(false);
     expect(state.position?.quantity).toBe(100);
   });
+});
+
+describe("sizing by risk per position", () => {
+  const sl = { stopLoss: { enabled: true, unit: "PERCENT" as const, value: 2 }, target: null, trailingSl: null };
+  const risk = (value: number) => ({ mode: "RISK_PERCENT" as const, value });
+  const cfg = (value: number, over: Partial<EngineConfig> = {}): EngineConfig => ({ brokeragePercent: 0, slippagePercent: 0, positionSizing: risk(value), riskManagement: sl, ...over });
+  const candles = [bar(0, 100, 100, 100, 100), bar(1, 100, 101, 99.5, 100), bar(2, 100, 100, 100, 100)];
+
+  it("buys the shares whose stop-loss distance adds up to the risk", () => {
+    // ₹1,000,000 × 1% = ₹10,000 at risk; a 2% stop on ₹100 is ₹2 a share → 5,000 shares, which would cost ₹5,00,000 (affordable)
+    const { state } = run(candles, cfg(1) as EngineConfig & { entryPlan: EntryPlan });
+    expect(state.position?.quantity).toBe(5000);
+  });
+  it("a wider stop means fewer shares", () => {
+    const wide = { ...cfg(1), riskManagement: { ...sl, stopLoss: { enabled: true, unit: "PERCENT" as const, value: 5 } } };
+    expect(run(candles, wide as EngineConfig & { entryPlan: EntryPlan }).state.position?.quantity).toBe(2000);
+  });
+  it("is capped by what the cash can buy", () => {
+    const small: EngineConfig = { ...cfg(50), riskManagement: { ...sl, stopLoss: { enabled: true, unit: "PERCENT", value: 0.5 } } };
+    const calm = [bar(0, 100, 100, 100, 100), bar(1, 100, 100.2, 99.8, 100), bar(2, 100, 100, 100, 100)];
+    let state: EngineState = { cash: 10_000, position: null };
+    for (let i = 0; i < calm.length - 1; i++) state = stepBar(calm, i, i === 0, false, state, small).state;
+    expect(state.position?.quantity).toBe(100); // 10,000 / 100
+  });
+  it("takes its percentage of the stated capital, not of the leveraged cash", () => {
+    const c: EngineConfig = { ...cfg(1), positionSizing: { mode: "RISK_PERCENT", value: 1, riskCapital: 100_000 } };
+    let state: EngineState = { cash: 500_000, position: null };
+    for (let i = 0; i < candles.length - 1; i++) state = stepBar(candles, i, i === 0, false, state, c).state;
+    expect(state.position?.quantity).toBe(500); // 1% of 100,000 = 1,000 at ₹2 a share
+  });
+  it("without a stop-loss nothing is bought", () => {
+    const c: EngineConfig = { brokeragePercent: 0, slippagePercent: 0, positionSizing: risk(1) };
+    let state: EngineState = { cash: 1_000_000, position: null };
+    let tooSmall = false;
+    for (let i = 0; i < candles.length - 1; i++) {
+      const r = stepBar(candles, i, i === 0, false, state, c);
+      state = r.state;
+      tooSmall ||= !!r.sizeTooSmall;
+    }
+    expect(state.position).toBeNull();
+    expect(tooSmall).toBe(true);
+  });
+  it("is limited to 100%", () => expect(() => validatePositionSizing({ mode: "RISK_PERCENT", value: 120 })).toThrow(/100%/));
 });

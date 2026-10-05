@@ -17,6 +17,7 @@ import { event, LIVE_DEFAULTS, LiveCheckError, placeLiveOrder, refreshLiveOrder 
 import { liveLog, liveLogThrottled, plainReason } from "./engine-log";
 import { conditionToText } from "@/lib/strategy/format";
 import { resyncEntryPlan, resyncStaged } from "./resync";
+import { resolveRiskDistance } from "@/lib/trading-engine/step";
 import { parseTargets } from "@/lib/trading-engine/targets-config";
 import { parseEntryPlan } from "@/lib/trading-engine/entry-plan-config";
 
@@ -99,7 +100,9 @@ export async function startDeployment(userId: string, input: { strategyId: strin
   const sizing = { mode: s.positionSizingMode, value: s.positionSizingValue };
   // Intraday trades are margin trades: the broker lends buying power, so the engine may size up to that multiple of the capital.
   const leverage = s.productType === "INTRADAY" ? INTRADAY_BUYING_POWER : 1;
-  const tooSmall = capitalProblem(sizing, input.capital, candles.at(-1)!.close * 1.0005, s.instrument.symbol.replace(/\.NS$/, ""), leverage);
+  const lastPx = candles.at(-1)!.close * 1.0005;
+  const stopDist = s.stopLossEnabled && s.stopLossUnit && s.stopLossValue != null ? resolveRiskDistance({ enabled: true, unit: s.stopLossUnit, value: s.stopLossValue }, lastPx, undefined) ?? undefined : undefined;
+  const tooSmall = capitalProblem(sizing, input.capital, lastPx, s.instrument.symbol.replace(/\.NS$/, ""), leverage, stopDist);
   if (tooSmall) throw new LiveCheckError(tooSmall);
 
   const state: PaperSessionState = {
@@ -109,7 +112,8 @@ export async function startDeployment(userId: string, input: { strategyId: strin
     exitCondition: s.exitCondition as unknown as ConditionNode,
     brokeragePercent: 0.03,
     slippagePercent: 0.05,
-    positionSizing: { mode: s.positionSizingMode, value: s.positionSizingValue },
+    // Risk-based sizing takes its percentage of the capital set here, not of the (larger) intraday buying power.
+    positionSizing: { mode: s.positionSizingMode, value: s.positionSizingValue, ...(s.positionSizingMode === "RISK_PERCENT" ? { riskCapital: input.capital } : {}) },
     riskManagement: {
       stopLoss: s.stopLossEnabled ? { enabled: true, unit: s.stopLossUnit!, value: s.stopLossValue! } : null,
       target: s.targetEnabled ? { enabled: true, unit: s.targetUnit!, value: s.targetValue! } : null,
@@ -163,7 +167,7 @@ function dataFor(d: LiveDeployment): MarketDataProvider {
 
 /** The engine's position must match the broker's: when nothing is really held, the engine is flat too. */
 function flatten(state: PaperSessionState): PaperSessionState {
-  return { ...state, positionEntryTime: null, positionEntryPrice: null, positionQuantity: null, positionFavorableExtreme: null, positionStopLossPrice: null, positionTargetPrice: null, positionInitialQuantity: null, positionTargetsHit: 0, positionLockedStopPrice: null, positionPlannedQuantity: null, positionAnchorPrice: null, positionPyramidCount: null } as PaperSessionState;
+  return { ...state, positionEntryTime: null, positionEntryPrice: null, positionQuantity: null, positionFavorableExtreme: null, positionStopLossPrice: null, positionTargetPrice: null, positionInitialQuantity: null, positionTargetsHit: 0, positionLockedStopPrice: null, positionPlannedQuantity: null, positionAnchorPrice: null, positionPyramidCount: null, positionLevelCursor: 0 } as PaperSessionState;
 }
 
 export async function setDeploymentStatus(userId: string, id: string, status: "ACTIVE" | "PAUSED" | "STOPPED") {
@@ -380,6 +384,7 @@ export async function runDeployment(id: string): Promise<"idle" | "acted" | "pau
     positionTargetsHit: result.position?.targetsHit ?? 0,
     positionLockedStopPrice: result.position?.lockedStopPrice ?? null,
     positionPyramidCount: result.position?.pyramidCount ?? null,
+    positionLevelCursor: result.position?.levelCursor ?? 0,
     positionPlannedQuantity: result.position?.plannedQuantity ?? null,
     positionAnchorPrice: result.position?.anchorPrice ?? null,
     lastSyncedTime: result.lastSyncedTime,

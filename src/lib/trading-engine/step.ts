@@ -1,5 +1,6 @@
 import type { Candle } from "@/lib/market-data";
 import { istDayAndMinute } from "@/lib/market-data/resample";
+import type { ConditionNode } from "@/lib/strategy/types";
 
 // Whether the entry condition opens a long (buy first, sell to close) or
 // short (sell first, buy to cover) position. Fixed per strategy — see
@@ -29,6 +30,8 @@ export interface EnginePosition {
   /** Entry plan only: the whole size the plan aims to build, and the first fill's price the further levels are measured from. */
   plannedQuantity?: number;
   anchorPrice?: number;
+  /** Entry plan: the next further entry that can still fill. Entries that waited too long are skipped over, never blocking the ones after them. */
+  levelCursor?: number;
 }
 
 export interface EngineState {
@@ -64,11 +67,13 @@ function limitFill(bar: Candle, limit: number, direction: StrategyDirection): nu
   return bar.low <= limit ? Math.min(bar.open, limit) : null;
 }
 
-export type PositionSizingMode = "FULL_CAPITAL" | "FIXED_QUANTITY" | "FIXED_CAPITAL" | "PERCENT_OF_CAPITAL";
+export type PositionSizingMode = "FULL_CAPITAL" | "FIXED_QUANTITY" | "FIXED_CAPITAL" | "PERCENT_OF_CAPITAL" | "RISK_PERCENT";
 
 export interface PositionSizing {
   mode: PositionSizingMode;
   value: number | null;
+  /** RISK_PERCENT only: the capital the risk percentage is taken of. Omitted = the cash the engine holds now (so it compounds). */
+  riskCapital?: number;
 }
 
 export type RiskUnit = "PERCENT" | "POINTS" | "ATR_MULTIPLE";
@@ -101,11 +106,16 @@ export const MAX_TARGETS = 3;
  * A further entry of a multi-level plan, measured from the first fill's price:
  *  PULLBACK — a resting buy that fills when price falls this far (for a short: rises this far): averaging in on weakness.
  *  BREAKOUT — a resting buy that fills when price rises this far (for a short: falls): adding on strength.
+ *  SIGNAL   — a rule instead of a price (e.g. "RSI back above 40"): buys at the next candle's open once it is true.
+ * Entries are taken in order; one that waits longer than its limit is dropped and the next one takes over.
  */
 export interface EntryLevel {
-  trigger: "PULLBACK" | "BREAKOUT";
+  /** SIGNAL: not a price but a rule: the entry buys at the next open once the condition is true at a candle's close. */
+  trigger: "PULLBACK" | "BREAKOUT" | "SIGNAL";
   unit: RiskUnit;
   value: number;
+  /** SIGNAL levels only: the rule that triggers this entry (any rule the entry condition can express). */
+  condition?: ConditionNode;
   /** Share of the planned size bought at this level (1–100). */
   allocationPercent: number;
   /** The level is withdrawn this many trading days after the first entry (omitted = it waits as long as the position is open). */
@@ -168,6 +178,8 @@ export interface EngineConfig {
   entryOrder?: EntryOrder;
   /** Omitted = one entry per position, as before. */
   entryPlan?: EntryPlan;
+  /** For each plan level (by index), whether its rule was true at the close of each candle; only SIGNAL levels need one. */
+  levelSignals?: (boolean[] | undefined)[];
 }
 
 export interface IntradaySession {
@@ -209,6 +221,13 @@ function fillTimeAllowed(session: IntradaySession | undefined, fillBar: Candle):
   if (session.noEntryAfterMinute != null && fillMinute >= session.noEntryAfterMinute) return false;
   if (session.squareOffMinute != null && fillMinute >= session.squareOffMinute) return false;
   return true;
+}
+
+/** The stop-loss distance a position entered at the price would carry: what risk-based sizing divides by. Undefined without a stop-loss. */
+export function stopDistanceFor(config: { riskManagement?: RiskManagementConfig }, price: number, atr: number | undefined): number | undefined {
+  const leg = config.riskManagement?.stopLoss;
+  if (!leg?.enabled) return undefined;
+  return resolveRiskDistance(leg, price, atr) ?? undefined;
 }
 
 /** Converts a risk leg into an absolute price distance from the entry price. */
@@ -254,10 +273,13 @@ export function validateEntryPlan(plan: EntryPlan | undefined, maxPyramidEntries
   const last = new Map<string, number>();
   for (const [i, l] of plan.levels.entries()) {
     const n = i + 2; // the signal's own entry is entry 1
-    if (!Number.isFinite(l.value) || l.value <= 0) return `Entry ${n} needs a distance above zero.`;
+    if (l.trigger === "SIGNAL") {
+      if (!l.condition) return `Entry ${n} is triggered by a rule, so it needs one.`;
+    } else if (!Number.isFinite(l.value) || l.value <= 0) return `Entry ${n} needs a distance above zero.`;
     if (!Number.isFinite(l.allocationPercent) || l.allocationPercent <= 0 || l.allocationPercent > 100) return `Entry ${n} must buy between 1% and 100% of the planned size.`;
     if (l.maxWaitDays !== undefined && (!Number.isInteger(l.maxWaitDays) || l.maxWaitDays < 1)) return `Entry ${n}'s waiting period must be a whole number of days, 1 or more.`;
     total += l.allocationPercent;
+    if (l.trigger === "SIGNAL") continue;
     const key = `${l.trigger}:${l.unit}`;
     const prev = last.get(key);
     if (prev !== undefined && l.value <= prev) return `Entry ${n} must be further from the first entry than the one before it.`;
@@ -349,10 +371,16 @@ export function targetsTakenFor(targets: TargetLevel[], initialQuantity: number,
  * nearest whole tradable unit (universal convention — never round up)
  * and never exceeds what `cash` can actually afford, regardless of mode.
  */
-export function computeQuantity(cash: number, fillPrice: number, sizing: PositionSizing): number {
+export function computeQuantity(cash: number, fillPrice: number, sizing: PositionSizing, riskPerShare?: number): number {
   const affordable = Math.floor(cash / fillPrice);
 
   switch (sizing.mode) {
+    case "RISK_PERCENT": {
+      // Risk a set share of capital: the shares whose stop-loss distance adds up to that rupee amount. No stop-loss, no size.
+      if (!riskPerShare || !(riskPerShare > 0)) return 0;
+      const base = sizing.riskCapital ?? cash;
+      return Math.min(Math.floor((base * (sizing.value ?? 0)) / 100 / riskPerShare), affordable);
+    }
     case "FIXED_QUANTITY":
       return Math.min(Math.floor(sizing.value ?? 0), affordable);
     case "FIXED_CAPITAL":
@@ -437,7 +465,7 @@ export type StepResult = {
   /** Set on a staged-target sale: which target (1–3) this was. The position stays open unless it was the last share. */
   targetLevel?: number;
   /** Set when a further entry of a multi-level plan filled on this bar (level 2 = the first further entry). */
-  entryLevel?: { level: number; quantity: number; price: number };
+  entryLevel?: { level: number; quantity: number; price: number; /** When it fills: the candle that reached the price, or the open after a rule fired. */ time: number };
 };
 
 /**
@@ -453,51 +481,73 @@ export function stepBar(candles: Candle[], i: number, entrySignal: boolean, exit
   if (!plan || !pos0) return stepBarCore(candles, i, entrySignal, exitSignal, state, config);
 
   const direction = config.direction ?? "LONG";
+  const isShort = direction === "SHORT";
   const bar = candles[i];
+  const slip = (side: "open" | "close") => 1 + ((side === "open") === !isShort ? 1 : -1) * (config.slippagePercent / 100);
 
   if (plan.maxHoldDays !== undefined && i > pos0.entryIdx && istDayAndMinute(bar.time).day - istDayAndMinute(candles[pos0.entryIdx].time).day >= plan.maxHoldDays) {
-    const px = bar.open * (1 + (direction === "SHORT" ? 1 : -1) * (config.slippagePercent / 100));
-    const trade = closeTrade(candles, pos0, i, px, config.brokeragePercent, direction);
+    const trade = closeTrade(candles, pos0, i, bar.open * slip("close"), config.brokeragePercent, direction);
     return { state: { cash: state.cash + trade.netPnl, position: null }, trade, exitReason: "time_stop" };
   }
 
+  const planned = pos0.plannedQuantity;
+  const anchor = pos0.anchorPrice;
+  const accumulating = planned !== undefined && anchor !== undefined && (pos0.targetsHit ?? 0) === 0;
   let pos = pos0;
+  let cursor = pos0.levelCursor ?? Math.max(0, pos0.pyramidCount - 1);
+  let moved = false;
   let entryLevel: StepResult["entryLevel"];
-  const planned = pos.plannedQuantity;
-  const next = plan.levels[pos.pyramidCount - 1]; // entry 1 is the signal's own; pyramidCount counts fills
-  if (next && planned !== undefined && pos.anchorPrice !== undefined && (pos.targetsHit ?? 0) === 0 && fillTimeAllowed(config.session, bar)) {
-    const waited = istDayAndMinute(bar.time).day - istDayAndMinute(candles[pos.entryIdx].time).day;
-    if (next.maxWaitDays === undefined || waited <= next.maxWaitDays) {
-      const level = entryLevelPrice(next, pos.anchorPrice, config.atrAtEntry?.(pos.entryIdx), direction);
-      const isShort = direction === "SHORT";
+
+  /** Adds `qty` shares at `fill` to the position: blended average, stops and targets recomputed from it. */
+  const addShares = (p: EnginePosition, qty: number, fill: number): EnginePosition => {
+    const total = p.quantity + qty;
+    const blended = (p.entryPrice * p.quantity + fill * qty) / total;
+    const { stopLossPrice, targetPrice: tp } = resolveRiskLevels(config.riskManagement, blended, config.atrAtEntry?.(p.entryIdx), direction);
+    return { ...p, entryPrice: blended, quantity: total, stopLossPrice, targetPrice: tp, pyramidCount: p.pyramidCount + 1, ...(p.initialQuantity !== undefined ? { initialQuantity: p.initialQuantity + qty } : {}) };
+  };
+
+  if (accumulating) {
+    const waited = istDayAndMinute(bar.time).day - istDayAndMinute(candles[pos0.entryIdx].time).day;
+    const expired = (l: EntryLevel) => l.maxWaitDays !== undefined && waited > l.maxWaitDays;
+    while (cursor < plan.levels.length && expired(plan.levels[cursor])) {
+      cursor++;
+      moved = true;
+    }
+    const next = plan.levels[cursor];
+    if (next && next.trigger !== "SIGNAL" && fillTimeAllowed(config.session, bar)) {
+      const level = entryLevelPrice(next, anchor!, config.atrAtEntry?.(pos0.entryIdx), direction);
       const reaches = level === null ? false : (next.trigger === "PULLBACK") === !isShort ? bar.low <= level : bar.high >= level;
       if (level !== null && reaches) {
         // A resting limit (pullback) fills at its price or better; a resting stop (breakout) at its price or the open if it gapped, plus slippage.
-        const pullback = next.trigger === "PULLBACK";
-        const fill = pullback
-          ? isShort ? Math.max(bar.open, level) : Math.min(bar.open, level)
-          : (isShort ? Math.min(bar.open, level) : Math.max(bar.open, level)) * (1 + (isShort ? -1 : 1) * (config.slippagePercent / 100));
-        const qty = entrySlice(next.allocationPercent, planned, pos.quantity);
+        const fill = next.trigger === "PULLBACK" ? (isShort ? Math.max(bar.open, level) : Math.min(bar.open, level)) : (isShort ? Math.min(bar.open, level) : Math.max(bar.open, level)) * slip("open");
+        const qty = entrySlice(next.allocationPercent, planned!, pos.quantity);
         if (qty > 0) {
-          const total = pos.quantity + qty;
-          const blended = (pos.entryPrice * pos.quantity + fill * qty) / total;
-          const { stopLossPrice, targetPrice: tp } = resolveRiskLevels(config.riskManagement, blended, config.atrAtEntry?.(pos.entryIdx), direction);
-          pos = {
-            ...pos,
-            entryPrice: blended,
-            quantity: total,
-            stopLossPrice,
-            targetPrice: tp,
-            pyramidCount: pos.pyramidCount + 1,
-            ...(pos.initialQuantity !== undefined ? { initialQuantity: pos.initialQuantity + qty } : {}),
-          };
-          entryLevel = { level: pos.pyramidCount, quantity: qty, price: fill };
+          pos = addShares(pos, qty, fill);
+          entryLevel = { level: cursor + 2, quantity: qty, price: fill, time: bar.time };
+          cursor++;
+          moved = true;
         }
       }
     }
   }
-  const r = stepBarCore(candles, i, entrySignal, exitSignal, entryLevel ? { ...state, position: pos } : state, config);
-  return entryLevel ? { ...r, entryLevel } : r;
+  if (moved) pos = { ...pos, levelCursor: cursor };
+  const r = stepBarCore(candles, i, entrySignal, exitSignal, moved ? { ...state, position: pos } : state, config);
+  if (entryLevel) return { ...r, entryLevel };
+
+  // A rule-triggered entry: judged on this candle's close, bought at the next open. Only while the position is still open
+  // and untouched by a sale on this candle, so the rule never mixes with an exit.
+  const p2 = r.state.position;
+  const nextBar = candles[i + 1];
+  const lv = plan.levels[cursor];
+  if (accumulating && p2 && !r.trade && (p2.targetsHit ?? 0) === 0 && nextBar && lv?.trigger === "SIGNAL" && config.levelSignals?.[cursor]?.[i] && entryAllowed(config.session, bar, nextBar)) {
+    const qty = entrySlice(lv.allocationPercent, planned!, p2.quantity);
+    if (qty > 0) {
+      const fill = nextBar.open * slip("open");
+      const grown = { ...addShares(p2, qty, fill), levelCursor: cursor + 1 };
+      return { ...r, state: { ...r.state, position: grown }, entryLevel: { level: cursor + 2, quantity: qty, price: fill, time: nextBar.time } };
+    }
+  }
+  return r;
 }
 
 function stepBarCore(
@@ -611,7 +661,7 @@ function stepBarCore(
       const order = config.entryOrder;
       const fillPrice = order?.type === "LIMIT" ? limitFill(nextBar, limitPriceFor(order, bar.close, direction), direction) : openFillPrice(nextBar.open);
       if (fillPrice === null) return { state: { ...state, position: { ...pos, favorableExtreme } } };
-      const addQuantity = computeQuantity(state.cash, fillPrice, config.positionSizing);
+      const addQuantity = computeQuantity(state.cash, fillPrice, config.positionSizing, stopDistanceFor(config, fillPrice, config.atrAtEntry?.(i + 1)));
       if (addQuantity > 0) {
         const totalQuantity = pos.quantity + addQuantity;
         const blendedEntryPrice = (pos.entryPrice * pos.quantity + fillPrice * addQuantity) / totalQuantity;
@@ -633,6 +683,7 @@ function stepBarCore(
               lockedStopPrice: pos.lockedStopPrice,
               plannedQuantity: pos.plannedQuantity,
               anchorPrice: pos.anchorPrice,
+              levelCursor: pos.levelCursor,
             },
           },
         };
@@ -644,7 +695,7 @@ function stepBarCore(
 
   /** Opens a position at `fillIdx` for `fillPrice`, or reports that the size came out as zero. */
   const open = (fillIdx: number, fillPrice: number) => {
-    const wanted = computeQuantity(state.cash, fillPrice, config.positionSizing);
+    const wanted = computeQuantity(state.cash, fillPrice, config.positionSizing, stopDistanceFor(config, fillPrice, config.atrAtEntry?.(fillIdx)));
     if (wanted <= 0) return { state: { ...state, pendingEntry: null }, sizeTooSmall: true };
     // A multi-level plan buys only its first share now and keeps the rest of the planned size for its further levels.
     const plan = config.entryPlan;
@@ -721,6 +772,9 @@ export function validatePositionSizing(sizing: PositionSizing): void {
   }
   if (sizing.mode === "PERCENT_OF_CAPITAL" && sizing.value > 100) {
     throw new Error("Percent of capital sizing cannot exceed 100%");
+  }
+  if (sizing.mode === "RISK_PERCENT" && sizing.value > 100) {
+    throw new Error("Risk per position cannot exceed 100% of capital");
   }
 }
 

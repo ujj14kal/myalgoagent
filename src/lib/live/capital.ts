@@ -8,8 +8,15 @@ import { computeQuantity, type PositionSizing } from "@/lib/trading-engine/step"
 /** Intraday (MIS) trades need only a fraction of a share's price as margin; brokers allow roughly this multiple, varying by stock. */
 export const INTRADAY_BUYING_POWER = 5;
 
-export function capitalProblem(sizing: PositionSizing, capital: number, price: number, label: string, leverage = 1): string | null {
+export function capitalProblem(sizing: PositionSizing, capital: number, price: number, label: string, leverage = 1, riskPerShare?: number): string | null {
   const wanted = sizing.mode === "FIXED_QUANTITY" ? Math.max(1, Math.floor(sizing.value ?? 1)) : 1;
+  if (sizing.mode === "RISK_PERCENT") {
+    // Without a known stop distance (an ATR stop) the engine sizes the order at entry.
+    if (!riskPerShare) return null;
+    const riskRupees = (capital * (sizing.value ?? 0)) / 100;
+    if (computeQuantity(capital * leverage, price, { ...sizing, riskCapital: capital }, riskPerShare) >= 1) return null;
+    return `Risking ${sizing.value}% of ₹${Math.ceil(capital).toLocaleString("en-IN")} is ₹${Math.round(riskRupees).toLocaleString("en-IN")}, which is less than the ₹${riskPerShare.toFixed(2)} a single ${label} share would lose at your stop-loss, so it would never enter a trade. Raise the capital or the risk percentage, or tighten the stop-loss.`;
+  }
   if (computeQuantity(capital * leverage, price, sizing) >= wanted) return null;
   const rupees = (n: number) => `₹${Math.ceil(n).toLocaleString("en-IN")}`;
   const px = `₹${price.toFixed(2)}`;

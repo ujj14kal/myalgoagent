@@ -1,6 +1,7 @@
 import type { Candle } from "@/lib/market-data";
 import { istDayAndMinute } from "@/lib/market-data/resample";
 import { evaluateConditionsPerBar } from "@/lib/strategy";
+import { levelSignalSeries } from "@/lib/strategy/plan-conditions";
 import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
 import type { ConditionNode, AuxCandleMap } from "@/lib/strategy";
 import {
@@ -41,8 +42,44 @@ function usesAtr(rm: RiskManagementConfig | undefined, plan?: EntryPlan): boolea
   return (rm.targets ?? []).some((t) => t.unit === "ATR_MULTIPLE" || (t.lock.mode === "MARGIN" && t.lock.unit === "ATR_MULTIPLE"));
 }
 
-/** A closed trade, plus why it closed ("end_of_data" = still open when the data ran out). */
-export type BacktestTradeResult = EngineTrade & { exitReason?: ExitReason | "end_of_data" };
+/** The parts of a position that was built or sold in stages: each sale, and each further entry. */
+export type TradeLegs = {
+  exits: { time: number; price: number; quantity: number; netPnl: number; reason: ExitReason | "end_of_data"; targetLevel?: number }[];
+  entries: { level: number; time: number; price: number; quantity: number }[];
+};
+
+/** A closed trade, plus why it closed ("end_of_data" = still open when the data ran out). A position sold or built in parts is ONE trade; `legs` has its parts. */
+export type BacktestTradeResult = EngineTrade & { exitReason?: ExitReason | "end_of_data"; legs?: TradeLegs };
+
+/** The sales of one position, merged into the single trade it was: total shares, average entry and exit, summed P&L. */
+export function mergePositionTrades(parts: BacktestTradeResult[], targetLevels: (number | undefined)[], entries: TradeLegs["entries"]): BacktestTradeResult {
+  const staged = parts.length > 1 || entries.length > 0 || targetLevels.some((t) => t !== undefined);
+  if (!staged) return parts[0];
+  const quantity = parts.reduce((n, p) => n + p.quantity, 0);
+  const weighted = (pick: (p: BacktestTradeResult) => number) => parts.reduce((n, p) => n + pick(p) * p.quantity, 0) / quantity;
+  const grossPnl = parts.reduce((n, p) => n + p.grossPnl, 0);
+  const fees = parts.reduce((n, p) => n + p.fees, 0);
+  const netPnl = grossPnl - fees;
+  const entryPrice = weighted((p) => p.entryPrice);
+  const last = parts[parts.length - 1];
+  return {
+    entryTime: parts[0].entryTime,
+    entryPrice,
+    exitTime: last.exitTime,
+    exitPrice: weighted((p) => p.exitPrice),
+    quantity,
+    grossPnl,
+    fees,
+    netPnl,
+    netPnlPct: (netPnl / (entryPrice * quantity)) * 100,
+    holdingBars: Math.max(...parts.map((p) => p.holdingBars)),
+    exitReason: last.exitReason,
+    legs: {
+      exits: parts.map((p, i) => ({ time: p.exitTime, price: p.exitPrice, quantity: p.quantity, netPnl: p.netPnl, reason: p.exitReason ?? "exit_rule", ...(targetLevels[i] !== undefined ? { targetLevel: targetLevels[i] } : {}) })),
+      entries,
+    },
+  };
+}
 
 export interface EquityPoint {
   time: number;
@@ -169,16 +206,32 @@ export function runBacktest(
     session: config.session,
     entryOrder: config.entryOrder,
     entryPlan: config.entryPlan,
+    levelSignals: levelSignalSeries(candles, config.entryPlan, aux ?? new Map()),
   };
 
   const trades: BacktestTradeResult[] = [];
   const equityCurve: EquityPoint[] = [];
   let state: EngineState = { cash: config.startingCapital, position: null };
 
+  // A position sold in stages (targets) or built in stages (entry levels) is reported as ONE trade, so win rate, profit
+  // factor and the trade list count positions, not pieces. Its parts are kept on the trade.
+  let parts: BacktestTradeResult[] = [];
+  let partLevels: (number | undefined)[] = [];
+  let extraEntries: TradeLegs["entries"] = [];
   for (let i = 0; i < candles.length; i++) {
     const stepped = stepBar(candles, i, entry[i], exit[i], state, engineConfig);
     state = stepped.state;
-    if (stepped.trade) trades.push({ ...stepped.trade, exitReason: stepped.exitReason });
+    if (stepped.entryLevel) extraEntries.push({ level: stepped.entryLevel.level, time: stepped.entryLevel.time, price: stepped.entryLevel.price, quantity: stepped.entryLevel.quantity });
+    if (stepped.trade) {
+      parts.push({ ...stepped.trade, exitReason: stepped.exitReason });
+      partLevels.push(stepped.targetLevel);
+      if (!state.position) {
+        trades.push(mergePositionTrades(parts, partLevels, extraEntries));
+        parts = [];
+        partLevels = [];
+        extraEntries = [];
+      }
+    }
 
     equityCurve.push({ time: candles[i].time, equity: markToMarket(candles, i, state, config.direction) });
   }
@@ -187,7 +240,11 @@ export function runBacktest(
     const lastIdx = candles.length - 1;
     const closed = forceClose(candles, lastIdx, state, engineConfig);
     state = closed.state;
-    if (closed.trade) trades.push({ ...closed.trade, exitReason: "end_of_data" });
+    if (closed.trade) {
+      parts.push({ ...closed.trade, exitReason: "end_of_data" });
+      partLevels.push(undefined);
+      trades.push(mergePositionTrades(parts, partLevels, extraEntries));
+    }
     if (equityCurve.length > 0) equityCurve[equityCurve.length - 1] = { time: candles[lastIdx].time, equity: state.cash };
   }
 

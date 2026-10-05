@@ -8,6 +8,7 @@ import { type CandleInterval, type CandleRange } from "@/lib/market-data";
 import { engineEntryOrder, engineSession, rangeFor } from "@/lib/strategy/session";
 import { runBacktest } from "@/lib/backtest/run";
 import { fetchAuxCandles } from "@/lib/strategy-aux-data";
+import { withLevelConditions } from "@/lib/strategy/plan-conditions";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import type { ConditionNode } from "@/lib/strategy";
 import { Prisma } from "@prisma/client";
@@ -83,7 +84,8 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
     const entryCondition = strategy.entryCondition as unknown as ConditionNode;
     const exitCondition = strategy.exitCondition as unknown as ConditionNode;
 
-    const aux = await fetchAuxCandles(entryCondition, exitCondition, strategy.instrument.symbol, range, timeframe, market);
+    const entryPlan = parseEntryPlan(strategy.entryPlan);
+    const aux = await fetchAuxCandles(entryCondition, withLevelConditions(exitCondition, entryPlan), strategy.instrument.symbol, range, timeframe, market);
 
     const result = runBacktest(
       candles,
@@ -99,7 +101,7 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
         direction: strategy.direction,
         session: engineSession(strategy, entryCondition),
         entryOrder: engineEntryOrder(strategy),
-        entryPlan: parseEntryPlan(strategy.entryPlan),
+        entryPlan,
       },
       aux,
     );
@@ -159,6 +161,7 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
             netPnl: t.netPnl,
             netPnlPct: t.netPnlPct,
             holdingBars: t.holdingBars,
+            legs: t.legs ? (t.legs as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
           })),
         },
       },

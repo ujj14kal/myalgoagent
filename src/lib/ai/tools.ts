@@ -92,13 +92,14 @@ const entryPlanSchema = {
       items: {
         type: "object",
         properties: {
-          trigger: { type: "string", enum: ["pullback", "breakout"], description: "default pullback" },
-          value: { type: "number", description: "Distance from the first fill, e.g. 3 for 3%" },
-          unit: { type: "string", enum: ["PERCENT", "POINTS", "ATR_MULTIPLE"] },
+          trigger: { type: "string", enum: ["pullback", "breakout", "signal"], description: "default pullback; \"signal\" buys at the next open once a rule (condition) holds at a candle's close, e.g. \"RSI(14) back above 40\" or \"close above the 20-day SMA\"" },
+          value: { type: "number", description: "Price levels only: distance from the first fill, e.g. 3 for 3%" },
+          unit: { type: "string", enum: ["PERCENT", "POINTS", "ATR_MULTIPLE"], description: "Price levels only" },
+          condition: { anyOf: [{ type: "string" }, { type: "object" }], description: "Signal levels only: the rule (see CONDITIONS)" },
           allocation_percent: { type: "number", description: "Share of the planned size bought at this level, 1–100" },
           max_wait_days: { type: "number", description: "Withdraw this level this many trading days after the first entry" },
         },
-        required: ["value", "unit", "allocation_percent"],
+        required: ["allocation_percent"],
       },
     },
     max_hold_days: { type: "number", description: "Close the position at the open this many trading days after the first entry" },
@@ -274,7 +275,7 @@ export const AGENT_TOOLS: MantleTool[] = [
           position_sizing: {
             type: "object",
             properties: {
-              mode: { type: "string", enum: ["FULL_CAPITAL", "FIXED_QUANTITY", "FIXED_CAPITAL", "PERCENT_OF_CAPITAL"] },
+              mode: { type: "string", enum: ["FULL_CAPITAL", "FIXED_QUANTITY", "FIXED_CAPITAL", "PERCENT_OF_CAPITAL", "RISK_PERCENT"], description: "RISK_PERCENT = risk this percent of capital per trade; shares are worked out from the stop-loss distance, so a stop-loss is required" },
               value: { type: "number", description: "Shares, rupees or percent, depending on mode; omit for FULL_CAPITAL" },
             },
             required: ["mode"],
@@ -403,7 +404,7 @@ export const AGENT_TOOLS: MantleTool[] = [
           position_sizing: {
             type: "object",
             properties: {
-              mode: { type: "string", enum: ["FULL_CAPITAL", "FIXED_QUANTITY", "FIXED_CAPITAL", "PERCENT_OF_CAPITAL"] },
+              mode: { type: "string", enum: ["FULL_CAPITAL", "FIXED_QUANTITY", "FIXED_CAPITAL", "PERCENT_OF_CAPITAL", "RISK_PERCENT"], description: "RISK_PERCENT = risk this percent of capital per trade; shares are worked out from the stop-loss distance, so a stop-loss is required" },
               value: { type: "number" },
             },
           },
@@ -554,7 +555,7 @@ function sizingFrom(v: unknown, fallback?: { mode: SizingModeName; value: number
   const sizing = asObject(v);
   if (!sizing) return fallback ?? { mode: "FULL_CAPITAL" as SizingModeName, value: null };
   const mode: SizingModeName =
-    sizing.mode === "FIXED_QUANTITY" || sizing.mode === "FIXED_CAPITAL" || sizing.mode === "PERCENT_OF_CAPITAL" ? sizing.mode : "FULL_CAPITAL";
+    sizing.mode === "FIXED_QUANTITY" || sizing.mode === "FIXED_CAPITAL" || sizing.mode === "PERCENT_OF_CAPITAL" || sizing.mode === "RISK_PERCENT" ? sizing.mode : "FULL_CAPITAL";
   return { mode, value: mode === "FULL_CAPITAL" ? null : num(sizing.value) ?? null };
 }
 
@@ -596,6 +597,14 @@ function timeframeArg(v: unknown): string | undefined {
 }
 
 /** Looks up {custom: "name"} references in the user's saved custom indicators. */
+/** Custom indicators named in an entry plan's rules are filled in from the user's saved ones, like the entry and exit rules. */
+async function fillPlanCustomRefs<P extends { levels: { condition?: ConditionNode }[] } | null | undefined>(userId: string, plan: P): Promise<P> {
+  if (!plan || !JSON.stringify(plan).includes('"custom"')) return plan;
+  const rows = await prisma.customIndicator.findMany({ where: { userId }, select: { name: true, def: true } });
+  const saved = new Map(rows.map((r) => [r.name, r.def as unknown as CustomIndicatorDef]));
+  return { ...plan, levels: plan!.levels.map((l) => (l.condition ? { ...l, condition: fillCustomRefs(l.condition, saved) } : l)) } as P;
+}
+
 async function withCustomDefs<T extends { entry?: ConditionNode; exit?: ConditionNode | null }>(userId: string, rules: T): Promise<T> {
   const text = JSON.stringify(rules);
   if (!text.includes('"custom"')) return rules;
@@ -681,7 +690,7 @@ async function proposeStrategy(userId: string, a: Record<string, unknown>): Prom
   let plan: ReturnType<typeof entryPlanFrom>;
   try {
     stagedTargets = targetsFrom(a.targets);
-    plan = entryPlanFrom(a.entry_plan, Math.max(1, Math.floor(num(a.max_entries) ?? 1)));
+    plan = await fillPlanCustomRefs(userId, entryPlanFrom(a.entry_plan, Math.max(1, Math.floor(num(a.max_entries) ?? 1))));
   } catch (err) {
     return { result: { error: `${readableIssues(err)} Fix it and call propose_strategy again.` } };
   }
@@ -777,7 +786,7 @@ async function proposeStrategyUpdate(userId: string, a: Record<string, unknown>)
     // Omitted = keep the saved targets; null or an empty list removes them.
     nextTargets = targetsFrom(a.targets) ?? parseTargets(s.targetsConfig);
     // Omitted = keep the saved entry plan; null removes it.
-    const planArg = entryPlanFrom(a.entry_plan, Math.max(1, Math.floor(num(a.max_entries) ?? s.maxPyramidEntries)));
+    const planArg = await fillPlanCustomRefs(userId, entryPlanFrom(a.entry_plan, Math.max(1, Math.floor(num(a.max_entries) ?? s.maxPyramidEntries))));
     nextPlan = planArg === undefined ? parseEntryPlan(s.entryPlan) : planArg ?? undefined;
     const styleArg = styleFrom(a.style);
     nextStyle = styleArg === undefined ? (s.style as ReturnType<typeof styleFrom>) ?? null : styleArg;

@@ -168,3 +168,28 @@ describe("swing and positional styles", () => {
     expect(styleProblem("POSITIONAL", { ...ok, direction: "SHORT" })).toMatch(/long only/);
   });
 });
+
+describe("a rule-triggered entry across restarts", () => {
+  const signalPlan = { firstPercent: 50, levels: [{ trigger: "SIGNAL", unit: "PERCENT", value: 0, allocationPercent: 50, condition: { kind: "comparison", left: { kind: "price", field: "CLOSE" }, operator: "LT", right: { kind: "constant", value: 299 } } }] };
+
+  it("buys when its rule holds, once, and a restart does not buy it again", async () => {
+    const s0 = state({ entryPlan: signalPlan });
+    const s1 = saved(s0, await pass(s0, "11:08"));
+    expect(s1.positionQuantity).toBe(50);
+    const bought = await pass(s1, "11:25"); // price has fallen below 299: the rule holds
+    expect(bought.newOrders.map((o) => [o.reason, o.entryLevel, o.quantity])).toEqual([["entry_level", 2, 50]]);
+    expect(bought.position?.quantity).toBe(100);
+    const s2 = saved(s1, bought);
+    const again = await pass(s2, "11:25");
+    expect(again.newOrders).toHaveLength(0);
+    const later = await pass(s2, "11:50");
+    expect(later.newOrders).toHaveLength(0);
+    expect(later.position?.quantity).toBe(100);
+  });
+  it("buys nothing while its rule does not hold", async () => {
+    const s0 = state({ entryPlan: signalPlan });
+    const s1 = saved(s0, await pass(s0, "11:08"));
+    const early = await pass(s1, "11:12"); // price is still above 299
+    expect(early.newOrders).toHaveLength(0);
+  });
+});

@@ -8,6 +8,7 @@ const MODES: { value: PositionSizingMode; label: string; hint: string }[] = [
   { value: "FIXED_QUANTITY", label: "Quantity", hint: "A fixed number of shares every trade." },
   { value: "FIXED_CAPITAL", label: "Amount (₹)", hint: "A fixed rupee amount every trade — the number of shares follows the price." },
   { value: "PERCENT_OF_CAPITAL", label: "% of capital", hint: "A share of the account's current capital every trade." },
+  { value: "RISK_PERCENT", label: "Risk per trade (%)", hint: "Risk a set share of your capital on each trade: the number of shares is worked out from your stop-loss distance, so a wider stop means fewer shares. Needs a stop-loss." },
   { value: "FULL_CAPITAL", label: "Full capital", hint: "All available capital every trade." },
 ];
 
@@ -16,6 +17,7 @@ const VALUE_CONFIG: Record<PositionSizingMode, { label: string; placeholder: str
   FIXED_QUANTITY: { label: "Shares per trade", placeholder: "e.g. 10", step: 1, suffix: "shares" },
   FIXED_CAPITAL: { label: "Amount per trade", placeholder: "e.g. 20000", step: 100, suffix: "₹" },
   PERCENT_OF_CAPITAL: { label: "Share of capital per trade", placeholder: "e.g. 25", step: 1, suffix: "%" },
+  RISK_PERCENT: { label: "Capital risked per trade", placeholder: "e.g. 1", step: 0.25, suffix: "%" },
 };
 
 const DEFAULT_VALUE: Record<PositionSizingMode, number | null> = {
@@ -23,6 +25,7 @@ const DEFAULT_VALUE: Record<PositionSizingMode, number | null> = {
   FIXED_QUANTITY: 1,
   FIXED_CAPITAL: 10000,
   PERCENT_OF_CAPITAL: 25,
+  RISK_PERCENT: 1,
 };
 
 export default function PositionSizingFields({
