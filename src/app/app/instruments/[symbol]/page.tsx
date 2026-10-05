@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { marketDataFor, marketExtrasFor, type CorpAction } from "@/lib/market-data";
+import { marketExtrasFor, type CorpAction } from "@/lib/market-data";
 import InstrumentExtras, { type KeyStats } from "@/components/markets/instrument-extras";
 import InstrumentChartPanel from "@/components/instrument-chart-panel";
 import SymbolSwitcher from "@/components/symbol-switcher";
@@ -10,6 +10,7 @@ import type { Drawing } from "@/lib/chart-drawing-primitive";
 import type { CandleInterval } from "@/lib/market-data";
 import { normalizeIndicatorInstances } from "@/lib/chart-indicator-instance";
 import { formatPct, formatPrice, formatSignedINR, toneOf, TONE_TEXT } from "@/lib/format";
+import { userMarketDataReady } from "@/lib/market-data/for-user";
 
 export async function generateMetadata({ params }: { params: Promise<{ symbol: string }> }) {
   const { symbol } = await params;
@@ -25,7 +26,7 @@ export default async function InstrumentDetailPage({
   const symbol = decodeURIComponent(rawSymbol);
 
   const session = await auth();
-  const market = marketDataFor(session?.user?.id, "view");
+  const market = await userMarketDataReady(session?.user?.id, "view");
   const instrument = await prisma.instrument.findUnique({ where: { symbol } });
   if (!instrument) {
     notFound();

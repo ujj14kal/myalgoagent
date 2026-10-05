@@ -1,7 +1,8 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { marketDataFor, marketExtrasFor, maxPain, pcr } from "@/lib/market-data";
+import { marketExtrasFor, maxPain, pcr } from "@/lib/market-data";
 import { loadBrokerAccount } from "@/lib/brokers/account-load";
+import { userMarketDataReady } from "@/lib/market-data/for-user";
 
 // Read-only market and account lookups for the assistant. Everything goes
 // through the same selectors as the pages (licensed feed only for allowed
@@ -20,7 +21,7 @@ async function instrumentFor(raw: string) {
 export async function getQuote(userId: string, raw: string) {
   const inst = await instrumentFor(raw);
   if (!inst) return { error: `Unknown instrument "${raw}" — search with list_instruments.` };
-  const market = marketDataFor(userId, "view");
+  const market = await userMarketDataReady(userId, "view");
   const extras = marketExtrasFor(userId);
   const [daily, ticks, week52] = await Promise.all([
     market.getHistoricalCandles(inst.symbol, "1mo", "1d"),

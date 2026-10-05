@@ -6,7 +6,9 @@ import { logError, logWarn } from "@/lib/logger";
 import { BrokerError } from "@/lib/brokers/adapters";
 import { brokerById } from "@/lib/brokers/catalog";
 import { LIVE_BROKERS } from "@/lib/brokers/live-brokers";
-import { marketDataFor, type CandleInterval } from "@/lib/market-data";
+import { marketDataFor, type CandleInterval, type MarketDataProvider } from "@/lib/market-data";
+import { brokerMarketData } from "@/lib/brokers/broker-data";
+import type { BrokerId } from "@/lib/brokers/catalog";
 import { closedCandles, syncPaperSession, type NewPaperOrder, type PaperSessionState } from "@/lib/paper/sync";
 import { inMarketWindow } from "@/lib/paper/market-window";
 import { rangeFor } from "@/lib/strategy/session";
@@ -71,8 +73,21 @@ export async function startDeployment(userId: string, input: { strategyId: strin
 
   // Start from now: the engine only acts on candles that close after this point.
   const tf = s.timeframe as CandleInterval;
-  const market = marketDataFor(userId, "trading");
-  const candles = closedCandles(await market.getHistoricalCandles(s.instrument.symbol, rangeFor(s.timeframe, "1mo", market.depth), tf), tf);
+  // Prices for this strategy's signals come from the user's own broker when it supplies data, and
+  // that choice is fixed for the deployment's life (switching sources mid-position would break
+  // candle matching). Otherwise the general feed, with the reason logged for the user.
+  let dataSource: "broker" | "general" = "general";
+  let dataNote = "";
+  let raw;
+  try {
+    raw = await brokerMarketData(userId, input.broker as BrokerId).getHistoricalCandles(s.instrument.symbol, rangeFor(s.timeframe, "1mo", "standard"), tf);
+    dataSource = "broker";
+  } catch (err) {
+    dataNote = err instanceof Error ? err.message : "";
+    const general = marketDataFor(userId, "trading");
+    raw = await general.getHistoricalCandles(s.instrument.symbol, rangeFor(s.timeframe, "1mo", general.depth), tf);
+  }
+  const candles = closedCandles(raw, tf);
   if (!candles.length) throw new LiveCheckError("No recent prices for this stock.");
   // A strategy whose capital can't buy its first position would watch forever and never trade.
   const sizing = { mode: s.positionSizingMode, value: s.positionSizingValue };
@@ -110,6 +125,7 @@ export async function startDeployment(userId: string, input: { strategyId: strin
     positionStopLossPrice: null,
     positionTargetPrice: null,
     lastSyncedTime: candles.at(-1)!.time,
+    dataSource,
   } as PaperSessionState;
 
   const d = await prisma.liveDeployment.create({
@@ -127,8 +143,14 @@ export async function startDeployment(userId: string, input: { strategyId: strin
     },
   });
   await lg(d, "OK", `Went live on ${name} with ${rupees(input.capital)} of capital (${s.productType === "INTRADAY" ? "intraday" : "delivery"}). ${input.mode === "AUTO" ? "Orders are sent automatically when the rules fire." : "Each signal waits for your confirmation."} Enter when: ${conditionToText(state.entryCondition)}. Exit when: ${conditionToText(state.exitCondition)}. It is checked every few seconds while the market is open.`);
+  await lg(d, dataSource === "broker" ? "OK" : "INFO", dataSource === "broker" ? `Prices for its signals come straight from your ${name} account.` : `Prices for its signals come from the general price feed (Yahoo, not an official exchange source)${dataNote ? `: ${dataNote}` : "."}`);
   await notify(userId, `“${s.name}” is live on ${name} (${input.mode === "AUTO" ? "orders go out automatically" : "each signal waits for your confirmation"}).`);
   return d;
+}
+
+/** The price source fixed at Go live; deployments from before broker data existed stay on the general feed. */
+function dataFor(d: LiveDeployment): MarketDataProvider {
+  return (d.engineState as { dataSource?: string }).dataSource === "broker" ? brokerMarketData(d.userId, d.broker as BrokerId) : marketDataFor(d.userId, "trading");
 }
 
 /** The engine's position must match the broker's: when nothing is really held, the engine is flat too. */
@@ -264,14 +286,14 @@ export async function runDeployment(id: string): Promise<"idle" | "acted" | "pau
   const state = d.engineState as unknown as PaperSessionState;
   const risk = await prisma.riskSettings.findUnique({ where: { userId: d.userId }, select: { killSwitchEnabled: true, liveMaxOrderValue: true } });
   const maxOrderValue = risk?.liveMaxOrderValue ?? LIVE_DEFAULTS.maxOrderValue;
-  const market = marketDataFor(d.userId, "trading");
+  const market = dataFor(d);
   let result;
   try {
     // Same engine as forward testing; the forming candle is included so a signal on the last closed candle is sent right away.
     result = await syncPaperSession(state, !risk?.killSwitchEnabled, market, { includeForming: true });
   } catch (err) {
     logError("live.deployment.sync", err, { id });
-    await liveLogThrottled(`price:${id}`, 5 * 60_000, d.userId, id, "WARN", `Couldn't read ${stock(d)} prices this time. Nothing is sent while prices are unavailable; trying again in a few seconds.`);
+    await liveLogThrottled(`price:${id}`, 5 * 60_000, d.userId, id, "WARN", `Couldn't read ${stock(d)} prices${(d.engineState as { dataSource?: string }).dataSource === "broker" ? ` from ${brokerName(d)}` : ""} this time. Nothing is sent while prices are unavailable; trying again in a few seconds.`);
     await prisma.liveDeployment.update({ where: { id }, data: { lastCheckedAt: new Date(), lastError: "Couldn't read prices this time — will retry." } });
     return "idle";
   }

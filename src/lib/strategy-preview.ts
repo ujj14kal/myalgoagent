@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/logger";
 import { compile } from "@/lib/strategy-compile";
-import { isIntraday, marketDataFor, type Candle } from "@/lib/market-data";
+import { isIntraday, type Candle } from "@/lib/market-data";
 import { STRATEGY_TIMEFRAMES, engineEntryOrder, engineSession, normalizeSession, rangeFor } from "@/lib/strategy/session";
 import { fetchAuxCandles } from "@/lib/strategy-aux-data";
 import { runBacktest, type BacktestTradeResult } from "@/lib/backtest/run";
@@ -12,6 +12,7 @@ import { INDICATOR_CATALOG } from "@/lib/strategy/indicator-catalog";
 import type { StrategyInput } from "@/lib/strategy-actions";
 import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
 import { buildReplayStudies, entryCheckers, tradeLevels, type ReplayRisk, type ReplayStudies, type TradeReplay } from "@/lib/strategy-replay";
+import { userMarketDataReady } from "@/lib/market-data/for-user";
 
 // The strategy builder's "See it in action" demo: runs an unsaved draft
 // through the same validator and backtest engine on recent data. Server-only
@@ -106,7 +107,7 @@ export async function computeStrategyPreview(userId: string | null, input: Strat
 
     const session = normalizeSession(input);
     const timeframe = session.timeframe;
-    const market = marketDataFor(userId, "backtest");
+    const market = await userMarketDataReady(userId, "backtest");
     const range = rangeFor(timeframe, PREVIEW.range, market.depth);
     const candles = await market.getHistoricalCandles(instrument.symbol, range, timeframe);
     if (candles.length === 0) return { ok: false, error: "No recent price data for this instrument." };

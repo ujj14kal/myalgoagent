@@ -4,13 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { marketDataFor, type CandleInterval, type CandleRange } from "@/lib/market-data";
+import { type CandleInterval, type CandleRange } from "@/lib/market-data";
 import { engineEntryOrder, engineSession, rangeFor } from "@/lib/strategy/session";
 import { runBacktest } from "@/lib/backtest/run";
 import { fetchAuxCandles } from "@/lib/strategy-aux-data";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import type { ConditionNode } from "@/lib/strategy";
 import type { Prisma } from "@prisma/client";
+import { userMarketDataReady } from "@/lib/market-data/for-user";
 
 export interface RunBacktestInput {
   strategyId: string;
@@ -71,7 +72,7 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
     // Runs on the strategy's own timeframe; intraday history is limited by what
     // the data source keeps, so the period is clamped to what's available.
     const timeframe = strategy.timeframe as CandleInterval;
-    const market = marketDataFor(userId, "backtest");
+    const market = await userMarketDataReady(userId, "backtest");
     const range = rangeFor(timeframe, input.range, market.depth);
     const candles = await market.getHistoricalCandles(strategy.instrument.symbol, range, timeframe);
     if (candles.length === 0) throw new Error("No historical data available for this instrument");

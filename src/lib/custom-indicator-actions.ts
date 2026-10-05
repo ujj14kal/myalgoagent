@@ -6,8 +6,9 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { logError } from "@/lib/logger";
-import { marketDataFor, type Candle } from "@/lib/market-data";
+import { type Candle } from "@/lib/market-data";
 import { computeCustomSeries, validateCustomDef, type CustomIndicatorDef } from "@/lib/custom-indicator";
+import { userMarketData } from "@/lib/market-data/for-user";
 
 // The user's own indicators: save, delete, and preview a formula on a real chart.
 
@@ -68,7 +69,7 @@ export async function previewCustomIndicator(def: CustomIndicatorDef, symbol: st
   const instrument = await prisma.instrument.findUnique({ where: { symbol }, select: { symbol: true } });
   if (!instrument) return { ok: false, error: "Pick an instrument." };
   try {
-    const candles = await marketDataFor(userId, "view").getHistoricalCandles(symbol, "6mo", "1d");
+    const candles = await userMarketData(userId, "view").getHistoricalCandles(symbol, "6mo", "1d");
     const raw = computeCustomSeries(candles, clean);
     const values = candles.flatMap((c, i) => (Number.isFinite(raw[i]) ? [{ time: c.time, value: Math.round(raw[i] * 10000) / 10000 }] : []));
     return { ok: true, data: { candles, values, last: values.at(-1)?.value ?? null } };

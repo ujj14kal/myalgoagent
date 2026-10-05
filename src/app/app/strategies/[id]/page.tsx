@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { type CandleInterval, marketDataFor } from "@/lib/market-data";
+import { type CandleInterval } from "@/lib/market-data";
 import { rangeFor } from "@/lib/strategy/session";
 import { describeExecutionConfig } from "@/lib/describe-strategy-config";
 import {
@@ -21,6 +21,7 @@ import PageHeader from "@/components/ui/page-header";
 import GoLive from "@/components/live/go-live";
 import { brokerReadiness } from "@/lib/live/broker-readiness";
 import StatusBadge from "@/components/ui/status-badge";
+import { userMarketDataReady } from "@/lib/market-data/for-user";
 
 export const metadata = { title: "Strategy", robots: { index: false } };
 
@@ -29,7 +30,7 @@ const OVERLAY_COLORS = ["#bda360", "#466fff", "#6a35c2", "#0e1b2d"];
 export default async function StrategyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await auth();
-  const market = marketDataFor(session?.user?.id, "view");
+  const market = await userMarketDataReady(session?.user?.id, "view");
   if (!session?.user?.id) return null;
 
   const [strategy, instruments] = await Promise.all([

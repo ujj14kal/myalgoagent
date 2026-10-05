@@ -19,6 +19,8 @@ const DEFAULT_MAX_PYRAMID_ENTRIES = 1;
 const DEFAULT_ATR_PERIOD = 14;
 
 export interface PaperSessionState {
+  /** Live deployments only: where signal prices come from, fixed at Go live (absent = the general feed). */
+  dataSource?: "broker" | "general";
   instrumentSymbol: string;
   direction: StrategyDirection;
   entryCondition: ConditionNode;

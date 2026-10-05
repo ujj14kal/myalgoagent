@@ -58,3 +58,9 @@ Research of 5 Oct 2026. Prices are from NSE Data & Analytics' published commerci
 2. Each broker's API terms: that we may use the client's data, through their own API session, inside our app for that client.
 3. TradingView: widget use inside a logged-in, paid app (their free terms mention public pages).
 4. Groww: whether the free plan's exclusion of data still holds and if partner pricing exists.
+
+## 6. Status (5 Oct 2026)
+
+Built: candles from the user's own broker for Groww, Zerodha, Upstox, Fyers, Angel One, Dhan and 5paisa (`src/lib/brokers/broker-candles.ts`, `broker-data.ts`), used for charts, backtests, previews and the AI agent (`src/lib/market-data/for-user.ts`), and fixed per live strategy at Go live (`engineState.dataSource`). Falls back to the general feed when the broker gives no data (free trial users, Groww/Zerodha/Dhan without a data plan, logged out). Forward tests and webhooks stay on the general feed for now. Not built: Alice Blue (history closed in market hours) and ICICI Direct (own stock codes).
+
+Verified live: Dinesh's Groww (free trial plan) answers 403 to the candle API → clean fallback. A successful broker read still needs an account with a data plan (or a free-data broker) to confirm each adapter.
