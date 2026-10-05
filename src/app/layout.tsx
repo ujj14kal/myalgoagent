@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Geist_Mono, Montserrat } from "next/font/google";
+import { Inter, Geist_Mono } from "next/font/google";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import Script from "next/script";
 import GlobalErrorListener from "@/components/global-error-listener";
@@ -9,14 +9,6 @@ import "./globals.css";
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
-});
-
-// Display face for the marketing site's headlines (self-hosted by next/font at build time).
-const montserrat = Montserrat({
-  variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["600", "700", "800"],
-  display: "swap",
 });
 
 const geistMono = Geist_Mono({
@@ -47,7 +39,6 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: "/favicon.ico" },
-      { url: "/brand/icon.svg", type: "image/svg+xml" },
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
@@ -105,12 +96,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${geistMono.variable} ${montserrat.variable} h-full antialiased`}
+      className={`${inter.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-brand-bg text-brand-navy">
         <Script id="js-enabled" strategy="beforeInteractive">
-          {"var d=document.documentElement;d.classList.add('js');if(!matchMedia('(prefers-reduced-motion: reduce)').matches){d.classList.add('mk-anim');try{if(location.pathname==='/'&&sessionStorage.getItem('mk-preloaded')!=='1')d.classList.add('mk-preload')}catch(e){}setTimeout(function(){if(!d.classList.contains('mk-ready'))d.classList.remove('mk-anim')},4000)}"}
+          {"document.documentElement.classList.add('js')"}
         </Script>
         {jsonLd.map((ld, i) => (
           <script

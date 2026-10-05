@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
-import { Prose } from "@/components/section";
+import { Breadcrumbs, Prose } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 import Reveal from "@/components/reveal";
 
@@ -19,7 +19,8 @@ export default function CookiePolicyPage() {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <PageHeader crumbs={[{ href: "/", label: "Home" }, { href: "/cookie-policy", label: "Cookie Policy" }]} eyebrow="Legal" title="Cookie Policy" description="Last updated: draft — pending legal review." />
+      <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/cookie-policy", label: "Cookie Policy" }]} />
+      <PageHeader eyebrow="Legal" title="Cookie Policy" description="Last updated: draft — pending legal review." />
       <Reveal>
       <Prose>
         <h2>What we use cookies for</h2>

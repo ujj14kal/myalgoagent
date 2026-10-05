@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
-import { Prose } from "@/components/section";
+import { Breadcrumbs, Prose } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 import Reveal from "@/components/reveal";
 import CompanyLink from "@/components/company-link";
@@ -20,7 +20,8 @@ export default function AboutPage() {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <PageHeader crumbs={[{ href: "/", label: "Home" }, { href: "/about", label: "About" }]} eyebrow="About" title="About MyAlgoAgent" description={<>Built by <CompanyLink>Shagoon Softech</CompanyLink>.</>} />
+      <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/about", label: "About" }]} />
+      <PageHeader eyebrow="About" title="About MyAlgoAgent" description={<>Built by <CompanyLink>Shagoon Softech</CompanyLink>.</>} />
       <Reveal>
       <Prose>
         <h2>Our focus</h2>
