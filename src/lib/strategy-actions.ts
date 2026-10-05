@@ -65,6 +65,8 @@ function riskFields(input: StrategyInput) {
 
 export interface StrategyActionResult {
   error?: string;
+  /** Set when a new strategy was created; the form navigates to it. */
+  id?: string;
 }
 
 /**
@@ -80,7 +82,7 @@ export interface StrategyActionResult {
  * `redirect()`'s own internal mechanism is allowed to throw, since Next.js
  * handles that one specially regardless of this redaction.
  */
-/** Shared by createStrategy (redirects on success) and
+/** Shared by createStrategy (returns the new id on success) and
  * autoSaveDraftStrategy (doesn't — see its own comment for why). Every
  * new strategy starts DRAFT by default (the schema default), which is
  * exactly the state an auto-saved in-progress one should be in too. */
@@ -122,7 +124,9 @@ export async function createStrategy(input: StrategyInput): Promise<StrategyActi
   if ("error" in result) return result;
 
   revalidatePath("/app/strategies");
-  redirect(`/app/strategies/${result.id}`);
+  // Returned, not redirect()ed: on Amplify the server-side redirect's internal fetch of the new page fails
+  // (TLS to its own plain-HTTP port), which left the button on "Saving…" behind a "Leave site?" prompt.
+  return { id: result.id };
 }
 
 /** Called when a user navigates away from the "New Strategy" form before

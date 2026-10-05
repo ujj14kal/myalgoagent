@@ -237,13 +237,14 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ b
                 <tbody>
                   {o.map((r, i) => (
                     <tr key={`${r.id}-${i}`}>
-                      <td className="whitespace-nowrap text-xs">{r.time ?? "—"}</td>
+                      <td className="whitespace-nowrap text-xs">{r.time ? r.time.replace("T", " ").replace(/\.\d+$/, "") : "—"}</td>
                       <td className="font-semibold">{r.symbol}</td>
                       <td className={r.side === "BUY" ? "text-[#0b6b30]" : "text-[#9b1111]"}>{r.side}</td>
                       <td>
                         {r.quantity} ({r.filled})
                       </td>
-                      <td>{price(r.price)}</td>
+                      {/* A market order's "price" is the broker's protection limit, not a price anyone chose — say "Market". */}
+                      <td>{/^MARKET$|^MKT$/i.test(r.orderType ?? "") ? <span title={r.price != null ? `Broker's protection limit ${price(r.price)}` : undefined}>Market</span> : price(r.price)}</td>
                       <td>{price(r.avgPrice)}</td>
                       <td className="text-xs">{r.status}</td>
                       <td>

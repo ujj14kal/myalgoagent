@@ -30,6 +30,11 @@ describe("classifyPosition", () => {
   it("is MIXED when ours explain only part of it", () => {
     expect(classifyPosition({ symbol: "TARIL", product: "MIS", quantity: -3 }, [ours({})], NOW)).toBe("MIXED");
   });
+  it("is MAA for a position MyAlgoAgent opened and closed today (broker shows quantity 0)", () => {
+    const round = [ours({ tradingSymbol: "TATASTEEL", side: "BUY", brokerOrderId: "A" }), ours({ tradingSymbol: "TATASTEEL", side: "SELL", brokerOrderId: "B" })];
+    expect(classifyPosition({ symbol: "TATASTEEL", product: "MIS", quantity: 0 }, round, NOW)).toBe("MAA");
+    expect(classifyPosition({ symbol: "ITC", product: "MIS", quantity: 0 }, round, NOW)).toBe("MANUAL");
+  });
   it("does not count a closed-out strategy trade: buy then sell back nets to zero", () => {
     const round = [ours({ side: "SELL", brokerOrderId: "A" }), ours({ side: "BUY", brokerOrderId: "B" })];
     expect(classifyPosition({ symbol: "TARIL", product: "MIS", quantity: -2 }, round, NOW)).toBe("MANUAL");

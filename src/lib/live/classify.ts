@@ -42,7 +42,11 @@ export function classifyPosition(p: BrokerPosition, ours: OurOrder[], now: Date)
   const mine = ours.filter((x) => sym(x.tradingSymbol) === sym(p.symbol) && (!intraday || istDay(x.createdAt) === istDay(now)));
   if (mine.some((x) => !x.brokerOrderId && UNCONFIRMED.has(x.status))) return "UNKNOWN";
   const net = mine.reduce((n, x) => n + (x.side === "BUY" ? x.filledQuantity : -x.filledQuantity), 0);
-  if (net === 0) return "MANUAL";
+  const traded = mine.some((x) => x.filledQuantity > 0);
   const brokerAbs = Math.abs(p.quantity);
+  // A position we opened and closed today shows at the broker with quantity 0: ours, not manual.
+  if (!traded) return "MANUAL";
+  // Our trades net to zero: whatever is still open was placed outside MyAlgoAgent.
+  if (net === 0) return brokerAbs === 0 ? "MAA" : "MANUAL";
   return Math.abs(net) === brokerAbs ? "MAA" : "MIXED";
 }

@@ -12,7 +12,7 @@ export type AccountProfile = { name: string | null; clientId: string | null; ema
 export type AccountFunds = { available: number | null; used: number | null; total: number | null; lines?: { name: string; value: number }[] };
 export type AccountHolding = { symbol: string; exchange: string | null; quantity: number; avgPrice: number | null; ltp: number | null; pnl: number | null };
 export type AccountPosition = { symbol: string; exchange: string | null; product: string | null; quantity: number; avgPrice: number | null; ltp: number | null; pnl: number | null; realised: number | null };
-export type AccountOrder = { id: string; symbol: string; side: string; quantity: number; filled: number; price: number | null; avgPrice: number | null; status: string; time: string | null };
+export type AccountOrder = { id: string; symbol: string; side: string; quantity: number; filled: number; orderType?: string | null; price: number | null; avgPrice: number | null; status: string; time: string | null };
 export type AccountTrade = { id: string; orderId: string | null; symbol: string; side: string; quantity: number; price: number | null; time: string | null };
 
 export type AccountReader = {
@@ -84,6 +84,7 @@ function order(r: Record<string, unknown>): AccountOrder {
     side: sideOf(r.transaction_type ?? r.transactiontype ?? r.transactionType ?? r.side ?? r.BuySell),
     quantity: n(r, "quantity", "qty", "Qty") ?? 0,
     filled: n(r, "filled_quantity", "filledshares", "filledQty", "TradedQty") ?? 0,
+    orderType: t(r, "order_type", "ordertype", "orderType", "OrderType"),
     price: n(r, "price", "limitPrice", "Rate"),
     avgPrice: n(r, "average_price", "averageprice", "averageTradedPrice", "tradedPrice", "average_fill_price"),
     status: t(r, "status", "orderstatus", "orderStatus", "order_status", "OrderStatus") ?? "",

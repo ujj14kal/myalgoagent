@@ -134,7 +134,9 @@ async function execute(p: AgentProposal, instrumentId: string | null, go: (path:
     case "strategy": {
       if (!instrumentId) return "Pick an instrument for this strategy.";
       const res = await createStrategy(toStrategyInput(p.draft, instrumentId));
-      return res?.error ? readableError(res.error) : null;
+      if (res?.error) return readableError(res.error);
+      if (res?.id) go(`/app/strategies/${res.id}`);
+      return null;
     }
     case "backtest": {
       const { strategyId, startingCapital, brokeragePercent, slippagePercent, range } = p.draft;

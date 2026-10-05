@@ -495,6 +495,16 @@ export default function StrategyBuilderForm({
         // exception. Only `redirect()`'s own internal throw (on success) is
         // exempt from that redaction, which is why it's still handled below.
         const result = strategyId ? await updateStrategy(strategyId, input) : await createStrategy(input);
+        if (result?.id) {
+          // Saved: nothing is left unsaved, so leaving must not ask "Leave site?".
+          isDirtyRef.current = false;
+          navigatingRef.current = true;
+          try {
+            sessionStorage.removeItem(NEW_STRATEGY_DRAFT_KEY);
+          } catch {}
+          router.push(`/app/strategies/${result.id}`);
+          return;
+        }
         if (result?.error === "DUPLICATE_NAME") {
           setFeasibilityIssues([{ message: `You already have a strategy named "${input.name.trim()}". Choose a different name.` }]);
           return;
