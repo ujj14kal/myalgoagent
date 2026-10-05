@@ -15,6 +15,8 @@ export type ExplainContext = {
   exitRule: string;
   stopLoss: Leg;
   target: Leg;
+  /** Staged targets (TP1–TP3), when the strategy uses them instead of one take-profit. */
+  targets?: ({ unit: RiskUnit; value: number; exitPercent: number })[];
   trailingStop: Leg;
   /** Intraday timeframe: show the time of day with each date. */
   intraday?: boolean;
@@ -59,7 +61,13 @@ export function explainPaperOrder(o: NewPaperOrder, c: ExplainContext): string {
     case "stop_loss":
       return `${head} — your ${legText(c.stopLoss)} stop-loss was hit on ${day(o.signalTime)}.${pnl}`;
     case "target":
+      if (o.targetLevel) {
+        const lvl = c.targets?.[o.targetLevel - 1];
+        return `${head} — Target ${o.targetLevel}${lvl ? ` (${legText(lvl)}${lvl.exitPercent < 100 ? `, selling ${lvl.exitPercent}% of the position` : ""})` : ""} was reached on ${day(o.signalTime)}.${pnl}`;
+      }
       return `${head} — your ${legText(c.target)} take-profit was reached on ${day(o.signalTime)}.${pnl}`;
+    case "locked_profit":
+      return `${head} — price came back to the profit locked by an earlier target on ${day(o.signalTime)}, so the rest was sold there.${pnl}`;
     case "trailing_stop":
       return `${head} — your ${legText(c.trailingStop)} trailing stop was hit on ${day(o.signalTime)} (price moved that far back from its best level).${pnl}`;
     case "square_off":

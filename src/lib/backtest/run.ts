@@ -33,7 +33,8 @@ export interface BacktestConfig {
 
 function usesAtr(rm: RiskManagementConfig | undefined): boolean {
   if (!rm) return false;
-  return [rm.stopLoss, rm.target, rm.trailingSl].some((leg) => leg?.enabled && leg.unit === "ATR_MULTIPLE");
+  if ([rm.stopLoss, rm.target, rm.trailingSl].some((leg) => leg?.enabled && leg.unit === "ATR_MULTIPLE")) return true;
+  return (rm.targets ?? []).some((t) => t.unit === "ATR_MULTIPLE" || (t.lock.mode === "MARGIN" && t.lock.unit === "ATR_MULTIPLE"));
 }
 
 /** A closed trade, plus why it closed ("end_of_data" = still open when the data ran out). */

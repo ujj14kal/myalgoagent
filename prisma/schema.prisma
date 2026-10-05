@@ -377,6 +377,8 @@ model Strategy {
   targetEnabled       Boolean            @default(false)
   targetUnit          RiskUnit?
   targetValue         Float?
+  // Staged targets Target 1–3 (see TargetLevel): [{ unit, value, exitPercent, lock }]. When set they replace the single target above.
+  targetsConfig       Json?
   trailingSlEnabled   Boolean            @default(false)
   trailingSlUnit      RiskUnit?
   trailingSlValue     Float?
@@ -439,6 +441,7 @@ model BacktestRun {
   targetEnabled       Boolean            @default(false)
   targetUnit          RiskUnit?
   targetValue         Float?
+  targetsConfig       Json?
   trailingSlEnabled   Boolean            @default(false)
   trailingSlUnit      RiskUnit?
   trailingSlValue     Float?
@@ -523,6 +526,7 @@ model PaperSession {
   targetEnabled            Boolean            @default(false)
   targetUnit               RiskUnit?
   targetValue              Float?
+  targetsConfig            Json?
   trailingSlEnabled        Boolean            @default(false)
   trailingSlUnit           RiskUnit?
   trailingSlValue          Float?
@@ -561,6 +565,10 @@ model PaperSession {
   positionStopLossPrice    Float?
   positionTargetPrice      Float?
   positionPyramidCount     Int                @default(1)
+  // Staged targets: shares at entry, how many targets are already taken, and the stop they set.
+  positionInitialQuantity  Float?
+  positionTargetsHit       Int                @default(0)
+  positionLockedStop       Float?
   lastSyncedTime           Int?
   status                   PaperSessionStatus @default(ACTIVE)
   createdAt                DateTime           @default(now())

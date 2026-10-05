@@ -9,7 +9,7 @@ import { rangeFor } from "@/lib/strategy/session";
 import { revalidatePaperPaths, syncPaperSessionFor } from "@/lib/paper/sync-session";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { activateStrategyIfDraft } from "@/lib/strategy-status";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 export interface StartPaperSessionInput {
   strategyId: string;
@@ -82,6 +82,7 @@ async function startPaperSessionCore(userId: string, input: StartPaperSessionInp
         targetEnabled: strategy.targetEnabled,
         targetUnit: strategy.targetUnit,
         targetValue: strategy.targetValue,
+        targetsConfig: strategy.targetsConfig ?? Prisma.DbNull,
         trailingSlEnabled: strategy.trailingSlEnabled,
         trailingSlUnit: strategy.trailingSlUnit,
         trailingSlValue: strategy.trailingSlValue,

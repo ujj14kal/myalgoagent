@@ -16,6 +16,8 @@ import type { ConditionNode } from "@/lib/strategy";
 import { event, LIVE_DEFAULTS, LiveCheckError, placeLiveOrder, refreshLiveOrder } from "./orders";
 import { liveLog, liveLogThrottled, plainReason } from "./engine-log";
 import { conditionToText } from "@/lib/strategy/format";
+import { resyncStaged } from "./resync";
+import { parseTargets } from "@/lib/trading-engine/targets-config";
 
 // Live deployments: a strategy trading on the user's own broker. The forward-
 // testing engine decides (same rules, same risk exits, same square-off); every
@@ -24,7 +26,7 @@ import { conditionToText } from "@/lib/strategy/format";
 // (caps, kill switch, market hours, symbol read-back). The real position is
 // tracked from the broker's fills, and a rejected order pauses the deployment.
 
-export type PendingSignal = { side: "BUY" | "SELL"; quantity: number; reason: string; signalTime: number; createdAt: string; purpose: "strategy" | "exit" };
+export type PendingSignal = { side: "BUY" | "SELL"; quantity: number; reason: string; signalTime: number; createdAt: string; purpose: "strategy" | "exit"; /** A staged target's sale: only this many shares, not the whole position. */ targetLevel?: number };
 const READY_WITHIN_MS = 24 * 3_600_000;
 const FINAL = new Set(["FILLED", "CANCELLED", "REJECTED", "FAILED"]);
 /** An order with no broker id and no record at the broker this long after being sent never arrived. */
@@ -44,6 +46,7 @@ const REASON: Record<string, string> = {
   target: "target",
   trailing_stop: "trailing stop",
   square_off: "intraday square-off",
+  locked_profit: "the profit locked by an earlier target",
 };
 const reasonText = (r: string) => REASON[r] ?? r.replace(/_/g, " ");
 
@@ -108,6 +111,7 @@ export async function startDeployment(userId: string, input: { strategyId: strin
       stopLoss: s.stopLossEnabled ? { enabled: true, unit: s.stopLossUnit!, value: s.stopLossValue! } : null,
       target: s.targetEnabled ? { enabled: true, unit: s.targetUnit!, value: s.targetValue! } : null,
       trailingSl: s.trailingSlEnabled ? { enabled: true, unit: s.trailingSlUnit!, value: s.trailingSlValue! } : null,
+      targets: parseTargets(s.targetsConfig),
     },
     maxPyramidEntries: 1,
     timeframe: s.timeframe,
@@ -155,7 +159,7 @@ function dataFor(d: LiveDeployment): MarketDataProvider {
 
 /** The engine's position must match the broker's: when nothing is really held, the engine is flat too. */
 function flatten(state: PaperSessionState): PaperSessionState {
-  return { ...state, positionEntryTime: null, positionEntryPrice: null, positionQuantity: null, positionFavorableExtreme: null, positionStopLossPrice: null, positionTargetPrice: null } as PaperSessionState;
+  return { ...state, positionEntryTime: null, positionEntryPrice: null, positionQuantity: null, positionFavorableExtreme: null, positionStopLossPrice: null, positionTargetPrice: null, positionInitialQuantity: null, positionTargetsHit: 0, positionLockedStopPrice: null } as PaperSessionState;
 }
 
 export async function setDeploymentStatus(userId: string, id: string, status: "ACTIVE" | "PAUSED" | "STOPPED") {
@@ -165,7 +169,12 @@ export async function setDeploymentStatus(userId: string, id: string, status: "A
   // Resuming after a rejected order: line the engine up with what's really held.
   await lg(d, status === "ACTIVE" ? "INFO" : "WARN", status === "ACTIVE" ? "You resumed this strategy." : status === "PAUSED" ? "You paused this strategy: it sends no orders until you resume it." : "You stopped this strategy. It sends no more orders; a position it opened stays open until you close it.");
   const real = status === "ACTIVE" ? await reconcile(d) : null;
-  const engineState = real && real.qty === 0 && !real.working ? (flatten(d.engineState as unknown as PaperSessionState) as unknown as Prisma.InputJsonValue) : undefined;
+  const current = d.engineState as unknown as PaperSessionState;
+  const engineState = real && real.qty === 0 && !real.working
+    ? (flatten(current) as unknown as Prisma.InputJsonValue)
+    : real && real.qty > 0 && !real.working
+      ? (resyncStaged(current, real.qty) as unknown as Prisma.InputJsonValue)
+      : undefined;
   return prisma.liveDeployment.update({
     where: { id },
     data: {
@@ -303,13 +312,14 @@ export async function runDeployment(id: string): Promise<"idle" | "acted" | "pau
   for (const o of result.newOrders as NewPaperOrder[]) {
     const opening = o.reason === "entry_rule" || o.reason === "pyramid";
     // Exits close what's really held; nothing to close = nothing to send.
-    let quantity = opening ? o.quantity : real.qty;
+    // A staged target sells only its own share of the position; every other exit closes whatever is held.
+    let quantity = opening ? o.quantity : o.targetLevel ? Math.min(o.quantity, real.qty) : real.qty;
     if (quantity <= 0) continue;
     if (opening && (real.qty > 0 || real.working)) {
       await liveLogThrottled(`skip:${id}`, 5 * 60_000, d.userId, id, "INFO", `The entry rules fired, but ${real.working ? "an earlier order is still being settled" : "the position is already open"}, so no second order was sent (one position at a time).`);
       continue;
     }
-    await lg(d, "INFO", `${opening ? "Entry" : "Exit"} signal: ${reasonText(o.reason)} at about ${rupees(o.price)}.`);
+    await lg(d, "INFO", `${opening ? "Entry" : o.targetLevel ? `Target ${o.targetLevel}` : "Exit"} signal: ${o.targetLevel ? `Target ${o.targetLevel} reached, selling ${quantity} of the position` : reasonText(o.reason)} at about ${rupees(o.price)}.`);
     let note = "";
     if (opening) {
       // The user's per-order limit still applies: shrink an over-limit order instead of having it refused (which would pause the strategy).
@@ -324,7 +334,7 @@ export async function runDeployment(id: string): Promise<"idle" | "acted" | "pau
       if (fit.reduced) note = ` (reduced from ${quantity} to ${fit.quantity} shares to fit your ₹${maxOrderValue.toLocaleString("en-IN")} per-order limit)`;
       quantity = fit.quantity;
     }
-    const sig: PendingSignal = { side: o.side, quantity, reason: reasonText(o.reason) + note, signalTime: o.signalTime, createdAt: new Date().toISOString(), purpose: opening ? "strategy" : "exit" };
+    const sig: PendingSignal = { side: o.side, quantity, reason: (o.targetLevel ? `Target ${o.targetLevel}` : reasonText(o.reason)) + note, signalTime: o.signalTime, createdAt: new Date().toISOString(), purpose: opening ? "strategy" : "exit", ...(o.targetLevel ? { targetLevel: o.targetLevel } : {}) };
     if (d.mode === "AUTO") {
       try {
         await send(d, sig);
@@ -354,6 +364,9 @@ export async function runDeployment(id: string): Promise<"idle" | "acted" | "pau
     positionFavorableExtreme: result.position?.favorableExtreme ?? null,
     positionStopLossPrice: result.position?.stopLossPrice ?? null,
     positionTargetPrice: result.position?.targetPrice ?? null,
+    positionInitialQuantity: result.position?.initialQuantity ?? null,
+    positionTargetsHit: result.position?.targetsHit ?? 0,
+    positionLockedStopPrice: result.position?.lockedStopPrice ?? null,
     lastSyncedTime: result.lastSyncedTime,
   } as PaperSessionState;
   const after = acted && d.mode === "AUTO" ? await reconcile(d) : real;
@@ -409,7 +422,7 @@ export async function confirmSignal(userId: string, id: string, index: number) {
   const sig = pending[index];
   if (!sig) throw new LiveCheckError("That signal is no longer waiting.");
   const real = await reconcile(d);
-  const quantity = sig.purpose === "exit" ? real.qty : sig.quantity;
+  const quantity = sig.purpose === "exit" ? (sig.targetLevel ? Math.min(sig.quantity, real.qty) : real.qty) : sig.quantity;
   if (quantity <= 0) throw new LiveCheckError("There's no open position to close.");
   pending.splice(index, 1);
   await prisma.liveDeployment.update({ where: { id }, data: { pendingSignals: pending as unknown as Prisma.InputJsonValue } });

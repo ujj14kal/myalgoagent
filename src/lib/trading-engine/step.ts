@@ -20,6 +20,12 @@ export interface EnginePosition {
   // non-pyramided position). Risk levels are always recomputed off the
   // blended average entryPrice after each add, not tracked per-leg.
   pyramidCount: number;
+  /** Staged targets (TP1–TP3) only. Shares at entry, the sizes of the partial exits are a share of this. */
+  initialQuantity?: number;
+  /** How many staged targets have already been taken (0–3); a taken target never fires again. */
+  targetsHit?: number;
+  /** After a target is taken the rest of the position is protected by a stop here (null = none yet). */
+  lockedStopPrice?: number | null;
 }
 
 export interface EngineState {
@@ -70,10 +76,30 @@ export interface RiskLeg {
   value: number;
 }
 
+/**
+ * What happens to the rest of the position once a target is taken:
+ *  FIXED  — the profit is locked at that target's own price: the remainder is stopped out if price falls back to it.
+ *  MARGIN — the lock sits a margin below it (above, for a short), so price can pull back a little without giving up the lock.
+ */
+export type TargetLock = { mode: "FIXED" } | { mode: "MARGIN"; unit: RiskUnit; value: number };
+
+/** One staged target (TP1, TP2 or TP3): where it is, how much of the position it sells, and how the profit is then locked. */
+export interface TargetLevel {
+  unit: RiskUnit;
+  value: number;
+  /** Share of the original position sold at this target (1–100). */
+  exitPercent: number;
+  lock: TargetLock;
+}
+
+export const MAX_TARGETS = 3;
+
 export interface RiskManagementConfig {
   stopLoss: RiskLeg | null;
   target: RiskLeg | null;
   trailingSl: RiskLeg | null;
+  /** Staged targets, in order. When present they replace the single `target`. */
+  targets?: TargetLevel[];
 }
 
 /** The shape a risk leg takes as raw form/action input, before being
@@ -187,6 +213,69 @@ export function resolveRiskLevels(
   };
 }
 
+/** Why a set of staged targets can't be used, or null when it is fine. */
+export function validateTargets(targets: TargetLevel[] | undefined, singleTargetOn = false): string | null {
+  if (!targets || targets.length === 0) return null;
+  if (targets.length > MAX_TARGETS) return `At most ${MAX_TARGETS} targets are supported.`;
+  if (singleTargetOn) return "Use either the single take-profit or Targets 1–3, not both.";
+  let total = 0;
+  let prev: TargetLevel | null = null;
+  for (const [i, t] of targets.entries()) {
+    const n = i + 1;
+    if (!Number.isFinite(t.value) || t.value <= 0) return `Target ${n} needs a distance above zero.`;
+    if (!Number.isFinite(t.exitPercent) || t.exitPercent <= 0 || t.exitPercent > 100) return `Target ${n} must sell between 1% and 100% of the position.`;
+    total += t.exitPercent;
+    if (t.lock.mode === "MARGIN" && (!Number.isFinite(t.lock.value) || t.lock.value <= 0)) return `Target ${n}'s margin needs a value above zero.`;
+    if (t.lock.mode === "MARGIN" && t.lock.unit === t.unit && t.lock.value >= t.value) return `Target ${n}'s margin must be smaller than the target distance itself.`;
+    if (prev && prev.unit === t.unit && t.value <= prev.value) return `Target ${n} must be further from the entry than Target ${n - 1}.`;
+    prev = t;
+  }
+  if (total > 100.0001) return `The targets sell ${total}% of the position in total; the most is 100%.`;
+  return null;
+}
+
+/** Price of staged target `index` for a position entered at `entryPrice`. */
+export function targetPrice(level: TargetLevel, entryPrice: number, atr: number | undefined, direction: StrategyDirection): number | null {
+  const dist = resolveRiskDistance({ enabled: true, unit: level.unit, value: level.value }, entryPrice, atr);
+  if (dist === null) return null;
+  return entryPrice + (direction === "SHORT" ? -1 : 1) * dist;
+}
+
+/**
+ * The stop that protects the rest of the position once `level` is taken at `tp`. Never worse than the entry price,
+ * so a taken target can only ever turn a position into a risk-free one, not into a loser.
+ */
+export function lockFloor(level: TargetLevel, tp: number, entryPrice: number, atr: number | undefined, direction: StrategyDirection): number {
+  const sign = direction === "SHORT" ? -1 : 1;
+  let floor = tp;
+  if (level.lock.mode === "MARGIN") {
+    const margin = resolveRiskDistance({ enabled: true, unit: level.lock.unit, value: level.lock.value }, entryPrice, atr) ?? 0;
+    floor = tp - sign * margin;
+  }
+  return sign === 1 ? Math.max(floor, entryPrice) : Math.min(floor, entryPrice);
+}
+
+/** Shares a target sells: its share of the original position, at least one, never more than what is left. */
+export function targetQuantity(level: TargetLevel, initialQuantity: number, remaining: number): number {
+  return Math.min(remaining, Math.max(1, Math.floor((initialQuantity * level.exitPercent) / 100)));
+}
+
+/**
+ * After a restart or a refused order: how many targets the broker's real position implies have been taken —
+ * the consecutive targets whose combined shares were already sold.
+ */
+export function targetsTakenFor(targets: TargetLevel[], initialQuantity: number, remaining: number): number {
+  const sold = initialQuantity - remaining;
+  let cumulative = 0;
+  let taken = 0;
+  for (const t of targets) {
+    cumulative += Math.max(1, Math.floor((initialQuantity * t.exitPercent) / 100));
+    if (sold >= cumulative) taken++;
+    else break;
+  }
+  return taken;
+}
+
 /**
  * Computes how many whole units to buy given available cash, the fill
  * price, and the configured sizing mode. Always rounds down to the
@@ -271,7 +360,7 @@ function closeTrade(
  * intrabar order of price movement isn't knowable from candle data.
  */
 /** Why a position closed — reported with each trade so fills can be explained. */
-export type ExitReason = "trailing_stop" | "stop_loss" | "target" | "exit_rule" | "square_off";
+export type ExitReason = "trailing_stop" | "stop_loss" | "target" | "exit_rule" | "square_off" | "locked_profit";
 
 export function stepBar(
   candles: Candle[],
@@ -280,7 +369,7 @@ export function stepBar(
   exitSignal: boolean,
   state: EngineState,
   config: EngineConfig,
-): { state: EngineState; trade?: EngineTrade; exitReason?: ExitReason; sizeTooSmall?: boolean } {
+): { state: EngineState; trade?: EngineTrade; exitReason?: ExitReason; sizeTooSmall?: boolean; /** Set on a staged-target sale: which target (1–3) this was. The position stays open unless it was the last share. */ targetLevel?: number } {
   const nextBar = candles[i + 1];
   const direction = config.direction ?? "LONG";
   const isShort = direction === "SHORT";
@@ -311,12 +400,17 @@ export function stepBar(
 
     let exitPrice: number | null = null;
     let exitReason: ExitReason | null = null;
+    // The stop in force is the tighter of the stop-loss and the one a taken target set. That one applies from the
+    // bar after the target was taken (see `lockedStopPrice`), never on the same bar.
+    const locked = pos.lockedStopPrice ?? null;
+    const lockWins = locked !== null && (pos.stopLossPrice === null || (isShort ? locked <= pos.stopLossPrice : locked >= pos.stopLossPrice));
+    const activeStop = lockWins ? locked : pos.stopLossPrice;
     if (trailingStopPrice !== null && (isShort ? bar.high >= trailingStopPrice : bar.low <= trailingStopPrice)) {
       exitPrice = trailingStopPrice;
       exitReason = "trailing_stop";
-    } else if (pos.stopLossPrice !== null && (isShort ? bar.high >= pos.stopLossPrice : bar.low <= pos.stopLossPrice)) {
-      exitPrice = pos.stopLossPrice;
-      exitReason = "stop_loss";
+    } else if (activeStop !== null && (isShort ? bar.high >= activeStop : bar.low <= activeStop)) {
+      exitPrice = activeStop;
+      exitReason = lockWins ? "locked_profit" : "stop_loss";
     } else if (pos.targetPrice !== null && (isShort ? bar.low <= pos.targetPrice : bar.high >= pos.targetPrice)) {
       exitPrice = pos.targetPrice;
       exitReason = "target";
@@ -325,6 +419,38 @@ export function stepBar(
     if (exitPrice !== null && exitReason) {
       const trade = closeTrade(candles, pos, i, exitPrice, config.brokeragePercent, direction);
       return { state: { cash: state.cash + trade.netPnl, position: null }, trade, exitReason };
+    }
+
+    // Staged targets: the next untaken target sells its share and locks profit on the rest. One target per bar,
+    // so a gap through two targets takes the second on the following bar.
+    const staged = rm?.targets ?? [];
+    const taken = pos.targetsHit ?? 0;
+    if (staged.length > taken) {
+      const level = staged[taken];
+      const atr = config.atrAtEntry?.(pos.entryIdx);
+      const tp = targetPrice(level, pos.entryPrice, atr, direction);
+      if (tp !== null && (isShort ? bar.low <= tp : bar.high >= tp)) {
+        const initial = pos.initialQuantity ?? pos.quantity;
+        const sellQty = targetQuantity(level, initial, pos.quantity);
+        const last = taken + 1 >= staged.length;
+        if (sellQty >= pos.quantity || (last && staged.reduce((n, t) => n + t.exitPercent, 0) >= 100)) {
+          const trade = closeTrade(candles, pos, i, tp, config.brokeragePercent, direction);
+          return { state: { cash: state.cash + trade.netPnl, position: null }, trade, exitReason: "target", targetLevel: taken + 1 };
+        }
+        const part = closeTrade(candles, { ...pos, quantity: sellQty }, i, tp, config.brokeragePercent, direction);
+        const floor = lockFloor(level, tp, pos.entryPrice, atr, direction);
+        const nextLock = locked === null ? floor : isShort ? Math.min(locked, floor) : Math.max(locked, floor);
+        return {
+          state: {
+            ...state,
+            cash: state.cash + part.netPnl,
+            position: { ...pos, quantity: pos.quantity - sellQty, favorableExtreme, initialQuantity: initial, targetsHit: taken + 1, lockedStopPrice: nextLock },
+          },
+          trade: part,
+          exitReason: "target",
+          targetLevel: taken + 1,
+        };
+      }
     }
 
     if (exitSignal && nextBar) {
@@ -364,6 +490,9 @@ export function stepBar(
               stopLossPrice,
               targetPrice,
               pyramidCount: pos.pyramidCount + 1,
+              ...(pos.initialQuantity !== undefined ? { initialQuantity: pos.initialQuantity + addQuantity } : {}),
+              targetsHit: pos.targetsHit,
+              lockedStopPrice: pos.lockedStopPrice,
             },
           },
         };
@@ -383,7 +512,7 @@ export function stepBar(
       state: {
         cash: state.cash,
         pendingEntry: null,
-        position: { entryIdx: fillIdx, entryPrice: fillPrice, quantity, favorableExtreme: fillPrice, stopLossPrice, targetPrice, pyramidCount: 1 },
+        position: { entryIdx: fillIdx, entryPrice: fillPrice, quantity, favorableExtreme: fillPrice, stopLossPrice, targetPrice, pyramidCount: 1, ...(config.riskManagement?.targets?.length ? { initialQuantity: quantity, targetsHit: 0, lockedStopPrice: null } : {}) },
       },
     };
   };

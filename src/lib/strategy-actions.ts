@@ -5,12 +5,13 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { enforceRateLimit } from "@/lib/rate-limit";
-import { toRiskLeg, type PositionSizingMode, type RiskLegInput } from "@/lib/trading-engine/step";
+import { toRiskLeg, type PositionSizingMode, type RiskLegInput, type TargetLevel } from "@/lib/trading-engine/step";
+import { targetsToStore } from "@/lib/trading-engine/targets-config";
 import { compile } from "@/lib/strategy-compile";
 import { normalizeSession } from "@/lib/strategy/session";
 import { isUniqueConstraintViolation } from "@/lib/prisma-errors";
 import type { ConditionNode } from "@/lib/strategy";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 export interface StrategyInput {
   name: string;
@@ -25,6 +26,8 @@ export interface StrategyInput {
   positionSizingValue: number | null;
   stopLoss: RiskLegInput;
   target: RiskLegInput;
+  /** Staged Target 1–3 (each sells a share of the position and locks profit on the rest); replaces the single take-profit. */
+  targets?: TargetLevel[];
   trailingSl: RiskLegInput;
   maxPyramidEntries: number;
   /** Candle timeframe the strategy runs on; omitted = daily. */
@@ -45,7 +48,11 @@ function riskFields(input: StrategyInput) {
   const stopLoss = toRiskLeg(input.stopLoss);
   const target = toRiskLeg(input.target);
   const trailingSl = toRiskLeg(input.trailingSl);
+  const staged = targetsToStore(input.targets, target.enabled);
+  if (staged.error) throw new Error(staged.error);
+  if (staged.json && input.mode === "WEBHOOK") throw new Error("Targets 1–3 aren't available for webhook strategies.");
   return {
+    targetsConfig: staged.json ? (staged.json as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
     direction: input.direction,
     positionSizingMode: input.positionSizingMode,
     positionSizingValue: input.positionSizingValue,

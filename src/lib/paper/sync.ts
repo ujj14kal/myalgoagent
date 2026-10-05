@@ -55,12 +55,17 @@ export interface PaperSessionState {
   positionStopLossPrice: number | null;
   positionTargetPrice: number | null;
   positionPyramidCount: number | null;
+  /** Staged targets (TP1–TP3): shares at entry, how many targets are already taken, and the stop they set. */
+  positionInitialQuantity?: number | null;
+  positionTargetsHit?: number | null;
+  positionLockedStopPrice?: number | null;
   lastSyncedTime: number | null;
 }
 
-function usesAtr(rm: RiskManagementConfig | undefined): boolean {
+export function usesAtr(rm: RiskManagementConfig | undefined): boolean {
   if (!rm) return false;
-  return [rm.stopLoss, rm.target, rm.trailingSl].some((leg) => leg?.enabled && leg.unit === "ATR_MULTIPLE");
+  if ([rm.stopLoss, rm.target, rm.trailingSl].some((leg) => leg?.enabled && leg.unit === "ATR_MULTIPLE")) return true;
+  return (rm.targets ?? []).some((t) => t.unit === "ATR_MULTIPLE" || (t.lock.mode === "MARGIN" && t.lock.unit === "ATR_MULTIPLE"));
 }
 
 export interface NewPaperOrder {
@@ -76,6 +81,8 @@ export interface NewPaperOrder {
   signalTime: number;
   /** An entry filled by a limit order (at the limit or better), not at market. */
   viaLimit?: boolean;
+  /** A staged target's sale (1–3): only part of the position is sold unless it is the last share. */
+  targetLevel?: number;
 }
 
 export interface SignalAlert {
@@ -96,6 +103,9 @@ export interface SyncResult {
     stopLossPrice: number | null;
     targetPrice: number | null;
     pyramidCount: number;
+    initialQuantity: number | null;
+    targetsHit: number;
+    lockedStopPrice: number | null;
   } | null;
   lastSyncedTime: number | null;
   /** A limit entry order still resting at the end of this sync (saved for the next one). */
@@ -219,6 +229,13 @@ export async function syncPaperSession(
             stopLossPrice: session.positionStopLossPrice,
             targetPrice: session.positionTargetPrice,
             pyramidCount: session.positionPyramidCount ?? 1,
+            ...(session.riskManagement?.targets?.length
+              ? {
+                  initialQuantity: session.positionInitialQuantity ?? session.positionQuantity,
+                  targetsHit: session.positionTargetsHit ?? 0,
+                  lockedStopPrice: session.positionLockedStopPrice ?? null,
+                }
+              : {}),
           }
         : null,
     pendingEntry:
@@ -280,6 +297,7 @@ export async function syncPaperSession(
         netPnl: stepped.trade.netPnl,
         reason: stepped.exitReason ?? "exit_rule",
         signalTime: candles[i].time,
+        ...(stepped.targetLevel ? { targetLevel: stepped.targetLevel } : {}),
       });
     } else if (wasFlat && state.position) {
       newOrders.push({
@@ -327,6 +345,9 @@ export async function syncPaperSession(
           stopLossPrice: state.position.stopLossPrice,
           targetPrice: state.position.targetPrice,
           pyramidCount: state.position.pyramidCount,
+          initialQuantity: state.position.initialQuantity ?? null,
+          targetsHit: state.position.targetsHit ?? 0,
+          lockedStopPrice: state.position.lockedStopPrice ?? null,
         }
       : null,
     lastSyncedTime,
