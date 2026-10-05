@@ -20,7 +20,7 @@ const sections: LegalSection[] = [
       "Brokerage and transaction fees, as a percentage per trade",
       "A slippage percentage applied to every fill",
       "Market or limit entry orders, and Intraday or Delivery product",
-      "Stop-loss, take-profit and trailing-stop exits, in %, points or ATR multiples",
+      "Stop-loss, take-profit and trailing-stop exits, in %, points or ATR multiples — or up to three staged targets that sell in parts",
     ],
     soon: ["Taxes and exchange levies", "Spread assumptions", "Margin/leverage rules where applicable"],
   },

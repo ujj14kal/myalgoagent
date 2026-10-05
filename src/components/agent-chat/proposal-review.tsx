@@ -1,4 +1,5 @@
 "use client";
+import { describeTargets } from "@/lib/describe-targets";
 import InstrumentCombobox from "@/components/instrument-combobox";
 
 import { useEffect, useState, useTransition } from "react";
@@ -449,6 +450,15 @@ function StrategyFields({
           <LegRow label="Stop-loss" leg={draft.stopLoss} onChange={(l) => set("stopLoss", l)} />
           <LegRow label="Take-profit" leg={draft.target} onChange={(l) => set("target", l)} />
           <LegRow label="Trailing stop" leg={draft.trailingSl} onChange={(l) => set("trailingSl", l)} />
+          {draft.targets && draft.targets.length > 0 && (
+            <div className="space-y-1 border-t border-black/5 pt-2 text-xs text-brand-navy/75">
+              <p className="font-semibold text-brand-navy">Staged targets (replace the single take-profit)</p>
+              {describeTargets(draft.targets).map((line) => (
+                <p key={line}>{line}</p>
+              ))}
+              <p className="text-brand-navy/50">Ask your assistant to change them.</p>
+            </div>
+          )}
         </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-[1fr_140px]">

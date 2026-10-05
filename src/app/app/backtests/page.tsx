@@ -1,3 +1,4 @@
+import { parseTargets } from "@/lib/trading-engine/targets-config";
 import Pager from "@/components/ui/pager";
 import { pageWindow, readPageQuery } from "@/lib/pagination";
 import Link from "next/link";
@@ -55,6 +56,7 @@ export default async function BacktestsPage({ searchParams }: { searchParams: Pr
             targetEnabled: s.targetEnabled,
             targetUnit: s.targetUnit,
             targetValue: s.targetValue,
+            targets: parseTargets(s.targetsConfig),
             trailingSlEnabled: s.trailingSlEnabled,
             trailingSlUnit: s.trailingSlUnit,
             trailingSlValue: s.trailingSlValue,

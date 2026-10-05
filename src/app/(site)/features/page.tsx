@@ -33,7 +33,7 @@ const groups: Group[] = [
       "Combine two conditions with Match both / Match any, or build any AND/OR group in advanced mode",
       "Indicator-to-indicator and price-to-indicator comparisons, crossovers and crossunders",
       "Candlestick, chart and volume patterns, each shown with a picture of what it looks like — and candle patterns that only count at a support or resistance level",
-      "Stop-loss, take-profit and trailing-stop rules",
+      "Stop-loss, take-profit and trailing-stop rules, or up to three staged targets that sell part of the position and lock profit on the rest",
       "Position sizing by quantity, rupee amount, percentage of capital or full capital",
       "Entry orders at market or as a limit order — a % from the signal price or a fixed ₹ price — valid for the day",
       "Intraday or Delivery products: intraday positions are squared off the same day; delivery can be held overnight (long only)",

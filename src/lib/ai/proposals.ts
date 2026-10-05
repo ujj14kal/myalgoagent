@@ -1,4 +1,5 @@
 import type { StrategyInput } from "@/lib/strategy-actions";
+import type { TargetLevel } from "@/lib/trading-engine/step";
 import { NEVER_EXIT_CONDITION, type ConditionNode } from "@/lib/strategy/types";
 
 // An action the agent has prepared for the user to review. Stored on the
@@ -42,6 +43,8 @@ export type AgentProposal =
         stopLoss: RiskLegDraft;
         target: RiskLegDraft;
         trailingSl: RiskLegDraft;
+        /** Staged Target 1–3 (each sells a share and locks profit on the rest); replaces the single take-profit. */
+        targets?: TargetLevel[];
         positionSizingMode: SizingModeName;
         positionSizingValue: number | null;
       };
@@ -149,6 +152,7 @@ export function toStrategyInput(
     stopLoss: d.stopLoss,
     target: d.target,
     trailingSl: d.trailingSl,
+    ...(d.targets?.length ? { targets: d.targets } : {}),
     maxPyramidEntries: d.maxPyramidEntries && d.maxPyramidEntries > 0 ? Math.floor(d.maxPyramidEntries) : 1,
     timeframe: d.timeframe ?? "1d",
     noEntryAfterMinute: d.noEntryAfterMinute ?? null,
