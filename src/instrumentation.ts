@@ -1,7 +1,6 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-
-    const { setGlobalDispatcher, Agent } = await import("undici");
+    const { setFetchAgentOptions } = await import("@/lib/fetch-dispatcher");
 
     // AWS Lambda (what Amplify's WEB_COMPUTE platform runs on under the
     // hood) freezes the execution environment between invocations. A
@@ -15,6 +14,8 @@ export async function register() {
     // server error). Shortening the keep-alive window makes undici open a
     // fresh connection far more often than Lambda's freeze cycle hits,
     // so a stale pooled socket is rarely still in the pool to reuse.
-    setGlobalDispatcher(new Agent({ keepAliveTimeout: 4_000, keepAliveMaxTimeout: 4_000 }));
+    // (setFetchAgentOptions builds the Agent from Node's own undici where
+    // needed — an npm undici Agent breaks fetch() response headers on Node 26.)
+    await setFetchAgentOptions({ keepAliveTimeout: 4_000, keepAliveMaxTimeout: 4_000 });
   }
 }

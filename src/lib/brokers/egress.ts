@@ -1,3 +1,4 @@
+import "@/lib/fetch-dispatcher"; // must load before npm undici — see that file
 import { ProxyAgent, fetch as undiciFetch } from "undici";
 
 // Server-side only. Broker API calls leave through our egress relay (infra/egress-proxy) when it
