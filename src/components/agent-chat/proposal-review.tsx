@@ -481,6 +481,7 @@ function StrategyFields({
           >
             <option value="FULL_CAPITAL">Full capital</option>
             <option value="PERCENT_OF_CAPITAL">% of capital</option>
+            <option value="RISK_PERCENT">Risk per trade (% of capital)</option>
             <option value="FIXED_CAPITAL">Fixed amount (₹)</option>
             <option value="FIXED_QUANTITY">Fixed quantity (shares)</option>
           </select>

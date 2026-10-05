@@ -3,6 +3,7 @@ import { engineEntryOrder, engineSession, paperSyncRange } from "@/lib/strategy/
 import { evaluateConditionsPerBar } from "@/lib/strategy";
 import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
 import { fetchAuxCandles } from "@/lib/strategy-aux-data";
+import { levelSignalSeries, withLevelConditions } from "@/lib/strategy/plan-conditions";
 import type { ConditionNode } from "@/lib/strategy";
 import {
   stepBar,
@@ -65,6 +66,8 @@ export interface PaperSessionState {
   /** Entry plan: the whole size the plan aims to build and the first fill's price the levels are measured from. */
   positionPlannedQuantity?: number | null;
   positionAnchorPrice?: number | null;
+  /** Entry plan: the next further entry that can still fill. */
+  positionLevelCursor?: number | null;
   lastSyncedTime: number | null;
 }
 
@@ -116,6 +119,7 @@ export interface SyncResult {
     lockedStopPrice: number | null;
     plannedQuantity: number | null;
     anchorPrice: number | null;
+    levelCursor: number;
   } | null;
   lastSyncedTime: number | null;
   /** A limit entry order still resting at the end of this sync (saved for the next one). */
@@ -191,7 +195,7 @@ export async function syncPaperSession(
   // order goes out at its open instead of a candle late.
   const candles = opts.includeForming ? fetched : closedCandles(fetched, timeframe);
   const actionable = opts.includeForming ? closedCandles(fetched, timeframe).length : candles.length - 1;
-  const aux = await fetchAuxCandles(session.entryCondition, session.exitCondition, session.instrumentSymbol, range, timeframe, market);
+  const aux = await fetchAuxCandles(session.entryCondition, withLevelConditions(session.exitCondition, session.entryPlan), session.instrumentSymbol, range, timeframe, market);
 
   const { entry, exit } = evaluateConditionsPerBar(candles, session.entryCondition, session.exitCondition, aux);
 
@@ -246,7 +250,7 @@ export async function syncPaperSession(
                   lockedStopPrice: session.positionLockedStopPrice ?? null,
                 }
               : {}),
-            ...(session.entryPlan ? { plannedQuantity: session.positionPlannedQuantity ?? session.positionQuantity, anchorPrice: session.positionAnchorPrice ?? session.positionEntryPrice } : {}),
+            ...(session.entryPlan ? { plannedQuantity: session.positionPlannedQuantity ?? session.positionQuantity, anchorPrice: session.positionAnchorPrice ?? session.positionEntryPrice, levelCursor: session.positionLevelCursor ?? Math.max(0, (session.positionPyramidCount ?? 1) - 1) } : {}),
           }
         : null,
     pendingEntry:
@@ -271,6 +275,7 @@ export async function syncPaperSession(
     maxPyramidEntries: session.maxPyramidEntries ?? DEFAULT_MAX_PYRAMID_ENTRIES,
     direction: session.direction,
     entryPlan: session.entryPlan ?? undefined,
+    levelSignals: levelSignalSeries(candles, session.entryPlan, aux),
     session: engineSession(
       { timeframe, noEntryAfterMinute: session.noEntryAfterMinute ?? null, squareOffMinute: session.squareOffMinute ?? null, productType: session.productType },
       session.entryCondition,
@@ -303,7 +308,7 @@ export async function syncPaperSession(
     if (stepped.entryLevel) {
       newOrders.push({
         side: openSide,
-        time: candles[i].time,
+        time: stepped.entryLevel.time,
         price: stepped.entryLevel.price,
         quantity: stepped.entryLevel.quantity,
         fees: 0,
@@ -377,6 +382,7 @@ export async function syncPaperSession(
           lockedStopPrice: state.position.lockedStopPrice ?? null,
           plannedQuantity: state.position.plannedQuantity ?? null,
           anchorPrice: state.position.anchorPrice ?? null,
+          levelCursor: state.position.levelCursor ?? 0,
         }
       : null,
     lastSyncedTime,

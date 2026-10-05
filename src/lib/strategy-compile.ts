@@ -68,11 +68,25 @@ function checkRiskFeasibility(input: StrategyInput): FeasibilityIssue[] {
  * collected-issues shape everything else here uses, tagged so the "fix it"
  * link in the popup can jump straight to the position-sizing fields. */
 function checkPositionSizingFeasibility(input: StrategyInput): FeasibilityIssue[] {
+  if (input.positionSizingMode === "RISK_PERCENT" && !input.stopLoss.enabled) {
+    return [{ section: "positionSizing", message: "Sizing by risk per trade needs a stop-loss: its distance decides how many shares fit within the amount you are willing to risk. Turn on the stop-loss, or choose another position size." }];
+  }
   try {
     validatePositionSizing({ mode: input.positionSizingMode, value: input.positionSizingValue });
     return [];
   } catch (err) {
     return [{ section: "positionSizing", message: err instanceof Error ? err.message : "Invalid position sizing" }];
+  }
+}
+
+/** The rules that trigger entry-plan levels are held to the same checks as the entry and exit rules. */
+async function validateLevelRules(input: StrategyInput): Promise<void> {
+  const levels = (input.entryPlan?.levels ?? []).map((l, i) => ({ l, n: i + 2 })).filter(({ l }) => l.trigger === "SIGNAL");
+  for (const { l, n } of levels) {
+    if (!l.condition) throw new Error(`Entry ${n} is triggered by a rule, so it needs one.`);
+    validateConditionNode(l.condition, `entryPlan.levels[${n - 2}].condition`);
+    throwIfInfeasible(checkConditionFeasibility(l.condition, "entry"));
+    await validateReferencedInstruments(l.condition, l.condition);
   }
 }
 
@@ -117,6 +131,7 @@ export async function compile(input: StrategyInput): Promise<{
       ...checkSessionFeasibility(session, entryCondition, exitCondition),
     ]);
     await validateReferencedInstruments(entryCondition, exitCondition);
+    await validateLevelRules(input);
     return {
       entryCondition,
       exitCondition,
@@ -136,6 +151,7 @@ export async function compile(input: StrategyInput): Promise<{
     ...checkSessionFeasibility(session, input.entryCondition, input.exitCondition),
   ]);
   await validateReferencedInstruments(input.entryCondition, input.exitCondition);
+  await validateLevelRules(input);
   return {
     entryCondition: input.entryCondition,
     exitCondition: input.exitCondition,

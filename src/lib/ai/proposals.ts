@@ -8,7 +8,7 @@ import { NEVER_EXIT_CONDITION, type ConditionNode } from "@/lib/strategy/types";
 // records what the user decided.
 
 export type RiskUnitName = "PERCENT" | "POINTS" | "ATR_MULTIPLE";
-export type SizingModeName = "FULL_CAPITAL" | "FIXED_QUANTITY" | "FIXED_CAPITAL" | "PERCENT_OF_CAPITAL";
+export type SizingModeName = "FULL_CAPITAL" | "FIXED_QUANTITY" | "FIXED_CAPITAL" | "PERCENT_OF_CAPITAL" | "RISK_PERCENT";
 export type ProposalStatus = "pending" | "confirmed" | "rejected";
 
 type RiskLegDraft = { enabled: boolean; unit: RiskUnitName; value: number };

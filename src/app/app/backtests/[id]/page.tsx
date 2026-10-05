@@ -1,3 +1,5 @@
+import { Fragment } from "react";
+import { describeLegs, parseTradeLegs } from "@/lib/backtest/legs";
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -57,10 +59,20 @@ export default async function BacktestDetailPage({ params }: { params: Promise<{
     fetchError = err instanceof Error ? err.message : "Failed to load market data";
   }
 
-  const markers: Signal[] = run.trades.flatMap((t) => [
-    { time: t.entryTime, type: "entry" as const },
-    { time: t.exitTime, type: "exit" as const },
-  ]);
+  // A position built or sold in stages is one trade; its further entries and sales still get their own marks on the chart.
+  const markers: Signal[] = run.trades.flatMap((t) => {
+    const legs = parseTradeLegs(t.legs);
+    return legs
+      ? [
+          { time: t.entryTime, type: "entry" as const },
+          ...legs.entries.map((e) => ({ time: e.time, type: "entry" as const })),
+          ...legs.exits.map((e) => ({ time: e.time, type: "exit" as const })),
+        ]
+      : [
+          { time: t.entryTime, type: "entry" as const },
+          { time: t.exitTime, type: "exit" as const },
+        ];
+  });
   const equityCurve = run.equityCurve as unknown as { time: number; equity: number }[];
 
   return (
@@ -132,8 +144,10 @@ export default async function BacktestDetailPage({ params }: { params: Promise<{
               {run.trades.map((t) => {
                 const tone = toneOf(t.netPnl);
                 const d = (sec: number) => new Date(sec * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "2-digit", timeZone: "Asia/Kolkata" });
+                const legs = parseTradeLegs(t.legs);
                 return (
-                  <tr key={t.id}>
+                  <Fragment key={t.id}>
+                  <tr>
                     <td>{d(t.entryTime)}</td>
                     <td>{d(t.exitTime)}</td>
                     <td className="num-cell">{t.quantity}</td>
@@ -143,6 +157,15 @@ export default async function BacktestDetailPage({ params }: { params: Promise<{
                     <td className={`num-cell ${TONE_TEXT[tone]}`}>{formatPct(t.netPnlPct)}</td>
                     <td className="num-cell text-brand-navy/60">{t.holdingBars}</td>
                   </tr>
+                  {legs && (
+                    <tr>
+                      <td colSpan={8} className="bg-brand-bg px-4 py-2 text-xs text-brand-navy/60">
+                        <span className="font-semibold text-brand-navy/70">Built and sold in parts: </span>
+                        {describeLegs(legs, d)}
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
               {run.trades.length === 0 && (

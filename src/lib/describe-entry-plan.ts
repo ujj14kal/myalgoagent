@@ -1,4 +1,5 @@
 import type { EntryPlan, RiskUnit } from "@/lib/trading-engine/step";
+import { conditionToText } from "@/lib/strategy/format";
 
 const unitText = (unit: RiskUnit, value: number) => (unit === "PERCENT" ? `${value}%` : unit === "POINTS" ? `${value} pts` : `${value}× ATR`);
 
@@ -9,6 +10,10 @@ export function describeEntryPlan(plan: EntryPlan, direction: "LONG" | "SHORT" =
   plan.levels.forEach((l, i) => {
     const moves = (l.trigger === "PULLBACK") === (direction !== "SHORT") ? "falls" : "rises";
     const wait = l.maxWaitDays ? `, withdrawn after ${l.maxWaitDays} day${l.maxWaitDays === 1 ? "" : "s"}` : "";
+    if (l.trigger === "SIGNAL") {
+      lines.push(`Entry ${i + 2}: when ${l.condition ? conditionToText(l.condition) : "its rule"} holds at a close, ${verb} ${l.allocationPercent}% of the planned size at the next open${wait}`);
+      return;
+    }
     lines.push(`Entry ${i + 2}: when price ${moves} ${unitText(l.unit, l.value)} from the first fill, ${verb} ${l.allocationPercent}% of the planned size${wait}`);
   });
   if (plan.maxHoldDays) lines.push(`Closes at the open ${plan.maxHoldDays} trading day${plan.maxHoldDays === 1 ? "" : "s"} after the first entry if still open`);

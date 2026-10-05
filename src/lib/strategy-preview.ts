@@ -1,3 +1,4 @@
+import { withLevelConditions } from "@/lib/strategy/plan-conditions";
 import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/logger";
 import { compile } from "@/lib/strategy-compile";
@@ -111,7 +112,7 @@ export async function computeStrategyPreview(userId: string | null, input: Strat
     const range = rangeFor(timeframe, PREVIEW.range, market.depth);
     const candles = await market.getHistoricalCandles(instrument.symbol, range, timeframe);
     if (candles.length === 0) return { ok: false, error: "No recent price data for this instrument." };
-    const aux = await fetchAuxCandles(compiled.entryCondition, compiled.exitCondition, instrument.symbol, range, timeframe, market);
+    const aux = await fetchAuxCandles(compiled.entryCondition, withLevelConditions(compiled.exitCondition, input.entryPlan), instrument.symbol, range, timeframe, market);
 
     const leg = (l: StrategyInput["stopLoss"]) => (l.enabled ? { enabled: true, unit: l.unit, value: l.value } : null);
     const result = runBacktest(
@@ -123,7 +124,8 @@ export async function computeStrategyPreview(userId: string | null, input: Strat
         brokeragePercent: PREVIEW.brokeragePercent,
         slippagePercent: PREVIEW.slippagePercent,
         positionSizing: { mode: input.positionSizingMode, value: input.positionSizingValue },
-        riskManagement: { stopLoss: leg(input.stopLoss), target: leg(input.target), trailingSl: leg(input.trailingSl) },
+        riskManagement: { stopLoss: leg(input.stopLoss), target: leg(input.target), trailingSl: leg(input.trailingSl), ...(input.targets?.length ? { targets: input.targets } : {}) },
+        entryPlan: input.entryPlan,
         maxPyramidEntries: input.maxPyramidEntries,
         direction: input.direction,
         session: engineSession(session, compiled.entryCondition),

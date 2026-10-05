@@ -43,6 +43,7 @@ export function resyncEntryPlan(state: PaperSessionState, real: { qty: number; a
   return {
     ...state,
     positionPyramidCount: count,
+    positionLevelCursor: count - 1,
     positionQuantity: real.qty,
     positionEntryPrice: real.avg ?? state.positionEntryPrice,
     ...(state.positionInitialQuantity != null ? { positionInitialQuantity: real.qty } : {}),

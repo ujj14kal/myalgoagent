@@ -38,6 +38,9 @@ function toInitial(d: StrategyInput): StrategyInitial | null {
     orderType: d.orderType,
     limitMode: d.limitMode,
     limitValue: d.limitValue,
+    style: d.style ?? null,
+    targets: d.targets,
+    entryPlan: d.entryPlan ?? null,
   };
 }
 
