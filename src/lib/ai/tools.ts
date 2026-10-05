@@ -10,8 +10,8 @@ import { compile } from "@/lib/strategy-compile";
 import { isNeverExitCondition, type ConditionNode } from "@/lib/strategy/types";
 import { conditionToText } from "@/lib/strategy/format";
 import { CONDITION_REFERENCE, fillCustomRefs, toConditionNode } from "./conditions";
-import { describeCustom, type CustomIndicatorDef } from "@/lib/custom-indicator";
-import { FormulaError, parseFormula } from "@/lib/custom-indicator/formula";
+import { classifyCustom, customParts, describeCustom, type CustomIndicatorDef } from "@/lib/custom-indicator";
+import { DRAFT_KINDS, draftDefFrom, draftLink } from "./custom-indicator-arg";
 import type { MantleTool } from "./mantle";
 import { getBrokerAccount, getMarketOverview, getOptionChainSummary, getQuote } from "./market-tools";
 import { NEW_STRATEGY_ID, toStrategyInput, type AgentProposal, type PlanStep, type RiskUnitName, type SizingModeName } from "./proposals";
@@ -73,7 +73,7 @@ const targetsSchema = {
   type: "array",
   maxItems: 3,
   description:
-    "Staged targets, in order (Target 1, 2, 3). Each sells exit_percent of the ORIGINAL position when price reaches it, then locks profit on what is left: lock \"fixed\" = the rest is sold if price falls back to that target's own price; lock \"margin\" = the lock sits margin_value below it (above for a short), so price can pull back a little first. The total sold across targets is at most 100%; each target must be further from the entry than the one before; the lock never sits worse than the entry price. Use INSTEAD of take_profit, never together. Example: [{\"value\":5,\"unit\":\"PERCENT\",\"exit_percent\":25,\"lock\":\"fixed\"},{\"value\":10,\"unit\":\"PERCENT\",\"exit_percent\":25,\"lock\":\"margin\",\"margin_value\":1,\"margin_unit\":\"PERCENT\"}]. Not available for webhook strategies.",
+    "Staged targets, in order (Target 1, 2, 3). Each sells exit_percent of the ORIGINAL position when price reaches it, then locks profit on what is left: lock \"fixed\" = the rest is sold if price falls back to that target's own price; lock \"margin\" = the lock sits margin_value below it (above for a short), so price can pull back a little first. The total sold across targets is at most 100%; each target must be further from the entry than the one before; the lock never sits worse than the entry price. Use INSTEAD of take_profit, never together — but they work fine alongside an exit rule (e.g. exit when RSI > 70) and a stop-loss: whichever comes first closes what is left. Example: [{\"value\":5,\"unit\":\"PERCENT\",\"exit_percent\":25,\"lock\":\"fixed\"},{\"value\":10,\"unit\":\"PERCENT\",\"exit_percent\":25,\"lock\":\"margin\",\"margin_value\":1,\"margin_unit\":\"PERCENT\"}]. Not available for webhook strategies.",
   items: {
     type: "object",
     properties: {
@@ -218,7 +218,7 @@ export const AGENT_TOOLS: MantleTool[] = [
     type: "function",
     function: {
       name: "list_custom_indicators",
-      description: "The user's own custom indicators (name, formula or drawn line). Use them in strategy conditions as {\"custom\": \"<name>\"}.",
+      description: "The user's own custom indicators: name, class (graph line, price overlay, signal markers, trend line, horizontal level, zone, rectangle, channel, band), definition, and the parts a rule can read. Use them in strategy conditions as {\"custom\": \"<name>\"}, adding \"part\" for zones, rectangles, channels and bands.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -227,16 +227,24 @@ export const AGENT_TOOLS: MantleTool[] = [
     function: {
       name: "draft_custom_indicator",
       description:
-        "Turn a user's own trend/indicator idea into a formula and give them a link to review, preview on a chart and save it (nothing is saved until they press Save). Formula language: prices open/high/low/close/volume/hl2/hlc3/ohlc4; + - * / ^; comparisons and/or (true = 1); fn(source, length) for sma, ema, wma, rma, rsi, stdev, highest, lowest, sum, change, ref, roc; abs, sqrt, log, min, max, if(cond, a, b), crossover(a, b), crossunder(a, b); and any built-in indicator by its strategy-language name with numeric settings, e.g. atr(14), supertrend(10, 3), vwap(). Example: (close - sma(close, 50)) / atr(14).",
+        "Turn a user's own indicator idea into a custom indicator and give them a link to review, preview on a chart and save it (nothing is saved until they press Save). Pick the kind that matches their words: graph line (own pane: ratios, scores, oscillators) or price overlay (a line on the candles) from `formula`; signal markers (a true/false `formula`, marked where true, reads 1/0); channel (`upper` and `lower` formulas, optional `middle`); band (`middle` formula ± `width` formula, e.g. Bollinger-style); level (`price`); zone (`upper` and `lower` prices, optional `from` date); rectangle (a zone between `from` and `to` dates only). Trendlines are drawn on a chart by the user, not drafted. Formula language: prices open/high/low/close/volume/hl2/hlc3/ohlc4; + - * / ^; comparisons and/or (true = 1); fn(source, length) for sma, ema, wma, rma, rsi, stdev, highest, lowest, sum, change, ref, roc; abs, sqrt, log, min, max, if(cond, a, b), crossover(a, b), crossunder(a, b); and any built-in indicator by its strategy-language name with numeric settings, e.g. atr(14), supertrend(10, 3), vwap(). Example: (close - sma(close, 50)) / atr(14).",
       parameters: {
         type: "object",
         properties: {
           name: { type: "string" },
-          formula: { type: "string" },
-          pane: { type: "string", enum: ["price", "separate"], description: "price = drawn on the candles (same units as price); separate = its own pane (ratios, scores, 0/1 flags)." },
+          kind: { type: "string", enum: [...DRAFT_KINDS] },
+          formula: { type: "string", description: "For graph line, price overlay and signal markers." },
+          upper: { type: "string", description: "Channel: upper-line formula. Zone/rectangle: upper price." },
+          lower: { type: "string", description: "Channel: lower-line formula. Zone/rectangle: lower price." },
+          middle: { type: "string", description: "Band: middle-line formula. Channel: optional middle formula." },
+          width: { type: "string", description: "Band: width formula added above and taken off below the middle, e.g. 2 * stdev(close, 20)." },
+          price: { type: "number", description: "Level: the price." },
+          from: { type: "string", description: "YYYY-MM-DD. Level/zone: optional start. Rectangle: required." },
+          to: { type: "string", description: "YYYY-MM-DD. Rectangle only: last day it applies." },
+          pane: { type: "string", enum: ["price", "separate"], description: "Channel/band only: drawn on price (default) or in its own pane." },
           description: { type: "string", description: "One sentence: what it measures." },
         },
-        required: ["name", "formula", "pane"],
+        required: ["name", "kind"],
       },
     },
   },
@@ -1225,17 +1233,32 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
     }
     case "list_custom_indicators": {
       const rows = await prisma.customIndicator.findMany({ where: { userId }, orderBy: { name: "asc" }, select: { name: true, description: true, def: true } });
-      return { result: rows.map((r) => ({ name: r.name, definition: describeCustom(r.def as unknown as CustomIndicatorDef), description: r.description })) };
+      return {
+        result: rows.map((r) => {
+          const def = r.def as unknown as CustomIndicatorDef;
+          const parts = customParts(def);
+          return { name: r.name, class: classifyCustom(def), definition: describeCustom(def), ...(parts.length > 1 ? { parts } : {}), description: r.description };
+        }),
+      };
     }
     case "draft_custom_indicator": {
-      const formula = str(a.formula).trim();
+      let def: CustomIndicatorDef;
       try {
-        parseFormula(formula);
+        def = draftDefFrom(a);
       } catch (err) {
-        return { result: { error: `${err instanceof FormulaError ? err.message : "Invalid formula."} Fix it and call draft_custom_indicator again.` } };
+        return { result: { error: `${err instanceof Error ? err.message : "That definition can't be used."} Fix it and call draft_custom_indicator again.` } };
       }
-      const q = new URLSearchParams({ name: str(a.name).slice(0, 60), formula, pane: a.pane === "price" ? "price" : "separate", ...(str(a.description) ? { description: str(a.description).slice(0, 300) } : {}) });
-      return { result: { ok: true, link: `/app/indicators?${q}`, note: "Give the user this link: they can preview it on any chart and save it. Once saved, it can be used in strategy rules." } };
+      const parts = customParts(def);
+      return {
+        result: {
+          ok: true,
+          class: classifyCustom(def),
+          definition: describeCustom(def),
+          link: draftLink(def, str(a.name), str(a.description)),
+          button: `[[go:${draftLink(def, str(a.name), str(a.description))}|Preview and save it]]`,
+          note: `It is NOT saved yet — tell the user it's a draft. Put \`button\` in your reply exactly as given (the definition travels in its link, so never shorten it): they preview it on any chart and press Save. Once saved, it can be used in strategy rules${parts.length > 1 ? ` — reading its ${parts.join(", ")} part` : ""}.`,
+        },
+      };
     }
     case "list_instruments": {
       // 2,000+ instruments: never dump them all into the conversation — search and return the best 25.

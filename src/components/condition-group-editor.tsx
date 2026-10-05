@@ -1,7 +1,7 @@
 "use client";
 import InstrumentCombobox from "@/components/instrument-combobox";
 import { useCustomIndicators } from "@/components/custom-indicators/context";
-import { describeCustom } from "@/lib/custom-indicator";
+import { customParts, defaultPart, describeCustom, PART_LABEL, type CustomPart } from "@/lib/custom-indicator";
 
 import { createContext, useContext, useState } from "react";
 import type { ComparisonOperator, ConditionNode, IndicatorKind, Operand, PriceField } from "@/lib/strategy";
@@ -498,7 +498,7 @@ function OperandEditor({
           if (v === "CONST") onChange({ kind: "constant", value: 0 });
           else if (v.startsWith("CUSTOM:")) {
             const c = customs.find((x) => x.name === v.slice(7)) ?? (value.kind === "custom" && value.name === v.slice(7) ? value : null);
-            if (c) onChange({ kind: "custom", name: c.name, def: c.def });
+            if (c) onChange({ kind: "custom", name: c.name, def: c.def, ...(customParts(c.def).length > 1 ? { part: defaultPart(c.def) } : {}) });
           }
           else if (v.startsWith("PRICE:")) onChange({ kind: "price", field: v.slice(6) as PriceField });
           else {
@@ -537,6 +537,15 @@ function OperandEditor({
         )}
         <option value="CONST">Fixed value</option>
       </select>
+      {value.kind === "custom" && customParts(value.def).length > 1 && (
+        <select aria-label={`Which part of ${value.name}`} className={inputClass} value={value.part ?? defaultPart(value.def)} onChange={(e) => onChange({ ...value, part: e.target.value as CustomPart })}>
+          {customParts(value.def).map((p) => (
+            <option key={p} value={p}>
+              {PART_LABEL[p]}
+            </option>
+          ))}
+        </select>
+      )}
       {value.kind === "custom" && (
         <span className="max-w-xs truncate font-mono text-[11px] text-brand-navy/50" title={describeCustom(value.def)}>
           {describeCustom(value.def)}

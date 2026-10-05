@@ -30,7 +30,7 @@ function minutesToClock(minutes: number): string {
 
 function describeOperand(op: Operand): string {
   if (op.kind === "indicator") return `${op.type}(${op.params.join(",")})`;
-  if (op.kind === "custom") return op.name;
+  if (op.kind === "custom") return op.part && op.part !== "value" ? `${op.name} (${op.part})` : op.name;
   if (op.kind === "price") return op.field;
   return String(op.value);
 }
@@ -43,7 +43,7 @@ function describeOperand(op: Operand): string {
 function operandIdentity(op: Operand): string | null {
   if (op.kind === "indicator") return `IND:${op.type}:${op.params.join(",")}:${op.timeframe ?? ""}:${op.instrumentSymbol ?? ""}`;
   if (op.kind === "price") return `PRICE:${op.field}:${op.timeframe ?? ""}:${op.instrumentSymbol ?? ""}`;
-  if (op.kind === "custom") return `CUSTOM:${JSON.stringify(op.def)}:${op.timeframe ?? ""}:${op.instrumentSymbol ?? ""}`;
+  if (op.kind === "custom") return `CUSTOM:${JSON.stringify(op.def)}:${op.part ?? ""}:${op.timeframe ?? ""}:${op.instrumentSymbol ?? ""}`;
   return null;
 }
 

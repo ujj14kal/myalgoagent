@@ -7,7 +7,7 @@ import { PencilRuler, Save } from "lucide-react";
 import { useCustomIndicators } from "./context";
 import { saveCustomIndicator } from "@/lib/custom-indicator-actions";
 import type { Drawing } from "@/lib/chart-drawing-primitive";
-import type { LinePoint } from "@/lib/custom-indicator";
+import { drawingDef } from "./draw";
 
 /** "Custom ▾": toggle the user's custom indicators on this chart. */
 export function CustomIndicatorToggle({ active, onToggle }: { active: string[]; onToggle: (name: string) => void }) {
@@ -47,22 +47,16 @@ export function CustomIndicatorToggle({ active, onToggle }: { active: string[]; 
   );
 }
 
-type LineDrawing = Extract<Drawing, { kind: "trendline" } | { kind: "ray" } | { kind: "horizontal" }>;
+type LineDrawing = Extract<Drawing, { kind: "trendline" } | { kind: "ray" } | { kind: "horizontal" } | { kind: "rectangle" }>;
 
-/** Two points for a drawn line; a horizontal level starts at the latest candle (it has no time of its own). */
-function pointsOf(d: LineDrawing, latestTime: number): [LinePoint, LinePoint] {
-  if (d.kind === "horizontal") return [{ time: latestTime, price: d.price }, { time: latestTime, price: d.price }];
-  return [d.from, d.to];
-}
-
-/** Save a trendline, ray or level drawn on this chart as a named custom indicator. */
+/** Save a trendline, ray, level or zone drawn on this chart as a named custom indicator. */
 export function SaveLineAsIndicator({ drawings, symbol, latestTime }: { drawings: Drawing[]; symbol: string; latestTime: number }) {
-  const lines = drawings.filter((d): d is LineDrawing => d.kind === "trendline" || d.kind === "ray" || d.kind === "horizontal");
+  const lines = drawings.filter((d): d is LineDrawing => d.kind === "trendline" || d.kind === "ray" || d.kind === "horizontal" || d.kind === "rectangle");
   const [pending, start] = useTransition();
   const [note, setNote] = useState<string | null>(null);
   const router = useRouter();
   if (!lines.length) return null;
-  const label = (d: LineDrawing, i: number) => (d.kind === "horizontal" ? `Level ₹${d.price.toFixed(2)}` : `${d.kind === "ray" ? "Ray" : "Trendline"} ${i + 1}: ₹${d.from.price.toFixed(2)} → ₹${d.to.price.toFixed(2)}`);
+  const label = (d: LineDrawing, i: number) => (d.kind === "horizontal" ? `Level ₹${d.price.toFixed(2)}` : d.kind === "rectangle" ? `Zone ₹${Math.min(d.from.price, d.to.price).toFixed(2)}–₹${Math.max(d.from.price, d.to.price).toFixed(2)}` : `${d.kind === "ray" ? "Ray" : "Trendline"} ${i + 1}: ₹${d.from.price.toFixed(2)} → ₹${d.to.price.toFixed(2)}`);
   return (
     <div className="flex flex-wrap items-center gap-1.5 border-b border-black/5 px-3 py-2 text-xs">
       <span className="text-brand-navy/55">Save a line as a custom indicator:</span>
@@ -72,10 +66,10 @@ export function SaveLineAsIndicator({ drawings, symbol, latestTime }: { drawings
           type="button"
           disabled={pending}
           onClick={() => {
-            const name = window.prompt("Name this indicator (it will appear under “Custom” everywhere)", d.kind === "horizontal" ? `${symbol.replace(/\.NS$/, "")} level ${d.price.toFixed(0)}` : `${symbol.replace(/\.NS$/, "")} trendline`);
+            const name = window.prompt("Name this indicator (it will appear under “Custom” everywhere)", d.kind === "horizontal" ? `${symbol.replace(/\.NS$/, "")} level ${d.price.toFixed(0)}` : `${symbol.replace(/\.NS$/, "")} ${d.kind === "rectangle" ? "zone" : "trendline"}`);
             if (!name) return;
             start(async () => {
-              const r = await saveCustomIndicator({ name, def: { type: "line", points: pointsOf(d, latestTime), symbol } });
+              const r = await saveCustomIndicator({ name, def: drawingDef(d, latestTime, symbol) });
               setNote(r.ok ? `Saved “${name}”. Use it in strategy rules, e.g. “close crosses above ${name}”.` : r.error);
               if (r.ok) router.refresh();
             });

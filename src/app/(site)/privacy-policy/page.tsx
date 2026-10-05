@@ -23,7 +23,7 @@ const sections: LegalSection[] = [
     paragraphs: [
       "Account information you provide directly: name and email address when you create an account, any profile information you choose to add, and communications you send us — support requests, feedback, and your replies in those conversations, together with our team's replies.",
       "Usage and device information: pages visited, features used, when you last used the app, device and browser type, approximate location derived from IP address (for security and fraud prevention, not precise geolocation), and log data such as timestamps, referring URLs and error reports.",
-      "Trading configuration and platform data: strategies, workspaces (the plans that connect your strategies, with their published versions), backtest settings, risk limits, and — only if you connect a broker — the API key and secret of the API app you created at your broker, that day's session token, and the broker client ID and account name your broker returns (all keys and tokens encrypted). If you choose Groww's automatic login, we also store the TOTP token and TOTP secret of the Groww API key you created (encrypted), and use them only to generate one-time codes that start your daily Groww API session. We never receive or store your broker account password, PIN or login 2FA codes — you enter those only on your broker's own login page.",
+      "Trading configuration and platform data: strategies, workspaces (the plans that connect your strategies, with their published versions), the custom indicators you build or draw (their definitions, such as formulas, levels, zones and drawn lines), backtest settings, risk limits, and — only if you connect a broker — the API key and secret of the API app you created at your broker, that day's session token, and the broker client ID and account name your broker returns (all keys and tokens encrypted). If you choose Groww's automatic login, we also store the TOTP token and TOTP secret of the Groww API key you created (encrypted), and use them only to generate one-time codes that start your daily Groww API session. We never receive or store your broker account password, PIN or login 2FA codes — you enter those only on your broker's own login page.",
     ],
   },
   {
@@ -161,7 +161,7 @@ export default function PrivacyPolicyPage() {
       <LegalPage
         label="Legal / Data protection"
         title="Privacy Policy"
-        updated="September 2026"
+        updated="October 2026"
         intro="A clear account of what we collect, why we need it, and the controls available to you."
         sections={sections}
         breadcrumbLabel="Privacy Policy"

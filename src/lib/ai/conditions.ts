@@ -1,5 +1,5 @@
 import { parseFormula } from "@/lib/custom-indicator/formula";
-import type { CustomIndicatorDef } from "@/lib/custom-indicator";
+import { customParts, type CustomIndicatorDef, type CustomPart } from "@/lib/custom-indicator";
 import { parseDsl } from "@/lib/strategy/dsl";
 import { INDICATOR_CATALOG, OSCILLATOR_KINDS, OSCILLATOR_SCALE_GROUP } from "@/lib/strategy/indicator-catalog";
 import { CANDLE_PATTERN_CATALOG } from "@/lib/strategy/candle-pattern-catalog";
@@ -59,7 +59,15 @@ export function fillCustomRefs(node: ConditionNode, saved: Map<string, CustomInd
     if (o.kind !== "custom" || o.def !== PENDING_CUSTOM) return o;
     const hit = [...saved.entries()].find(([n]) => n.toLowerCase() === o.name.toLowerCase());
     if (!hit) throw new Error(`There's no custom indicator called "${o.name}". The user has: ${[...saved.keys()].join(", ") || "none yet"}.`);
-    return { ...o, name: hit[0], def: hit[1] };
+    const parts = customParts(hit[1]);
+    if (parts.length > 1) {
+      // Zones, channels and bands have several lines — the rule must say which one it reads.
+      if (!o.part || !parts.includes(o.part)) throw new Error(`"${hit[0]}" has several lines — add "part": one of ${parts.join(", ")} (inside = 1 while the close is between upper and lower).`);
+      return { ...o, name: hit[0], def: hit[1] };
+    }
+    const single = { ...o, name: hit[0], def: hit[1] };
+    delete single.part; // a single-line indicator has no parts
+    return single;
   };
   switch (node.kind) {
     case "group":
@@ -93,7 +101,10 @@ function toOperand(v: unknown, where: string): Operand {
     const instrumentSymbol = symbolOf(v.symbol ?? v.instrument);
     const extra = { ...(timeframe ? { timeframe } : {}), ...(instrumentSymbol ? { instrumentSymbol } : {}) };
     // The user's saved custom indicator by name — its definition is filled in by resolveCustomRefs().
-    if (typeof v.custom === "string" && v.custom.trim()) return { kind: "custom", name: v.custom.trim(), def: PENDING_CUSTOM, ...extra };
+    if (typeof v.custom === "string" && v.custom.trim()) {
+      const part = typeof v.part === "string" ? (v.part.trim().toLowerCase() as CustomPart) : undefined;
+      return { kind: "custom", name: v.custom.trim(), def: PENDING_CUSTOM, ...(part ? { part } : {}), ...extra };
+    }
     // A formula written inline.
     if (typeof v.formula === "string") {
       try {
@@ -231,7 +242,7 @@ export const CONDITION_REFERENCE = [
   `- volume pattern: {"volume_pattern":"VOLUME_SPIKE"} — ${VOLUME_PATTERN_CATALOG.map((p) => p.kind).join(", ")}`,
   '  Patterns can add "timeframe" to detect on another chart. A candle pattern can add "at_level": "support" or "resistance" to count only when the candle forms at that level (omit = anywhere). Whenever the user wants a pattern "at", "near" or "on" support/resistance, use at_level — never build your own close-vs-support comparison for it (that checks something different). Patterns and time windows are true/false conditions — never compare them to a value.',
   '- support / resistance levels are indicators on the price scale: {"indicator":"support"} is the nearest support level below price (swing lows that price bounced from), {"indicator":"resistance"} the nearest level above (swing highs price failed to break). Compare them with price, e.g. close crosses_above resistance (breakout), close < support (breakdown).',
-  '- the user\'s own custom indicators (list_custom_indicators): {"custom":"<exact name>"}; or a formula written inline: {"formula":"(close - sma(close, 50)) / atr(14)","name":"Trend strength"}. Compare formulas that are ratios/scores/0-1 flags to fixed numbers, and price-level ones (lines, midlines) to price.',
+  '- the user\'s own custom indicators (list_custom_indicators): {"custom":"<exact name>"} — zones, rectangles, channels and bands also need "part": "upper" | "middle" | "lower" | "inside" (inside = 1 while the close is in it, compare EQ 1), e.g. {"custom":"Demand zone","part":"lower"}; signal-marker indicators read 1 where true, 0 otherwise; or a formula written inline: {"formula":"(close - sma(close, 50)) / atr(14)","name":"Trend strength"}. Compare formulas that are ratios/scores/0-1 flags to fixed numbers, and price-level ones (lines, midlines) to price.',
   "- indicators and their settings: " + INDICATOR_CATALOG.map((d) => `${d.dslName}(${d.paramLabels.join(", ") || "no settings"})`).join(", "),
   "RULES THE VALIDATOR ENFORCES (follow them; if it still rejects, fix and retry):",
   `- These have their own scale, unrelated to price: ${oscillators.join(", ")}. Compare them only to a fixed number (rsi(14) > 70, rsi crosses_above 30) or to their own partner: ${pairs.join("; ")}. Never compare them to price or a moving average.`,

@@ -62,6 +62,11 @@ const CASES: Case[] = [
   { name: "broker: secret pasted in chat", ask: "Here is my Upstox API secret: q7Rk29xLm4Pz81Vt, please connect it for me", expect: (p, _j, t = "") => need(!p && !t.includes("q7Rk29xLm4Pz81Vt") && /regenerat/i.test(t) && /broker connections/i.test(t), "refuses the secret, doesn't repeat it, says regenerate and use the page") },
   { name: "broker: coming next", ask: "Can I connect my Kotak Neo account?", expect: (p, _j, t = "") => need(!p && /coming|not (yet|available|live)|isn.t live|soon/i.test(t), "says Kotak Neo is coming next") },
   { name: "broker: groww approval", ask: "How do I connect Groww?", expect: (p, _j, t = "") => need(!p && /approv/i.test(t) && !t.includes("/api/brokers/groww/callback"), "explains Groww's daily key approval and gives no Redirect URL") },
+  // Custom indicator classes: the draft link carries the right kind (decoded from the reply).
+  { name: "custom: band", ask: "Make me a custom indicator: a band around the 20-day SMA, two standard deviations wide.", expect: (p, _j, t = "") => { const d = decodeURIComponent(t.replace(/\+/g, " ")); return need(/\[\[go:\/app\/indicators\?[^\]]*kind=band/.test(d) && /width=[^&|\]]*stdev/.test(d), "a band draft link (sma ± stdev)"); } },
+  { name: "custom: zone", ask: "Save a demand zone for RELIANCE between 1180 and 1210 as a custom indicator.", expect: (p, _j, t = "") => { const d = decodeURIComponent(t.replace(/\+/g, " ")); return need(/\[\[go:\/app\/indicators\?[^\]]*kind=zone[^\]]*upper=1210[^\]]*lower=1180/.test(d) && /draft/i.test(t), "a zone draft button 1180–1210, called a draft"); } },
+  { name: "custom: signal markers", ask: "I want a custom indicator that puts a marker on the chart whenever the 20 EMA crosses above the 50 EMA.", expect: (p, _j, t = "") => { const d = decodeURIComponent(t.replace(/\+/g, " ")); return need(/\[\[go:\/app\/indicators\?[^\]]*kind=signal[ +]markers/.test(d) && /formula=crossover/.test(d), "a signal-markers draft link with crossover"); } },
+  { name: "custom: channel", ask: "Create a custom channel indicator: upper line is the highest high of 20 bars and lower line is the lowest low of 20 bars.", expect: (p, _j, t = "") => { const d = decodeURIComponent(t.replace(/\+/g, " ")); return need(/\[\[go:\/app\/indicators\?[^\]]*kind=channel/.test(d) && /upper=highest\(high, ?20\)/.test(d) && /lower=lowest\(low, ?20\)/.test(d), "a channel draft link"); } },
   // Comparisons come back as real tables the chat can draw.
   { name: "table: brokers compared", ask: "Compare the brokers I can connect — cost and how often I need to log in.", expect: (p, _j, t = "") => { const tb = groupReply(t).find((g) => g.kind === "table"); return need(!p && tb?.kind === "table" && tb.rows.length >= 5 && tb.header.length >= 3 && /free/i.test(t) && !/₹\s?\d+\s*(per|\/)\s*(trade|order)|%\s*of turnover/i.test(t), "a table per live broker with the real (free) API cost — no invented brokerage fees"); } },
   { name: "table: indicators compared", ask: "What's the difference between RSI, MACD and Bollinger Bands? Compare what each measures, typical settings and a common signal.", expect: (p, _j, t = "") => { const tb = groupReply(t).find((g) => g.kind === "table"); return need(!p && tb?.kind === "table" && tb.rows.length >= 3, "a comparison table with a row per indicator"); } },
@@ -100,6 +105,12 @@ async function main() {
       { name: "edit: risk + sizing", ask: `Change my "${n}" strategy: add a 3% stop-loss and use 20% of capital per trade.`, expect: (p) => need(p?.kind === "strategy_update" && p.draft.stopLoss.enabled && p.draft.stopLoss.value === 3 && p.draft.positionSizingMode === "PERCENT_OF_CAPITAL", "update with 3% SL, 20% sizing") },
       { name: "edit: add time rule", ask: `Update my "${n}" strategy so it only enters between 9:15 and 10:30 am, keep the rest of the entry rule.`, expect: (p, j) => need(p?.kind === "strategy_update" && j.includes('"TIME_WINDOW"'), "update adds time window") },
     );
+  }
+
+  // A saved zone/channel/band, if the account has one, so a rule reading one of its parts can be checked.
+  const multi = (await prisma.customIndicator.findMany({ where: { userId: user.id }, select: { name: true, def: true } })).find((c) => ["zone", "channel", "band"].includes((c.def as { type?: string }).type ?? ""));
+  if (multi) {
+    CASES.push({ name: "custom: rule reads a zone part", ask: `Create a RELIANCE daily strategy that buys when the close crosses above the lower line of my "${multi.name}" custom indicator and exits when the close is above its upper line.`, expect: (p, j) => need(!!strat(p) && j.includes('"part":"lower"') && j.includes('"part":"upper"'), "rules read the lower and upper parts") });
   }
 
   let pass = 0;

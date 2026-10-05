@@ -7,10 +7,10 @@ import { prisma } from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { logError } from "@/lib/logger";
 import { type Candle } from "@/lib/market-data";
-import { computeCustomSeries, validateCustomDef, type CustomIndicatorDef } from "@/lib/custom-indicator";
+import { computeCustomSeries, customVisual, defaultPart, PART_LABEL, validateCustomDef, type CustomIndicatorDef, type CustomVisual } from "@/lib/custom-indicator";
 import { userMarketData } from "@/lib/market-data/for-user";
 
-// The user's own indicators: save, delete, and preview a formula on a real chart.
+// The user's own indicators: save, delete, and preview any kind on a real chart.
 
 export type CIResult<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -53,10 +53,10 @@ export async function deleteCustomIndicator(id: string): Promise<CIResult> {
   return { ok: true };
 }
 
-export type PreviewData = { candles: Candle[]; values: { time: number; value: number }[]; last: number | null };
+export type PreviewData = { candles: Candle[]; visual: CustomVisual; last: number | null; lastLabel: string };
 
-/** A formula's values on ~6 months of daily candles for a symbol — for the editor's live preview. */
-export async function previewCustomIndicator(def: CustomIndicatorDef, symbol: string): Promise<CIResult<PreviewData>> {
+/** An indicator drawn on ~6 months of daily candles for a symbol — for the editor's live preview. */
+export async function previewCustomIndicator(def: CustomIndicatorDef, symbol: string, name = "Preview"): Promise<CIResult<PreviewData>> {
   const userId = await uid();
   if (!userId) return { ok: false, error: "Sign in again." };
   if (await checkRateLimit(`ci-preview:${userId}`, 60, 60_000)) return { ok: false, error: "Previewing too often — wait a moment." };
@@ -70,9 +70,11 @@ export async function previewCustomIndicator(def: CustomIndicatorDef, symbol: st
   if (!instrument) return { ok: false, error: "Pick an instrument." };
   try {
     const candles = await userMarketData(userId, "view").getHistoricalCandles(symbol, "6mo", "1d");
+    const visual = customVisual(candles, clean, name.trim() || "Preview");
+    // The latest value a rule would read by default (the middle line for zones/bands, 1/0 for signals).
     const raw = computeCustomSeries(candles, clean);
-    const values = candles.flatMap((c, i) => (Number.isFinite(raw[i]) ? [{ time: c.time, value: Math.round(raw[i] * 10000) / 10000 }] : []));
-    return { ok: true, data: { candles, values, last: values.at(-1)?.value ?? null } };
+    const lastRaw = raw.at(-1);
+    return { ok: true, data: { candles, visual, last: lastRaw !== undefined && Number.isFinite(lastRaw) ? Math.round(lastRaw * 10000) / 10000 : null, lastLabel: PART_LABEL[defaultPart(clean)] } };
   } catch (err) {
     logError("custom-indicator.preview", err, { symbol });
     return { ok: false, error: "Couldn't load prices for the preview — try again." };

@@ -1,4 +1,4 @@
-import type { CustomIndicatorDef } from "@/lib/custom-indicator";
+import type { CustomIndicatorDef, CustomPart } from "@/lib/custom-indicator";
 import type { CandlePatternKind } from "@/lib/candle-patterns";
 import type { ChartPatternKind } from "@/lib/chart-patterns";
 import type { VolumePatternKind } from "@/lib/volume-patterns";
@@ -64,7 +64,8 @@ export type Operand =
   | { kind: "price"; field: PriceField; timeframe?: CandleInterval; instrumentSymbol?: string }
   | { kind: "constant"; value: number }
   // The user's own indicator (formula or drawn line), definition included — see lib/custom-indicator.
-  | { kind: "custom"; name: string; def: CustomIndicatorDef; timeframe?: CandleInterval; instrumentSymbol?: string };
+  // `part` picks a line of a zone/channel/band (upper, middle, lower, inside); single-line kinds leave it out.
+  | { kind: "custom"; name: string; def: CustomIndicatorDef; part?: CustomPart; timeframe?: CandleInterval; instrumentSymbol?: string };
 
 // A "signal" is a boolean-native condition — true/false per bar — as opposed
 // to a comparison, which compares two numeric time series. Time windows and

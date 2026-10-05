@@ -86,13 +86,13 @@ function alignedSeries(candles: Candle[], type: IndicatorKind, params: number[])
 
 type IndicatorOperand = Extract<Operand, { kind: "indicator" } | { kind: "custom" }>;
 
-const indicatorLabel = (o: IndicatorOperand) => (o.kind === "custom" ? o.name : `${LABEL.get(o.type) ?? o.type}${o.params.length ? `(${o.params.join(", ")})` : ""}`);
+const indicatorLabel = (o: IndicatorOperand) => (o.kind === "custom" ? (o.part && o.part !== "value" ? `${o.name} · ${o.part}` : o.name) : `${LABEL.get(o.type) ?? o.type}${o.params.length ? `(${o.params.join(", ")})` : ""}`);
 
 /** Values of a built-in or custom indicator on each candle. */
 function operandValues(candles: Candle[], o: IndicatorOperand): Values {
   if (o.kind === "indicator") return alignedSeries(candles, o.type, o.params);
   try {
-    return computeCustomSeries(candles, o.def).map((v) => (Number.isFinite(v) ? round(v) : null));
+    return computeCustomSeries(candles, o.def, o.part).map((v) => (Number.isFinite(v) ? round(v) : null));
   } catch {
     return candles.map(() => null);
   }
@@ -118,9 +118,9 @@ export function buildReplayStudies(
       if (!studies.notes.includes(note)) studies.notes.push(note);
       return null;
     }
-    const key = o.kind === "custom" ? `CUSTOM:${o.name}` : `${o.type}:${o.params.join(",")}`;
+    const key = o.kind === "custom" ? `CUSTOM:${o.name}:${o.part ?? ""}` : `${o.type}:${o.params.join(",")}`;
     const values = operandValues(candles, o);
-    const ownPane = o.kind === "custom" ? customPane(o.def) === "separate" : OSCILLATOR_KINDS.has(o.type);
+    const ownPane = o.kind === "custom" ? customPane(o.def) === "separate" || o.part === "inside" || o.def.type === "signal" : OSCILLATOR_KINDS.has(o.type);
     if (ownPane) {
       const paneKey = o.kind === "custom" ? key : (OSCILLATOR_SCALE_GROUP[o.type] ?? o.type);
       let pane = oscByKey.get(paneKey);

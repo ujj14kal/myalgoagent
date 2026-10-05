@@ -1,9 +1,10 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { classifyCustom, type CustomIndicatorDef } from "@/lib/custom-indicator";
 
 /** Everything an account owns, for the user's own data export (and staff fulfilling a data request). Never includes broker keys or tokens. */
 export async function collectUserData(userId: string) {
-  const [user, watchlistItems, strategies, backtestRuns, paperSessions, riskSettings, riskEvents, notifications, feedback, supportCases, agentConversations, brokerConnections, workspaces] =
+  const [user, watchlistItems, strategies, backtestRuns, paperSessions, riskSettings, riskEvents, notifications, feedback, supportCases, agentConversations, brokerConnections, workspaces, customIndicators] =
     await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
@@ -36,6 +37,7 @@ export async function collectUserData(userId: string) {
         select: { broker: true, status: true, apiKeyHint: true, brokerClientId: true, accountName: true, connectedAt: true, tokenExpiresAt: true, lastCheckedAt: true, createdAt: true },
       }),
       prisma.workspace.findMany({ where: { userId }, include: { versions: { orderBy: { version: "asc" } } } }),
+      prisma.customIndicator.findMany({ where: { userId }, orderBy: { name: "asc" } }),
     ]);
 
   if (!user) return null;
@@ -55,5 +57,7 @@ export async function collectUserData(userId: string) {
     agentConversations,
     brokerConnections,
     workspaces,
+    // Each with its class (graph line, zone, band…) next to the full definition.
+    customIndicators: customIndicators.map((c) => ({ ...c, class: classifyCustom(c.def as unknown as CustomIndicatorDef) })),
   };
 }

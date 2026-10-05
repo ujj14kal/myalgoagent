@@ -2,21 +2,22 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Minus, MoveUpRight, Save, TrendingUp, Undo2 } from "lucide-react";
+import { Minus, MoveUpRight, RectangleHorizontal, Save, TrendingUp, Undo2 } from "lucide-react";
 import CandlestickChart from "@/components/candlestick-chart";
 import InstrumentCombobox from "@/components/instrument-combobox";
 import { saveCustomIndicator } from "@/lib/custom-indicator-actions";
 import type { Drawing } from "@/lib/chart-drawing-primitive";
 import type { Candle } from "@/lib/market-data";
-import type { LinePoint } from "@/lib/custom-indicator";
+import type { CustomIndicatorDef } from "@/lib/custom-indicator";
 
-type LineKind = "trendline" | "ray" | "horizontal";
+type LineKind = "trendline" | "ray" | "horizontal" | "rectangle";
 type LineDrawing = Extract<Drawing, { kind: LineKind }>;
 
 const TOOLS: { kind: LineKind; label: string; hint: string; icon: typeof TrendingUp }[] = [
   { kind: "trendline", label: "Trendline", hint: "Click two points — e.g. two swing lows for a rising support line.", icon: TrendingUp },
   { kind: "ray", label: "Ray", hint: "Click two points; the line keeps going to the right.", icon: MoveUpRight },
   { kind: "horizontal", label: "Level", hint: "Click once at the price you want to follow.", icon: Minus },
+  { kind: "rectangle", label: "Zone", hint: "Drag a box over a price area — e.g. a demand zone. Choose below whether it extends right or stays between its edges.", icon: RectangleHorizontal },
 ];
 
 const TIMEFRAMES = [
@@ -25,7 +26,24 @@ const TIMEFRAMES = [
   { value: "15m", range: "1mo", label: "15 min (1 month)" },
 ];
 
-/** Draw a trendline, ray or level on a real chart and save it as a named custom indicator. */
+const dropIndex =
+  (i: number) =>
+  <T,>(m: Record<number, T>): Record<number, T> =>
+    Object.fromEntries(Object.entries(m).flatMap(([k, v]) => (Number(k) === i ? [] : [[Number(k) > i ? Number(k) - 1 : Number(k), v]])));
+
+/** What a drawing saves as. A line with a parallel width is a channel; a box is a zone (extended right) or a rectangle (between its edges). */
+export function drawingDef(d: LineDrawing, latest: number, symbol: string, opts: { offset?: number; boxOnly?: boolean } = {}): CustomIndicatorDef {
+  if (d.kind === "horizontal") return { type: "level", price: d.price, from: latest, symbol };
+  if (d.kind === "rectangle") {
+    const [t1, t2] = [Math.min(d.from.time, d.to.time), Math.max(d.from.time, d.to.time)];
+    const [upper, lower] = [Math.max(d.from.price, d.to.price), Math.min(d.from.price, d.to.price)];
+    // Extended right, the zone only exists from its right edge — before that you hadn't drawn it yet.
+    return opts.boxOnly ? { type: "zone", upper, lower, from: t1, to: t2, symbol } : { type: "zone", upper, lower, from: t2, symbol };
+  }
+  return { type: "line", points: [d.from, d.to], ...(opts.offset ? { offset: opts.offset } : {}), symbol };
+}
+
+/** Draw a trendline, ray, channel, level or zone on a real chart and save it as a named custom indicator. */
 export default function DrawIndicator({ instruments }: { instruments: { id: string; symbol: string; name: string }[] }) {
   const [symbol, setSymbol] = useState(instruments.find((i) => i.symbol === "RELIANCE.NS")?.symbol ?? instruments[0]?.symbol ?? "");
   const [tf, setTf] = useState(TIMEFRAMES[0]);
@@ -34,6 +52,8 @@ export default function DrawIndicator({ instruments }: { instruments: { id: stri
   const [tool, setTool] = useState<LineKind | null>("trendline");
   const [drawings, setDrawings] = useState<LineDrawing[]>([]);
   const [names, setNames] = useState<Record<number, string>>({});
+  const [offsets, setOffsets] = useState<Record<number, string>>({});
+  const [boxOnly, setBoxOnly] = useState<Record<number, boolean>>({});
   const [note, setNote] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const router = useRouter();
@@ -57,8 +77,12 @@ export default function DrawIndicator({ instruments }: { instruments: { id: stri
   }, [symbol, tf]);
 
   const latest = candles.at(-1)?.time ?? 0;
-  const pointsOf = (d: LineDrawing): [LinePoint, LinePoint] => (d.kind === "horizontal" ? [{ time: latest, price: d.price }, { time: latest, price: d.price }] : [d.from, d.to]);
-  const describe = (d: LineDrawing) => (d.kind === "horizontal" ? `Level at ₹${d.price.toFixed(2)}` : `${d.kind === "ray" ? "Ray" : "Trendline"} ₹${d.from.price.toFixed(2)} → ₹${d.to.price.toFixed(2)}`);
+  const describe = (d: LineDrawing) =>
+    d.kind === "horizontal"
+      ? `Level at ₹${d.price.toFixed(2)}`
+      : d.kind === "rectangle"
+        ? `Zone ₹${Math.min(d.from.price, d.to.price).toFixed(2)}–₹${Math.max(d.from.price, d.to.price).toFixed(2)}`
+        : `${d.kind === "ray" ? "Ray" : "Trendline"} ₹${d.from.price.toFixed(2)} → ₹${d.to.price.toFixed(2)}`;
   const plain = symbol.replace(/\.NS$/, "");
 
   return (
@@ -98,7 +122,7 @@ export default function DrawIndicator({ instruments }: { instruments: { id: stri
           drawings={drawings}
           activeTool={tool}
           onDrawingComplete={(d) => {
-            if (d.kind === "trendline" || d.kind === "ray" || d.kind === "horizontal") setDrawings((all) => [...all, d]);
+            if (d.kind === "trendline" || d.kind === "ray" || d.kind === "horizontal" || d.kind === "rectangle") setDrawings((all) => [...all, d]);
           }}
         />
       )}
@@ -110,19 +134,35 @@ export default function DrawIndicator({ instruments }: { instruments: { id: stri
               <input
                 value={names[i] ?? ""}
                 onChange={(e) => setNames((n) => ({ ...n, [i]: e.target.value }))}
-                placeholder={`Name, e.g. ${plain} ${d.kind === "horizontal" ? "support" : "uptrend"}`}
+                placeholder={`Name, e.g. ${plain} ${d.kind === "horizontal" ? "support" : d.kind === "rectangle" ? "demand zone" : "uptrend"}`}
                 className="min-w-48 flex-1 rounded-lg border border-brand-navy/15 px-2.5 py-1.5 text-sm"
               />
+              {(d.kind === "trendline" || d.kind === "ray") && (
+                <label className="inline-flex items-center gap-1 text-xs text-brand-navy/60" title="Adds a parallel line this many rupees above (+) or below (−), making a channel">
+                  Parallel line ±₹
+                  <input type="number" step="any" value={offsets[i] ?? ""} onChange={(e) => setOffsets((o) => ({ ...o, [i]: e.target.value }))} placeholder="none" className="w-20 rounded-lg border border-brand-navy/15 px-2 py-1 text-xs" />
+                </label>
+              )}
+              {d.kind === "rectangle" && (
+                <select value={boxOnly[i] ? "box" : "extend"} onChange={(e) => setBoxOnly((b) => ({ ...b, [i]: e.target.value === "box" }))} className="rounded-lg border border-brand-navy/15 px-2 py-1 text-xs" aria-label="How the zone applies">
+                  <option value="extend">Extend right from its right edge</option>
+                  <option value="box">Only between its edges (rectangle)</option>
+                </select>
+              )}
               <button
                 type="button"
                 disabled={pending || !(names[i] ?? "").trim()}
                 onClick={() =>
                   start(async () => {
                     const name = (names[i] ?? "").trim();
-                    const r = await saveCustomIndicator({ name, def: { type: "line", points: pointsOf(d), symbol } });
+                    const r = await saveCustomIndicator({ name, def: drawingDef(d, latest, symbol, { offset: Number(offsets[i]) || undefined, boxOnly: boxOnly[i] }) });
                     if (!r.ok) return setNote(r.error);
                     setNote(`Saved “${name}”. Use it in strategy rules, e.g. “close crosses above ${name}”, or show it on any ${plain} chart from the Custom menu.`);
                     setDrawings((all) => all.filter((_, j) => j !== i));
+                    // Later rows move up one, so their typed names and settings move with them.
+                    setNames(dropIndex(i));
+                    setOffsets(dropIndex(i));
+                    setBoxOnly(dropIndex(i));
                     router.refresh();
                   })
                 }
@@ -135,7 +175,9 @@ export default function DrawIndicator({ instruments }: { instruments: { id: stri
         </ul>
       )}
       {note && <p className="text-sm text-brand-navy/70">{note}</p>}
-      <p className="text-[11px] text-brand-navy/45">A drawn line only counts from its later point onwards — backtests never use a line before you could have drawn it.</p>
+      <p className="text-[11px] text-brand-navy/45">
+        A drawn line only counts from its later point onwards, a level from the latest bar, and an extended zone from its right edge — backtests never use them before you could have drawn them. A rectangle kept between its edges is the exception: it applies exactly as drawn.
+      </p>
     </div>
   );
 }

@@ -7,11 +7,11 @@ import CustomIndicatorEditor from "./editor";
 import DrawIndicator from "./draw";
 import DescribeIndicator from "./describe";
 import { deleteCustomIndicator } from "@/lib/custom-indicator-actions";
-import { CUSTOM_CLASSES, classifyCustom, type CustomClass, type CustomIndicatorDef } from "@/lib/custom-indicator";
+import { CUSTOM_CLASSES, classifyCustom, customParts, PART_LABEL, type CustomClass, type CustomIndicatorDef } from "@/lib/custom-indicator";
 
 export type SavedIndicator = { id: string; name: string; description: string | null; def: CustomIndicatorDef; summary: string };
 
-export type Prefill = { name: string; formula: string; pane: "price" | "separate"; description: string | null };
+export type Prefill = { name: string; description: string | null; def: CustomIndicatorDef };
 
 export default function CustomIndicatorList({ items, instruments, prefill }: { items: SavedIndicator[]; instruments: { id: string; symbol: string; name: string }[]; prefill?: Prefill | null }) {
   const [editing, setEditing] = useState<string | null>(null);
@@ -31,7 +31,7 @@ export default function CustomIndicatorList({ items, instruments, prefill }: { i
           {(
             [
               ["draw", "Draw on a chart", PencilLine],
-              ["formula", "Write a formula", Sigma],
+              ["formula", "Build from settings", Sigma],
               ["describe", "Describe it", MessageSquareText],
             ] as const
           ).map(([k, label, Icon]) => (
@@ -77,22 +77,24 @@ export default function CustomIndicatorList({ items, instruments, prefill }: { i
       {items.length > 0 && visible.length === 0 && <p className="text-sm text-brand-navy/50">None match.</p>}
       {visible.slice(0, shown).map((i) => (
         <section key={i.id} className="surface p-4">
-          {editing === i.id && i.def.type === "formula" ? (
-            <CustomIndicatorEditor instruments={instruments} initial={{ id: i.id, name: i.name, description: i.description, formula: i.def.formula, pane: i.def.pane }} onDone={() => setEditing(null)} />
+          {editing === i.id && i.def.type !== "line" ? (
+            <CustomIndicatorEditor instruments={instruments} initial={{ id: i.id, name: i.name, description: i.description, def: i.def }} onDone={() => setEditing(null)} />
           ) : (
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="font-semibold text-brand-navy">
+                  {i.def.color && <span aria-hidden className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full align-middle" style={{ background: i.def.color }} />}
                   {i.name}{" "}
                   <span className="ml-1 rounded-full bg-brand-navy/[0.05] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-navy/55">
                     {classifyCustom(i.def)}
                   </span>
                 </p>
                 <p className="mt-1 break-all font-mono text-xs text-brand-navy/70">{i.summary}</p>
+                {customParts(i.def).length > 1 && <p className="mt-1 text-[11px] text-brand-navy/50">Rules can read: {customParts(i.def).map((p) => PART_LABEL[p]).join(" · ")}</p>}
                 {i.description && <p className="mt-1 text-xs text-brand-navy/55">{i.description}</p>}
               </div>
               <div className="flex gap-1">
-                {i.def.type === "formula" && (
+                {i.def.type !== "line" && (
                   <button type="button" onClick={() => setEditing(i.id)} aria-label="Edit" className="rounded-full p-2 text-brand-navy/45 hover:text-brand-primary">
                     <Pencil size={14} />
                   </button>

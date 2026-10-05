@@ -1,5 +1,6 @@
 import type { ConditionNode, Operand, BooleanSignalKind, ComparisonOperator } from "./types";
 import { INDICATOR_CATALOG } from "./indicator-catalog";
+import { PART_LABEL } from "@/lib/custom-indicator";
 
 // Readable text for a saved condition tree, in the same notation as the
 // strategy language (so a code-mode user recognises it). Used to explain
@@ -33,7 +34,7 @@ export function operandToText(o: Operand): string {
     case "indicator":
       return `${DSL_BY_KIND.get(o.type) ?? humanize(o.type)}(${o.params.join(",")})${suffix(o)}`;
     case "custom":
-      return `“${o.name}”${suffix(o)}`;
+      return `“${o.name}”${o.part && o.part !== "value" ? ` ${PART_LABEL[o.part]}` : ""}${suffix(o)}`;
   }
 }
 

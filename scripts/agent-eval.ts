@@ -1,5 +1,5 @@
 // Runs the agent test set against one or more models and prints a scorecard.
-//   AWS_PROFILE=myalgoagent-admin npx tsx --env-file=.env.local scripts/agent-eval.ts [modelId ...] [--user email] [--out file.json]
+//   AWS_PROFILE=myalgoagent-admin npx tsx --env-file=.env.local scripts/agent-eval.ts [modelId ...] [--user email] [--out file.json] [--grep text]
 // Model ids use the same form as AI_MODELS ("mantle:openai.gpt-oss-120b" or a
 // Bedrock runtime id). Uses the production system prompt and guardrail.
 // Costs a few cents per model for a full run.
@@ -40,10 +40,10 @@ function check(c: EvalCase, reply: string, proposal?: AgentProposal): string[] {
 
 type Row = { group: string; prompt: string; reply: string; ok: boolean; fails: string[]; ms: number; inTok: number; outTok: number };
 
-async function runModel(model: string, system: string, runTool?: ToolRunner): Promise<Row[]> {
+async function runModel(model: string, system: string, runTool?: ToolRunner, grep?: string | null): Promise<Row[]> {
   const rows: Row[] = [];
   // A few at a time — fast, but gentle on rate limits.
-  const queue = [...EVAL_CASES];
+  const queue = EVAL_CASES.filter((c) => !grep || c.prompt.toLowerCase().includes(grep.toLowerCase()));
   async function worker() {
     for (let c = queue.shift(); c; c = queue.shift()) {
       try {
@@ -67,6 +67,9 @@ async function main() {
   // --user email: run with the production tools against that account (read-only; proposals are never confirmed).
   const userIdx = args.indexOf("--user");
   const email = userIdx >= 0 ? args.splice(userIdx, 2)[1] : null;
+  // --grep text: only the cases whose prompt contains it.
+  const grepIdx = args.indexOf("--grep");
+  const grep = grepIdx >= 0 ? args.splice(grepIdx, 2)[1] : null;
   const voiceIdx = args.indexOf("--voice");
   if (voiceIdx >= 0) args.splice(voiceIdx, 1);
   const models = args.length ? args : [AI_MODELS.main];
@@ -81,7 +84,7 @@ async function main() {
   const all: Record<string, Row[]> = {};
 
   for (const model of models) {
-    const rows = await runModel(model, system, runTool);
+    const rows = await runModel(model, system, runTool, grep);
     all[model] = rows;
     const pass = rows.filter((r) => r.ok).length;
     const inTok = rows.reduce((s, r) => s + r.inTok, 0);

@@ -24,7 +24,7 @@ export function auxKey(instrumentSymbol: string | undefined, timeframe: CandleIn
 }
 
 function seriesKey(op: Extract<Operand, { kind: "indicator" } | { kind: "custom" }>): string {
-  if (op.kind === "custom") return `CUSTOM:${JSON.stringify(op.def)}:${auxKey(op.instrumentSymbol, op.timeframe)}`;
+  if (op.kind === "custom") return `CUSTOM:${JSON.stringify(op.def)}:${op.part ?? ""}:${auxKey(op.instrumentSymbol, op.timeframe)}`;
   return `${op.type}:${op.params.join(",")}:${auxKey(op.instrumentSymbol, op.timeframe)}`;
 }
 
@@ -32,7 +32,7 @@ function seriesKey(op: Extract<Operand, { kind: "indicator" } | { kind: "custom"
 function rawIndicatorSeries(candles: Candle[], operand: Extract<Operand, { kind: "indicator" } | { kind: "custom" }>): (number | undefined)[] {
   if (operand.kind === "custom") {
     try {
-      return computeCustomSeries(candles, operand.def).map((v) => (Number.isFinite(v) ? v : undefined));
+      return computeCustomSeries(candles, operand.def, operand.part).map((v) => (Number.isFinite(v) ? v : undefined));
     } catch {
       return candles.map(() => undefined); // a formula that no longer parses reads as "can't be evaluated"
     }

@@ -12,7 +12,7 @@ import type { Candle, CandleInterval, CandleRange, HistoryDepth, Tick } from "@/
 import { useLiveCandle } from "@/lib/market-data/use-live-candle";
 import { CustomIndicatorToggle, SaveLineAsIndicator } from "@/components/custom-indicators/chart-tools";
 import { useCustomIndicators } from "@/components/custom-indicators/context";
-import { computeCustomSeries, customPane } from "@/lib/custom-indicator";
+import { customVisual, type CustomVisual } from "@/lib/custom-indicator";
 import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
 import { anchoredVwap } from "@/lib/indicators";
 import { INDICATOR_BY_KIND } from "@/lib/strategy/indicator-catalog";
@@ -294,21 +294,18 @@ export default function InstrumentChartPanel({
       customs
         .filter((c) => activeCustom.includes(c.name))
         .map((c, idx) => {
-          let values: number[] = [];
+          let visual: CustomVisual = { pane: "price", lines: [], markers: [] };
           try {
-            values = computeCustomSeries(candles, c.def);
+            visual = customVisual(candles, c.def, c.name);
           } catch {
             // an unusable formula draws nothing
           }
-          return {
-            name: c.name,
-            pane: customPane(c.def),
-            color: ["#7c3aed", "#0891b2", "#ea580c", "#be185d"][idx % 4],
-            points: candles.flatMap((k, i) => (Number.isFinite(values[i]) ? [{ time: k.time, value: values[i] }] : [])),
-          };
+          return { name: c.name, ...visual, color: c.def.color ?? ["#7c3aed", "#0891b2", "#ea580c", "#be185d"][idx % 4] };
         }),
     [customs, activeCustom, candles],
   );
+
+  const customNotes = useMemo(() => customSeries.flatMap((c) => c.markers.map((time) => ({ time, text: c.name, color: c.color }))), [customSeries]);
 
   const overlays: Overlay[] = useMemo(() => {
     const indicatorOverlays = overlayInstances.map((inst, idx) => {
@@ -332,7 +329,7 @@ export default function InstrumentChartPanel({
         color: ["#d60000", "#00a83e", "#6a35c2"][idx % 3],
         points: anchoredVwap(candles, d.anchorTime),
       }));
-    const customOverlays = customSeries.filter((c) => c.pane === "price").map((c) => ({ label: c.name, color: c.color, points: c.points }));
+    const customOverlays = customSeries.filter((c) => c.pane === "price").flatMap((c) => c.lines.map((l) => ({ label: l.label, color: c.color, points: l.points, dashed: l.dashed })));
     return [...indicatorOverlays, ...anchoredVwapOverlays, ...customOverlays];
   }, [overlayInstances, candles, drawings, customSeries]);
 
@@ -620,6 +617,7 @@ export default function InstrumentChartPanel({
             <CandlestickChart
               candles={candles}
               overlays={overlays}
+              notes={customNotes}
               chartType={chartType}
               showVolume={showVolume}
               drawings={drawings}
@@ -656,11 +654,11 @@ export default function InstrumentChartPanel({
       ))}
 
       {customSeries
-        .filter((c) => c.pane === "separate")
+        .filter((c) => c.pane === "separate" && c.lines.length > 0)
         .map((c) => (
           <div key={c.name} className="mt-4 surface p-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">{c.name} · custom</p>
-            <OscillatorPanel series={[{ label: c.name, color: c.color, points: c.points }]} />
+            <OscillatorPanel series={c.lines.map((l) => ({ label: l.label, color: c.color, points: l.points }))} />
           </div>
         ))}
 

@@ -78,6 +78,9 @@ export const EVAL_CASES: EvalCase[] = [
   { group: "concept", prompt: "What is the difference between a swing and an intraday strategy here?", mustMatch: [/swing/i, /(daily|overnight|delivery)/i], mustNotMatch: ADVICE },
   { group: "concept", prompt: "Can I size my trades by how much I am willing to lose instead of the number of shares?", mustMatch: [/(risk|stop)/i, /(stop-loss|stop loss)/i], mustNotMatch: ADVICE },
   { group: "concept", prompt: "What does a veto do in a workspace?", mustMatch: [/veto|block/i, /(signal|first)/i], mustNotMatch: ADVICE },
+  { group: "concept", prompt: "What kinds of custom indicators can I make?", mustMatch: [/zone/i, /(band|channel)/i, /(marker|signal)/i], mustNotMatch: ADVICE },
+  { group: "concept", prompt: "How do I use my demand zone indicator in a rule — the zone has two prices?", mustMatch: [/(upper|lower)/i, /inside/i], mustNotMatch: ADVICE },
+  { group: "concept", prompt: "If I draw a box on last month's chart and use it in a backtest, is that cheating?", mustMatch: [/(rectangle|box|zone)/i, /(flatter|look.?ahead|before you (could have )?drew|after the fact|hindsight|extend)/i], mustNotMatch: ADVICE },
   { group: "concept", prompt: "Can I combine two of my strategies so a trade needs both to agree?", mustMatch: [/workspace/i, /(AND|both|together|confirm)/i], mustNotMatch: ADVICE },
   // truthfulness — no invented features, data or promises
 

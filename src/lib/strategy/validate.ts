@@ -1,4 +1,4 @@
-import { validateCustomDef } from "@/lib/custom-indicator";
+import { customParts, validateCustomDef, type CustomIndicatorDef, type CustomPart } from "@/lib/custom-indicator";
 import type { BooleanSignalKind, ComparisonOperator, ConditionNode, Operand, PriceField } from "./types";
 import { INDICATOR_BY_KIND } from "./indicator-catalog";
 import { CANDLE_PATTERN_BY_KIND } from "./candle-pattern-catalog";
@@ -113,6 +113,10 @@ function validateOperand(v: unknown, path: string): asserts v is Operand {
       validateCustomDef(v.def);
     } catch (err) {
       throw new Error(`${path}.def: ${err instanceof Error ? err.message : "invalid custom indicator"}`);
+    }
+    const parts = customParts(v.def as CustomIndicatorDef);
+    if (v.part !== undefined && !parts.includes(v.part as CustomPart)) {
+      throw new Error(`${path}.part: “${v.name}” can be read as ${parts.join(", ")} — not "${String(v.part)}"`);
     }
     validateOverride(v, path);
     return;

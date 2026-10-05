@@ -10,6 +10,7 @@ import {
   AreaSeries,
   BarSeries,
   HistogramSeries,
+  LineStyle,
   type IChartApi,
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
@@ -26,7 +27,12 @@ export interface Overlay {
   label: string;
   color: string;
   points: IndicatorPoint[];
+  /** Dashed, e.g. the middle line of a custom zone or band. */
+  dashed?: boolean;
 }
+
+/** A labelled marker that isn't a trade, e.g. where a custom signal indicator is true. */
+export type ChartNote = { time: number; text: string; color: string };
 
 export type ChartType = "candlestick" | "line" | "area" | "bar";
 
@@ -45,6 +51,7 @@ type EditableField = "from" | "to" | "price" | "at" | "anchor" | "entry" | "stop
 // range with the markers effect re-firing on that same commit).
 const EMPTY_OVERLAYS: Overlay[] = [];
 const EMPTY_MARKERS: Signal[] = [];
+const EMPTY_NOTES: ChartNote[] = [];
 const EMPTY_DRAWINGS: Drawing[] = [];
 
 type PriceSeries = ISeriesApi<"Candlestick"> | ISeriesApi<"Line"> | ISeriesApi<"Area"> | ISeriesApi<"Bar">;
@@ -98,6 +105,7 @@ export default function CandlestickChart({
   candles,
   overlays = EMPTY_OVERLAYS,
   markers = EMPTY_MARKERS,
+  notes = EMPTY_NOTES,
   chartType = "candlestick",
   showVolume = false,
   drawings = EMPTY_DRAWINGS,
@@ -113,6 +121,7 @@ export default function CandlestickChart({
   liveCandle?: Candle | null;
   overlays?: Overlay[];
   markers?: Signal[];
+  notes?: ChartNote[];
   chartType?: ChartType;
   showVolume?: boolean;
   drawings?: Drawing[];
@@ -651,10 +660,10 @@ export default function CandlestickChart({
     for (const overlay of overlays) {
       let s = map.get(overlay.label);
       if (!s) {
-        s = chart.addSeries(LineSeries, { color: overlay.color, lineWidth: 2, title: overlay.label });
+        s = chart.addSeries(LineSeries, { color: overlay.color, lineWidth: 2, title: overlay.label, lineStyle: overlay.dashed ? LineStyle.Dashed : LineStyle.Solid });
         map.set(overlay.label, s);
       } else {
-        s.applyOptions({ color: overlay.color });
+        s.applyOptions({ color: overlay.color, lineStyle: overlay.dashed ? LineStyle.Dashed : LineStyle.Solid });
       }
       s.setData(overlay.points.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
     }
@@ -714,8 +723,10 @@ export default function CandlestickChart({
       shape: m.type === "entry" ? "arrowUp" : "arrowDown",
       text: m.type === "entry" ? "Entry" : "Exit",
     }));
-    markersPluginRef.current.setMarkers(seriesMarkers);
-  }, [markers, chartType]);
+    const noteMarkers: SeriesMarker<Time>[] = notes.map((n) => ({ time: n.time as UTCTimestamp, position: "aboveBar", color: n.color, shape: "circle", text: n.text }));
+    // The markers plugin wants them in time order.
+    markersPluginRef.current.setMarkers([...seriesMarkers, ...noteMarkers].sort((a, b) => (a.time as number) - (b.time as number)));
+  }, [markers, notes, chartType]);
 
   // Drawings.
   useEffect(() => {

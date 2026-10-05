@@ -3,14 +3,27 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import PageHeader from "@/components/ui/page-header";
 import CustomIndicatorList from "@/components/custom-indicators/list";
-import { describeCustom, type CustomIndicatorDef } from "@/lib/custom-indicator";
+import { describeCustom, validateCustomDef, type CustomIndicatorDef } from "@/lib/custom-indicator";
+import { draftDefFrom } from "@/lib/ai/custom-indicator-arg";
+
+/** A draft from the assistant's link: ?formula=…&pane=… for a formula, or ?kind=zone&upper=…&lower=… (see draftParams) for any kind. */
+function prefillFrom(sp: Record<string, string | undefined>) {
+  let def: CustomIndicatorDef | null = null;
+  try {
+    if (sp.kind) def = draftDefFrom(Object.fromEntries(Object.entries(sp).map(([k, v]) => [k, v?.slice(0, 500)])));
+    else if (sp.formula) def = validateCustomDef({ type: "formula", formula: sp.formula.slice(0, 500), pane: sp.pane === "price" ? "price" : "separate" });
+  } catch {
+    return null; // a broken link just opens the empty builder
+  }
+  return def ? { name: (sp.name ?? "").slice(0, 60), description: sp.description?.slice(0, 300) ?? null, def } : null;
+}
 
 export const metadata = { title: "Custom Indicators", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
 export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
-  const prefill = sp.formula ? { name: (sp.name ?? "").slice(0, 60), formula: sp.formula.slice(0, 500), pane: sp.pane === "price" ? ("price" as const) : ("separate" as const), description: sp.description?.slice(0, 300) ?? null } : null;
+  const prefill = prefillFrom(sp);
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return null;
@@ -23,7 +36,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
       <PageHeader
         title="Custom Indicators"
         icon={PencilRuler}
-        description="Your own indicators: write a formula from prices and indicators, or draw a trendline or level on any chart and save it with a name. They appear under “Custom” in every indicator picker — on charts, in strategy rules, backtests, forward tests and the replay — always with their formula shown."
+        description="Your own indicators: graph lines and price overlays from a formula, signal markers, channels, bands, levels, zones and rectangles — or draw a trendline, channel, level or zone on any chart and save it with a name. They appear under “Custom” in every indicator picker — on charts, in strategy rules, backtests, forward tests and the replay — always with their formula shown."
       />
       <div className="mt-6">
         <CustomIndicatorList
