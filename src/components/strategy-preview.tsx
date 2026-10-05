@@ -22,6 +22,7 @@ const EXIT_REASON: Record<NonNullable<PreviewTrade["exitReason"]>, string> = {
   target: "the take-profit was hit",
   trailing_stop: "the trailing stop was hit",
   locked_profit: "the profit locked by an earlier target was reached",
+  time_stop: "the maximum holding period ended",
   square_off: "the intraday square-off time was reached",
   end_of_data: "still open at the end of the period (closed for this demo)",
 };

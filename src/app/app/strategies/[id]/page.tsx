@@ -1,4 +1,5 @@
 import { parseTargets } from "@/lib/trading-engine/targets-config";
+import { parseEntryPlan } from "@/lib/trading-engine/entry-plan-config";
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -145,7 +146,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
         <p className="-mt-2 text-xs text-brand-navy/45">
           Data: {market.name}
           {!market.isOfficial && " (interim feed, not an official NSE/BSE source)"}
-          {" · "}{describeExecutionConfig({ ...strategy, targets: parseTargets(strategy.targetsConfig) }).split(" · ")[0]}, not real-time · signals shown are a preview of where this
+          {" · "}{describeExecutionConfig({ ...strategy, targets: parseTargets(strategy.targetsConfig), entryPlan: parseEntryPlan(strategy.entryPlan) }).split(" · ")[0]}, not real-time · signals shown are a preview of where this
           strategy would have triggered, not a backtest of P&amp;L.
         </p>
       )}

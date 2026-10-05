@@ -8,6 +8,7 @@ import {
   stepBar,
   markToMarket,
   type EngineState,
+  type EntryPlan,
   type ExitReason,
   type PositionSizing,
   type RiskManagementConfig,
@@ -30,6 +31,8 @@ export interface PaperSessionState {
   positionSizing: PositionSizing;
   riskManagement?: RiskManagementConfig;
   maxPyramidEntries?: number;
+  /** Multi-level entry plan (swing / long-term): the first entry, further price levels and a holding limit. */
+  entryPlan?: EntryPlan | null;
   /** Candle timeframe (default daily) and intraday session rules. */
   timeframe?: string;
   noEntryAfterMinute?: number | null;
@@ -59,6 +62,9 @@ export interface PaperSessionState {
   positionInitialQuantity?: number | null;
   positionTargetsHit?: number | null;
   positionLockedStopPrice?: number | null;
+  /** Entry plan: the whole size the plan aims to build and the first fill's price the levels are measured from. */
+  positionPlannedQuantity?: number | null;
+  positionAnchorPrice?: number | null;
   lastSyncedTime: number | null;
 }
 
@@ -76,13 +82,15 @@ export interface NewPaperOrder {
   fees: number;
   netPnl: number | null;
   /** Why this order happened: opening (entry rule / pyramid add) or closing (which rule closed it). */
-  reason: "entry_rule" | "pyramid" | ExitReason;
+  reason: "entry_rule" | "pyramid" | "entry_level" | ExitReason;
   /** The bar whose close triggered it (rule-based fills happen at the next bar's open). */
   signalTime: number;
   /** An entry filled by a limit order (at the limit or better), not at market. */
   viaLimit?: boolean;
   /** A staged target's sale (1–3): only part of the position is sold unless it is the last share. */
   targetLevel?: number;
+  /** A further entry of a multi-level plan: which entry (2 = the first level after the signal's own). */
+  entryLevel?: number;
 }
 
 export interface SignalAlert {
@@ -106,6 +114,8 @@ export interface SyncResult {
     initialQuantity: number | null;
     targetsHit: number;
     lockedStopPrice: number | null;
+    plannedQuantity: number | null;
+    anchorPrice: number | null;
   } | null;
   lastSyncedTime: number | null;
   /** A limit entry order still resting at the end of this sync (saved for the next one). */
@@ -236,6 +246,7 @@ export async function syncPaperSession(
                   lockedStopPrice: session.positionLockedStopPrice ?? null,
                 }
               : {}),
+            ...(session.entryPlan ? { plannedQuantity: session.positionPlannedQuantity ?? session.positionQuantity, anchorPrice: session.positionAnchorPrice ?? session.positionEntryPrice } : {}),
           }
         : null,
     pendingEntry:
@@ -259,6 +270,7 @@ export async function syncPaperSession(
     atrAtEntry: atrByTimeFinal ? (idx: number) => atrByTimeFinal.get(candles[idx]?.time) : undefined,
     maxPyramidEntries: session.maxPyramidEntries ?? DEFAULT_MAX_PYRAMID_ENTRIES,
     direction: session.direction,
+    entryPlan: session.entryPlan ?? undefined,
     session: engineSession(
       { timeframe, noEntryAfterMinute: session.noEntryAfterMinute ?? null, squareOffMinute: session.squareOffMinute ?? null, productType: session.productType },
       session.entryCondition,
@@ -287,6 +299,21 @@ export async function syncPaperSession(
     state = stepped.state;
     if (stepped.sizeTooSmall) sizeTooSmall = true;
 
+    // A further entry of a multi-level plan filled on this bar (before anything that closed the position on the same bar).
+    if (stepped.entryLevel) {
+      newOrders.push({
+        side: openSide,
+        time: candles[i].time,
+        price: stepped.entryLevel.price,
+        quantity: stepped.entryLevel.quantity,
+        fees: 0,
+        netPnl: null,
+        reason: "entry_level",
+        signalTime: candles[i].time,
+        entryLevel: stepped.entryLevel.level,
+      });
+    }
+
     if (stepped.trade) {
       newOrders.push({
         side: closeSide,
@@ -311,7 +338,7 @@ export async function syncPaperSession(
         signalTime: candles[i].time,
         viaLimit: engineConfig.entryOrder?.type === "LIMIT",
       });
-    } else if (!wasFlat && state.position && state.position.quantity > prevQuantity) {
+    } else if (!wasFlat && !stepped.entryLevel && state.position && state.position.quantity > prevQuantity) {
       // A pyramid add — reconstruct this leg's own fill price from the
       // blend (blendedPrice*totalQty = prevPrice*prevQty + legPrice*legQty)
       // since EnginePosition only tracks the blended average, not each leg.
@@ -348,6 +375,8 @@ export async function syncPaperSession(
           initialQuantity: state.position.initialQuantity ?? null,
           targetsHit: state.position.targetsHit ?? 0,
           lockedStopPrice: state.position.lockedStopPrice ?? null,
+          plannedQuantity: state.position.plannedQuantity ?? null,
+          anchorPrice: state.position.anchorPrice ?? null,
         }
       : null,
     lastSyncedTime,

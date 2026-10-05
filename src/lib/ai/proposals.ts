@@ -1,5 +1,6 @@
 import type { StrategyInput } from "@/lib/strategy-actions";
-import type { TargetLevel } from "@/lib/trading-engine/step";
+import type { EntryPlan, TargetLevel } from "@/lib/trading-engine/step";
+import type { StrategyStyle } from "@/lib/strategy/style";
 import { NEVER_EXIT_CONDITION, type ConditionNode } from "@/lib/strategy/types";
 
 // An action the agent has prepared for the user to review. Stored on the
@@ -45,6 +46,10 @@ export type AgentProposal =
         trailingSl: RiskLegDraft;
         /** Staged Target 1–3 (each sells a share and locks profit on the rest); replaces the single take-profit. */
         targets?: TargetLevel[];
+        /** Swing / positional strategies are held for days to months: daily candles, delivery, long only. */
+        style?: StrategyStyle | null;
+        /** Multi-level entry plan: the signal buys a share, each further level buys more as price reaches it. */
+        entryPlan?: EntryPlan;
         positionSizingMode: SizingModeName;
         positionSizingValue: number | null;
       };
@@ -153,6 +158,8 @@ export function toStrategyInput(
     target: d.target,
     trailingSl: d.trailingSl,
     ...(d.targets?.length ? { targets: d.targets } : {}),
+    ...(d.style ? { style: d.style } : {}),
+    ...(d.entryPlan ? { entryPlan: d.entryPlan } : {}),
     maxPyramidEntries: d.maxPyramidEntries && d.maxPyramidEntries > 0 ? Math.floor(d.maxPyramidEntries) : 1,
     timeframe: d.timeframe ?? "1d",
     noEntryAfterMinute: d.noEntryAfterMinute ?? null,

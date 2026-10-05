@@ -1,4 +1,5 @@
 import { parseTargets } from "@/lib/trading-engine/targets-config";
+import { parseEntryPlan } from "@/lib/trading-engine/entry-plan-config";
 import Pager from "@/components/ui/pager";
 import { pageWindow, readPageQuery } from "@/lib/pagination";
 import Link from "next/link";
@@ -57,6 +58,7 @@ export default async function BacktestsPage({ searchParams }: { searchParams: Pr
             targetUnit: s.targetUnit,
             targetValue: s.targetValue,
             targets: parseTargets(s.targetsConfig),
+            entryPlan: parseEntryPlan(s.entryPlan),
             trailingSlEnabled: s.trailingSlEnabled,
             trailingSlUnit: s.trailingSlUnit,
             trailingSlValue: s.trailingSlValue,

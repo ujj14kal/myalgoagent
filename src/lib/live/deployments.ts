@@ -16,8 +16,9 @@ import type { ConditionNode } from "@/lib/strategy";
 import { event, LIVE_DEFAULTS, LiveCheckError, placeLiveOrder, refreshLiveOrder } from "./orders";
 import { liveLog, liveLogThrottled, plainReason } from "./engine-log";
 import { conditionToText } from "@/lib/strategy/format";
-import { resyncStaged } from "./resync";
+import { resyncEntryPlan, resyncStaged } from "./resync";
 import { parseTargets } from "@/lib/trading-engine/targets-config";
+import { parseEntryPlan } from "@/lib/trading-engine/entry-plan-config";
 
 // Live deployments: a strategy trading on the user's own broker. The forward-
 // testing engine decides (same rules, same risk exits, same square-off); every
@@ -40,6 +41,8 @@ const lg = (d: { userId: string; id: string }, level: "INFO" | "OK" | "WARN" | "
 
 const REASON: Record<string, string> = {
   entry_rule: "entry rule",
+  entry_level: "a further entry level of the plan",
+  time_stop: "the maximum holding period",
   pyramid: "adding to the position",
   exit_rule: "exit rule",
   stop_loss: "stop-loss",
@@ -114,6 +117,7 @@ export async function startDeployment(userId: string, input: { strategyId: strin
       targets: parseTargets(s.targetsConfig),
     },
     maxPyramidEntries: 1,
+    entryPlan: parseEntryPlan(s.entryPlan) ?? null,
     timeframe: s.timeframe,
     noEntryAfterMinute: s.noEntryAfterMinute,
     squareOffMinute: s.squareOffMinute,
@@ -159,7 +163,7 @@ function dataFor(d: LiveDeployment): MarketDataProvider {
 
 /** The engine's position must match the broker's: when nothing is really held, the engine is flat too. */
 function flatten(state: PaperSessionState): PaperSessionState {
-  return { ...state, positionEntryTime: null, positionEntryPrice: null, positionQuantity: null, positionFavorableExtreme: null, positionStopLossPrice: null, positionTargetPrice: null, positionInitialQuantity: null, positionTargetsHit: 0, positionLockedStopPrice: null } as PaperSessionState;
+  return { ...state, positionEntryTime: null, positionEntryPrice: null, positionQuantity: null, positionFavorableExtreme: null, positionStopLossPrice: null, positionTargetPrice: null, positionInitialQuantity: null, positionTargetsHit: 0, positionLockedStopPrice: null, positionPlannedQuantity: null, positionAnchorPrice: null, positionPyramidCount: null } as PaperSessionState;
 }
 
 export async function setDeploymentStatus(userId: string, id: string, status: "ACTIVE" | "PAUSED" | "STOPPED") {
@@ -173,7 +177,7 @@ export async function setDeploymentStatus(userId: string, id: string, status: "A
   const engineState = real && real.qty === 0 && !real.working
     ? (flatten(current) as unknown as Prisma.InputJsonValue)
     : real && real.qty > 0 && !real.working
-      ? (resyncStaged(current, real.qty) as unknown as Prisma.InputJsonValue)
+      ? (resyncEntryPlan(resyncStaged(current, real.qty), real) as unknown as Prisma.InputJsonValue)
       : undefined;
   return prisma.liveDeployment.update({
     where: { id },
@@ -310,16 +314,24 @@ export async function runDeployment(id: string): Promise<"idle" | "acted" | "pau
   const pending = (d.pendingSignals as unknown as PendingSignal[]) ?? [];
   let acted = false;
   for (const o of result.newOrders as NewPaperOrder[]) {
-    const opening = o.reason === "entry_rule" || o.reason === "pyramid";
+    const level = o.reason === "entry_level";
+    const opening = o.reason === "entry_rule" || o.reason === "pyramid" || level;
     // Exits close what's really held; nothing to close = nothing to send.
     // A staged target sells only its own share of the position; every other exit closes whatever is held.
     let quantity = opening ? o.quantity : o.targetLevel ? Math.min(o.quantity, real.qty) : real.qty;
     if (quantity <= 0) continue;
-    if (opening && (real.qty > 0 || real.working)) {
+    if (level && (real.qty <= 0 || real.working)) {
+      // The plan moved on but the broker can't take the order now: stop and let the user resume, which re-aligns the plan with what is really held.
+      await lg(d, "WARN", `Entry ${o.entryLevel} of the plan was reached at about ${rupees(o.price)}, but ${real.working ? "an earlier order is still being settled" : "no position is open at the broker"}, so nothing was sent and the strategy is paused. Resume it to re-check what is held.`);
+      await prisma.liveDeployment.update({ where: { id }, data: { status: "PAUSED", lastError: "A further entry couldn't be sent because an earlier order was still working — resume to re-check." } });
+      await notify(d.userId, `“${d.strategyName}” paused — a further entry level couldn't be sent. Resume it on Live Trading.`, "RISK_EVENT");
+      return "paused";
+    }
+    if (opening && !level && (real.qty > 0 || real.working)) {
       await liveLogThrottled(`skip:${id}`, 5 * 60_000, d.userId, id, "INFO", `The entry rules fired, but ${real.working ? "an earlier order is still being settled" : "the position is already open"}, so no second order was sent (one position at a time).`);
       continue;
     }
-    await lg(d, "INFO", `${opening ? "Entry" : o.targetLevel ? `Target ${o.targetLevel}` : "Exit"} signal: ${o.targetLevel ? `Target ${o.targetLevel} reached, selling ${quantity} of the position` : reasonText(o.reason)} at about ${rupees(o.price)}.`);
+    await lg(d, "INFO", `${level ? `Entry ${o.entryLevel}` : opening ? "Entry" : o.targetLevel ? `Target ${o.targetLevel}` : "Exit"} signal: ${o.targetLevel ? `Target ${o.targetLevel} reached, selling ${quantity} of the position` : reasonText(o.reason)} at about ${rupees(o.price)}.`);
     let note = "";
     if (opening) {
       // The user's per-order limit still applies: shrink an over-limit order instead of having it refused (which would pause the strategy).
@@ -367,6 +379,9 @@ export async function runDeployment(id: string): Promise<"idle" | "acted" | "pau
     positionInitialQuantity: result.position?.initialQuantity ?? null,
     positionTargetsHit: result.position?.targetsHit ?? 0,
     positionLockedStopPrice: result.position?.lockedStopPrice ?? null,
+    positionPyramidCount: result.position?.pyramidCount ?? null,
+    positionPlannedQuantity: result.position?.plannedQuantity ?? null,
+    positionAnchorPrice: result.position?.anchorPrice ?? null,
     lastSyncedTime: result.lastSyncedTime,
   } as PaperSessionState;
   const after = acted && d.mode === "AUTO" ? await reconcile(d) : real;

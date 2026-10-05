@@ -41,7 +41,7 @@ function legText(leg: Leg): string {
 }
 
 export function explainPaperOrder(o: NewPaperOrder, c: ExplainContext): string {
-  const isOpen = o.reason === "entry_rule" || o.reason === "pyramid";
+  const isOpen = o.reason === "entry_rule" || o.reason === "pyramid" || o.reason === "entry_level";
   const qty = Number.isInteger(o.quantity) ? o.quantity : Number(o.quantity.toFixed(4));
   const verb = isOpen ? (c.direction === "SHORT" ? "Sold short" : "Bought") : c.direction === "SHORT" ? "Bought back" : "Sold";
   const head = `${verb} ${qty} ${c.symbol} at ${inr(o.price)} (${c.strategyName})`;
@@ -54,6 +54,8 @@ export function explainPaperOrder(o: NewPaperOrder, c: ExplainContext): string {
         return `${head} — your entry rule (${clip(c.entryRule)}) fired, and your limit order filled on ${day(o.time)} at ${inr(o.price)} (your limit or better).`;
       }
       return `${head} — your entry rule (${clip(c.entryRule)}) was true at the close on ${day(o.signalTime)}, so it filled at the next open.`;
+    case "entry_level":
+      return `${head} — your entry plan\'s level ${o.entryLevel ?? "?"} was reached on ${day(o.time)}, so it bought its share of the planned size there.`;
     case "pyramid":
       return `${head} — your entry rule fired again on ${day(o.signalTime)} while the position was open, so it added to it.`;
     case "exit_rule":
@@ -66,6 +68,8 @@ export function explainPaperOrder(o: NewPaperOrder, c: ExplainContext): string {
         return `${head} — Target ${o.targetLevel}${lvl ? ` (${legText(lvl)}${lvl.exitPercent < 100 ? `, selling ${lvl.exitPercent}% of the position` : ""})` : ""} was reached on ${day(o.signalTime)}.${pnl}`;
       }
       return `${head} — your ${legText(c.target)} take-profit was reached on ${day(o.signalTime)}.${pnl}`;
+    case "time_stop":
+      return `${head} — the maximum holding period you set ended on ${day(o.signalTime)}, so the position was closed at the open.${pnl}`;
     case "locked_profit":
       return `${head} — price came back to the profit locked by an earlier target on ${day(o.signalTime)}, so the rest was sold there.${pnl}`;
     case "trailing_stop":

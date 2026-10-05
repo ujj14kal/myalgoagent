@@ -1,5 +1,7 @@
 "use client";
 import { describeTargets } from "@/lib/describe-targets";
+import { describeEntryPlan } from "@/lib/describe-entry-plan";
+import { STYLE_LABEL } from "@/lib/strategy/style";
 import InstrumentCombobox from "@/components/instrument-combobox";
 
 import { useEffect, useState, useTransition } from "react";
@@ -457,6 +459,15 @@ function StrategyFields({
                 <p key={line}>{line}</p>
               ))}
               <p className="text-brand-navy/50">Ask your assistant to change them.</p>
+            </div>
+          )}
+          {draft.entryPlan && (draft.entryPlan.levels.length > 0 || draft.entryPlan.maxHoldDays) && (
+            <div className="space-y-1 border-t border-black/5 pt-2 text-xs text-brand-navy/75">
+              <p className="font-semibold text-brand-navy">Entry plan{draft.style ? ` · ${STYLE_LABEL[draft.style]}` : ""}</p>
+              {describeEntryPlan(draft.entryPlan, draft.direction).map((line) => (
+                <p key={line}>{line}</p>
+              ))}
+              <p className="text-brand-navy/50">Ask your assistant to change it.</p>
             </div>
           )}
         </div>
