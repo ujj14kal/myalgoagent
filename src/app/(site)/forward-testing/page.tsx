@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/page-header";
-import { Breadcrumbs, Prose } from "@/components/section";
+import { Prose } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 import Reveal from "@/components/reveal";
 
@@ -19,8 +19,7 @@ export default function ForwardTestingPage() {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/forward-testing", label: "Forward Testing" }]} />
-      <PageHeader eyebrow="Forward Testing" title="See how a strategy holds up on new market data" description="Forward testing runs your strategy on market data as it arrives and records the trades its rules would have taken — so you can validate it before any real order is placed." />
+      <PageHeader crumbs={[{ href: "/", label: "Home" }, { href: "/forward-testing", label: "Forward Testing" }]} eyebrow="Forward Testing" title="See how a strategy holds up on new market data" description="Forward testing runs your strategy on market data as it arrives and records the trades its rules would have taken — so you can validate it before any real order is placed." />
       <Reveal>
       <Prose>
         <h2>What forward testing is</h2>

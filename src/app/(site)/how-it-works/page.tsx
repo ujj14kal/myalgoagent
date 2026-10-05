@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import PageHeader from "@/components/page-header";
-import { Breadcrumbs, Prose } from "@/components/section";
+import { Prose } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 import Reveal from "@/components/reveal";
 import ComingSoonTag from "@/components/coming-soon-tag";
@@ -33,8 +33,7 @@ export default function HowItWorksPage() {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/how-it-works", label: "How It Works" }]} />
-      <PageHeader eyebrow="How It Works" title="From idea to live strategy" description="The same eight-step workflow runs every strategy on the platform." />
+      <PageHeader crumbs={[{ href: "/", label: "Home" }, { href: "/how-it-works", label: "How It Works" }]} eyebrow="How It Works" title="From idea to live strategy" description="The same eight-step workflow runs every strategy on the platform." />
       <Reveal>
       <Prose>
         {steps.map((s) => (

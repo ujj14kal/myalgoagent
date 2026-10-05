@@ -1,29 +1,33 @@
 import Link from "next/link";
 import Agent2D from "@/components/robot/agent-2d";
+import { PageMotion } from "@/components/site/site-motion";
 
 export default function NotFound() {
   return (
-    <div className="mx-auto flex max-w-xl flex-col items-center px-4 py-24 text-center">
-      <Agent2D pose="thinking" size={130} />
-      <h1 className="mt-6 text-3xl font-bold text-brand-navy">Page not found</h1>
-      <p className="mt-3 text-brand-navy/70">
-        The page you&rsquo;re looking for doesn&rsquo;t exist or may have
-        moved.
-      </p>
-      <div className="mt-8 flex flex-wrap justify-center gap-3">
-        <Link
-          href="/"
-          className="rounded-full bg-brand-primary px-6 py-3 text-sm font-semibold text-white hover:bg-brand-primary-light"
-        >
-          Back to home
-        </Link>
-        <Link
-          href="/product"
-          className="rounded-full border border-brand-navy/15 px-6 py-3 text-sm font-semibold text-brand-navy hover:border-brand-primary hover:text-brand-primary"
-        >
-          Product overview
-        </Link>
+    <section data-full-bleed data-theme="dark" className="mk-dark relative isolate flex min-h-[100svh] items-center overflow-hidden">
+      <div className="mk-grid-bg" aria-hidden />
+      <div className="mk-glow left-[20%] top-[25%] h-[380px] w-[380px] bg-[var(--mk-accent)]" aria-hidden />
+      <div className="mk-outline-word left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[34vw]" aria-hidden>
+        404
       </div>
-    </div>
+      <div className="mk-wrap relative flex flex-col items-center pt-24 text-center">
+        <Agent2D pose="thinking" size={130} />
+        <h1 className="mk-display mk-h2 mt-8 text-white" data-split="now">
+          Page not found
+        </h1>
+        <p className="mk-lead mt-5 max-w-md" data-rise>
+          The page you&rsquo;re looking for doesn&rsquo;t exist or may have moved.
+        </p>
+        <div className="mt-9 flex flex-wrap justify-center gap-3" data-rise>
+          <Link href="/" className="mk-btn mk-btn--gold" data-magnetic>
+            Back to home
+          </Link>
+          <Link href="/product" className="mk-btn mk-btn--ghost">
+            Product overview
+          </Link>
+        </div>
+      </div>
+      <PageMotion />
+    </section>
   );
 }

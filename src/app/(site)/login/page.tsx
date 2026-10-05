@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { auth, signIn } from "@/lib/auth";
 import LoginForm from "@/components/login-form";
 import { SUSPENDED_MESSAGE } from "@/lib/account-status";
+import AuthShell from "@/components/site/auth-shell";
 
 export const metadata = {
   title: "Sign in",
@@ -35,9 +36,10 @@ export default async function LoginPage({
   const errorMessage = error ? (OAUTH_ERROR_MESSAGES[error] ?? OAUTH_ERROR_MESSAGES.Default) : null;
 
   return (
-    <div className="mx-auto flex min-h-[70vh] max-w-sm flex-col items-center px-4 py-12 text-center">
+    <AuthShell>
+      <div className="flex flex-col items-center">
       <Agent2D pose="wave" size={110} />
-      <h1 className="mt-6 text-2xl font-bold text-brand-navy">
+      <h1 className="mk-display mt-6 text-3xl tracking-tight">
         Sign in to MyAlgoAgent
       </h1>
       <p className="mt-2 text-sm text-brand-navy/60">
@@ -83,5 +85,6 @@ export default async function LoginPage({
         <a href="/privacy-policy" className="underline">Privacy Policy</a>.
       </p>
     </div>
+    </AuthShell>
   );
 }

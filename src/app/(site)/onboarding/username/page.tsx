@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { suggestUsernames } from "@/lib/username";
 import ChooseUsernameForm from "@/components/choose-username-form";
+import AuthShell from "@/components/site/auth-shell";
 
 export const metadata = { title: "Choose a username", robots: { index: false } };
 
@@ -16,12 +17,14 @@ export default async function OnboardingUsernamePage() {
   const seedSuggestions = await suggestUsernames(user?.name ?? user?.email ?? "trader");
 
   return (
-    <div className="mx-auto flex min-h-[70vh] max-w-sm flex-col items-center px-4 py-12 text-center">
-      <h1 className="text-2xl font-bold text-brand-navy">Choose a username</h1>
+    <AuthShell>
+      <div className="flex flex-col items-center">
+      <h1 className="mk-display text-3xl tracking-tight">Choose a username</h1>
       <p className="mt-2 text-sm text-brand-navy/60">
         You&rsquo;ll use this to sign in with a password.
       </p>
       <ChooseUsernameForm seedSuggestions={seedSuggestions} />
     </div>
+    </AuthShell>
   );
 }

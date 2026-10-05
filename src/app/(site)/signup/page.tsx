@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import SignupForm from "@/components/signup-form";
+import AuthShell from "@/components/site/auth-shell";
 
 export const metadata = {
   title: "Create your account",
@@ -14,9 +15,10 @@ export default async function SignupPage() {
   if (session) redirect("/app/dashboard");
 
   return (
-    <div className="mx-auto flex min-h-[70vh] max-w-sm flex-col items-center px-4 py-12 text-center">
+    <AuthShell>
+      <div className="flex flex-col items-center">
       <Agent2D pose="wave" size={110} />
-      <h1 className="mt-6 text-2xl font-bold text-brand-navy">Create your account</h1>
+      <h1 className="mk-display mt-6 text-3xl tracking-tight">Create your account</h1>
       <p className="mt-2 text-sm text-brand-navy/60">
         Already have an account?{" "}
         <Link href="/login" className="font-semibold text-brand-primary">
@@ -30,5 +32,6 @@ export default async function SignupPage() {
         <a href="/privacy-policy" className="underline">Privacy Policy</a>.
       </p>
     </div>
+    </AuthShell>
   );
 }

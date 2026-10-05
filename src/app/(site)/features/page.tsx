@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 import { Activity, Bell, FlaskConical, Layers, Radio, ShieldCheck, Sparkles, Sigma } from "lucide-react";
 import PageHeader from "@/components/page-header";
-import { Breadcrumbs } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
-import Reveal from "@/components/reveal";
 import ComingSoonTag, { ComingSoonList } from "@/components/coming-soon-tag";
 import BrokerLogos from "@/components/broker-logos";
 
@@ -144,35 +142,33 @@ export default function FeaturesPage() {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/features", label: "Features" }]} />
-      <PageHeader eyebrow="Features" title="What you can use today — and what’s next" description="Strategy creation, testing and risk control you can use now, with planned features clearly marked as coming soon." />
-      <div className="mx-auto max-w-5xl px-4 pt-10">
-        <BrokerLogos variant="strip" />
-      </div>
-      <Reveal>
-        <div className="mx-auto grid max-w-5xl gap-6 px-4 pb-14 pt-8 sm:grid-cols-2">
-          {groups.map((g) => (
-            <div key={g.title} className="surface surface-interactive p-6">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-primary/[0.08] text-brand-primary">
-                <g.icon size={19} />
-              </span>
-              <div className="mt-4 flex items-center gap-2.5">
-                <h2 className="text-lg font-semibold text-brand-navy">{g.title}</h2>
-                {g.comingSoon && <ComingSoonTag />}
-              </div>
-              <ul className="mt-3 space-y-2 text-sm leading-relaxed text-brand-navy/70">
-                {g.items.map((i2) => (
-                  <li key={i2} className="flex gap-2">
-                    <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-brand-primary/50" />
-                    <span>{i2}</span>
-                  </li>
-                ))}
-              </ul>
-              {g.soon && <ComingSoonList items={g.soon} />}
-            </div>
-          ))}
+      <PageHeader crumbs={[{ href: "/", label: "Home" }, { href: "/features", label: "Features" }]} eyebrow="Features" title="What you can use today — and what’s next" description="Strategy creation, testing and risk control you can use now, with planned features clearly marked as coming soon." />
+      <section className="mk-section mk-tint !pt-14 sm:!pt-20">
+        <div className="mk-wrap">
+          <div data-rise>
+            <BrokerLogos variant="strip" />
+          </div>
+          <div className="mt-10 grid gap-5 sm:grid-cols-2" data-stagger>
+            {groups.map((g) => (
+              <article key={g.title} className="mk-card mk-pillar" data-tilt="4">
+                <span className="mk-icon">
+                  <g.icon size={21} />
+                </span>
+                <div className="mt-6 flex flex-wrap items-center gap-2.5">
+                  <h2 className="mk-display mk-h3">{g.title}</h2>
+                  {g.comingSoon && <ComingSoonTag />}
+                </div>
+                <ul className="mk-prose mt-4 !text-sm">
+                  {g.items.map((i2) => (
+                    <li key={i2}>{i2}</li>
+                  ))}
+                </ul>
+                {g.soon && <ComingSoonList items={g.soon} />}
+              </article>
+            ))}
+          </div>
         </div>
-      </Reveal>
+      </section>
     </>
   );
 }
