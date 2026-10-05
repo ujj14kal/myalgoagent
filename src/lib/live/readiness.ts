@@ -15,7 +15,7 @@ import { LiveCheckError, session } from "./orders";
 // order: the broker session, read access through the static IP, the IP brokers
 // actually see, order-book access and the stock list. Read-only calls only.
 
-export type ReadinessStep = { step: string; ok: boolean; detail?: string };
+export type ReadinessStep = { step: string; ok: boolean; detail?: string; /** Shown for information; doesn't decide readiness. */ info?: boolean };
 export type Readiness = { ready: boolean; steps: ReadinessStep[]; checkedAt: string };
 
 const msg = (err: unknown, broker: string) => {
@@ -86,7 +86,14 @@ export async function checkReadiness(userId: string, brokerId: string): Promise<
     add("NSE stock list loaded", false, "Couldn't load the exchange's stock list.");
   }
 
-  const ready = steps.every((s) => s.ok);
+  // Market data from the broker: useful, never required to trade (signals fall back to the general feed).
+  if (ctx) {
+    const { dataAccess } = await import("@/lib/brokers/data-access");
+    const a = await dataAccess(userId, brokerId as never, { refresh: true }).catch(() => null);
+    if (a) steps.push({ step: `${name} supplies market data for your signals`, ok: a.status === "available", detail: a.detail, info: true });
+  }
+
+  const ready = steps.filter((s) => !s.info).every((s) => s.ok);
   const result: Readiness = { ready, steps, checkedAt: new Date().toISOString() };
   await prisma.brokerConnection
     .update({ where: { userId_broker: { userId, broker: brokerId } }, data: { liveReadyAt: ready ? new Date() : null, liveReadyDetail: result as unknown as Prisma.InputJsonValue } })

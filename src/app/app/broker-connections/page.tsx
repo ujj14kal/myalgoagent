@@ -8,6 +8,8 @@ import { BROKERS, brokerById } from "@/lib/brokers/catalog";
 import { callbackOrigin, notifierUrlFor } from "@/lib/brokers/service";
 import { brokerEncryptionReady } from "@/lib/brokers/crypto";
 import { decodeFailure } from "@/lib/brokers/failures";
+import { dataAccess, type DataAccess } from "@/lib/brokers/data-access";
+import type { BrokerId } from "@/lib/brokers/catalog";
 
 export const metadata = { title: "Broker Connections", robots: { index: false } };
 
@@ -31,9 +33,20 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ b
 
   const now = new Date();
   // Only display-safe fields cross to the browser — never keys or tokens.
+  // Market data access is checked through each logged-in connection (one small read, cached for hours).
+  const access = new Map<string, DataAccess>();
+  await Promise.all(
+    rows
+      .filter((r) => r.status === "CONNECTED" && r.tokenExpiresAt && r.tokenExpiresAt > now)
+      .map(async (r) => {
+        const a = await dataAccess(session.user!.id!, r.broker as BrokerId).catch(() => null);
+        if (a) access.set(r.broker, a);
+      }),
+  );
   const connections: ConnectionView[] = rows.map((r) => {
     const sessionLive = r.status === "CONNECTED" && !!r.tokenExpiresAt && r.tokenExpiresAt > now;
     return {
+      data: access.get(r.broker) ?? null,
       broker: r.broker,
       state: sessionLive ? "connected" : r.status === "CONNECTED" ? "expired" : r.status === "ERROR" ? "error" : "keys_saved",
       apiKeyHint: r.apiKeyHint,

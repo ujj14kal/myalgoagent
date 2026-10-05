@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { logError } from "@/lib/logger";
 import { BrokerError, requestUpstoxApproval } from "@/lib/brokers/adapters";
-import { loginView, type LoginMethodId } from "@/lib/brokers/catalog";
+import { brokerById, loginView, type LoginMethodId } from "@/lib/brokers/catalog";
 import { isBase32Secret } from "@/lib/brokers/totp";
 import { cleanKey, KeyInputError } from "@/lib/brokers/keys";
 import { brokerEncryptionReady } from "@/lib/brokers/crypto";
@@ -272,4 +272,19 @@ export async function disconnectBroker(brokerId: string): Promise<BrokerActionRe
   await prisma.brokerConnection.deleteMany({ where: { userId, broker: brokerId } });
   revalidatePath("/app/broker-connections");
   return { ok: true };
+}
+
+/** Check again (now) whether the user's broker supplies market data — e.g. after buying its data plan. */
+export async function checkBrokerData(brokerId: string): Promise<{ ok: true; access: import("@/lib/brokers/data-access").DataAccess } | { ok: false; error: string }> {
+  const userId = (await auth())?.user?.id;
+  if (!userId) return { ok: false, error: "Sign in again." };
+  const broker = brokerById(brokerId)?.id;
+  if (!broker) return { ok: false, error: "Unknown broker." };
+  if (await checkRateLimit(`data-access:${userId}`, 10, 60_000)) return { ok: false, error: "Checking too often — wait a minute." };
+  const { dataAccess } = await import("@/lib/brokers/data-access");
+  const { forgetBrokerChoice } = await import("@/lib/market-data/for-user");
+  const access = await dataAccess(userId, broker, { refresh: true });
+  forgetBrokerChoice(userId); // use (or stop using) the broker's data straight away
+  revalidatePath("/app/broker-connections");
+  return { ok: true, access };
 }

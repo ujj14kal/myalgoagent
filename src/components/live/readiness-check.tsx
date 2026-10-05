@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, CircleX, ShieldCheck } from "lucide-react";
+import { CheckCircle2, CircleX, ShieldCheck, Info } from "lucide-react";
 import { runReadinessCheck } from "@/lib/live-actions";
 import type { Readiness } from "@/lib/live/readiness";
 
@@ -53,7 +53,7 @@ export default function ReadinessCheck({ brokers }: { brokers: { id: string; nam
           <ol className="space-y-1.5">
             {result.steps.map((s, k) => (
               <li key={k} className="flex items-start gap-2 text-sm">
-                {s.ok ? <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-brand-buy" /> : <CircleX size={16} className="mt-0.5 shrink-0 text-brand-sell" />}
+                {s.ok ? <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-brand-buy" /> : s.info ? <Info size={16} className="mt-0.5 shrink-0 text-[#8a7437]" /> : <CircleX size={16} className="mt-0.5 shrink-0 text-brand-sell" />}
                 <span className="min-w-0">
                   <span className="text-brand-navy">{s.step}</span>
                   {s.detail && <span className="block break-words text-xs text-brand-navy/50">{s.detail}</span>}

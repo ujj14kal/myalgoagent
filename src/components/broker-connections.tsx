@@ -23,8 +23,9 @@ import Agent2D from "@/components/robot/agent-2d";
 import BodyPortal from "@/components/ui/body-portal";
 import BrokerFailureCard from "@/components/broker-failure-card";
 import type { Failure } from "@/lib/brokers/failures";
+import type { DataAccess } from "@/lib/brokers/data-access";
 import { callbackUrl, loginView, type BrokerId, type BrokerInfo, type LoginMethodId } from "@/lib/brokers/catalog";
-import { disconnectBroker, saveBrokerKeys, startBrokerLogin, testBrokerConnection, type BrokerActionResult } from "@/lib/broker-actions";
+import { checkBrokerData, disconnectBroker, saveBrokerKeys, startBrokerLogin, testBrokerConnection, type BrokerActionResult } from "@/lib/broker-actions";
 
 export type ConnectionView = {
   broker: string;
@@ -36,6 +37,8 @@ export type ConnectionView = {
   lastCheckedAt: string | null;
   failure: Failure | null;
   loginMethod: LoginMethodId | null;
+  /** Whether this broker supplies market data on the user's account (checked through the connection). */
+  data: DataAccess | null;
 };
 
 type View = ReturnType<typeof loginView>;
@@ -472,6 +475,11 @@ function ConnectPanel({ broker, view, conn, disabled, startEditing }: { broker: 
             <Row label="API key">•••• {conn.apiKeyHint}</Row>
             <Row label="Session">{conn.sessionUntil ? `Active until ${conn.sessionUntil}` : "Not logged in today"}</Row>
             {conn.lastCheckedAt && <Row label="Last checked">{conn.lastCheckedAt}</Row>}
+            {conn.state === "connected" && (
+              <Row label="Market data">
+                <DataAccessRow broker={conn.broker} initial={conn.data} />
+              </Row>
+            )}
           </dl>
 
           <div className="mt-5 flex flex-wrap gap-2">
@@ -596,5 +604,45 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
       <dt className="text-brand-navy/50">{label}</dt>
       <dd className="text-right font-medium text-brand-navy">{children}</dd>
     </div>
+  );
+}
+
+const DATA_BADGE: Record<DataAccess["status"], { label: string; className: string }> = {
+  available: { label: "Available", className: "bg-brand-buy/10 text-brand-buy" },
+  no_plan: { label: "Not on your plan", className: "bg-brand-gold/15 text-[#8a7437]" },
+  logged_out: { label: "Log in first", className: "bg-brand-navy/5 text-brand-navy/55" },
+  not_supported: { label: "Not from this broker yet", className: "bg-brand-navy/5 text-brand-navy/55" },
+  error: { label: "Couldn't check", className: "bg-brand-sell/10 text-brand-sell" },
+};
+
+/** Whether the broker supplies market data on the user's account, with a re-check after buying the broker's data plan. */
+function DataAccessRow({ broker, initial }: { broker: string; initial: DataAccess | null }) {
+  const [access, setAccess] = useState<DataAccess | null>(initial);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const badge = access ? DATA_BADGE[access.status] : null;
+  return (
+    <span className="flex flex-col gap-1">
+      <span className="flex flex-wrap items-center gap-2">
+        {badge ? <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${badge.className}`}>{badge.label}</span> : <span className="text-brand-navy/50">Not checked yet</span>}
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() =>
+            start(async () => {
+              setError(null);
+              const r = await checkBrokerData(broker);
+              if (r.ok) setAccess(r.access);
+              else setError(r.error);
+            })
+          }
+          className="text-xs font-semibold text-brand-primary disabled:opacity-40"
+        >
+          {pending ? "Checking…" : "Check again"}
+        </button>
+      </span>
+      {access && <span className="text-xs leading-relaxed text-brand-navy/60">{access.detail}</span>}
+      {error && <span className="text-xs text-brand-sell">{error}</span>}
+    </span>
   );
 }
