@@ -1,3 +1,6 @@
+import { describeEntryPlan } from "@/lib/describe-entry-plan";
+import { describeTargets } from "@/lib/describe-targets";
+import { STYLE_LABEL } from "@/lib/strategy/style";
 import { parseTargets } from "@/lib/trading-engine/targets-config";
 import { parseEntryPlan } from "@/lib/trading-engine/entry-plan-config";
 import { notFound } from "next/navigation";
@@ -48,6 +51,8 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
   if (!strategy) notFound();
 
   const isWebhook = strategy.mode === "WEBHOOK";
+  const plan = parseEntryPlan(strategy.entryPlan);
+  const stagedTargets = parseTargets(strategy.targetsConfig);
   // Go live: brokers logged in today and checked ready in the last 24 hours.
   const [liveUser, liveConns, liveDeployments] = await Promise.all([
     prisma.user.findUnique({ where: { id: session.user.id }, select: { liveTradingEnabledAt: true } }),
@@ -151,6 +156,37 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
         </p>
       )}
 
+      {!isWebhook && (plan || stagedTargets.length > 0 || strategy.style) && (
+        <div className="surface mb-4 space-y-3 p-4 text-sm text-brand-navy/75">
+          {strategy.style && (
+            <p>
+              <span className="font-semibold text-brand-navy">Style: </span>
+              {STYLE_LABEL[strategy.style as keyof typeof STYLE_LABEL] ?? strategy.style} — held overnight, on daily candles, long only.
+            </p>
+          )}
+          {plan && (
+            <div>
+              <p className="font-semibold text-brand-navy">Entry plan</p>
+              <ul className="mt-1 space-y-0.5 text-xs">
+                {describeEntryPlan(plan, strategy.direction).map((l) => (
+                  <li key={l}>{l}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {stagedTargets.length > 0 && (
+            <div>
+              <p className="font-semibold text-brand-navy">Staged targets</p>
+              <ul className="mt-1 space-y-0.5 text-xs">
+                {describeTargets(stagedTargets).map((l) => (
+                  <li key={l}>{l}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="mt-6">
         {isWebhook ? (
           <WebhookPanel
@@ -211,6 +247,9 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
               orderType: strategy.orderType,
               limitMode: strategy.limitMode,
               limitValue: strategy.limitValue,
+              style: strategy.style,
+              targets: parseTargets(strategy.targetsConfig),
+              entryPlan: parseEntryPlan(strategy.entryPlan) ?? null,
             }}
           />
         </div>

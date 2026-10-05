@@ -30,7 +30,10 @@ import { createStrategy, updateStrategy, autoSaveDraftStrategy, type StrategyInp
 import { NEVER_EXIT_CONDITION, isNeverExitCondition, type FeasibilitySection } from "@/lib/strategy/types";
 import { consumeDraftReminderSkip, setDraftReminderSkipCount } from "@/lib/draft-reminder";
 import type { ConditionNode } from "@/lib/strategy";
-import type { PositionSizingMode, RiskUnit } from "@/lib/trading-engine/step";
+import type { EntryPlan, PositionSizingMode, RiskUnit, TargetLevel } from "@/lib/trading-engine/step";
+import StagedTargetsFields, { rowsToTargets, targetsToRows, type TargetRow } from "@/components/staged-targets-fields";
+import EntryPlanFields, { planToState, stateToPlan, type PlanState } from "@/components/entry-plan-fields";
+import type { StrategyStyle } from "@/lib/strategy/style";
 
 interface InstrumentOption {
   id: string;
@@ -168,6 +171,11 @@ export interface StrategyInitial {
   orderType?: string;
   limitMode?: string | null;
   limitValue?: number | null;
+  /** Swing / positional strategies are held for days to months. */
+  style?: string | null;
+  /** Staged Target 1–3 and the multi-level entry plan, when the strategy uses them. */
+  targets?: TargetLevel[];
+  entryPlan?: EntryPlan | null;
 }
 
 /** A row of pill buttons for one choice. */
@@ -288,6 +296,11 @@ export default function StrategyBuilderForm({
   const [positionSizingMode, setPositionSizingMode] = useState<PositionSizingMode>(initial?.positionSizingMode ?? "FULL_CAPITAL");
   const [positionSizingValue, setPositionSizingValue] = useState<number | null>(initial?.positionSizingValue ?? null);
   const [maxPyramidEntries, setMaxPyramidEntries] = useState(initial?.maxPyramidEntries ?? 1);
+  // Swing and positional strategies are held overnight: daily candles, delivery, long only.
+  const [style, setStyle] = useState<"STANDARD" | "SWING" | "POSITIONAL">(initial?.style === "SWING" || initial?.style === "POSITIONAL" ? initial.style : "STANDARD");
+  const swingish = style !== "STANDARD";
+  const [plan, setPlan] = useState<PlanState>(() => planToState(initial?.entryPlan));
+  const [targetRows, setTargetRows] = useState<TargetRow[]>(() => targetsToRows(initial?.targets));
   const [timeframe, setTimeframe] = useState<string>(initial?.timeframe ?? "1d");
   const [noEntryAfterMinute, setNoEntryAfterMinute] = useState<number | null>(initial?.noEntryAfterMinute ?? null);
   // Intraday strategies square off at 15:15 by default — many brokers only allow intraday until then.
@@ -330,6 +343,17 @@ export default function StrategyBuilderForm({
   const [trailingSl, setTrailingSl] = useState<RiskLegState>(
     toRiskLegState(initial?.trailingSlEnabled ?? false, initial?.trailingSlUnit ?? null, initial?.trailingSlValue ?? null, 1.5),
   );
+
+  /** Choosing swing or positional moves the strategy to what such a strategy can be: daily candles, delivery, long only. */
+  function chooseStyle(next: "STANDARD" | "SWING" | "POSITIONAL") {
+    setStyle(next);
+    if (next === "STANDARD") return;
+    setTimeframe("1d");
+    setProductType("DELIVERY");
+    setDirection("LONG");
+    setNoEntryAfterMinute(null);
+    setSquareOffMinute(null);
+  }
 
   const [feasibilityIssues, setFeasibilityIssues] = useState<DisplayIssue[] | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -463,6 +487,9 @@ export default function StrategyBuilderForm({
       target,
       trailingSl,
       maxPyramidEntries,
+      ...(mode !== "WEBHOOK" && swingish ? { style: style as StrategyStyle } : {}),
+      ...(mode !== "WEBHOOK" && stateToPlan(plan).plan ? { entryPlan: stateToPlan(plan).plan } : {}),
+      ...(mode !== "WEBHOOK" && targetRows.length ? { targets: rowsToTargets(targetRows) } : {}),
       timeframe,
       noEntryAfterMinute: intraday ? noEntryAfterMinute : null,
       squareOffMinute: intraday && productType === "INTRADAY" ? squareOffMinute : null,
@@ -528,6 +555,11 @@ export default function StrategyBuilderForm({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFeasibilityIssues(null);
+    const planCheck = stateToPlan(plan);
+    if (planCheck.error) {
+      setFeasibilityIssues([{ message: planCheck.error, section: "positionSizing" }]);
+      return;
+    }
     submit(buildInput());
   }
 
@@ -612,7 +644,9 @@ export default function StrategyBuilderForm({
                     key={d}
                     type="button"
                     onClick={() => setDirection(d)}
-                    className={`px-4 py-1.5 text-sm font-medium ${
+                    disabled={swingish && d === "SHORT"}
+                    title={swingish && d === "SHORT" ? "Swing and positional strategies are long only: a short can't be held overnight in the cash market." : undefined}
+                    className={`px-4 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40 ${
                       direction === d
                         ? d === "LONG"
                           ? "bg-brand-buy text-white"
@@ -632,6 +666,25 @@ export default function StrategyBuilderForm({
             </div>
             {mode !== "WEBHOOK" && (
               <div>
+                <PillChoice
+                  label="Holding style"
+                  value={style}
+                  onChange={chooseStyle}
+                  options={[
+                    { value: "STANDARD", label: "Standard" },
+                    { value: "SWING", label: "Swing", note: "days to weeks" },
+                    { value: "POSITIONAL", label: "Positional", note: "weeks to months" },
+                  ]}
+                />
+                <p className="mt-1.5 text-xs text-brand-navy/40">
+                  {swingish
+                    ? "Held overnight: daily candles, delivery, long only. Your rules can still read a weekly or monthly trend as another timeframe. Pair it with an entry plan and staged targets below."
+                    : "Choose Swing or Positional for strategies that build and leave a position over days or months."}
+                </p>
+              </div>
+            )}
+            {mode !== "WEBHOOK" && (
+              <div>
                 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
                   Timeframe
                 </label>
@@ -643,7 +696,9 @@ export default function StrategyBuilderForm({
                       role="radio"
                       aria-checked={timeframe === t.value}
                       onClick={() => chooseTimeframe(t.value)}
-                      className={`min-w-[44px] rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      disabled={swingish && t.value !== "1d"}
+                      title={swingish && t.value !== "1d" ? "Swing and positional strategies run on daily candles." : undefined}
+                      className={`min-w-[44px] rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                         timeframe === t.value ? "border-brand-primary bg-brand-primary text-white" : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
                       }`}
                     >
@@ -668,7 +723,7 @@ export default function StrategyBuilderForm({
                     value={productType}
                     onChange={(v) => setProductType(v as "INTRADAY" | "DELIVERY")}
                     options={[
-                      { value: "INTRADAY", label: "Intraday", disabled: !intraday, note: !intraday ? "needs 1m–4H" : undefined },
+                      { value: "INTRADAY", label: "Intraday", disabled: !intraday || swingish, note: swingish ? "not for swing" : !intraday ? "needs 1m–4H" : undefined },
                       { value: "DELIVERY", label: "Delivery" },
                       { value: "MTF" as "DELIVERY", label: "MTF", disabled: true, note: "coming soon" },
                     ]}
@@ -741,6 +796,9 @@ export default function StrategyBuilderForm({
               onModeChange={setPositionSizingMode}
               onValueChange={setPositionSizingValue}
             />
+            {positionSizingMode === "RISK_PERCENT" && !stopLoss.enabled && (
+              <p className="-mt-3 text-xs font-medium text-brand-sell">Sizing by risk needs a stop-loss: its distance decides how many shares fit within the amount you risk. Turn the stop-loss on in Risk management below.</p>
+            )}
             <div className="max-w-xs">
               <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
                 Max entries per position
@@ -755,6 +813,7 @@ export default function StrategyBuilderForm({
               />
               <p className="mt-1.5 text-xs text-brand-navy/40">1 = a single entry. Higher lets the strategy add to an open position (pyramiding).</p>
             </div>
+            {mode !== "WEBHOOK" && <EntryPlanFields state={plan} onChange={setPlan} direction={direction} pyramiding={maxPyramidEntries > 1} />}
           </div>
         </BuilderSection>
 
@@ -841,6 +900,18 @@ export default function StrategyBuilderForm({
             onTargetChange={setTarget}
             onTrailingSlChange={setTrailingSl}
           />
+          {mode !== "WEBHOOK" && (
+            <StagedTargetsFields
+              rows={targetRows}
+              direction={direction}
+              singleTargetOn={target.enabled}
+              onChange={(rows) => {
+                setTargetRows(rows);
+                // Staged targets replace the single Target, so adding them turns it off.
+                if (rows.length > 0 && target.enabled) setTarget({ ...target, enabled: false });
+              }}
+            />
+          )}
           {mode !== "WEBHOOK" && intraday && (
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <SessionTimeField
