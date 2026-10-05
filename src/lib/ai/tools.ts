@@ -194,8 +194,18 @@ export const AGENT_TOOLS: MantleTool[] = [
     type: "function",
     function: {
       name: "get_option_chain",
-      description: "An option chain in brief (live-data accounts): spot, PCR, max pain, ATM IV and prices/OI for strikes around the money.",
-      parameters: { type: "object", properties: { underlying: { type: "string", description: "NIFTY, BANKNIFTY or an F&O stock like RELIANCE" }, expiry: { type: "string", description: "yyyy-mm-dd; nearest if omitted" } }, required: ["underlying"] },
+      description:
+        "An option chain from the user's own connected broker (Groww, Upstox, Dhan), else the licensed feed for allowed accounts, else free-trial estimates — the result says which. Without strike: spot, ATM IV, PCR and prices/OI/IV/delta for strikes around the money. With strike (and optional type CE/PE): that contract in full — price, bid/ask, volume, OI, IV, delta, gamma, theta, vega, rho — each Greek labelled provided (by the source), calculated (by us from its price) or estimated (from an assumed volatility), plus warnings (stale, illiquid, wide spread, expired). Tell the user where figures came from; estimates are not quotes.",
+      parameters: {
+        type: "object",
+        properties: {
+          underlying: { type: "string", description: "NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY or an F&O stock like RELIANCE" },
+          expiry: { type: "string", description: "yyyy-mm-dd; nearest if omitted" },
+          strike: { type: "number", description: "One contract's strike, for its full Greeks" },
+          type: { type: "string", enum: ["CE", "PE"], description: "Call (CE) or put (PE); both if omitted" },
+        },
+        required: ["underlying"],
+      },
     },
   },
   {
@@ -1206,7 +1216,12 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
     case "get_market_overview":
       return { result: await getMarketOverview(userId).catch(() => ({ error: "Couldn't load the market overview right now." })) };
     case "get_option_chain":
-      return { result: await getOptionChainSummary(userId, str(a.underlying), str(a.expiry) || undefined).catch(() => ({ error: "Couldn't load the option chain right now." })) };
+      return {
+        result: await getOptionChainSummary(userId, str(a.underlying), str(a.expiry) || undefined, {
+          strike: Number.isFinite(Number(a.strike)) && Number(a.strike) > 0 ? Number(a.strike) : undefined,
+          type: a.type === "CE" || a.type === "PE" ? a.type : undefined,
+        }).catch(() => ({ error: "Couldn't load the option chain right now." })),
+      };
     case "get_my_broker_account":
       return { result: await getBrokerAccount(userId, str(a.broker) || undefined).catch(() => ({ error: "Couldn't read the broker account right now." })) };
     case "get_my_live_trading": {

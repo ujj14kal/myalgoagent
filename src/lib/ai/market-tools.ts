@@ -1,7 +1,9 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { marketExtrasFor, maxPain, pcr } from "@/lib/market-data";
+import { marketExtrasFor } from "@/lib/market-data";
 import { loadBrokerAccount } from "@/lib/brokers/account-load";
+import { loadOptionChain } from "@/lib/options/chain-source";
+import { chainForAgent } from "@/lib/options/chain-agent";
 import { userMarketDataReady } from "@/lib/market-data/for-user";
 
 // Read-only market and account lookups for the assistant. Everything goes
@@ -76,29 +78,11 @@ export async function getMarketOverview(userId: string) {
 }
 
 /** An option chain in brief: spot, PCR, max pain, ATM IV and strikes around the money — live-data accounts only. */
-export async function getOptionChainSummary(userId: string, underlyingRaw: string, expiry?: string) {
-  const extras = marketExtrasFor(userId);
-  if (!extras) return { error: "Option chains need live market data, which isn't enabled for this account." };
-  const underlying = underlyingRaw.trim().toUpperCase().replace(/^NIFTY 50$/, "NIFTY").replace(/^NIFTY BANK$/, "BANKNIFTY");
-  const expiries = await extras.expiries(underlying);
-  if (!expiries.length) return { error: `${underlying} has no listed options.` };
-  const exp = expiry && expiries.includes(expiry) ? expiry : expiries[0];
-  const rows = await extras.optionChain(underlying, exp);
-  const spotQuote = await getQuote(userId, underlying === "NIFTY" ? "^NSEI" : underlying === "BANKNIFTY" ? "^NSEBANK" : underlying).catch(() => null);
-  const spot = spotQuote && !("error" in spotQuote) ? spotQuote.last : null;
-  const atmIdx = spot ? rows.reduce((b, r, i) => (Math.abs(r.strike - spot) < Math.abs(rows[b].strike - spot) ? i : b), 0) : Math.floor(rows.length / 2);
-  const near = rows.slice(Math.max(0, atmIdx - 5), atmIdx + 6);
-  return {
-    underlying,
-    expiry: exp,
-    other_expiries: expiries.slice(1, 5),
-    spot,
-    pcr_oi: round(pcr(rows)),
-    max_pain: maxPain(rows),
-    atm_strike: rows[atmIdx]?.strike ?? null,
-    atm_iv_pct: round(((rows[atmIdx]?.call.iv ?? 0) + (rows[atmIdx]?.put.iv ?? 0)) * 50, 1),
-    strikes: near.map((r) => ({ strike: r.strike, call_ltp: r.call.ltp, call_oi: r.call.oi, call_iv_pct: round((r.call.iv ?? 0) * 100, 1), put_ltp: r.put.ltp, put_oi: r.put.oi, put_iv_pct: round((r.put.iv ?? 0) * 100, 1) })),
-  };
+/** The option chain in brief, or one contract in full, from the user's own source (broker first; see chain-source.ts). */
+export async function getOptionChainSummary(userId: string, underlyingRaw: string, expiry?: string, pick?: { strike?: number; type?: "CE" | "PE" }) {
+  const loaded = await loadOptionChain(userId, underlyingRaw, expiry);
+  if ("error" in loaded) return { error: loaded.error, broker_issues: (loaded.brokerIssues ?? []).map((i) => `${i.name}: ${i.reason}`) };
+  return chainForAgent(loaded.chain, loaded.expiries, loaded.brokerIssues, pick);
 }
 
 /** The user's broker account as their broker reports it (read-only). */

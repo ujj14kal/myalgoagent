@@ -58,20 +58,72 @@ const memo = new Map<string, { at: number; map: Map<string, GrowwOption> }>();
 let csvMemo: { at: number; text: Promise<string> } | null = null;
 const TTL = 6 * 3_600_000;
 
-/** One Groww option contract, or null if Groww doesn't list it. */
-export async function growwOption(underlying: string, expiry: string, strike: number, type: "CE" | "PE"): Promise<GrowwOption | null> {
+function instrumentCsv(): Promise<string> {
+  if (!csvMemo || Date.now() - csvMemo.at > TTL) {
+    const text = fetch(SOURCE, { signal: AbortSignal.timeout(60_000), cache: "no-store" }).then((r) => {
+      if (!r.ok) throw new Error(`Groww instruments: HTTP ${r.status}`);
+      return r.text();
+    });
+    csvMemo = { at: Date.now(), text };
+    text.catch(() => (csvMemo = null));
+  }
+  return csvMemo.text;
+}
+
+async function optionsOf(underlying: string): Promise<Map<string, GrowwOption>> {
   let hit = memo.get(underlying);
   if (!hit || Date.now() - hit.at > TTL) {
-    if (!csvMemo || Date.now() - csvMemo.at > TTL) {
-      const text = fetch(SOURCE, { signal: AbortSignal.timeout(60_000), cache: "no-store" }).then((r) => {
-        if (!r.ok) throw new Error(`Groww instruments: HTTP ${r.status}`);
-        return r.text();
-      });
-      csvMemo = { at: Date.now(), text };
-      text.catch(() => (csvMemo = null));
-    }
-    hit = { at: Date.now(), map: parseGrowwOptions(await csvMemo.text, underlying) };
+    hit = { at: Date.now(), map: parseGrowwOptions(await instrumentCsv(), underlying) };
     memo.set(underlying, hit);
   }
-  return hit.map.get(optionKey(underlying, expiry, strike, type)) ?? null;
+  return hit.map;
+}
+
+/** One Groww option contract, or null if Groww doesn't list it. */
+export async function growwOption(underlying: string, expiry: string, strike: number, type: "CE" | "PE"): Promise<GrowwOption | null> {
+  return (await optionsOf(underlying)).get(optionKey(underlying, expiry, strike, type)) ?? null;
+}
+
+export type OptionContracts = { expiries: string[]; lotSize: number | null; strikes: Record<string, number[]> };
+
+/** Listed expiries (soonest first), strikes per expiry and the lot size, from parsed contracts. Pure, for tests. */
+export function contractsFrom(map: Map<string, GrowwOption>): OptionContracts {
+  const strikes: Record<string, Set<number>> = {};
+  let lotSize: number | null = null;
+  for (const [key, o] of map) {
+    const [, expiry, strike] = key.split("|");
+    (strikes[expiry] ??= new Set()).add(Number(strike));
+    lotSize ??= o.lotSize;
+  }
+  const expiries = Object.keys(strikes).sort();
+  return { expiries, lotSize, strikes: Object.fromEntries(expiries.map((e) => [e, [...strikes[e]].sort((a, b) => a - b)])) };
+}
+
+/**
+ * The exchange's option contracts for an underlying — expiries, strikes and lot size — from Groww's public
+ * instrument list. This is reference data about the contracts (no prices), so every account can use it.
+ */
+export async function optionContracts(underlying: string): Promise<OptionContracts> {
+  return contractsFrom(await optionsOf(underlying));
+}
+
+/** Every underlying with NSE options (indices first, then stocks A–Z). Pure, for tests. */
+export function underlyingsFrom(csv: string): string[] {
+  const lines = csv.split(/\r?\n/);
+  const head = lines[0].split(",");
+  const [ex, seg, type, und] = ["exchange", "segment", "instrument_type", "underlying_symbol"].map((n) => head.indexOf(n));
+  const out = new Set<string>();
+  for (const line of lines) {
+    if (!line.includes(",FNO,")) continue;
+    const f = line.split(",");
+    if (f[ex] === "NSE" && f[seg] === "FNO" && (f[type] === "CE" || f[type] === "PE") && f[und]) out.add(f[und]);
+  }
+  const indices = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "NIFTYNXT50"].filter((i) => out.has(i));
+  return [...indices, ...[...out].filter((u) => !indices.includes(u)).sort()];
+}
+
+let underlyingsMemo: { at: number; list: string[] } | null = null;
+export async function optionUnderlyings(): Promise<string[]> {
+  if (!underlyingsMemo || Date.now() - underlyingsMemo.at > TTL) underlyingsMemo = { at: Date.now(), list: underlyingsFrom(await instrumentCsv()) };
+  return underlyingsMemo.list;
 }

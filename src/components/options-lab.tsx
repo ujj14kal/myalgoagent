@@ -14,10 +14,11 @@ import {
 } from "@/lib/options/positions";
 import OptionChain, { type ChainContext } from "@/components/option-chain";
 import LiveBasket, { type BasketBroker } from "@/components/options/live-basket";
+import ContractPicker, { type Pick } from "@/components/options/contract-picker";
 
-// Options Lab: a multi-leg payoff, breakeven and Greeks calculator. Works on
-// typed-in (or theoretical) premiums today; once a live option chain is
-// connected the strikes, premiums and IV will come from real quotes.
+// Options Lab: pick contracts from the option chain (the user's own broker first; the licensed feed
+// for allowed accounts; otherwise free-trial estimates), then see the multi-leg payoff, breakevens
+// and Greeks. Every price, IV and Greek says where it came from.
 
 const inr = (n: number) => `${n < 0 ? "−" : ""}₹${Math.abs(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 const inputCls = "w-full rounded-lg border border-brand-navy/15 px-2.5 py-1.5 text-sm outline-none focus:border-brand-primary";
@@ -38,16 +39,14 @@ function Num({ value, onChange, step = "any" }: { value: number; onChange: (v: n
   return <input type="number" step={step} value={Number.isFinite(value) ? value : ""} onChange={(e) => onChange(Number(e.target.value))} className={inputCls} />;
 }
 
-/** A leg's live price from the chain: mid of bid/ask when both exist, else the last trade. */
-function livePrice(ctx: ChainContext, type: "CE" | "PE", strike: number): { premium: number; iv: number | null } | null {
-  const row = ctx.rows.find((r) => r.strike === strike);
+/** A leg's price from the chain's shown strikes (the working price: a tight mid, else the last trade, else our estimate). */
+function chainPrice(ctx: ChainContext, type: "CE" | "PE", strike: number) {
+  const row = ctx.data.rows.find((r) => r.strike === strike);
   const q = row ? (type === "CE" ? row.call : row.put) : null;
-  if (!q) return null;
-  const premium = q.bid && q.ask ? Math.round(((q.bid + q.ask) / 2) * 20) / 20 : q.ltp;
-  return premium ? { premium, iv: q.iv || null } : null;
+  return q?.price ? { premium: q.price, iv: q.greeks.iv } : null;
 }
 
-export default function OptionsLab({ live = false, basketBrokers = [] }: { live?: boolean; basketBrokers?: BasketBroker[] }) {
+export default function OptionsLab({ basketBrokers = [] }: { basketBrokers?: BasketBroker[] }) {
   const [s, setS] = useState<Settings>({ spot: 25000, step: 50, expiryDays: 7, ivPct: 13, ratePct: 6.5, lots: 1, lotSize: 75 });
   const [template, setTemplate] = useState("iron-condor");
   const [legs, setLegs] = useState<OptionLeg[]>(() =>
@@ -55,23 +54,29 @@ export default function OptionsLab({ live = false, basketBrokers = [] }: { live?
   );
   const rate = s.ratePct / 100;
   const [ctx, setCtx] = useState<ChainContext | null>(null);
+  const [underlying, setUnderlying] = useState("NIFTY");
+  const [expiry, setExpiry] = useState<string | null>(null);
+  const [pick, setPick] = useState<Pick>({ strike: null, type: "CE" });
+  const estimate = ctx?.data.source.kind === "estimate";
 
   const apply = (id: string, next = s) => {
     setTemplate(id);
     const built = buildTemplate(id, { spot: next.spot, step: next.step, expiryDays: next.expiryDays, iv: next.ivPct / 100, rate: next.ratePct / 100, lots: next.lots, lotSize: next.lotSize });
-    // With a live chain, every leg is priced from real quotes instead of the model.
+    // With a live chain, every leg is priced from the chain's quotes instead of the model.
     setLegs(
-      ctx
+      ctx && !estimate
         ? built.map((l) => {
-            const q = livePrice(ctx, l.type, l.strike);
-            return q ? { ...l, premium: q.premium, premiumSource: "market" as const, iv: q.iv ?? l.iv, ivSource: q.iv ? ("market" as const) : ("assumed" as const) } : l;
+            const q = chainPrice(ctx, l.type, l.strike);
+            return q ? { ...l, premium: q.premium, premiumSource: "market" as const, iv: q.iv.value ?? l.iv, ivSource: q.iv.origin === "provided" ? ("market" as const) : q.iv.origin === "calculated" ? ("calculated" as const) : ("assumed" as const) } : l;
           })
         : built,
     );
   };
   const onContext = (c: ChainContext) => {
     setCtx(c);
-    setS((prev) => ({ ...prev, spot: c.spot, step: c.step, expiryDays: Math.round(c.daysToExpiry * 100) / 100, lotSize: c.lotSize, ivPct: c.atmIv ? Math.round(c.atmIv * 1000) / 10 : prev.ivPct }));
+    const d = c.data;
+    const iv = d.atmIv ?? d.assumedIv;
+    setS((prev) => ({ ...prev, spot: d.spot ?? prev.spot, step: d.step, expiryDays: Math.round(d.daysToExpiry * 100) / 100, lotSize: d.lotSize ?? prev.lotSize, ivPct: iv ? Math.round(iv * 1000) / 10 : prev.ivPct }));
   };
   const setLeg = (i: number, patch: Partial<OptionLeg>) => setLegs((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
 
@@ -80,26 +85,31 @@ export default function OptionsLab({ live = false, basketBrokers = [] }: { live?
 
   return (
     <div className="mt-6 space-y-5">
-      {live ? (
-        <>
-          <OptionChain onAdd={(leg) => setLegs((ls) => [...ls, { ...leg, lots: s.lots }])} onContext={onContext} />
-          <p className="flex items-start gap-2 rounded-xl bg-brand-bg px-4 py-3 text-xs leading-relaxed text-brand-navy/70 ring-1 ring-black/5">
-            <Info size={15} className="mt-0.5 shrink-0 text-brand-primary" />
-            <span>
-              Spot, lot size, days to expiry and IV below follow the live chain{ctx ? ` (${ctx.underlying} ${ctx.expiry})` : ""}; strategy templates are priced from real
-              quotes. This is a calculator for understanding a position, not advice.
-            </span>
-          </p>
-        </>
-      ) : (
-        <p className="flex items-start gap-2 rounded-xl bg-brand-gold/10 px-4 py-3 text-xs leading-relaxed text-brand-navy/75 ring-1 ring-brand-gold/25">
-          <Info size={15} className="mt-0.5 shrink-0 text-[#8a7437]" />
-          <span>
-            Premiums below are <strong>estimates</strong> (Black–Scholes at the IV you set) until a live option chain is connected — replace them with real quotes
-            for accurate numbers. Set the lot size for your contract. This is a calculator for understanding a position, not advice.
-          </span>
-        </p>
-      )}
+      <ContractPicker
+        underlying={underlying}
+        onUnderlying={(u) => (setUnderlying(u), setExpiry(null))}
+        expiry={expiry}
+        onExpiry={setExpiry}
+        pick={pick}
+        onPick={(patch) => setPick((p) => ({ ...p, ...patch }))}
+        chain={ctx?.data ?? null}
+        onAdd={(leg) => setLegs((ls) => [...ls, leg])}
+        lots={s.lots}
+      />
+      <OptionChain underlying={underlying} expiry={expiry} onExpiry={setExpiry} onAdd={(leg) => setLegs((ls) => [...ls, leg])} onContext={onContext} onPick={(k) => setPick((p) => ({ ...p, strike: k }))} lots={s.lots} />
+      <p className="flex items-start gap-2 rounded-xl bg-brand-bg px-4 py-3 text-xs leading-relaxed text-brand-navy/70 ring-1 ring-black/5">
+        <Info size={15} className="mt-0.5 shrink-0 text-brand-primary" />
+        <span>
+          {estimate ? (
+            <>
+              <strong>Free trial:</strong> the contracts (expiries, strikes, lot sizes) are the exchange&apos;s real ones, but their prices are our estimates. Connect your broker on Broker Connections for live option prices, depth and Greeks from your own account.
+            </>
+          ) : (
+            <>Spot, lot size, days to expiry and IV below follow the chain{ctx ? ` (${ctx.data.underlying} ${ctx.data.expiry})` : ""}; strategy templates are priced from its quotes.</>
+          )}{" "}
+          This is a calculator for understanding a position, not advice.
+        </span>
+      </p>
 
       <section className="surface p-4 sm:p-5">
         <p className="mb-3 text-sm font-semibold text-brand-navy">Underlying & assumptions</p>
@@ -166,7 +176,7 @@ export default function OptionsLab({ live = false, basketBrokers = [] }: { live?
             <Plus size={13} /> Add leg
           </button>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto [contain:inline-size]">
           <table className="w-full min-w-[720px] text-sm">
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-wide text-brand-navy/45">
@@ -233,19 +243,20 @@ export default function OptionsLab({ live = false, basketBrokers = [] }: { live?
             <Stat label="Breakevens" value={summary.breakevens.length ? summary.breakevens.map((b) => b.toLocaleString("en-IN", { maximumFractionDigits: 1 })).join(" · ") : "—"} />
           </div>
           <PayoffChart legs={legs} spot={s.spot} rate={rate} breakevens={summary.breakevens} />
-          {live && ctx && basketBrokers.length > 0 && (
+          {ctx && !estimate && basketBrokers.length > 0 && (
             <div className="mt-4">
-              <LiveBasket brokers={basketBrokers} underlying={ctx.underlying} expiry={ctx.expiry} legs={legs} />
+              <LiveBasket brokers={basketBrokers} underlying={ctx.data.underlying} expiry={ctx.data.expiry} legs={legs} />
             </div>
           )}
           <p className="mt-4 text-[11px] text-brand-navy/55">
-            <strong className="font-semibold">Greeks below: calculated by us</strong> (Black–Scholes, from each leg&apos;s IV, the spot and the days left) — not figures from your broker. The strikes, prices and IV marked “market” come from the live feed.
+            <strong className="font-semibold">Position Greeks below: calculated by us</strong> (Black–Scholes, from each leg&apos;s IV, the spot and the days left, at the rate set above) — not figures from your broker. Prices and IVs marked “market” come from {ctx && !estimate ? ctx.data.source.name : "a live chain"}.
           </p>
-          <div className="mt-2 grid gap-3 sm:grid-cols-4">
+          <div className="mt-2 grid gap-3 sm:grid-cols-5">
             <Stat small label="Delta" value={greeks.delta.toFixed(1)} hint="₹ P&L for a ₹1 move up" />
             <Stat small label="Gamma" value={greeks.gamma.toFixed(3)} hint="How fast delta changes" />
             <Stat small label="Theta / day" value={inr(greeks.theta)} hint="Time decay per day" />
             <Stat small label="Vega" value={inr(greeks.vega)} hint="P&L per 1-point rise in IV" />
+            <Stat small label="Rho" value={inr(greeks.rho)} hint="P&L per 1-point rise in rates" />
           </div>
         </section>
       )}
@@ -305,7 +316,7 @@ function PayoffChart({ legs, spot, rate, breakevens }: { legs: OptionLeg[]; spot
   const ticks = [yMin, 0, yMax].filter((v, i, a) => a.indexOf(v) === i);
 
   return (
-    <div className="mt-4 overflow-x-auto">
+    <div className="mt-4 overflow-x-auto [contain:inline-size]">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full min-w-[520px]" role="img" aria-label="Payoff chart">
         <defs>
           <clipPath id="above">

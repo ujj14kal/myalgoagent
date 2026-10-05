@@ -1,171 +1,112 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { RefreshCw } from "lucide-react";
-import type { ChainRow } from "@/lib/market-data";
+import { useEffect, useState } from "react";
+import { AlertTriangle, RefreshCw } from "lucide-react";
 import type { OptionLeg } from "@/lib/options/positions";
-import { inMarketWindow } from "@/lib/paper/market-window";
+import { CHAIN_PAGE_SIZES, FLAG_TEXT } from "@/lib/options/chain";
+import { fmt, legFrom, originTitle, priceText, ORIGIN_STYLE, type ChainResponse, type ChainSide, type Figure } from "@/components/options/chain-types";
+import { useChain } from "@/components/options/use-chain";
 
-// The live option chain (licensed feed): OI, change in OI, IV, delta and
-// prices per strike, with Buy/Sell buttons that add a leg to the Options Lab.
+// The option chain: OI, change in OI, IV, delta and prices per strike, from the user's own broker
+// (or the licensed feed, or free-trial estimates — always labelled), with Buy/Sell buttons that add a
+// leg to the Options Lab and a click on a strike that opens it in the contract picker. Filtered and
+// paged on the server.
 
-export type ChainContext = {
-  underlying: string;
-  expiry: string;
-  spot: number;
-  step: number;
-  daysToExpiry: number;
-  lotSize: number;
-  atmIv: number | null;
-  rows: ChainRow[];
-};
+export type ChainContext = { data: ChainResponse };
 
-type ChainResponse = {
-  live: boolean;
-  error?: string;
-  underlying: string;
-  expiries: string[];
-  expiry: string;
-  daysToExpiry: number;
-  lotSize: number | null;
-  spot: number | null;
-  pcr: number | null;
-  maxPain: number | null;
-  rows: ChainRow[];
-};
-
-const UNDERLYINGS = ["NIFTY", "BANKNIFTY"];
-const fmt = (n: number | null | undefined, d = 2) => (n == null ? "—" : n.toLocaleString("en-IN", { minimumFractionDigits: d, maximumFractionDigits: d }));
 const lakh = (n: number | null) => (n == null ? "—" : n >= 1e5 ? `${(n / 1e5).toLocaleString("en-IN", { maximumFractionDigits: 1 })}L` : n.toLocaleString("en-IN"));
 const pctOi = (oi: number | null, prev: number | null) => (oi == null || !prev ? null : ((oi - prev) / prev) * 100);
-const expiryLabel = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
 
-/** The strike spacing (most common gap between listed strikes). */
-function strikeStep(rows: ChainRow[]): number {
-  const gaps = new Map<number, number>();
-  for (let i = 1; i < rows.length; i++) {
-    const g = Math.round((rows[i].strike - rows[i - 1].strike) * 100) / 100;
-    gaps.set(g, (gaps.get(g) ?? 0) + 1);
-  }
-  return [...gaps.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 50;
+/** A figure with its origin shown by colour (and in the tooltip). */
+function Fig({ f, data, digits = 2, scale = 1 }: { f: Figure; data: ChainResponse; digits?: number; scale?: number }) {
+  if (f.value === null) return <span className="text-brand-navy/30">—</span>;
+  return (
+    <span title={originTitle(f.origin, data.source)} className={f.origin ? ORIGIN_STYLE[f.origin].cls : ""}>
+      {fmt(f.value * scale, digits)}
+    </span>
+  );
 }
 
-export default function OptionChain({ onAdd, onContext }: { onAdd: (leg: OptionLeg) => void; onContext: (ctx: ChainContext) => void }) {
-  const [underlying, setUnderlying] = useState("NIFTY");
-  const [custom, setCustom] = useState("");
-  const [expiry, setExpiry] = useState<string | null>(null);
-  const [data, setData] = useState<ChainResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [window_, setWindow] = useState<number>(12); // strikes shown each side of the money; 0 = all
-  const [tick, setTick] = useState(0);
+function Warn({ q }: { q: ChainSide }) {
+  if (!q.flags.length) return null;
+  return (
+    <span title={q.flags.map((f) => FLAG_TEXT[f]).join("\n")} aria-label={q.flags.map((f) => FLAG_TEXT[f]).join(" ")} className="mr-1 inline-flex align-middle text-[#b26b00]">
+      <AlertTriangle size={11} />
+    </span>
+  );
+}
+
+export default function OptionChain({
+  underlying,
+  expiry,
+  onExpiry,
+  onAdd,
+  onContext,
+  onPick,
+  lots = 1,
+}: {
+  underlying: string;
+  expiry: string | null;
+  onExpiry: (e: string) => void;
+  onAdd: (leg: OptionLeg) => void;
+  onContext: (ctx: ChainContext) => void;
+  onPick?: (strike: number) => void;
+  lots?: number;
+}) {
+  const [window_, setWindow] = useState(12); // strikes each side of the money; 0 = all (paged)
+  const [page, setPage] = useState(1);
+  const [size, setSize] = useState(25);
+  const { data, error, loading, refresh } = useChain({ underlying, expiry, window: window_, page: window_ === 0 ? page : undefined, size: window_ === 0 ? size : undefined });
 
   useEffect(() => {
-    let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading flag for the fetch below
-    setLoading(true);
-    const q = new URLSearchParams({ underlying, ...(expiry ? { expiry } : {}) });
-    fetch(`/api/options/chain?${q}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d: ChainResponse) => {
-        if (cancelled) return;
-        if (d.error) return setError(d.error);
-        setError(null);
-        setData(d);
-      })
-      .catch(() => !cancelled && setError("Couldn't load the option chain."))
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [underlying, expiry, tick]);
-
-  // Live refresh every 5 s while the market is open.
-  useEffect(() => {
-    const t = setInterval(() => !document.hidden && inMarketWindow(new Date()) && setTick((n) => n + 1), 5000);
-    return () => clearInterval(t);
-  }, []);
-
-  const step = useMemo(() => (data ? strikeStep(data.rows) : 50), [data]);
-  const spot = data?.spot ?? null;
-  const atm = spot != null && data ? data.rows.reduce((b, r) => (Math.abs(r.strike - spot) < Math.abs(b - spot) ? r.strike : b), data.rows[0]?.strike ?? 0) : null;
-  const atmRow = data?.rows.find((r) => r.strike === atm);
-  const atmIv = atmRow ? ((atmRow.call.iv || 0) + (atmRow.put.iv || 0)) / ((atmRow.call.iv ? 1 : 0) + (atmRow.put.iv ? 1 : 0) || 1) || null : null;
-
-  useEffect(() => {
-    if (data && spot != null) {
-      onContext({ underlying: data.underlying, expiry: data.expiry, spot, step, daysToExpiry: data.daysToExpiry, lotSize: data.lotSize ?? 1, atmIv, rows: data.rows });
-    }
+    if (data) onContext({ data });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- report only when the chain itself changes
   }, [data]);
 
-  const shown = useMemo(() => {
-    if (!data) return [];
-    if (window_ === 0 || atm == null) return data.rows;
-    const i = data.rows.findIndex((r) => r.strike === atm);
-    return data.rows.slice(Math.max(0, i - window_), i + window_ + 1);
-  }, [data, window_, atm]);
-  const maxOi = Math.max(1, ...shown.flatMap((r) => [r.call.oi ?? 0, r.put.oi ?? 0]));
-
-  const add = (row: ChainRow, type: "CE" | "PE", side: "BUY" | "SELL") => {
-    const q = type === "CE" ? row.call : row.put;
-    const premium = (side === "BUY" ? q.ask : q.bid) ?? q.ltp;
-    if (!premium || !data) return;
-    onAdd({ kind: "OPTION", type, side, strike: row.strike, premium, premiumSource: "market", ivSource: q.iv ? "market" : "assumed", lots: 1, lotSize: data.lotSize ?? 1, expiryDays: Math.max(data.daysToExpiry, 0.01), iv: q.iv || atmIv || 0.15 });
+  const add = (strike: number, type: "CE" | "PE", side: "BUY" | "SELL", q: ChainSide) => {
+    const leg = data && legFrom(data, strike, type, side, q, lots);
+    if (leg) onAdd(leg);
   };
-
+  const estimate = data?.source.kind === "estimate";
+  const maxOi = Math.max(1, ...(data?.rows ?? []).flatMap((r) => [r.call.oi ?? 0, r.put.oi ?? 0]));
   const btn = "rounded px-1.5 py-0.5 text-[10px] font-bold";
+
   return (
     <section className="surface overflow-hidden">
-      <div className="flex flex-wrap items-center gap-2 border-b border-black/[0.05] p-3">
-        {UNDERLYINGS.map((u) => (
-          <button
-            key={u}
-            type="button"
-            onClick={() => {
-              setUnderlying(u);
-              setExpiry(null);
-            }}
-            className={`rounded-full border px-3 py-1 text-xs font-semibold ${underlying === u ? "border-brand-primary bg-brand-primary text-white" : "border-brand-navy/15 text-brand-navy/65"}`}
-          >
-            {u}
-          </button>
-        ))}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (custom.trim()) {
-              setUnderlying(custom.trim().toUpperCase());
-              setExpiry(null);
-            }
-          }}
-          className="flex items-center gap-1"
-        >
-          <input value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="Stock, e.g. RELIANCE" className="w-40 rounded-full border border-brand-navy/15 px-3 py-1 text-xs outline-none focus:border-brand-primary" />
-        </form>
+      <div className="flex flex-wrap items-center gap-2 border-b border-black/[0.05] p-3 text-xs">
+        <span className="font-semibold text-brand-navy">Option chain · {underlying}</span>
         {data && (
-          <select value={data.expiry} onChange={(e) => setExpiry(e.target.value)} className="rounded-full border border-brand-navy/15 px-3 py-1 text-xs">
+          <select aria-label="Expiry" value={data.expiry} onChange={(e) => (onExpiry(e.target.value), setPage(1))} className="rounded-full border border-brand-navy/15 px-3 py-1 text-xs">
             {data.expiries.map((d) => (
               <option key={d} value={d}>
-                {expiryLabel(d)}
+                {new Date(`${d}T00:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" })}
               </option>
             ))}
           </select>
         )}
-        <button type="button" onClick={() => setTick((n) => n + 1)} className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-brand-primary" aria-label="Refresh">
-          <RefreshCw size={12} className={loading ? "animate-spin" : ""} /> Live
+        <button type="button" onClick={refresh} className="ml-auto inline-flex items-center gap-1 font-semibold text-brand-primary" aria-label="Refresh">
+          <RefreshCw size={12} className={loading ? "animate-spin" : ""} /> Refresh
         </button>
       </div>
 
-      {error && <p className="px-4 py-6 text-center text-sm text-brand-sell">{error}</p>}
+      {error && (
+        <div className="px-4 py-6 text-center text-sm">
+          <p className="text-brand-sell">{error.message}</p>
+          {error.issues.map((i) => (
+            <p key={i.broker} className="mt-1 text-xs text-brand-navy/55">
+              {i.name}: {i.reason}
+            </p>
+          ))}
+        </div>
+      )}
       {data && !error && (
         <>
           <div className="grid grid-cols-2 gap-2 border-b border-black/[0.05] px-4 py-3 text-xs sm:grid-cols-6">
             {[
-              ["Spot", fmt(spot)],
+              ["Spot", fmt(data.spot)],
               ["Days left", fmt(data.daysToExpiry, 1)],
               ["Lot size", data.lotSize ? String(data.lotSize) : "—"],
-              ["ATM IV", atmIv ? `${fmt(atmIv * 100, 1)}%` : "—"],
+              [estimate ? "Assumed IV" : "ATM IV", data.atmIv ? `${fmt(data.atmIv * 100, 1)}%` : `${fmt(data.assumedIv * 100, 1)}%`],
               ["PCR (OI)", fmt(data.pcr)],
               ["Max pain", fmt(data.maxPain, 0)],
             ].map(([k, v]) => (
@@ -175,7 +116,7 @@ export default function OptionChain({ onAdd, onContext }: { onAdd: (leg: OptionL
               </div>
             ))}
           </div>
-          <div className="max-h-[520px] overflow-auto">
+          <div className="max-h-[520px] overflow-auto [contain:inline-size]">
             <table className="w-full min-w-[860px] text-xs tabular-nums">
               <thead className="sticky top-0 z-10 bg-white">
                 <tr className="text-[10px] uppercase tracking-wide text-brand-navy/45">
@@ -188,13 +129,13 @@ export default function OptionChain({ onAdd, onContext }: { onAdd: (leg: OptionL
                   </th>
                 </tr>
                 <tr className="border-b border-black/[0.06] text-[10px] text-brand-navy/45">
-                  {["OI", "ΔOI", "IV", "Δ", "LTP", ""].map((h, i) => (
+                  {["OI", "ΔOI", "IV %", "Δ", estimate ? "Est. price" : "LTP", ""].map((h, i) => (
                     <th key={`c${i}`} className="px-2 pb-1.5 text-right font-semibold">
                       {h}
                     </th>
                   ))}
                   <th />
-                  {["", "LTP", "Δ", "IV", "ΔOI", "OI"].map((h, i) => (
+                  {["", estimate ? "Est. price" : "LTP", "Δ", "IV %", "ΔOI", "OI"].map((h, i) => (
                     <th key={`p${i}`} className="px-2 pb-1.5 text-right font-semibold">
                       {h}
                     </th>
@@ -202,43 +143,65 @@ export default function OptionChain({ onAdd, onContext }: { onAdd: (leg: OptionL
                 </tr>
               </thead>
               <tbody>
-                {shown.map((r) => {
+                {data.rows.map((r) => {
+                  const spot = data.spot;
                   const callItm = spot != null && r.strike < spot;
                   const putItm = spot != null && r.strike > spot;
                   const cOi = pctOi(r.call.oi, r.call.prevOi);
                   const pOi = pctOi(r.put.oi, r.put.prevOi);
+                  const ci = callItm ? "bg-brand-gold/[0.07]" : "";
+                  const pi = putItm ? "bg-brand-gold/[0.07]" : "";
+                  const atm = r.strike === data.atmStrike;
                   return (
-                    <tr key={r.strike} className={`border-b border-black/[0.03] ${r.strike === atm ? "outline outline-1 outline-brand-primary/40" : ""}`}>
-                      <td className={`relative px-2 py-1 text-right ${callItm ? "bg-brand-gold/[0.07]" : ""}`}>
+                    <tr key={r.strike} className={`border-b border-black/[0.03] ${atm ? "outline outline-1 outline-brand-primary/40" : ""}`}>
+                      <td className={`relative px-2 py-1 text-right ${ci}`}>
                         <span className="absolute inset-y-1 right-0 bg-brand-sell/10" style={{ width: `${((r.call.oi ?? 0) / maxOi) * 100}%` }} />
                         <span className="relative">{lakh(r.call.oi)}</span>
                       </td>
-                      <td className={`px-2 py-1 text-right ${cOi == null ? "text-brand-navy/30" : cOi >= 0 ? "text-[#0b6b30]" : "text-[#9b1111]"} ${callItm ? "bg-brand-gold/[0.07]" : ""}`}>{cOi == null ? "—" : `${fmt(cOi, 0)}%`}</td>
-                      <td className={`px-2 py-1 text-right ${callItm ? "bg-brand-gold/[0.07]" : ""}`}>{r.call.iv ? fmt(r.call.iv * 100, 1) : "—"}</td>
-                      <td className={`px-2 py-1 text-right text-brand-navy/60 ${callItm ? "bg-brand-gold/[0.07]" : ""}`}>{r.call.delta == null ? "—" : fmt(r.call.delta)}</td>
-                      <td className={`px-2 py-1 text-right font-semibold text-brand-navy ${callItm ? "bg-brand-gold/[0.07]" : ""}`}>{fmt(r.call.ltp)}</td>
-                      <td className={`whitespace-nowrap px-1 py-1 text-right ${callItm ? "bg-brand-gold/[0.07]" : ""}`}>
-                        <button type="button" disabled={!r.call.ltp} onClick={() => add(r, "CE", "BUY")} className={`${btn} bg-brand-buy/10 text-[#0b6b30] disabled:opacity-30`}>
+                      <td className={`px-2 py-1 text-right ${cOi == null ? "text-brand-navy/30" : cOi >= 0 ? "text-[#0b6b30]" : "text-[#9b1111]"} ${ci}`}>{cOi == null ? "—" : `${fmt(cOi, 0)}%`}</td>
+                      <td className={`px-2 py-1 text-right ${ci}`}>
+                        <Fig f={r.call.greeks.iv} data={data} digits={1} scale={100} />
+                      </td>
+                      <td className={`px-2 py-1 text-right ${ci}`}>
+                        <Fig f={r.call.greeks.delta} data={data} />
+                      </td>
+                      <td className={`px-2 py-1 text-right font-semibold text-brand-navy ${ci}`}>
+                        <Warn q={r.call} />
+                        <span className={estimate ? "italic text-[#8a7437]" : ""}>{priceText(r.call)}</span>
+                      </td>
+                      <td className={`whitespace-nowrap px-1 py-1 text-right ${ci}`}>
+                        <button type="button" disabled={!r.call.price} onClick={() => add(r.strike, "CE", "BUY", r.call)} aria-label={`Buy ${r.strike} call`} className={`${btn} bg-brand-buy/10 text-[#0b6b30] disabled:opacity-30`}>
                           B
                         </button>{" "}
-                        <button type="button" disabled={!r.call.ltp} onClick={() => add(r, "CE", "SELL")} className={`${btn} bg-brand-sell/10 text-[#9b1111] disabled:opacity-30`}>
+                        <button type="button" disabled={!r.call.price} onClick={() => add(r.strike, "CE", "SELL", r.call)} aria-label={`Sell ${r.strike} call`} className={`${btn} bg-brand-sell/10 text-[#9b1111] disabled:opacity-30`}>
                           S
                         </button>
                       </td>
-                      <td className={`px-3 py-1 text-center font-bold ${r.strike === atm ? "bg-brand-primary text-white" : "bg-brand-bg text-brand-navy"}`}>{fmt(r.strike, r.strike % 1 ? 1 : 0)}</td>
-                      <td className={`whitespace-nowrap px-1 py-1 ${putItm ? "bg-brand-gold/[0.07]" : ""}`}>
-                        <button type="button" disabled={!r.put.ltp} onClick={() => add(r, "PE", "BUY")} className={`${btn} bg-brand-buy/10 text-[#0b6b30] disabled:opacity-30`}>
+                      <td className={`px-0 py-0 text-center font-bold ${atm ? "bg-brand-primary text-white" : "bg-brand-bg text-brand-navy"}`}>
+                        <button type="button" onClick={() => onPick?.(r.strike)} title="Open in the contract picker" className="w-full px-3 py-1 hover:underline">
+                          {fmt(r.strike, r.strike % 1 ? 1 : 0)}
+                        </button>
+                      </td>
+                      <td className={`whitespace-nowrap px-1 py-1 ${pi}`}>
+                        <button type="button" disabled={!r.put.price} onClick={() => add(r.strike, "PE", "BUY", r.put)} aria-label={`Buy ${r.strike} put`} className={`${btn} bg-brand-buy/10 text-[#0b6b30] disabled:opacity-30`}>
                           B
                         </button>{" "}
-                        <button type="button" disabled={!r.put.ltp} onClick={() => add(r, "PE", "SELL")} className={`${btn} bg-brand-sell/10 text-[#9b1111] disabled:opacity-30`}>
+                        <button type="button" disabled={!r.put.price} onClick={() => add(r.strike, "PE", "SELL", r.put)} aria-label={`Sell ${r.strike} put`} className={`${btn} bg-brand-sell/10 text-[#9b1111] disabled:opacity-30`}>
                           S
                         </button>
                       </td>
-                      <td className={`px-2 py-1 text-right font-semibold text-brand-navy ${putItm ? "bg-brand-gold/[0.07]" : ""}`}>{fmt(r.put.ltp)}</td>
-                      <td className={`px-2 py-1 text-right text-brand-navy/60 ${putItm ? "bg-brand-gold/[0.07]" : ""}`}>{r.put.delta == null ? "—" : fmt(r.put.delta)}</td>
-                      <td className={`px-2 py-1 text-right ${putItm ? "bg-brand-gold/[0.07]" : ""}`}>{r.put.iv ? fmt(r.put.iv * 100, 1) : "—"}</td>
-                      <td className={`px-2 py-1 text-right ${pOi == null ? "text-brand-navy/30" : pOi >= 0 ? "text-[#0b6b30]" : "text-[#9b1111]"} ${putItm ? "bg-brand-gold/[0.07]" : ""}`}>{pOi == null ? "—" : `${fmt(pOi, 0)}%`}</td>
-                      <td className={`relative px-2 py-1 text-right ${putItm ? "bg-brand-gold/[0.07]" : ""}`}>
+                      <td className={`px-2 py-1 text-right font-semibold text-brand-navy ${pi}`}>
+                        <Warn q={r.put} />
+                        <span className={estimate ? "italic text-[#8a7437]" : ""}>{priceText(r.put)}</span>
+                      </td>
+                      <td className={`px-2 py-1 text-right ${pi}`}>
+                        <Fig f={r.put.greeks.delta} data={data} />
+                      </td>
+                      <td className={`px-2 py-1 text-right ${pi}`}>
+                        <Fig f={r.put.greeks.iv} data={data} digits={1} scale={100} />
+                      </td>
+                      <td className={`px-2 py-1 text-right ${pOi == null ? "text-brand-navy/30" : pOi >= 0 ? "text-[#0b6b30]" : "text-[#9b1111]"} ${pi}`}>{pOi == null ? "—" : `${fmt(pOi, 0)}%`}</td>
+                      <td className={`relative px-2 py-1 text-right ${pi}`}>
                         <span className="absolute inset-y-1 left-0 bg-brand-buy/10" style={{ width: `${((r.put.oi ?? 0) / maxOi) * 100}%` }} />
                         <span className="relative">{lakh(r.put.oi)}</span>
                       </td>
@@ -248,18 +211,43 @@ export default function OptionChain({ onAdd, onContext }: { onAdd: (leg: OptionL
               </tbody>
             </table>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-[11px] text-brand-navy/45">
-            <span>Shaded = in the money · B/S adds a leg below at the ask/bid · <strong className="font-semibold">Source: market data feed</strong> (OI, IV, delta and prices are the feed&apos;s own, not calculated by us) · refreshes every 5 s in market hours</span>
-            <label className="flex items-center gap-1.5 font-semibold text-brand-primary">
-              Strikes shown
-              <select value={window_} onChange={(e) => setWindow(Number(e.target.value))} className="rounded border border-brand-navy/15 bg-white px-1.5 py-0.5 text-[11px] text-brand-navy">
-                <option value={6}>±6 from the money</option>
-                <option value={12}>±12 from the money</option>
-                <option value={25}>±25 from the money</option>
-                <option value={0}>All {data.rows.length}</option>
-              </select>
-              <span className="font-normal text-brand-navy/45">({shown.length} listed)</span>
-            </label>
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-[11px] text-brand-navy/50">
+            <span>
+              Shaded = in the money · B/S adds a leg at the ask/bid · <AlertTriangle size={10} className="inline text-[#b26b00]" /> = a warning about that price (hover) · Colours:{" "}
+              <span className={ORIGIN_STYLE.provided.cls}>from {data.source.kind === "estimate" ? "source" : data.source.name}</span>, <span className={ORIGIN_STYLE.calculated.cls}>calculated by us from the price</span>,{" "}
+              <span className={ORIGIN_STYLE.estimated.cls}>estimated from an assumed volatility</span>
+            </span>
+            <span className="flex flex-wrap items-center gap-1.5 font-semibold text-brand-primary">
+              <label className="flex items-center gap-1.5">
+                Strikes shown
+                <select value={window_} onChange={(e) => (setWindow(Number(e.target.value)), setPage(1))} className="rounded border border-brand-navy/15 bg-white px-1.5 py-0.5 text-[11px] text-brand-navy">
+                  <option value={6}>±6 from the money</option>
+                  <option value={12}>±12 from the money</option>
+                  <option value={25}>±25 from the money</option>
+                  <option value={0}>All {data.strikes.length}, in pages</option>
+                </select>
+              </label>
+              {window_ === 0 && (
+                <>
+                  <select aria-label="Strikes per page" value={size} onChange={(e) => (setSize(Number(e.target.value)), setPage(1))} className="rounded border border-brand-navy/15 bg-white px-1.5 py-0.5 text-[11px] text-brand-navy">
+                    {CHAIN_PAGE_SIZES.map((n) => (
+                      <option key={n} value={n}>
+                        {n} per page
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" disabled={data.page <= 1} onClick={() => setPage(data.page - 1)} className="rounded px-1.5 disabled:opacity-30">
+                    ‹ Prev
+                  </button>
+                  <span className="font-normal text-brand-navy/55">
+                    Page {data.page} of {data.pages}
+                  </span>
+                  <button type="button" disabled={data.page >= data.pages} onClick={() => setPage(data.page + 1)} className="rounded px-1.5 disabled:opacity-30">
+                    Next ›
+                  </button>
+                </>
+              )}
+            </span>
           </div>
         </>
       )}

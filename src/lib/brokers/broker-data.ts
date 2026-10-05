@@ -185,3 +185,6 @@ export function brokerMarketData(userId: string, broker: BrokerId): MarketDataPr
 }
 
 export { CANDLE_SOURCES, NO_CANDLES_REASON };
+
+/** One request to the user's broker with their session (shared by the option-chain adapters). */
+export const brokerSend = send;

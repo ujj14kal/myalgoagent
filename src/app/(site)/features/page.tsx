@@ -109,11 +109,15 @@ const groups: Group[] = [
     items: [
       "Build multi-leg options positions — spreads, straddles, strangles, iron condors and more — from ready-made templates or leg by leg",
       "Payoff chart at expiry and today, net credit or debit, max profit and loss, and exact breakevens",
-      "Position Greeks: delta, gamma, theta and vega",
+      "Pick any contract — underlying, expiry, call or put, strike — and see its price, bid and ask, volume, open interest and all six Greeks: IV, delta, gamma, theta, vega and rho",
+      "Live option chain from your own broker account (Groww, Upstox, Dhan), paged on the server so even 200-strike chains stay fast",
+      "Every Greek labelled: provided by your broker, calculated by us from the contract's price, or estimated — with warnings for stale, one-sided, wide-spread, untraded or expired contracts",
+      "Free trial without a broker: the exchange's real contracts with clearly-labelled estimated prices",
+      "Position Greeks: delta, gamma, theta, vega and rho",
       "Options backtests on real historical option prices, and forward tests on live prices with no orders placed",
       "Send the legs as real orders to your broker after a priced preview — buy legs first, open legs cancelled if one is refused",
     ],
-    soon: ["Live option chain with real premiums, IV and open interest for every account"],
+    soon: ["Option chains from more brokers (Zerodha, Angel One, Fyers, 5paisa)"],
   },
   {
     title: "Your AI agent",
