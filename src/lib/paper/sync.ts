@@ -128,6 +128,31 @@ export function closedCandles<T extends { time: number }>(candles: T[], timefram
   return closesAt <= nowSec ? candles : candles.slice(0, -1);
 }
 
+/**
+ * Some feeds (Yahoo) stamp the still-forming intraday candle with the time of its latest trade
+ * (10:10:43) instead of its start (10:10:00), so the same candle reports a different time on every
+ * read. Snap it back onto the candle grid, counted from the previous candle, so a position entered on
+ * it can be found again on the next pass.
+ */
+export function snapFormingCandle<T extends { time: number }>(candles: T[], timeframe: CandleInterval): T[] {
+  const step = INTERVAL_SECONDS[timeframe];
+  if (!step || candles.length < 2) return candles;
+  const last = candles[candles.length - 1];
+  const prev = candles[candles.length - 2];
+  const offset = (last.time - prev.time) % step;
+  if (offset === 0 || last.time - prev.time < step) return candles;
+  return [...candles.slice(0, -1), { ...last, time: last.time - offset }];
+}
+
+/** The candle a stored entry time belongs to: exact match, or the candle whose interval contains it. */
+export function findEntryIndex(candles: { time: number }[], entryTime: number, timeframe: CandleInterval): number {
+  const exact = candles.findIndex((c) => c.time === entryTime);
+  if (exact !== -1) return exact;
+  const step = INTERVAL_SECONDS[timeframe];
+  if (!step) return -1;
+  return candles.findIndex((c) => c.time <= entryTime && entryTime < c.time + step);
+}
+
 export async function syncPaperSession(
   session: PaperSessionState,
   allowNewEntries: boolean,
@@ -136,7 +161,7 @@ export async function syncPaperSession(
 ): Promise<SyncResult> {
   const timeframe = (session.timeframe ?? "1d") as CandleInterval;
   const range = paperSyncRange(timeframe);
-  const fetched = await market.getHistoricalCandles(session.instrumentSymbol, range, timeframe);
+  const fetched = snapFormingCandle(await market.getHistoricalCandles(session.instrumentSymbol, range, timeframe), timeframe);
   // A candle is only ever acted on once it has closed. A rule that fires on a
   // candle fills at the NEXT candle's open, so a candle is processed only once
   // its successor exists: forward tests wait for that next candle to close;
@@ -172,7 +197,7 @@ export async function syncPaperSession(
 
   let entryIdx: number | null = null;
   if (session.positionEntryTime !== null) {
-    entryIdx = candles.findIndex((c) => c.time === session.positionEntryTime);
+    entryIdx = findEntryIndex(candles, session.positionEntryTime, timeframe);
     if (entryIdx === -1) {
       throw new Error(
         "Open forward-test position's entry bar has rolled out of the fetched history window — cannot safely resume this session.",
