@@ -63,6 +63,11 @@ export function conditionToText(node: ConditionNode, nested = false): string {
       return signalToText(node.signal);
     case "not":
       return `not (${conditionToText(node.child, false)})`;
+    case "recent": {
+      const n = node.bars;
+      const span = node.excludeCurrent ? `in the ${n === 1 ? "previous candle" : `${n} candles before this one`}` : n === 1 ? "on this candle" : `within the last ${n} candles`;
+      return node.mode === "ALL" ? `(${conditionToText(node.child, false)}) held on each of the last ${n} candle${n === 1 ? "" : "s"}${node.excludeCurrent ? " before this one" : ""}` : `(${conditionToText(node.child, false)}) was true ${span}`;
+    }
     case "group": {
       if (node.children.length === 1) return conditionToText(node.children[0], nested);
       const joined = node.children.map((c) => conditionToText(c, true)).join(` ${node.op.toLowerCase()} `);

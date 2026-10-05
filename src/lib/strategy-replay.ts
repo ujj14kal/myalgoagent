@@ -140,7 +140,7 @@ export function buildReplayStudies(
 
   const walk = (node: ConditionNode) => {
     if (node.kind === "group") return node.children.forEach(walk);
-    if (node.kind === "not") return walk(node.child);
+    if (node.kind === "not" || node.kind === "recent") return walk(node.child);
     if (node.kind === "comparison") {
       if (isNeverExitCondition(node)) return;
       const sides = [node.left, node.right];

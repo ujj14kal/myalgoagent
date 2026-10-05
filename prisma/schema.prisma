@@ -83,6 +83,7 @@ model User {
   optionBacktestRuns  OptionBacktestRun[]
   optionForwardTests  OptionForwardTest[]
   customIndicators    CustomIndicator[]
+  workspaces          Workspace[]
 }
 
 enum OtpPurpose {
@@ -382,6 +383,8 @@ model Strategy {
   // Swing / long-term: how long it expects to hold (INTRADAY, SWING or POSITIONAL; null = derived from the product) and its multi-level entry plan { firstPercent, levels, maxHoldDays }.
   style               String?
   entryPlan           Json?
+  // Set when this strategy was compiled from a workspace version: its rules come from the workspace, so edit the workspace and publish a new version.
+  workspaceVersionId  String?            @unique
   trailingSlEnabled   Boolean            @default(false)
   trailingSlUnit      RiskUnit?
   trailingSlValue     Float?
@@ -403,12 +406,13 @@ model Strategy {
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
-  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  instrument      Instrument       @relation(fields: [instrumentId], references: [id])
-  backtestRuns    BacktestRun[]
-  paperSessions   PaperSession[]
-  liveDeployments LiveDeployment[]
-  webhookAlerts   WebhookAlert[]
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instrument       Instrument        @relation(fields: [instrumentId], references: [id])
+  backtestRuns     BacktestRun[]
+  paperSessions    PaperSession[]
+  liveDeployments  LiveDeployment[]
+  webhookAlerts    WebhookAlert[]
+  workspaceVersion WorkspaceVersion? @relation(fields: [workspaceVersionId], references: [id], onDelete: SetNull)
 
   @@unique([userId, nameNormalized])
 }
@@ -1039,4 +1043,46 @@ model LiveEngineLog {
 
   @@index([userId, at])
   @@index([deploymentId, at])
+}
+
+enum WorkspaceStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+// Several strategies and rules connected into one plan (see lib/workspace). The draft is edited freely; publishing a
+// version freezes a copy and compiles it into an ordinary strategy that runs through the usual backtest, forward test
+// and live engines, so a version that is live can never change under a running trade.
+model Workspace {
+  id             String          @id @default(cuid())
+  userId         String
+  name           String
+  nameNormalized String
+  description    String?
+  status         WorkspaceStatus @default(DRAFT)
+  draft          Json
+  latestVersion  Int             @default(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versions WorkspaceVersion[]
+
+  @@unique([userId, nameNormalized])
+  @@index([userId, updatedAt])
+}
+
+model WorkspaceVersion {
+  id          String   @id @default(cuid())
+  workspaceId String
+  version     Int
+  definition  Json
+  note        String?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  strategy  Strategy?
+
+  @@unique([workspaceId, version])
 }

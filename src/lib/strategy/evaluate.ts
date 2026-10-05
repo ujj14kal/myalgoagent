@@ -96,7 +96,7 @@ function buildSeries(candles: Candle[], operand: Operand, cache: Map<string, Ser
 function collectOperands(node: ConditionNode, out: Operand[]) {
   if (node.kind === "group") {
     for (const child of node.children) collectOperands(child, out);
-  } else if (node.kind === "not") {
+  } else if (node.kind === "not" || node.kind === "recent") {
     collectOperands(node.child, out);
   } else if (node.kind === "comparison") {
     out.push(node.left, node.right);
@@ -106,7 +106,7 @@ function collectOperands(node: ConditionNode, out: Operand[]) {
 function collectSignals(node: ConditionNode, out: BooleanSignalKind[]) {
   if (node.kind === "group") {
     for (const child of node.children) collectSignals(child, out);
-  } else if (node.kind === "not") {
+  } else if (node.kind === "not" || node.kind === "recent") {
     collectSignals(node.child, out);
   } else if (node.kind === "signal") {
     out.push(node.signal);
@@ -241,6 +241,19 @@ function evaluateNode(
   if (node.kind === "not") {
     const inner = evaluateNode(node.child, i, seriesOf, signalSeriesOf);
     return inner === undefined ? undefined : !inner;
+  }
+
+  if (node.kind === "recent") {
+    // The window is the `bars` candles ending on this one (or on the previous one). A candle that can't be judged counts as false.
+    const end = node.excludeCurrent ? i - 1 : i;
+    const start = end - node.bars + 1;
+    if (node.mode === "ALL") {
+      if (start < 0) return false;
+      for (let j = start; j <= end; j++) if (!evaluateNode(node.child, j, seriesOf, signalSeriesOf)) return false;
+      return true;
+    }
+    for (let j = Math.max(0, start); j <= end; j++) if (evaluateNode(node.child, j, seriesOf, signalSeriesOf)) return true;
+    return false;
   }
 
   if (node.kind === "signal") {

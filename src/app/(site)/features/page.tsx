@@ -34,6 +34,7 @@ const groups: Group[] = [
       "Indicator-to-indicator and price-to-indicator comparisons, crossovers and crossunders",
       "Candlestick, chart and volume patterns, each shown with a picture of what it looks like — and candle patterns that only count at a support or resistance level",
       "Stop-loss, take-profit and trailing-stop rules, or up to three staged targets that sell part of the position and lock profit on the rest",
+      "Workspaces: connect several of your strategies and your own rules into one plan — AND, OR, in sequence, confirmed by, unless, or only after a prerequisite has held — then publish versions that are backtested, forward tested and traded exactly like any strategy",
       "Swing and long-term strategies: build a position in stages with a multi-level entry plan (a share on the signal, more as price reaches each level), a holding limit, and daily-candle rules that can read a weekly trend",
       "Position sizing by quantity, rupee amount, percentage of capital or full capital",
       "Entry orders at market or as a limit order — a % from the signal price or a fixed ₹ price — valid for the day",

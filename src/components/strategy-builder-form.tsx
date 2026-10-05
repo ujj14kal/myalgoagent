@@ -80,7 +80,7 @@ type UsedPattern =
 /** Every distinct pattern and indicator used anywhere in a condition tree. */
 function collectPatterns(node: ConditionNode, out: UsedPattern[] = []) {
   if (node.kind === "group") node.children.forEach((c) => collectPatterns(c, out));
-  else if (node.kind === "not") collectPatterns(node.child, out);
+  else if (node.kind === "not" || node.kind === "recent") collectPatterns(node.child, out);
   else if (node.kind === "comparison") {
     for (const o of [node.left, node.right]) {
       if (o.kind === "indicator" && !out.some((p) => p.family === "INDICATOR" && p.pattern === o.type)) {
@@ -138,7 +138,7 @@ export const NEW_STRATEGY_DRAFT_KEY = "maa:new-strategy-draft";
 /** Whether a rule uses the time of day (a time window, or a candle pattern limited to certain times). */
 function hasTimeRule(node: ConditionNode): boolean {
   if (node.kind === "group") return node.children.some(hasTimeRule);
-  if (node.kind === "not") return hasTimeRule(node.child);
+  if (node.kind === "not" || node.kind === "recent") return hasTimeRule(node.child);
   if (node.kind !== "signal") return false;
   return node.signal.family === "TIME_WINDOW" || (node.signal.family === "CANDLE_PATTERN" && !!node.signal.window);
 }

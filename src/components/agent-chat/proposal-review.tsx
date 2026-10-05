@@ -16,6 +16,7 @@ import {
   FlaskConical,
   Layers,
   ListChecks,
+  Network,
   OctagonX,
   PencilLine,
   PlayCircle,
@@ -39,6 +40,7 @@ const toMinutes = (v: string) => {
 import { runBacktestAction, runBacktestForAgent } from "@/lib/backtest-actions";
 import { setPaperSessionStatus, startPaperSession, startPaperSessionForAgent, syncPaperSessionAction } from "@/lib/paper-actions";
 import { toggleKillSwitch, updateRiskSettings } from "@/lib/risk-actions";
+import { createWorkspace, publishWorkspace, saveWorkspaceDraft } from "@/lib/workspace-actions";
 import { addToWatchlist, removeFromWatchlist } from "@/lib/watchlist-actions";
 
 const ICONS: Record<AgentProposal["kind"], React.ReactNode> = {
@@ -52,6 +54,7 @@ const ICONS: Record<AgentProposal["kind"], React.ReactNode> = {
   paper_control: <RefreshCw size={16} />,
   strategy_archive: <Archive size={16} />,
   strategy_update: <PencilLine size={16} />,
+  workspace: <Network size={16} />,
   plan: <ListChecks size={16} />,
 };
 
@@ -83,6 +86,8 @@ export function proposalSummary(p: AgentProposal): string {
       return p.draft.strategyName;
     case "strategy_update":
       return `${p.draft.name}${p.draft.instrumentSymbol ? ` · ${p.draft.instrumentSymbol}` : ""}`;
+    case "workspace":
+      return `${p.draft.name}${p.draft.instrumentSymbol ? ` · ${p.draft.instrumentSymbol}` : ""}${p.draft.publish ? " · publish a version" : " · save the draft"}`;
     case "plan":
       return p.steps.map((st) => STEP_TITLES[st.kind]).join(" → ");
   }
@@ -110,6 +115,8 @@ function confirmLabel(p: AgentProposal): string {
       return "Archive";
     case "strategy_update":
       return "Save changes";
+    case "workspace":
+      return p.draft.publish ? (p.draft.workspaceId ? "Save and publish" : "Create and publish") : p.draft.workspaceId ? "Save changes" : "Create workspace";
     case "plan":
       return `Run all ${p.steps.length} steps`;
   }
@@ -195,6 +202,24 @@ async function execute(p: AgentProposal, instrumentId: string | null, go: (path:
     case "strategy_archive": {
       await archiveStrategyAction(p.draft.strategyId);
       go("/app/strategies");
+      return null;
+    }
+    case "workspace": {
+      const d = p.draft;
+      let id = d.workspaceId;
+      if (!id) {
+        const made = await createWorkspace({ name: d.name, description: d.description, instrumentId: d.definition.instrumentId });
+        if ("error" in made) return made.error === "DUPLICATE_NAME" ? "You already have a workspace with this name — give it a different name." : made.error;
+        id = made.id;
+      }
+      const saved = await saveWorkspaceDraft(id, { name: d.name, description: d.description ?? null, draft: d.definition });
+      if ("error" in saved) return saved.error === "DUPLICATE_NAME" ? "You already have a workspace with this name — give it a different name." : saved.error;
+      if (d.publish) {
+        const r = await publishWorkspace(id, d.note);
+        if ("error" in r) return r.error;
+        if (!r.ok) return r.errors.map((e) => `${e.where ? `${e.where}: ` : ""}${e.message}`).join(" ");
+      }
+      go(`/app/workspaces/${id}`);
       return null;
     }
     case "plan":
@@ -625,6 +650,54 @@ function ProposalFields({
     case "strategy":
     case "strategy_update":
       return <StrategyFields draft={p.draft} onChange={(draft) => onChange({ ...p, draft })} instrumentId={instrumentId} onInstrument={onInstrument} />;
+    case "workspace":
+      return (
+        <div className="space-y-4">
+          <Field label="Workspace name">
+            <input value={p.draft.name} maxLength={80} onChange={(e) => onChange({ ...p, draft: { ...p.draft, name: e.target.value } })} className={inputCls} />
+          </Field>
+          <div className="space-y-2 rounded-xl bg-brand-bg p-3 text-sm text-brand-navy/80">
+            <p>
+              <strong className="text-brand-navy">Trades:</strong> {p.draft.instrumentSymbol ?? "—"} · {p.draft.definition.direction === "SHORT" ? "short" : "long"} · {p.draft.definition.timeframe} candles{p.draft.definition.style ? ` · ${STYLE_LABEL[p.draft.definition.style]}` : ""}
+            </p>
+            <p>
+              <strong className="text-brand-navy">Enters when:</strong> {p.draft.entryText}
+            </p>
+            <p>
+              <strong className="text-brand-navy">Exit rule:</strong> {p.draft.definition.exit ? p.draft.exitText : "none — it exits on its stops, targets or holding limit"}
+            </p>
+            {p.draft.definition.entryPlan && (
+              <ul className="list-disc space-y-0.5 pl-5 text-xs">
+                {describeEntryPlan(p.draft.definition.entryPlan, p.draft.definition.direction).map((l) => (
+                  <li key={l}>{l}</li>
+                ))}
+              </ul>
+            )}
+            {p.draft.definition.targets && p.draft.definition.targets.length > 0 && (
+              <ul className="list-disc space-y-0.5 pl-5 text-xs">
+                {describeTargets(p.draft.definition.targets).map((l) => (
+                  <li key={l}>{l}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+          {p.draft.warnings.length > 0 && (
+            <ul className="list-disc space-y-0.5 rounded-xl bg-brand-gold/10 p-3 pl-7 text-xs text-brand-navy/75">
+              {p.draft.warnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          )}
+          <label className="flex items-start gap-2 text-sm text-brand-navy">
+            <input type="checkbox" className="mt-0.5 accent-brand-primary" checked={p.draft.publish} onChange={(e) => onChange({ ...p, draft: { ...p.draft, publish: e.target.checked } })} />
+            <span>
+              Publish it as a version now
+              <span className="block text-xs text-brand-navy/50">Freezes this plan and creates a strategy you can backtest, forward test and take live. Leave it off to just save the draft.</span>
+            </span>
+          </label>
+          <p className="text-xs text-brand-navy/40">To change the logic, ask your assistant, or open the workspace after saving.</p>
+        </div>
+      );
     case "backtest":
       return (
         <div className="space-y-4">

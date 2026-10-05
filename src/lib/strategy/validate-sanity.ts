@@ -242,7 +242,7 @@ function walk(node: ConditionNode, section: FeasibilitySection, issues: Feasibil
     return;
   }
 
-  if (node.kind === "not") {
+  if (node.kind === "not" || node.kind === "recent") {
     walk(node.child, section, issues);
     return;
   }

@@ -705,6 +705,28 @@ export default function ConditionGroupEditor({
     );
   }
 
+  if (node.kind === "recent") {
+    const r = node;
+    return (
+      <div className="rounded-lg border border-dashed border-brand-navy/20 p-2">
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-brand-navy/60">
+          <select value={r.mode} onChange={(e) => onChange({ ...r, mode: e.target.value as "ANY" | "ALL" })} className="rounded border border-brand-navy/15 px-1.5 py-1 text-xs font-semibold uppercase tracking-wide text-brand-navy/70" aria-label="Look-back mode">
+            <option value="ANY">True at least once in</option>
+            <option value="ALL">True on every candle of</option>
+          </select>
+          <span>the</span>
+          <input type="number" min={1} max={500} step={1} value={r.bars} aria-label="Look-back candles" onChange={(e) => onChange({ ...r, bars: Math.max(1, Math.min(500, Math.floor(Number(e.target.value)) || 1)) })} className="w-16 rounded border border-brand-navy/15 px-1.5 py-1 text-xs" />
+          <span>{r.excludeCurrent ? "candles before this one" : "latest candles (including this one)"}</span>
+          <label className="flex items-center gap-1">
+            <input type="checkbox" className="accent-brand-primary" checked={!!r.excludeCurrent} onChange={(e) => onChange({ ...r, excludeCurrent: e.target.checked })} />
+            not this one
+          </label>
+        </div>
+        <ConditionGroupEditor node={r.child} onChange={(child) => onChange({ ...r, child })} depth={depth + 1} />
+      </div>
+    );
+  }
+
   const group = node;
 
   function updateChild(idx: number, child: ConditionNode) {

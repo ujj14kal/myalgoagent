@@ -65,6 +65,7 @@ export function fillCustomRefs(node: ConditionNode, saved: Map<string, CustomInd
     case "group":
       return { ...node, children: node.children.map((c) => fillCustomRefs(c, saved)) };
     case "not":
+    case "recent":
       return { ...node, child: fillCustomRefs(node.child, saved) };
     case "comparison":
       return { ...node, left: op(node.left), right: op(node.right) };

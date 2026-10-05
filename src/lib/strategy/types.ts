@@ -94,6 +94,10 @@ export type BooleanSignalKind =
 export type ConditionNode =
   | { kind: "group"; op: "AND" | "OR"; children: ConditionNode[] }
   | { kind: "not"; child: ConditionNode }
+  // Looks back over the last `bars` candles: ANY = the rule was true on at least one of them, ALL = on every one.
+  // `excludeCurrent` ends the window on the previous candle (the rule must have happened BEFORE this one). Never "unknown":
+  // a candle without enough data counts as false. This is how a workspace says "A happened first, then B" or "the trend has held for 3 bars".
+  | { kind: "recent"; child: ConditionNode; bars: number; mode: "ANY" | "ALL"; excludeCurrent?: boolean }
   | { kind: "comparison"; left: Operand; operator: ComparisonOperator; right: Operand }
   | { kind: "signal"; signal: BooleanSignalKind };
 

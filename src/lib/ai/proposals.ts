@@ -1,6 +1,7 @@
 import type { StrategyInput } from "@/lib/strategy-actions";
 import type { EntryPlan, TargetLevel } from "@/lib/trading-engine/step";
 import type { StrategyStyle } from "@/lib/strategy/style";
+import type { WorkspaceDefinition } from "@/lib/workspace/types";
 import { NEVER_EXIT_CONDITION, type ConditionNode } from "@/lib/strategy/types";
 
 // An action the agent has prepared for the user to review. Stored on the
@@ -116,6 +117,27 @@ export type AgentProposal =
       draft: Extract<AgentProposal, { kind: "strategy" }>["draft"];
     }
   | {
+      // A workspace: several strategies and rules connected into one plan (created or updated, optionally published as a version).
+      kind: "workspace";
+      status: ProposalStatus;
+      resultId?: string;
+      draft: {
+        name: string;
+        description?: string;
+        /** Set when updating an existing workspace. */
+        workspaceId?: string;
+        definition: WorkspaceDefinition;
+        instrumentSymbol: string | null;
+        /** The entry and exit logic in plain words, and anything worth a look. */
+        entryText: string;
+        exitText: string;
+        warnings: string[];
+        /** Publish the plan as the next version (an ordinary strategy to backtest, forward test and take live). */
+        publish: boolean;
+        note?: string;
+      };
+    }
+  | {
       // Several steps in one review, run in order — e.g. create a strategy, backtest it, forward test it.
       kind: "plan";
       status: ProposalStatus;
@@ -140,6 +162,7 @@ export const PROPOSAL_TITLES: Record<AgentProposal["kind"], string> = {
   paper_control: "Forward test",
   strategy_archive: "Archive strategy",
   strategy_update: "Update strategy",
+  workspace: "Workspace",
   plan: "Multi-step plan",
 };
 

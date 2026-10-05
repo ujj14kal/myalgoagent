@@ -87,6 +87,8 @@ function entryTargetsOpen(node: ConditionNode | undefined): boolean {
       return node.children.some(entryTargetsOpen);
     case "not":
       return false;
+    case "recent":
+      return entryTargetsOpen(node.child);
     case "signal":
       return node.signal.family === "TIME_WINDOW" && node.signal.startMinute <= SESSION_OPEN_MINUTE;
     default:
@@ -126,6 +128,7 @@ function usesTimeOfDay(node: ConditionNode): boolean {
     case "group":
       return node.children.some(usesTimeOfDay);
     case "not":
+    case "recent":
       return usesTimeOfDay(node.child);
     case "signal":
       return node.signal.family === "TIME_WINDOW" || (node.signal.family === "CANDLE_PATTERN" && !!node.signal.window);

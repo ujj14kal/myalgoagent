@@ -156,6 +156,14 @@ export function validateConditionNode(v: unknown, path = "condition"): asserts v
     return;
   }
 
+  if (v.kind === "recent") {
+    if (typeof v.bars !== "number" || !Number.isInteger(v.bars) || v.bars < 1 || v.bars > 500) throw new Error(`${path}.bars: expected a whole number from 1 to 500`);
+    if (v.mode !== "ANY" && v.mode !== "ALL") throw new Error(`${path}.mode: expected "ANY" or "ALL"`);
+    if (v.excludeCurrent !== undefined && typeof v.excludeCurrent !== "boolean") throw new Error(`${path}.excludeCurrent: expected true or false`);
+    validateConditionNode(v.child, `${path}.child`);
+    return;
+  }
+
   if (v.kind === "comparison") {
     if (typeof v.operator !== "string" || !OPERATORS.includes(v.operator as ComparisonOperator)) {
       throw new Error(`${path}.operator: expected one of ${OPERATORS.join(", ")}`);
@@ -170,5 +178,5 @@ export function validateConditionNode(v: unknown, path = "condition"): asserts v
     return;
   }
 
-  throw new Error(`${path}.kind: expected "group", "not", "comparison", or "signal"`);
+  throw new Error(`${path}.kind: expected "group", "not", "recent", "comparison", or "signal"`);
 }

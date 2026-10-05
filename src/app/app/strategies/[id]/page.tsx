@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { describeEntryPlan } from "@/lib/describe-entry-plan";
 import { describeTargets } from "@/lib/describe-targets";
 import { STYLE_LABEL } from "@/lib/strategy/style";
@@ -41,7 +42,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
   const [strategy, instruments] = await Promise.all([
     prisma.strategy.findFirst({
       where: { id, userId: session.user.id },
-      include: { instrument: true },
+      include: { instrument: true, workspaceVersion: { select: { version: true, workspaceId: true, workspace: { select: { name: true } } } } },
     }),
     prisma.instrument.findMany({
       orderBy: { symbol: "asc" },
@@ -213,6 +214,19 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
         )}
       </div>
 
+      {strategy.workspaceVersion && (
+        <div className="mt-10 surface p-5 text-sm text-brand-navy/70">
+          <p className="font-semibold text-brand-navy">Built from a workspace</p>
+          <p className="mt-1">
+            This is version {strategy.workspaceVersion.version} of{" "}
+            <Link href={`/app/workspaces/${strategy.workspaceVersion.workspaceId}`} className="font-semibold text-brand-primary hover:underline">
+              {strategy.workspaceVersion.workspace.name}
+            </Link>
+            . Its rules come from the workspace, so it can&apos;t be edited here: change the workspace and publish a new version. You can still backtest it, forward test it and take it live from this page.
+          </p>
+        </div>
+      )}
+      {!strategy.workspaceVersion && (
       <div className="mt-10">
         <h2 className="text-lg font-semibold text-brand-navy">Edit strategy</h2>
         <div className="mt-4">
@@ -254,6 +268,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
           />
         </div>
       </div>
+      )}
     </div>
   );
 }
