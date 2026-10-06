@@ -1,3 +1,7 @@
+import Pager from "@/components/ui/pager";
+import ListToolbar from "@/components/ui/list-toolbar";
+import { pageWindow, readPageQuery } from "@/lib/pagination";
+import { keepParams, qText } from "@/lib/list-query";
 import { Megaphone } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireStaff } from "@/lib/admin/access";
@@ -7,10 +11,17 @@ import { AdminPageHeader, Card, Empty, Pill, ist } from "@/components/admin/ui";
 
 const TONE = { INFO: "blue", SUCCESS: "green", WARNING: "gold", CRITICAL: "red" } as const;
 
-export default async function AnnouncementsPage() {
+export default async function AnnouncementsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireStaff("announcements");
   const now = new Date();
-  const all = await prisma.announcement.findMany({ orderBy: { createdAt: "desc" }, take: 30 });
+  const sp = await searchParams;
+  const q = qText(sp.q);
+  const where = q ? { OR: [{ title: { contains: q, mode: "insensitive" as const } }, { body: { contains: q, mode: "insensitive" as const } }] } : {};
+  const total = await prisma.announcement.count({ where });
+  const { page, size } = readPageQuery(sp, 10);
+  const win = pageWindow(total, page, size);
+  const params = keepParams({ q, size: size === 10 ? undefined : String(size) });
+  const all = await prisma.announcement.findMany({ where, orderBy: { createdAt: "desc" }, skip: win.skip, take: win.take });
   const live = (a: (typeof all)[number]) => a.active && a.startsAt <= now && (!a.endsAt || a.endsAt > now);
 
   return (
@@ -20,8 +31,11 @@ export default async function AnnouncementsPage() {
         <AnnouncementForm />
       </Card>
       <Card title="History" pad={false}>
+        <div className="border-b border-black/[0.05] px-5 py-3">
+          <ListToolbar params={params} search={{ placeholder: "Search announcements…" }} />
+        </div>
         {all.length === 0 ? (
-          <Empty>Nothing announced yet.</Empty>
+          <Empty>{q ? "No announcements match." : "Nothing announced yet."}</Empty>
         ) : (
           <ul className="divide-y divide-black/[0.05]">
             {all.map((a) => (
@@ -43,6 +57,9 @@ export default async function AnnouncementsPage() {
             ))}
           </ul>
         )}
+        <div className="px-5 pb-3">
+          <Pager basePath="/admin/announcements" params={params} window={win} />
+        </div>
       </Card>
     </div>
   );

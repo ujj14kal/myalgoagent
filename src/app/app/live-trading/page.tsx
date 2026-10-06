@@ -46,15 +46,19 @@ function connectionState(c: { status: string; tokenExpiresAt: Date | null; liveR
   return { loggedIn, ready };
 }
 
+/** The newest orders shown here; the full, searchable list is on the Orders page. */
+const RECENT_ORDERS = 10;
+
 export default async function Page() {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return null;
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { liveTradingEnabledAt: true, liveStaticIp: true, riskSettings: true } });
-  const [conns, orders, deployments] = await Promise.all([
+  const [conns, orders, deployments, orderCount] = await Promise.all([
     prisma.brokerConnection.findMany({ where: { userId }, orderBy: { createdAt: "asc" }, select: { broker: true, status: true, tokenExpiresAt: true, liveReadyAt: true, liveReadyDetail: true, accountName: true } }),
-    prisma.liveOrder.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 50, include: { events: { orderBy: { at: "asc" } } } }),
+    prisma.liveOrder.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: RECENT_ORDERS, include: { events: { orderBy: { at: "asc" } } } }),
     prisma.liveDeployment.findMany({ where: { userId }, orderBy: [{ status: "asc" }, { startedAt: "desc" }], take: 30 }),
+    prisma.liveOrder.count({ where: { userId } }),
   ]);
   const nowMs = new Date().getTime();
   const staticIp = registeredStaticIp(user?.liveStaticIp);
@@ -245,9 +249,16 @@ export default async function Page() {
       <section className="surface min-w-0 overflow-hidden">
         <div className="flex items-center justify-between gap-3 border-b border-black/[0.05] px-5 py-3.5">
           <p className="flex items-center gap-2 text-sm font-semibold text-brand-navy">
-            <ListOrdered size={16} className="text-brand-primary" /> Live orders
+            <ListOrdered size={16} className="text-brand-primary" /> Latest live orders
           </p>
-          <RefreshOrders />
+          <span className="flex items-center gap-3">
+            {orderCount > 0 && (
+              <Link href="/app/orders" className="text-xs font-semibold text-brand-primary hover:underline">
+                All {orderCount.toLocaleString("en-IN")} orders — search &amp; filter →
+              </Link>
+            )}
+            <RefreshOrders />
+          </span>
         </div>
         {orders.length === 0 ? (
           <p className="px-5 py-10 text-center text-sm text-brand-navy/45">No live orders yet.</p>

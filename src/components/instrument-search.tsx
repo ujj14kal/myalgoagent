@@ -1,8 +1,10 @@
-"use client";
-
-import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, Search, X } from "lucide-react";
+import { ChevronRight } from "lucide-react";
+import ListTabs from "@/components/ui/list-tabs";
+import ListToolbar from "@/components/ui/list-toolbar";
+
+// The instrument browser: search and sector filter run on the server (instruments/page.tsx), and
+// only the page shown comes to the browser — not all 2,700+ instruments.
 
 interface Instrument {
   symbol: string;
@@ -15,77 +17,39 @@ function titleCase(s: string) {
   return s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export default function InstrumentSearch({ instruments }: { instruments: Instrument[] }) {
-  const [query, setQuery] = useState("");
-  const [sector, setSector] = useState<string | null>(null);
-
-  const sectors = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const i of instruments) if (i.sector) counts.set(i.sector, (counts.get(i.sector) ?? 0) + 1);
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([s]) => s);
-  }, [instruments]);
-
-  const q = query.trim().toLowerCase();
-  // 2,700+ instruments: rank (indices and exact/prefix matches first, then the large caps that carry a sector) and show the top ones.
-  const matches = instruments
-    .filter((i) => (!sector || i.sector === sector) && (!q || i.symbol.toLowerCase().includes(q) || i.name.toLowerCase().includes(q)))
-    .map((i) => {
-      const plain = i.symbol.replace(/\.NS$|\.BO$|^\^/, "").toLowerCase();
-      const rank = q
-        ? plain === q ? 0 : plain.startsWith(q) ? 1 : i.name.toLowerCase().startsWith(q) ? 2 : 3
-        : i.symbol.startsWith("^") ? 0 : i.sector ? 1 : 2;
-      return { i, rank };
-    })
-    .sort((a, b) => a.rank - b.rank || a.i.symbol.localeCompare(b.i.symbol))
-    .map((m) => m.i);
-  const SHOWN = 60;
-  const filtered = matches.slice(0, SHOWN);
-
+export default function InstrumentSearch({
+  instruments,
+  total,
+  sectors,
+  sector,
+  query,
+  params,
+  pager,
+}: {
+  /** The page shown. */
+  instruments: Instrument[];
+  /** Every instrument (for the "All" count). */
+  total: number;
+  sectors: { sector: string; count: number }[];
+  sector: string | null;
+  query: string | null;
+  params: Record<string, string | undefined>;
+  pager: React.ReactNode;
+}) {
   return (
-    <div>
-      <div className="relative max-w-md">
-        <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-navy/35" />
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by symbol or company name…"
-          aria-label="Search instruments"
-          className="w-full rounded-xl border border-brand-navy/10 bg-white py-2.5 pl-10 pr-9 text-sm shadow-sm outline-none transition focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/10"
-        />
-        {query && (
-          <button type="button" onClick={() => setQuery("")} aria-label="Clear search" className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-brand-navy/40 hover:text-brand-navy">
-            <X size={14} />
-          </button>
-        )}
-      </div>
-
+    <div className="space-y-4">
+      <ListToolbar basePath="/app/instruments" params={params} search={{ placeholder: "Search by symbol or company name…" }} />
       {sectors.length > 1 && (
-        <div className="mt-4 flex flex-wrap gap-1.5" role="group" aria-label="Filter by sector">
-          <button
-            type="button"
-            onClick={() => setSector(null)}
-            aria-pressed={sector === null}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${sector === null ? "bg-brand-navy text-white" : "bg-white text-brand-navy/60 ring-1 ring-brand-navy/10 hover:text-brand-primary"}`}
-          >
-            All · {instruments.length}
-          </button>
-          {sectors.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setSector(sector === s ? null : s)}
-              aria-pressed={sector === s}
-              className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${sector === s ? "bg-brand-navy text-white" : "bg-white text-brand-navy/60 ring-1 ring-brand-navy/10 hover:text-brand-primary"}`}
-            >
-              {titleCase(s)}
-            </button>
-          ))}
-        </div>
+        <ListTabs
+          basePath="/app/instruments"
+          params={params}
+          name="sector"
+          tabs={[{ value: "", label: "All", count: total }, ...sectors.map((s) => ({ value: s.sector, label: titleCase(s.sector), count: s.count }))]}
+          active={sector ?? ""}
+        />
       )}
-
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {filtered.map((i) => (
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {instruments.map((i) => (
           <Link key={i.symbol} href={`/app/instruments/${encodeURIComponent(i.symbol)}`} className="surface surface-interactive group flex items-center gap-3 p-4">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-primary/[0.07] text-xs font-bold tracking-tight text-brand-primary">
               {i.symbol.replace(/\.NS$|\.BO$/, "").slice(0, 3)}
@@ -98,18 +62,14 @@ export default function InstrumentSearch({ instruments }: { instruments: Instrum
             <ChevronRight size={16} className="shrink-0 text-brand-navy/20 transition-transform group-hover:translate-x-0.5 group-hover:text-brand-primary" />
           </Link>
         ))}
-        {matches.length > SHOWN && (
-          <p className="col-span-full text-center text-xs text-brand-navy/45">
-            Showing {SHOWN} of {matches.length.toLocaleString("en-IN")} — type a symbol or company name to narrow it down.
-          </p>
-        )}
-        {filtered.length === 0 && (
+        {instruments.length === 0 && (
           <p className="col-span-full rounded-xl border border-dashed border-brand-navy/15 py-10 text-center text-sm text-brand-navy/50">
             No instruments match{query ? <> &ldquo;{query}&rdquo;</> : null}
             {sector ? <> in {titleCase(sector)}</> : null}.
           </p>
         )}
       </div>
+      {pager}
     </div>
   );
 }

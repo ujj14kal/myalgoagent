@@ -1,5 +1,6 @@
 import MarketRefresh from "@/components/markets/auto-refresh";
 import Link from "next/link";
+import FillList from "@/components/ui/fill-list";
 import { Activity, Braces, FlaskConical, Landmark, Layers, LineChart, Radio, ShieldCheck, Sparkles, Star, Zap } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -57,7 +58,7 @@ export default async function DashboardPage() {
       prisma.riskSettings.findUnique({ where: { userId } }),
       getPnlByPeriod(userId),
       getRecentActivity(userId),
-      getStrategyPerformance(userId),
+      getStrategyPerformance(userId, 10),
       prisma.watchlistItem.findMany({
         where: { userId },
         include: { instrument: { select: { symbol: true, name: true } } },
@@ -65,7 +66,7 @@ export default async function DashboardPage() {
         take: 5,
       }),
       prisma.strategy.count({ where: { userId, status: { not: "DELETED" } } }),
-      getRecentBacktests(userId),
+      getRecentBacktests(userId, 8),
       getHealthAlerts(userId),
     ]);
 
@@ -73,7 +74,7 @@ export default async function DashboardPage() {
   // Forward tests are shown one by one (each strategy's hypothetical result) — never pooled into an account.
   const totalStarting = rows.reduce((s, r) => s + r.session.startingCapital, 0);
   const todayPnlPct = totalStarting > 0 ? (pnl.today / totalStarting) * 100 : 0;
-  const tests = [...rows].sort((a, b) => Number(b.session.status === "ACTIVE") - Number(a.session.status === "ACTIVE") || b.pnlPct - a.pnlPct).slice(0, 6);
+  const tests = [...rows].sort((a, b) => Number(b.session.status === "ACTIVE") - Number(a.session.status === "ACTIVE") || b.pnlPct - a.pnlPct).slice(0, 10);
   const best = rows.filter((r) => r.session.status === "ACTIVE").sort((a, b) => b.pnlPct - a.pnlPct)[0];
   const [brokerRows, liveDeployments, liveOrdersToday] = await Promise.all([
     prisma.brokerConnection.findMany({ where: { userId }, select: { broker: true, status: true, tokenExpiresAt: true } }),
@@ -191,8 +192,8 @@ export default async function DashboardPage() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="p-5 lg:col-span-2">
-          <div data-tour="portfolio-chart">
+        <Card className="flex flex-col p-5 lg:col-span-2">
+          <div data-tour="portfolio-chart" className="flex flex-1 flex-col">
             <CardHeader
               title="Forward tests"
               subtitle="Each strategy's own hypothetical result — no real money"
@@ -202,7 +203,8 @@ export default async function DashboardPage() {
             {tests.length === 0 ? (
               <p className="mt-6 text-sm text-brand-navy/50">No forward tests yet. Backtest a strategy, then forward test it on new prices.</p>
             ) : (
-              <ul className="mt-3 divide-y divide-black/[0.04]">
+              <FillList className="mt-3">
+              <ul className="divide-y divide-black/[0.04]">
                 {tests.map((r) => (
                   <li key={r.session.id}>
                     <Link href={`/app/forward-testing/${r.session.id}`} className="flex items-center gap-3 py-2.5 text-sm hover:bg-brand-bg/50">
@@ -219,6 +221,7 @@ export default async function DashboardPage() {
                   </li>
                 ))}
               </ul>
+              </FillList>
             )}
           </div>
         </Card>
@@ -239,16 +242,16 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="p-5 lg:col-span-2">
+        <Card className="flex flex-col p-5 lg:col-span-2">
           <CardHeader
             title="Strategy performance"
             subtitle="Today's realised P&L per strategy"
             icon={Layers}
             action={<Link href="/app/strategies" className="text-xs font-semibold text-brand-primary hover:underline">View all →</Link>}
           />
-          <div className="mt-3">
+          <FillList className="mt-3">
             <StrategyPerformanceList strategies={strategies} />
-          </div>
+          </FillList>
         </Card>
         <Card className="p-5">
           <CardHeader title="Quick actions" icon={Zap} />
@@ -259,21 +262,21 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        <Card className="p-5">
+        <Card className="flex flex-col p-5">
           <CardHeader title="Recent activity" icon={Activity} />
-          <div className="mt-4">
+          <FillList from="md" className="mt-4">
             <ActivityFeed items={activity} />
-          </div>
+          </FillList>
         </Card>
-        <Card className="p-5">
+        <Card className="flex flex-col p-5">
           <CardHeader
             title="Recent backtests"
             icon={FlaskConical}
             action={<Link href="/app/backtests" className="text-xs font-semibold text-brand-primary hover:underline">View all →</Link>}
           />
-          <div className="mt-3">
+          <FillList from="md" className="mt-3">
             <RecentBacktests runs={recentBacktests} />
-          </div>
+          </FillList>
         </Card>
         <div className="flex flex-col gap-6 md:col-span-2 xl:col-span-1">
           <Card className="p-5">

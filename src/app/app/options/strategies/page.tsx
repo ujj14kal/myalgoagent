@@ -8,6 +8,12 @@ import StrategyList from "@/components/options/strategy-list";
 import { marketExtrasFor } from "@/lib/market-data";
 import type { OptionStrategyInput } from "@/lib/option-strategy-actions";
 import { formatSignedINR, toneOf, TONE_TEXT } from "@/lib/format";
+import type { Prisma } from "@prisma/client";
+import Pager from "@/components/ui/pager";
+import ListTabs from "@/components/ui/list-tabs";
+import ListToolbar from "@/components/ui/list-toolbar";
+import { pageWindow, readPageQuery } from "@/lib/pagination";
+import { keepParams, qEnum, qText } from "@/lib/list-query";
 
 export const metadata = {
   title: "Options Strategies",
@@ -15,45 +21,35 @@ export const metadata = {
 };
 export const dynamic = "force-dynamic";
 
-export default async function Page() {
+export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return null;
   const live = !!marketExtrasFor(userId);
-  const [strategies, runs, forwards] = await Promise.all([
-    prisma.optionStrategy.findMany({
-      where: { userId },
-      orderBy: { updatedAt: "desc" },
-    }),
-    prisma.optionBacktestRun.findMany({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-      select: {
-        id: true,
-        strategyName: true,
-        fromDate: true,
-        toDate: true,
-        status: true,
-        stats: true,
-        daysDone: true,
-        daysTotal: true,
-      },
-    }),
-    prisma.optionForwardTest.findMany({
-      where: { userId },
-      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
-      take: 20,
-      select: {
-        id: true,
-        strategyName: true,
-        status: true,
-        trades: true,
-        today: true,
-        createdAt: true,
-      },
-    }),
+  const sp = await searchParams;
+  const tab = qEnum(sp.tab, ["strategies", "forward", "backtests"] as const, "strategies");
+  const q = qText(sp.q);
+  const state = qEnum(sp.state, ["all", "ACTIVE", "STOPPED", "DONE", "RUNNING", "FAILED"] as const, "all");
+  const { page, size } = readPageQuery(sp, 10);
+
+  // Every list is searched, filtered and paged in the database; only the tab shown is loaded.
+  const like = q ? { contains: q, mode: "insensitive" as const } : undefined;
+  const sWhere: Prisma.OptionStrategyWhereInput = { userId, ...(like ? { OR: [{ name: like }, { underlying: like }] } : {}) };
+  const fWhere: Prisma.OptionForwardTestWhereInput = { userId, ...(like ? { strategyName: like } : {}), ...(state === "ACTIVE" ? { status: "ACTIVE" } : state === "STOPPED" ? { status: { not: "ACTIVE" } } : {}) };
+  const bWhere: Prisma.OptionBacktestRunWhereInput = { userId, ...(like ? { strategyName: like } : {}), ...(state === "DONE" || state === "RUNNING" || state === "FAILED" ? { status: state } : {}) };
+  const [sCount, fCount, bCount] = await Promise.all([prisma.optionStrategy.count({ where: sWhere }), prisma.optionForwardTest.count({ where: fWhere }), prisma.optionBacktestRun.count({ where: bWhere })]);
+  const win = pageWindow(tab === "strategies" ? sCount : tab === "forward" ? fCount : bCount, page, size);
+  const [strategies, forwards, runs] = await Promise.all([
+    tab === "strategies" ? prisma.optionStrategy.findMany({ where: sWhere, orderBy: { updatedAt: "desc" }, skip: win.skip, take: win.take }) : [],
+    tab === "forward"
+      ? prisma.optionForwardTest.findMany({ where: fWhere, orderBy: [{ status: "asc" }, { createdAt: "desc" }], skip: win.skip, take: win.take, select: { id: true, strategyName: true, status: true, trades: true, today: true, createdAt: true } })
+      : [],
+    tab === "backtests"
+      ? prisma.optionBacktestRun.findMany({ where: bWhere, orderBy: { createdAt: "desc" }, skip: win.skip, take: win.take, select: { id: true, strategyName: true, fromDate: true, toDate: true, status: true, stats: true, daysDone: true, daysTotal: true } })
+      : [],
   ]);
+  const params = keepParams({ tab: tab === "strategies" ? undefined : tab, q, state: state === "all" ? undefined : state, size: size === 10 ? undefined : String(size) });
+  const none = (text: string) => <p className="rounded-2xl border border-dashed border-black/10 px-4 py-8 text-center text-sm text-brand-navy/50">{text}</p>;
 
   return (
     <div>
@@ -68,36 +64,62 @@ export default async function Page() {
           Options backtests run on real historical option prices from the live market-data feed, which isn&apos;t enabled for your account yet.
         </p>
       ) : (
-        <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_22rem]">
-          <StrategyList
-            strategies={strategies.map((s) => ({
-              id: s.id,
-              name: s.name,
-              underlying: s.underlying,
-              legs: s.legs as unknown as OptionStrategyInput["legs"],
-              expiryRule: s.expiryRule as OptionStrategyInput["expiryRule"],
-              entryMinute: s.entryMinute,
-              exitMinute: s.exitMinute,
-              weekdays: s.weekdays,
-              stopLossUnit: s.stopLossUnit as OptionStrategyInput["stopLossUnit"],
-              stopLossValue: s.stopLossValue,
-              targetUnit: s.targetUnit as OptionStrategyInput["targetUnit"],
-              targetValue: s.targetValue,
-            }))}
+        <div className="mt-6 space-y-4">
+          <ListTabs
+            basePath="/app/options/strategies"
+            params={params}
+            tabs={[
+              { value: "strategies", label: "Strategies", count: sCount },
+              { value: "forward", label: "Forward tests", count: fCount },
+              { value: "backtests", label: "Backtests", count: bCount },
+            ]}
+            active={tab}
           />
-          <div className="space-y-4">
-            <section className="surface h-fit overflow-hidden">
-              <p className="border-b border-black/[0.05] px-4 py-3 text-sm font-semibold text-brand-navy">Forward tests</p>
-              {forwards.length === 0 ? (
-                <p className="px-4 py-6 text-center text-xs text-brand-navy/45">None yet — press “Forward test” on a strategy.</p>
-              ) : (
-                <ul className="divide-y divide-black/[0.04]">
+          <ListToolbar
+            params={params}
+            search={{ placeholder: tab === "strategies" ? "Search name or underlying…" : "Search by strategy…" }}
+            selects={
+              tab === "forward"
+                ? [{ name: "state", label: "Status", options: [{ value: "all", label: "Any" }, { value: "ACTIVE", label: "Running" }, { value: "STOPPED", label: "Stopped" }] }]
+                : tab === "backtests"
+                  ? [{ name: "state", label: "Status", options: [{ value: "all", label: "Any" }, { value: "DONE", label: "Finished" }, { value: "RUNNING", label: "Running" }, { value: "FAILED", label: "Failed" }] }]
+                  : []
+            }
+          />
+          {tab === "strategies" && (
+            <>
+              <StrategyList
+                total={sCount}
+                strategies={strategies.map((s) => ({
+                  id: s.id,
+                  name: s.name,
+                  underlying: s.underlying,
+                  legs: s.legs as unknown as OptionStrategyInput["legs"],
+                  expiryRule: s.expiryRule as OptionStrategyInput["expiryRule"],
+                  entryMinute: s.entryMinute,
+                  exitMinute: s.exitMinute,
+                  weekdays: s.weekdays,
+                  stopLossUnit: s.stopLossUnit as OptionStrategyInput["stopLossUnit"],
+                  stopLossValue: s.stopLossValue,
+                  targetUnit: s.targetUnit as OptionStrategyInput["targetUnit"],
+                  targetValue: s.targetValue,
+                }))}
+              />
+              {q && strategies.length === 0 && none("No options strategies match.")}
+            </>
+          )}
+          {tab === "forward" &&
+            (forwards.length === 0 ? (
+              none(q || state !== "all" ? "No forward tests match." : "None yet — press “Forward test” on a strategy.")
+            ) : (
+              <section className="surface overflow-hidden">
+                <ul className="grid divide-y divide-black/[0.04] sm:grid-cols-2 sm:divide-y-0">
                   {forwards.map((f) => {
                     const closed = (f.trades as { netPnl: number }[]).reduce((sum, t) => sum + t.netPnl, 0);
                     const open = (f.today as { netPnl?: number } | null)?.netPnl ?? 0;
                     const total = closed + open;
                     return (
-                      <li key={f.id}>
+                      <li key={f.id} className="sm:border-b sm:border-black/[0.04]">
                         <Link href={`/app/options/forward/${f.id}`} className="block px-4 py-2.5 hover:bg-brand-bg/60">
                           <p className="flex items-center gap-2 text-sm font-semibold text-brand-navy">
                             {f.status === "ACTIVE" && <span className="h-1.5 w-1.5 rounded-full bg-brand-buy" />} {f.strategyName}
@@ -115,19 +137,19 @@ export default async function Page() {
                     );
                   })}
                 </ul>
-              )}
-              <p className="border-t border-black/[0.05] px-4 py-2 text-[11px] text-brand-navy/40">Hypothetical results on live prices — no orders are sent.</p>
-            </section>
-            <section className="surface h-fit overflow-hidden">
-              <p className="border-b border-black/[0.05] px-4 py-3 text-sm font-semibold text-brand-navy">Recent backtests</p>
-              {runs.length === 0 ? (
-                <p className="px-4 py-6 text-center text-xs text-brand-navy/45">None yet.</p>
-              ) : (
-                <ul className="divide-y divide-black/[0.04]">
+                <p className="border-t border-black/[0.05] px-4 py-2 text-[11px] text-brand-navy/40">Hypothetical results on live prices — no orders are sent.</p>
+              </section>
+            ))}
+          {tab === "backtests" &&
+            (runs.length === 0 ? (
+              none(q || state !== "all" ? "No backtests match." : "None yet — press “Backtest” on a strategy.")
+            ) : (
+              <section className="surface overflow-hidden">
+                <ul className="grid divide-y divide-black/[0.04] sm:grid-cols-2 sm:divide-y-0">
                   {runs.map((r) => {
                     const net = (r.stats as { netPnl?: number } | null)?.netPnl;
                     return (
-                      <li key={r.id}>
+                      <li key={r.id} className="sm:border-b sm:border-black/[0.04]">
                         <Link href={`/app/options/backtests/${r.id}`} className="block px-4 py-2.5 hover:bg-brand-bg/60">
                           <p className="text-sm font-semibold text-brand-navy">{r.strategyName}</p>
                           <p className="flex justify-between text-xs text-brand-navy/55">
@@ -145,9 +167,9 @@ export default async function Page() {
                     );
                   })}
                 </ul>
-              )}
-            </section>
-          </div>
+              </section>
+            ))}
+          <Pager basePath="/app/options/strategies" params={params} window={win} />
         </div>
       )}
     </div>

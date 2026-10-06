@@ -1,3 +1,6 @@
+import type { Prisma } from "@prisma/client";
+import ListToolbar from "@/components/ui/list-toolbar";
+import { keepParams, qEnum, qText } from "@/lib/list-query";
 import Pager from "@/components/ui/pager";
 import { pageWindow, readPageQuery } from "@/lib/pagination";
 import Link from "next/link";
@@ -22,15 +25,27 @@ export default async function NotificationsPage({ searchParams }: { searchParams
   const session = await auth();
   if (!session?.user?.id) return null;
 
-  // Only the page being shown is read from the database; the unread count covers all of them.
-  const [total, unreadCount] = await Promise.all([
+  // Search, filters and paging happen in the database; the unread count covers all of them.
+  const sp = await searchParams;
+  const q = qText(sp.q);
+  const type = qEnum(sp.type, ["all", ...Object.keys(TYPE_META)] as const, "all");
+  const read = qEnum(sp.read, ["all", "unread", "read"] as const, "all");
+  const where: Prisma.NotificationWhereInput = {
+    userId: session.user.id,
+    ...(q ? { message: { contains: q, mode: "insensitive" } } : {}),
+    ...(type !== "all" ? { type: type as Prisma.NotificationWhereInput["type"] } : {}),
+    ...(read !== "all" ? { read: read === "read" } : {}),
+  };
+  const [all, total, unreadCount] = await Promise.all([
     prisma.notification.count({ where: { userId: session.user.id } }),
+    prisma.notification.count({ where }),
     prisma.notification.count({ where: { userId: session.user.id, read: false } }),
   ]);
-  const { page, size } = readPageQuery(await searchParams);
+  const { page, size } = readPageQuery(sp);
   const win = pageWindow(total, page, size);
+  const params = keepParams({ q, type: type === "all" ? undefined : type, read: read === "all" ? undefined : read, size: size === 25 ? undefined : String(size) });
   const notifications = await prisma.notification.findMany({
-    where: { userId: session.user.id },
+    where,
     orderBy: { createdAt: "desc" },
     skip: win.skip,
     take: win.take,
@@ -45,7 +60,20 @@ export default async function NotificationsPage({ searchParams }: { searchParams
         actions={unreadCount > 0 ? <NotificationActions markAll /> : undefined}
       />
 
-      {notifications.length === 0 && (
+      {all > 0 && (
+        <div className="mb-4">
+          <ListToolbar
+            params={params}
+            search={{ placeholder: "Search notifications…" }}
+            selects={[
+              { name: "type", label: "Type", options: [{ value: "all", label: "Any" }, ...Object.entries(TYPE_META).map(([value, m]) => ({ value, label: m.label }))] },
+              { name: "read", label: "Show", options: [{ value: "all", label: "Read & unread" }, { value: "unread", label: "Unread" }, { value: "read", label: "Read" }] },
+            ]}
+          />
+        </div>
+      )}
+      {all > 0 && notifications.length === 0 && <p className="rounded-2xl border border-dashed border-black/10 px-4 py-8 text-center text-sm text-brand-navy/50">No notifications match.</p>}
+      {all === 0 && (
         <div className="mt-8">
           <EmptyState pose="alert" title="No notifications yet." description="Order fills, risk events, and session changes from your forward testing will show up here." />
         </div>
@@ -84,7 +112,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
           })}
         </ul>
       )}
-      <Pager basePath="/app/notifications" window={win} />
+      <Pager basePath="/app/notifications" params={params} window={win} />
     </div>
   );
 }

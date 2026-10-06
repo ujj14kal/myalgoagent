@@ -79,6 +79,7 @@ export const EVAL_CASES: EvalCase[] = [
   { group: "concept", prompt: "Can I size my trades by how much I am willing to lose instead of the number of shares?", mustMatch: [/(risk|stop)/i, /(stop-loss|stop loss)/i], mustNotMatch: ADVICE },
   { group: "concept", prompt: "What does a veto do in a workspace?", mustMatch: [/veto|block/i, /(signal|first)/i], mustNotMatch: ADVICE },
   { group: "concept", prompt: "Where do the Greeks in the Options Lab come from?", mustMatch: [/broker/i, /(calculat|estimat)/i], mustNotMatch: ADVICE },
+  { group: "help", prompt: "Where can I see only my backtests that lost money, worst first?", mustMatch: [/\/app\/backtests\?[^\s)\]|]*result=loss/] },
   { group: "concept", prompt: "What kinds of custom indicators can I make?", mustMatch: [/zone/i, /(band|channel)/i, /(marker|signal)/i], mustNotMatch: ADVICE },
   { group: "concept", prompt: "How do I use my demand zone indicator in a rule — the zone has two prices?", mustMatch: [/(upper|lower)/i, /inside/i], mustNotMatch: ADVICE },
   { group: "concept", prompt: "If I draw a box on last month's chart and use it in a backtest, is that cheating?", mustMatch: [/(rectangle|box|zone)/i, /(flatter|look.?ahead|before you (could have )?drew|after the fact|hindsight|extend)/i], mustNotMatch: ADVICE },

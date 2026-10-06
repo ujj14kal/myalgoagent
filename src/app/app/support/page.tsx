@@ -1,3 +1,7 @@
+import Pager from "@/components/ui/pager";
+import ListToolbar from "@/components/ui/list-toolbar";
+import { readPageQuery } from "@/lib/pagination";
+import { keepParams, pageRows, qEnum, qText } from "@/lib/list-query";
 import { LifeBuoy, MessageSquareText } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -17,15 +21,34 @@ const STATUS = {
 
 const visible = { where: { author: { not: "NOTE" as const } }, orderBy: { createdAt: "asc" as const } };
 
-export default async function SupportPage({ searchParams }: { searchParams: Promise<{ open?: string }> }) {
+export default async function SupportPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return null;
-  const { open } = await searchParams;
+  const sp = await searchParams;
+  const open = qText(sp.open, 80);
+  const q = qText(sp.q);
+  const status = qEnum(sp.status, ["all", "OPEN", "PENDING", "RESOLVED"] as const, "all");
+  const kind = qEnum(sp.kind, ["all", "case", "feedback"] as const, "all");
 
+  // Requests and feedback are two tables shown as one list: find the page from their ids and dates
+  // (searched and filtered in the database), then load full conversations for that page only.
+  const like = q ? { contains: q, mode: "insensitive" as const } : undefined;
+  const st = status !== "all" ? { status } : {};
+  const [allCount, caseKeys, feedbackKeys] = await Promise.all([
+    Promise.all([prisma.supportCase.count({ where: { userId } }), prisma.feedback.count({ where: { userId } })]).then(([a, b]) => a + b),
+    kind === "feedback" ? [] : prisma.supportCase.findMany({ where: { userId, ...st, ...(like ? { OR: [{ subject: like }, { message: like }] } : {}) }, select: { id: true, lastActivityAt: true } }),
+    kind === "case" ? [] : prisma.feedback.findMany({ where: { userId, ...st, ...(like ? { OR: [{ page: like }, { message: like }] } : {}) }, select: { id: true, lastActivityAt: true } }),
+  ]);
+  const keys = [...caseKeys.map((c) => ({ kind: "case" as const, ...c })), ...feedbackKeys.map((f) => ({ kind: "feedback" as const, ...f }))].sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime());
+  const { page: asked, size } = readPageQuery(sp, 10);
+  // A link to one conversation (?open=case-…, e.g. from a reply notification) lands on its page.
+  const openAt = open && !sp.page ? keys.findIndex((k) => `${k.kind}-${k.id}` === open) : -1;
+  const { rows: pageKeys, win } = pageRows(keys, openAt >= 0 ? Math.floor(openAt / size) + 1 : asked, size);
+  const params = keepParams({ q, status: status === "all" ? undefined : status, kind: kind === "all" ? undefined : kind, size: size === 10 ? undefined : String(size) });
   const [cases, feedback] = await Promise.all([
-    prisma.supportCase.findMany({ where: { userId }, include: { messages: visible }, orderBy: { lastActivityAt: "desc" }, take: 50 }),
-    prisma.feedback.findMany({ where: { userId }, include: { messages: visible }, orderBy: { lastActivityAt: "desc" }, take: 50 }),
+    prisma.supportCase.findMany({ where: { id: { in: pageKeys.filter((k) => k.kind === "case").map((k) => k.id) } }, include: { messages: visible } }),
+    prisma.feedback.findMany({ where: { id: { in: pageKeys.filter((k) => k.kind === "feedback").map((k) => k.id) } }, include: { messages: visible } }),
   ]);
   // Opening this page reads any "support replied" notifications.
   await prisma.notification.updateMany({ where: { userId, type: "SUPPORT_REPLY", read: false }, data: { read: true } });
@@ -63,7 +86,7 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
         description="Your conversations with our team — support requests and the feedback you've sent. Replies show up here and in your email."
       />
 
-      <details className="surface group p-5" open={threads.length === 0}>
+      <details className="surface group p-5" open={allCount === 0}>
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-brand-navy">
           <span className="inline-flex items-center gap-2">
             <MessageSquareText size={16} className="text-brand-primary" /> Ask for help
@@ -75,9 +98,19 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
         </div>
       </details>
 
-      {threads.length === 0 ? (
+      {allCount === 0 ? (
         <p className="text-sm text-brand-navy/55">No conversations yet. Anything you send us — here or with the feedback button — will appear on this page with our replies.</p>
       ) : (
+        <>
+        <ListToolbar
+          params={params}
+          search={{ placeholder: "Search your conversations…" }}
+          selects={[
+            { name: "status", label: "Status", options: [{ value: "all", label: "Any" }, { value: "OPEN", label: STATUS.OPEN.label }, { value: "PENDING", label: STATUS.PENDING.label }, { value: "RESOLVED", label: STATUS.RESOLVED.label }] },
+            { name: "kind", label: "Type", options: [{ value: "all", label: "Requests & feedback" }, { value: "case", label: "Support requests" }, { value: "feedback", label: "Feedback" }] },
+          ]}
+        />
+        {threads.length === 0 && <p className="rounded-2xl border border-dashed border-black/10 px-4 py-8 text-center text-sm text-brand-navy/50">No conversations match.</p>}
         <ul className="space-y-3">
           {threads.map((t) => {
             const s = STATUS[t.status];
@@ -100,6 +133,8 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
             );
           })}
         </ul>
+        <Pager basePath="/app/support" params={params} window={win} />
+        </>
       )}
     </div>
   );

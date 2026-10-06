@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { marketDataFor } from "@/lib/market-data";
 import CustomIndicatorList from "@/components/custom-indicators/list";
 import CustomIndicatorsRoot from "@/components/custom-indicators/root";
-import { describeCustom, type CustomIndicatorDef } from "@/lib/custom-indicator";
+import { classifyCustom, CUSTOM_CLASSES, describeCustom, type CustomClass, type CustomIndicatorDef } from "@/lib/custom-indicator";
 import DevIndicatorCharts from "./charts";
 
 // Development only: the custom-indicator screens and every class drawn on a real chart, without signing in.
@@ -34,7 +34,15 @@ export default async function Page() {
     <main className="mx-auto max-w-5xl space-y-6 p-4">
       <CustomIndicatorsRoot items={samples}>
         <DevIndicatorCharts candles={candles} samples={samples} />
-        <CustomIndicatorList instruments={instruments} items={samples.map((s, i) => ({ id: String(i), name: s.name, description: null, def: s.def, summary: describeCustom(s.def) }))} />
+        <CustomIndicatorList
+          instruments={instruments}
+          items={samples.map((s, i) => ({ id: String(i), name: s.name, description: null, def: s.def, summary: describeCustom(s.def) }))}
+          total={samples.length}
+          counts={Object.fromEntries(CUSTOM_CLASSES.map((c) => [c, samples.filter((s) => classifyCustom(s.def) === c).length])) as Record<CustomClass, number>}
+          kind="all"
+          params={{}}
+          pager={null}
+        />
       </CustomIndicatorsRoot>
     </main>
   );

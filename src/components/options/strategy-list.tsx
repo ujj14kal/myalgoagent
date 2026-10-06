@@ -68,8 +68,9 @@ function Launcher({ id }: { id: string }) {
   );
 }
 
-export default function StrategyList({ strategies }: { strategies: (OptionStrategyInput & { id: string })[] }) {
-  const [editing, setEditing] = useState<string | "new" | null>(strategies.length ? null : "new");
+export default function StrategyList({ strategies, total }: { strategies: (OptionStrategyInput & { id: string })[]; /** How many the user has in all (the list may be one page). */ total?: number }) {
+  const any = (total ?? strategies.length) > 0;
+  const [editing, setEditing] = useState<string | "new" | null>(any ? null : "new");
   const [testing, setTesting] = useState<string | null>(null);
   const [, start] = useTransition();
   const router = useRouter();
@@ -78,7 +79,7 @@ export default function StrategyList({ strategies }: { strategies: (OptionStrate
       {editing === "new" ? (
         <section className="surface p-5">
           <p className="mb-3 text-sm font-semibold text-brand-navy">New options strategy</p>
-          <StrategyEditor onDone={strategies.length ? () => setEditing(null) : undefined} />
+          <StrategyEditor onDone={any ? () => setEditing(null) : undefined} />
         </section>
       ) : (
         <button

@@ -11,6 +11,18 @@ import EmptyState from "@/components/empty-state";
 import { FlaskConical, History } from "lucide-react";
 import { formatPct, toneOf, TONE_TEXT } from "@/lib/format";
 import PageHeader from "@/components/ui/page-header";
+import type { Prisma } from "@prisma/client";
+import ListToolbar from "@/components/ui/list-toolbar";
+import { keepParams, qEnum, qText } from "@/lib/list-query";
+
+const SORTS = ["new", "old", "best", "worst", "trades"] as const;
+const ORDER: Record<(typeof SORTS)[number], Prisma.BacktestRunOrderByWithRelationInput> = {
+  new: { createdAt: "desc" },
+  old: { createdAt: "asc" },
+  best: { totalReturnPct: "desc" },
+  worst: { totalReturnPct: "asc" },
+  trades: { tradeCount: "desc" },
+};
 
 export const metadata = { title: "Backtests", robots: { index: false } };
 
@@ -18,10 +30,20 @@ export default async function BacktestsPage({ searchParams }: { searchParams: Pr
   const session = await auth();
   if (!session?.user?.id) return null;
 
-  // Past runs are paged in the database, not all loaded.
-  const totalRuns = await prisma.backtestRun.count({ where: { userId: session.user.id } });
-  const { page, size } = readPageQuery(await searchParams);
+  // Past runs are searched, filtered and paged in the database, not all loaded.
+  const sp = await searchParams;
+  const q = qText(sp.q);
+  const result = qEnum(sp.result, ["all", "profit", "loss", "none"] as const, "all");
+  const sort = qEnum(sp.sort, SORTS, "new");
+  const where: Prisma.BacktestRunWhereInput = {
+    userId: session.user.id,
+    ...(q ? { OR: [{ strategyName: { contains: q, mode: "insensitive" } }, { instrumentSymbol: { contains: q, mode: "insensitive" } }] } : {}),
+    ...(result === "profit" ? { totalReturnPct: { gt: 0 } } : result === "loss" ? { totalReturnPct: { lt: 0 } } : result === "none" ? { tradeCount: 0 } : {}),
+  };
+  const [allRuns, totalRuns] = await Promise.all([prisma.backtestRun.count({ where: { userId: session.user.id } }), prisma.backtestRun.count({ where })]);
+  const { page, size } = readPageQuery(sp);
   const win = pageWindow(totalRuns, page, size);
+  const params = keepParams({ q, result: result === "all" ? undefined : result, sort: sort === "new" ? undefined : sort, size: size === 25 ? undefined : String(size) });
   const [strategies, runs] = await Promise.all([
     prisma.strategy.findMany({
       // Deleted strategies never belong in a "pick one to run" list — that
@@ -31,8 +53,8 @@ export default async function BacktestsPage({ searchParams }: { searchParams: Pr
       orderBy: { updatedAt: "desc" },
     }),
     prisma.backtestRun.findMany({
-      where: { userId: session.user.id },
-      orderBy: { createdAt: "desc" },
+      where,
+      orderBy: [ORDER[sort], { createdAt: "desc" }],
       skip: win.skip,
       take: win.take,
     }),
@@ -74,7 +96,7 @@ export default async function BacktestsPage({ searchParams }: { searchParams: Pr
         />
       </div>
 
-      {runs.length === 0 ? (
+      {allRuns === 0 ? (
         <div className="mt-8">
           <EmptyState pose="thinking" title="No backtests run yet." description="Run one above against real historical data to see how a strategy would have performed." />
         </div>
@@ -85,6 +107,17 @@ export default async function BacktestsPage({ searchParams }: { searchParams: Pr
             <h2 className="text-sm font-semibold text-brand-navy">Past runs</h2>
             <span className="rounded-full bg-brand-navy/[0.06] px-2 py-0.5 text-xs font-semibold text-brand-navy/55">{totalRuns}</span>
           </div>
+          <div className="mb-4">
+            <ListToolbar
+              params={params}
+              search={{ placeholder: "Search by strategy or stock…" }}
+              selects={[
+                { name: "result", label: "Result", options: [{ value: "all", label: "Any" }, { value: "profit", label: "Made money" }, { value: "loss", label: "Lost money" }, { value: "none", label: "No trades" }] },
+                { name: "sort", label: "Sort", options: [{ value: "new", label: "Newest first" }, { value: "old", label: "Oldest first" }, { value: "best", label: "Best return" }, { value: "worst", label: "Worst return" }, { value: "trades", label: "Most trades" }] },
+              ]}
+            />
+          </div>
+          {runs.length === 0 && <p className="rounded-2xl border border-dashed border-black/10 px-4 py-8 text-center text-sm text-brand-navy/50">No backtests match these filters.</p>}
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {runs.map((r) => {
               const tone = toneOf(r.totalReturnPct);
@@ -113,7 +146,7 @@ export default async function BacktestsPage({ searchParams }: { searchParams: Pr
               );
             })}
           </div>
-          <Pager basePath="/app/backtests" window={win} />
+          <Pager basePath="/app/backtests" params={params} window={win} />
         </section>
       )}
     </div>

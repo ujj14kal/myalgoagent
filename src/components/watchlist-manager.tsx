@@ -24,14 +24,25 @@ interface InstrumentOption {
 export default function WatchlistManager({
   watchlistItems,
   allInstruments,
+  watched,
+  total,
+  toolbar,
+  pager,
 }: {
+  /** The page of the watchlist being shown. */
   watchlistItems: WatchlistItem[];
   allInstruments: InstrumentOption[];
+  /** Every watched symbol (not just this page), so search never offers one twice. */
+  watched?: string[];
+  /** How many are watched in all. */
+  total?: number;
+  toolbar?: React.ReactNode;
+  pager?: React.ReactNode;
 }) {
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const watchedSymbols = new Set(watchlistItems.map((w) => w.symbol));
+  const watchedSymbols = new Set(watched ?? watchlistItems.map((w) => w.symbol));
 
   function run(action: () => Promise<{ ok: true } | { ok: false; error: string }>) {
     setError(null);
@@ -91,40 +102,45 @@ export default function WatchlistManager({
 
       {error && <p className="mt-3 text-sm text-brand-sell">{error}</p>}
 
-      {watchlistItems.length === 0 ? (
+      {(total ?? watchlistItems.length) === 0 ? (
         <div className="mt-6">
           <EmptyState pose="point" title="Your watchlist is empty." description="Search above to add the instruments you want to keep an eye on." />
         </div>
       ) : (
-        <ul className="surface mt-6 divide-y divide-black/[0.05] overflow-hidden">
-          {watchlistItems.map((w) => {
-            const tone = w.changePct !== null ? toneOf(w.changePct) : "flat";
-            return (
-              <li key={w.id} className="group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-brand-primary/[0.02] sm:px-5">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-primary/[0.07] text-xs font-bold text-brand-primary">
-                  {w.symbol.replace(/\.NS$|\.BO$/, "").slice(0, 3)}
-                </span>
-                <Link href={`/app/instruments/${encodeURIComponent(w.symbol)}`} className="min-w-0 flex-1">
-                  <span className="block text-sm font-semibold text-brand-navy hover:text-brand-primary">{w.symbol}</span>
-                  <span className="block truncate text-xs text-brand-navy/55">{w.name}</span>
-                </Link>
-                <div className="text-right">
-                  <p className="num text-sm font-semibold text-brand-navy">{w.close !== null ? `₹${formatPrice(w.close)}` : "—"}</p>
-                  <p className={`num text-xs font-semibold ${TONE_TEXT[tone]}`}>{w.changePct !== null ? formatPct(w.changePct) : "No quote"}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => run(() => removeFromWatchlist(w.id))}
-                  disabled={isPending}
-                  className="ml-1 rounded-lg p-2 text-brand-navy/30 transition-colors hover:bg-brand-sell/10 hover:text-brand-sell disabled:opacity-40"
-                  aria-label={`Remove ${w.symbol} from watchlist`}
-                >
-                  <Trash2 size={15} />
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        <>
+          {toolbar && <div className="mt-6">{toolbar}</div>}
+          {watchlistItems.length === 0 && <p className="mt-4 rounded-2xl border border-dashed border-black/10 px-4 py-8 text-center text-sm text-brand-navy/50">Nothing in your watchlist matches.</p>}
+          <ul className={`surface mt-4 divide-y divide-black/[0.05] overflow-hidden ${watchlistItems.length === 0 ? "hidden" : ""}`}>
+            {watchlistItems.map((w) => {
+              const tone = w.changePct !== null ? toneOf(w.changePct) : "flat";
+              return (
+                <li key={w.id} className="group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-brand-primary/[0.02] sm:px-5">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-primary/[0.07] text-xs font-bold text-brand-primary">
+                    {w.symbol.replace(/\.NS$|\.BO$/, "").slice(0, 3)}
+                  </span>
+                  <Link href={`/app/instruments/${encodeURIComponent(w.symbol)}`} className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-brand-navy hover:text-brand-primary">{w.symbol}</span>
+                    <span className="block truncate text-xs text-brand-navy/55">{w.name}</span>
+                  </Link>
+                  <div className="text-right">
+                    <p className="num text-sm font-semibold text-brand-navy">{w.close !== null ? `₹${formatPrice(w.close)}` : "—"}</p>
+                    <p className={`num text-xs font-semibold ${TONE_TEXT[tone]}`}>{w.changePct !== null ? formatPct(w.changePct) : "No quote"}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => run(() => removeFromWatchlist(w.id))}
+                    disabled={isPending}
+                    className="ml-1 rounded-lg p-2 text-brand-navy/30 transition-colors hover:bg-brand-sell/10 hover:text-brand-sell disabled:opacity-40"
+                    aria-label={`Remove ${w.symbol} from watchlist`}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          {pager}
+        </>
       )}
     </div>
   );

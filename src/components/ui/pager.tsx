@@ -6,10 +6,23 @@ import { PAGE_SIZES, pageLinks, type PageWindow } from "@/lib/pagination";
  * query parameters (filters, search) so they survive moving between pages; changing the page size
  * goes back to page 1.
  */
-export default function Pager({ basePath, params, window: w }: { basePath: string; params?: Record<string, string | undefined>; window: PageWindow }) {
-  const href = (over: Record<string, string | number | undefined>) => {
+export default function Pager({
+  basePath,
+  params,
+  window: w,
+  pageKey = "page",
+  sizeKey = "size",
+}: {
+  basePath: string;
+  params?: Record<string, string | undefined>;
+  window: PageWindow;
+  /** Query names for this list's page and size (several lists on one page each have their own). */
+  pageKey?: string;
+  sizeKey?: string;
+}) {
+  const href = (over: { page: number; size: number }) => {
     const q = new URLSearchParams();
-    for (const [k, v] of Object.entries({ ...params, ...over })) if (v !== undefined && v !== "" && !(k === "page" && v === 1)) q.set(k, String(v));
+    for (const [k, v] of Object.entries({ ...params, [pageKey]: over.page, [sizeKey]: over.size })) if (v !== undefined && v !== "" && !(k === pageKey && v === 1)) q.set(k, String(v));
     const s = q.toString();
     return s ? `${basePath}?${s}` : basePath;
   };
