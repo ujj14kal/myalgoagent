@@ -32,7 +32,7 @@ export interface PaperSessionState {
   positionSizing: PositionSizing;
   riskManagement?: RiskManagementConfig;
   maxPyramidEntries?: number;
-  /** Multi-level entry plan (swing / long-term): the first entry, further price levels and a holding limit. */
+  /** Multi-level entry plan (swing): the first entry, further price levels and a holding limit. */
   entryPlan?: EntryPlan | null;
   /** Candle timeframe (default daily) and intraday session rules. */
   timeframe?: string;

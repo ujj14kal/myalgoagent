@@ -172,7 +172,7 @@ export interface StrategyInitial {
   orderType?: string;
   limitMode?: string | null;
   limitValue?: number | null;
-  /** Swing / positional strategies are held for days to months. */
+  /** Swing strategies are held for days to weeks. */
   style?: string | null;
   /** Staged Target 1–3 and the multi-level entry plan, when the strategy uses them. */
   targets?: TargetLevel[];
@@ -271,6 +271,24 @@ export default function StrategyBuilderForm({
   const [instrumentId, setInstrumentId] = useState(initial?.instrumentId ?? (instruments.find((i) => i.symbol === "RELIANCE.NS") ?? instruments.find((i) => !i.symbol.startsWith("^")) ?? instruments[0])?.id ?? "");
   const [mode, setMode] = useState<"NO_CODE" | "CODE" | "WEBHOOK">(initial?.mode ?? "NO_CODE");
   const [direction, setDirection] = useState<"LONG" | "SHORT">(initial?.direction ?? "LONG");
+  // The stock's latest close: the example entry for the stop-loss / target prices shown in Risk management.
+  const [latestPrice, setLatestPrice] = useState<{ symbol: string; price: number } | null>(null);
+  const instrumentSymbol = instruments.find((i) => i.id === instrumentId)?.symbol ?? null;
+  useEffect(() => {
+    if (!instrumentSymbol) return;
+    let gone = false;
+    fetch(`/api/instruments/${encodeURIComponent(instrumentSymbol)}/history?range=5d&interval=1d`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { candles?: { close: number }[] } | null) => {
+        const close = d?.candles?.at(-1)?.close;
+        if (!gone && close && close > 0) setLatestPrice({ symbol: instrumentSymbol, price: close });
+      })
+      .catch(() => {});
+    return () => {
+      gone = true;
+    };
+  }, [instrumentSymbol]);
+  const examplePrice = latestPrice && latestPrice.symbol === instrumentSymbol ? latestPrice.price : null;
 
   const initialEntryFitsSimple = initial ? fitsSimpleMode(initial.entryCondition) : true;
   // One layout for rules; a rule saved in the old free-form layout still opens in the full editor.
@@ -297,8 +315,9 @@ export default function StrategyBuilderForm({
   const [positionSizingMode, setPositionSizingMode] = useState<PositionSizingMode>(initial?.positionSizingMode ?? "FULL_CAPITAL");
   const [positionSizingValue, setPositionSizingValue] = useState<number | null>(initial?.positionSizingValue ?? null);
   const [maxPyramidEntries, setMaxPyramidEntries] = useState(initial?.maxPyramidEntries ?? 1);
-  // Swing and positional strategies are held overnight: daily candles, delivery, long only.
-  const [style, setStyle] = useState<"STANDARD" | "SWING" | "POSITIONAL">(initial?.style === "SWING" || initial?.style === "POSITIONAL" ? initial.style : "STANDARD");
+  // Swing strategies are held overnight: daily candles, delivery, long only. (A strategy saved with the retired
+  // positional style opens as swing — the same rules applied.)
+  const [style, setStyle] = useState<"STANDARD" | "SWING">(initial?.style === "SWING" || initial?.style === "POSITIONAL" ? "SWING" : "STANDARD");
   const swingish = style !== "STANDARD";
   const [plan, setPlan] = useState<PlanState>(() => planToState(initial?.entryPlan));
   const [targetRows, setTargetRows] = useState<TargetRow[]>(() => targetsToRows(initial?.targets));
@@ -345,8 +364,8 @@ export default function StrategyBuilderForm({
     toRiskLegState(initial?.trailingSlEnabled ?? false, initial?.trailingSlUnit ?? null, initial?.trailingSlValue ?? null, 1.5),
   );
 
-  /** Choosing swing or positional moves the strategy to what such a strategy can be: daily candles, delivery, long only. */
-  function chooseStyle(next: "STANDARD" | "SWING" | "POSITIONAL") {
+  /** Choosing swing moves the strategy to what such a strategy can be: daily candles, delivery, long only. */
+  function chooseStyle(next: "STANDARD" | "SWING") {
     setStyle(next);
     if (next === "STANDARD") return;
     if (isIntraday(timeframe as CandleInterval)) setTimeframe("1d");
@@ -646,7 +665,7 @@ export default function StrategyBuilderForm({
                     type="button"
                     onClick={() => setDirection(d)}
                     disabled={swingish && d === "SHORT"}
-                    title={swingish && d === "SHORT" ? "Swing and positional strategies are long only: a short can't be held overnight in the cash market." : undefined}
+                    title={swingish && d === "SHORT" ? "Swing strategies are long only: a short can't be held overnight in the cash market." : undefined}
                     className={`px-4 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40 ${
                       direction === d
                         ? d === "LONG"
@@ -674,13 +693,15 @@ export default function StrategyBuilderForm({
                   options={[
                     { value: "STANDARD", label: "Standard" },
                     { value: "SWING", label: "Swing", note: "days to weeks" },
-                    { value: "POSITIONAL", label: "Positional", note: "weeks to months" },
                   ]}
                 />
                 <p className="mt-1.5 text-xs text-brand-navy/40">
                   {swingish
                     ? "Held overnight: daily or weekly candles, delivery, long only. Your rules can still read a longer trend as another timeframe. Pair it with an entry plan and staged targets below."
-                    : "Choose Swing or Positional for strategies that build and leave a position over days or months."}
+                    : "Choose Swing for strategies that build and leave a position over days to weeks."}
+                </p>
+                <p className="mt-1 text-xs text-brand-navy/40">
+                  Algo strategies are positions the engine opens, watches and closes by your rules. A long-term investment you plan to hold for months or years isn&apos;t one — hold it in your broker account instead.
                 </p>
               </div>
             )}
@@ -698,7 +719,7 @@ export default function StrategyBuilderForm({
                       aria-checked={timeframe === t.value}
                       onClick={() => chooseTimeframe(t.value)}
                       disabled={swingish && isIntraday(t.value)}
-                      title={swingish && isIntraday(t.value) ? "Swing and positional strategies run on daily or weekly candles." : undefined}
+                      title={swingish && isIntraday(t.value) ? "Swing strategies run on daily or weekly candles." : undefined}
                       className={`min-w-[44px] rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                         timeframe === t.value ? "border-brand-primary bg-brand-primary text-white" : "border-brand-navy/15 text-brand-navy/60 hover:border-brand-primary"
                       }`}
@@ -902,11 +923,14 @@ export default function StrategyBuilderForm({
             onStopLossChange={setStopLoss}
             onTargetChange={setTarget}
             onTrailingSlChange={setTrailingSl}
+            direction={direction}
+            entryPrice={examplePrice}
           />
           {mode !== "WEBHOOK" && (
             <StagedTargetsFields
               rows={targetRows}
               direction={direction}
+              latestPrice={examplePrice}
               singleTargetOn={target.enabled}
               onChange={(rows) => {
                 setTargetRows(rows);

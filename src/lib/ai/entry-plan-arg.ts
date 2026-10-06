@@ -41,6 +41,6 @@ export function styleFrom(v: unknown): StrategyStyle | null | undefined {
   if (v === undefined) return undefined;
   if (v === null || v === "") return null;
   const s = parseStyle(String(v).toUpperCase().replace(/[^A-Z]/g, ""));
-  if (!s) throw new Error('style: use "intraday", "swing" or "positional".');
+  if (!s) throw new Error('style: use "intraday" or "swing".');
   return s;
 }

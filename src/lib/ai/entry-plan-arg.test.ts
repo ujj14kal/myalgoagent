@@ -49,7 +49,7 @@ describe("styleFrom", () => {
     expect(styleFrom(undefined)).toBeUndefined();
     expect(styleFrom(null)).toBeNull();
     expect(styleFrom("swing")).toBe("SWING");
-    expect(styleFrom("Positional")).toBe("POSITIONAL");
+    expect(styleFrom("Positional")).toBe("SWING"); // retired style is read as swing
     expect(styleFrom("intraday")).toBe("INTRADAY");
     expect(() => styleFrom("scalping")).toThrow(/intraday/);
   });

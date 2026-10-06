@@ -96,7 +96,7 @@ export default function WorkspaceEditor({
     setDirty(true);
     setCheck(null);
   };
-  const swingish = def.style === "SWING" || def.style === "POSITIONAL";
+  const swingish = def.style === "SWING";
   const memberOptions: MemberOption[] = def.members.map((m) => {
     const s = strategies.find((x) => x.id === m.strategyId);
     return { id: m.id, name: s?.name ?? "(removed strategy)", detail: s ? `${s.symbol} · ${s.timeframe}` : "" };
@@ -111,7 +111,7 @@ export default function WorkspaceEditor({
     return { ...def, entryPlan: stagedProblemPlan.plan ?? null, targets: targetRows.length ? rowsToTargets(targetRows) : [] };
   }
 
-  function chooseStyle(next: "STANDARD" | "SWING" | "POSITIONAL") {
+  function chooseStyle(next: "STANDARD" | "SWING") {
     if (next === "STANDARD") return change({ style: null });
     change({ style: next, timeframe: isIntraday(def.timeframe as CandleInterval) ? "1d" : def.timeframe, productType: "DELIVERY", direction: "LONG", noEntryAfterMinute: null, squareOffMinute: null });
   }
@@ -193,13 +193,13 @@ export default function WorkspaceEditor({
           <div>
             <label className={label}>Holding style</label>
             <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Holding style">
-              {(["STANDARD", "SWING", "POSITIONAL"] as const).map((s) => (
+              {(["STANDARD", "SWING"] as const).map((s) => (
                 <button key={s} type="button" role="radio" aria-checked={(def.style ?? "STANDARD") === s} onClick={() => chooseStyle(s)} className={pill((def.style ?? "STANDARD") === s)}>
                   {s === "STANDARD" ? "Standard" : STYLE_LABEL[s]}
                 </button>
               ))}
             </div>
-            <p className="mt-1.5 text-xs text-brand-navy/40">{swingish ? "Held overnight: daily or weekly candles, delivery, long only." : "Choose Swing or Positional for plans that build and leave a position over days or months."}</p>
+            <p className="mt-1.5 text-xs text-brand-navy/40">{swingish ? "Held overnight: daily or weekly candles, delivery, long only." : "Choose Swing for plans that build and leave a position over days to weeks. Long-term investments held for months or years aren't algo plans — hold those in your broker account."}</p>
           </div>
           <div>
             <label className={label}>Timeframe</label>

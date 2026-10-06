@@ -72,6 +72,22 @@ describe("buildScenarios", () => {
     expect(sl.note).toMatch(/trailing stop is tighter/);
   });
 
+  it("demo mode shows a clean demo move after the entry even for outcomes that really happened, and keeps exit rules real", () => {
+    const s = buildScenarios(preview({ trades: [trade("target"), trade("stop_loss", 50, 55), trade("exit_rule", 60, 62)] }), "demo");
+    const byShows = Object.fromEntries(s.map((x) => [x.shows, x]));
+    expect(byShows.target.illustration).toBe(true);
+    expect(byShows.target.alsoReal).toBe(true);
+    expect(byShows.target.kind).toBe("target");
+    expect(byShows.stop_loss.illustration).toBe(true);
+    expect(byShows.stop_loss.alsoReal).toBe(true);
+    // The entry comes from the real trade with that outcome.
+    expect(byShows.stop_loss.sourceIdx[byShows.stop_loss.signalIdx]).toBe(49);
+    expect(byShows.exit_rule.illustration).toBe(false);
+    // Real mode keeps the actual trades.
+    const real = buildScenarios(preview({ trades: [trade("target")] }), "real");
+    expect(real.find((x) => x.shows === "target")!.illustration).toBe(false);
+  });
+
   it("shows nothing when the rule never triggered", () => {
     expect(buildScenarios(preview({}))).toEqual([]);
   });

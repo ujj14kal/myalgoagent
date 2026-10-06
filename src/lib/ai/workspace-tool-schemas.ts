@@ -39,7 +39,7 @@ export function workspaceTools(riskLegSchema: object, targetsSchema: object, ent
             instrument_symbol: { type: "string", description: "NSE symbol like RELIANCE.NS" },
             direction: { type: "string", enum: ["LONG", "SHORT"] },
             style: styleSchema,
-            timeframe: { type: "string", enum: ["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d", "1wk"], description: "Candle size every rule is checked on; swing and positional use 1d or 1wk (weekly)" },
+            timeframe: { type: "string", enum: ["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d", "1wk"], description: "Candle size every rule is checked on; swing uses 1d or 1wk (weekly)" },
             strategies: { type: "array", items: { type: "string" }, description: "The user's strategies to combine, by name or id (up to 20). They are lettered A, B, C… in this order. Required when the logic uses strategy rules." },
             entry: { description: "The entry logic. " + logicNode },
             exit: { description: "The exit logic, or null for none (the stops, targets or holding limit then close the position). " + logicNode },

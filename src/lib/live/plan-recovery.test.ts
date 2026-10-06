@@ -3,7 +3,7 @@ import { syncPaperSession, type PaperSessionState } from "@/lib/paper/sync";
 import type { ConditionNode } from "@/lib/strategy/types";
 import { resyncEntryPlan } from "./resync";
 import { entryPlanToStore, parseEntryPlan } from "@/lib/trading-engine/entry-plan-config";
-import { styleProblem } from "@/lib/strategy/style";
+import { parseStyle, styleProblem } from "@/lib/strategy/style";
 
 // A multi-level entry plan across restarts, with the same state hand-off a live deployment uses:
 // an entry level that already filled must never be bought again, and a restart must not forget how far the plan got.
@@ -154,19 +154,23 @@ describe("storing an entry plan", () => {
   });
 });
 
-describe("swing and positional styles", () => {
+describe("swing style", () => {
+  it("reads strategies saved with the retired positional style as swing", () => {
+    expect(parseStyle("POSITIONAL")).toBe("SWING");
+    expect(parseStyle("SWING")).toBe("SWING");
+    expect(parseStyle("nonsense")).toBeNull();
+  });
   const ok = { timeframe: "1d", productType: "DELIVERY", direction: "LONG" };
   it("accept daily or weekly, delivery, long", () => {
     expect(styleProblem("SWING", ok)).toBeNull();
-    expect(styleProblem("POSITIONAL", { ...ok, timeframe: "1wk" })).toBeNull();
-    expect(styleProblem("POSITIONAL", ok)).toBeNull();
+    expect(styleProblem("SWING", { ...ok, timeframe: "1wk" })).toBeNull();
     expect(styleProblem("INTRADAY", { timeframe: "5m", productType: "INTRADAY", direction: "SHORT" })).toBeNull();
     expect(styleProblem(null, { timeframe: "5m", productType: "INTRADAY", direction: "SHORT" })).toBeNull();
   });
   it("explain what is wrong", () => {
     expect(styleProblem("SWING", { ...ok, timeframe: "15m" })).toMatch(/daily or weekly candles/);
     expect(styleProblem("SWING", { ...ok, productType: "INTRADAY" })).toMatch(/delivery/);
-    expect(styleProblem("POSITIONAL", { ...ok, direction: "SHORT" })).toMatch(/long only/);
+    expect(styleProblem("SWING", { ...ok, direction: "SHORT" })).toMatch(/long only/);
   });
 });
 

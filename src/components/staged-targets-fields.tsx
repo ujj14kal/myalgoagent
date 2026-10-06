@@ -40,14 +40,22 @@ const numberCls =
   "w-20 min-w-0 rounded-lg border border-brand-navy/15 px-2 py-1.5 text-sm outline-none [appearance:textfield] focus:border-brand-primary [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
 const selectCls = "min-w-0 rounded-lg border border-brand-navy/15 px-2 py-1.5 text-sm outline-none focus:border-brand-primary";
 
-/** A worked example with a ₹100 entry, so "margin" and "fixed" are not left abstract. */
-function example(row: TargetRow, direction: "LONG" | "SHORT"): string | null {
-  if (row.unit !== "PERCENT" || (row.lock === "MARGIN" && row.marginUnit !== "PERCENT")) return null;
+/**
+ * A worked example so "margin" and "fixed" are not left abstract: % targets on a ₹100 entry (the numbers read
+ * directly), points targets on the stock's latest price when known (points only mean something against a real price).
+ */
+function example(row: TargetRow, direction: "LONG" | "SHORT", latest: number | null): string | null {
+  if (row.unit === "ATR_MULTIPLE" || (row.lock === "MARGIN" && row.marginUnit !== row.unit)) return null;
   const sign = direction === "SHORT" ? -1 : 1;
-  const tp = 100 + sign * row.value;
+  const points = row.unit === "POINTS";
+  const entry = points ? (latest ?? 1000) : 100;
+  const tp = entry + sign * row.value;
   const floor = row.lock === "MARGIN" ? tp - sign * row.marginValue : tp;
+  if (!(tp > 0) || !(floor > 0)) return null;
   const f = (n: number) => `₹${(Math.round(n * 100) / 100).toLocaleString("en-IN")}`;
-  return `Example: bought at ₹100, this target is ${f(tp)}. It sells ${row.exitPercent}% there; the rest is then sold if price ${direction === "SHORT" ? "rises back to" : "falls back to"} ${f(floor)}${row.lock === "MARGIN" ? ` (${row.marginValue}% of margin)` : ""}.`;
+  const margin = row.lock === "MARGIN" ? ` (${row.marginValue}${points ? " points" : "%"} of margin)` : "";
+  const bought = points && latest ? `bought at today's price ${f(entry)}` : `bought at ${f(entry)}`;
+  return `Example: ${direction === "SHORT" ? bought.replace("bought", "sold short") : bought}, this target is ${f(tp)}${points ? ` (${row.value} points ${direction === "SHORT" ? "below" : "above"})` : ""}. It ${direction === "SHORT" ? "covers" : "sells"} ${row.exitPercent}% there; the rest is then closed if price ${direction === "SHORT" ? "rises back to" : "falls back to"} ${f(floor)}${margin}.`;
 }
 
 export default function StagedTargetsFields({
@@ -55,11 +63,14 @@ export default function StagedTargetsFields({
   onChange,
   direction,
   singleTargetOn,
+  latestPrice = null,
 }: {
   rows: TargetRow[];
   onChange: (rows: TargetRow[]) => void;
   direction: "LONG" | "SHORT";
   singleTargetOn: boolean;
+  /** The stock's latest price, for points examples. */
+  latestPrice?: number | null;
 }) {
   const levels = rowsToTargets(rows);
   const problem = rows.length ? validateTargets(levels, false) : null;
@@ -147,7 +158,7 @@ export default function StagedTargetsFields({
                   </label>
                 )}
               </div>
-              {example(r, direction) && <p className="mt-2 text-xs text-brand-navy/50">{example(r, direction)}</p>}
+              {example(r, direction, latestPrice) && <p className="mt-2 text-xs text-brand-navy/50">{example(r, direction, latestPrice)}</p>}
             </div>
           ))}
           <p className="text-xs text-brand-navy/50">

@@ -29,7 +29,7 @@ export interface StrategyInput {
   target: RiskLegInput;
   /** Staged Target 1–3 (each sells a share of the position and locks profit on the rest); replaces the single take-profit. */
   targets?: TargetLevel[];
-  /** Swing / positional: held for days to weeks or months. These run on daily candles as long-only delivery. */
+  /** Swing: held for days to weeks. Runs on daily or weekly candles as long-only delivery. */
   style?: StrategyStyle;
   /** Multi-level entry: the signal buys `firstPercent` of the planned size, each level buys its share as price reaches it; `maxHoldDays` closes the position after that many trading days. */
   entryPlan?: EntryPlan;

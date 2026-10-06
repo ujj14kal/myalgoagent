@@ -9,6 +9,12 @@ import type { ReplayCheck } from "@/lib/strategy-replay";
 // real entry, then a made-up price path, run through the engine's exit order
 // (trailing stop, then stop-loss, then take-profit) so it shows what the
 // strategy's own settings would do. Illustrations are always labelled.
+//
+// "demo" mode (the builder's default) goes further: every take-profit, stop-loss
+// and trailing-stop outcome is an illustration, even when it also happened for
+// real, so the user sees a clean reference move from the moment the entry
+// condition matches. Exit-rule and square-off outcomes stay real — inventing
+// indicator values to fake an exit rule would mislead.
 
 export type ScenarioKind = "target" | "stop_loss" | "trailing_stop" | "exit_rule" | "square_off" | "end_of_data";
 
@@ -36,6 +42,8 @@ export type Scenario = {
   entryReason: string;
   exitRuleReason?: string;
   note?: string;
+  /** An illustration of an outcome that also happened for real in the period. */
+  alsoReal?: boolean;
 };
 
 export const SCENARIO_TITLE: Record<ScenarioKind, string> = {
@@ -233,7 +241,13 @@ function illustration(p: StrategyPreview, base: PreviewTrade, shows: "target" | 
 
 const ORDER: ScenarioKind[] = ["target", "stop_loss", "trailing_stop", "exit_rule", "square_off", "end_of_data"];
 
-export function buildScenarios(p: StrategyPreview): Scenario[] {
+const LEVEL_SET: Partial<Record<ScenarioKind, (p: StrategyPreview) => boolean>> = {
+  target: (p) => !!p.risk.target,
+  stop_loss: (p) => !!p.risk.stopLoss,
+  trailing_stop: (p) => !!p.risk.trailing,
+};
+
+export function buildScenarios(p: StrategyPreview, mode: "demo" | "real" = "real"): Scenario[] {
   if (p.trades.length === 0) return [];
   const latestBy = new Map<ScenarioKind, PreviewTrade>();
   for (const t of p.trades) latestBy.set((t.exitReason ?? "exit_rule") as ScenarioKind, t);
@@ -242,10 +256,13 @@ export function buildScenarios(p: StrategyPreview): Scenario[] {
   const base = p.trades[p.trades.length - 1];
   for (const kind of ORDER) {
     const real = latestBy.get(kind);
-    if (real) out.push(realScenario(p, real));
-    else if (kind === "target" && p.risk.target) out.push(...[illustration(p, base, "target")].filter((s): s is Scenario => !!s));
-    else if (kind === "stop_loss" && p.risk.stopLoss) out.push(...[illustration(p, base, "stop_loss")].filter((s): s is Scenario => !!s));
-    else if (kind === "trailing_stop" && p.risk.trailing) out.push(...[illustration(p, base, "trailing_stop")].filter((s): s is Scenario => !!s));
+    const levelSet = LEVEL_SET[kind]?.(p) ?? false;
+    if (levelSet && (mode === "demo" || !real)) {
+      // In demo mode a real hit still lends its entry, so the chart before the entry is that trade's.
+      const s = illustration(p, real ?? base, kind as "target" | "stop_loss" | "trailing_stop");
+      if (s) out.push(real ? { ...s, alsoReal: true } : s);
+      else if (real) out.push(realScenario(p, real));
+    } else if (real) out.push(realScenario(p, real));
   }
   // "Still open" only when it's the only real outcome — it isn't an exit worth replaying otherwise.
   return out.length > 1 ? out.filter((s) => s.kind !== "end_of_data" || s.illustration) : out;

@@ -91,7 +91,7 @@ const targetsSchema = {
 const entryPlanSchema = {
   type: "object",
   description:
-    "A multi-level entry plan, for swing and long-term strategies that build a position in stages. The entry rule buys first_percent of the PLANNED size; each further level buys its allocation_percent of the planned size when price reaches it, measured from the first fill's price: trigger \"pullback\" = price falls that far (for a short, rises) and the buy waits there; \"breakout\" = price rises that far (short: falls). The planned size comes from the position sizing, so first_percent + all allocation_percent is at most 100. Levels must move further out; at most 8 levels; levels can't be combined with max_entries above 1. max_wait_days withdraws a level that many trading days after the first entry. max_hold_days closes the position at the open that many trading days after the first entry. No further entries are bought once a staged target is taken. Example (buy a quarter now and a quarter at each 3% dip): {\"first_percent\":25,\"levels\":[{\"trigger\":\"pullback\",\"value\":3,\"unit\":\"PERCENT\",\"allocation_percent\":25},{\"trigger\":\"pullback\",\"value\":6,\"unit\":\"PERCENT\",\"allocation_percent\":25},{\"trigger\":\"pullback\",\"value\":9,\"unit\":\"PERCENT\",\"allocation_percent\":25}],\"max_hold_days\":60}. Not available for webhook strategies.",
+    "A multi-level entry plan, for swing strategies that build a position in stages. The entry rule buys first_percent of the PLANNED size; each further level buys its allocation_percent of the planned size when price reaches it, measured from the first fill's price: trigger \"pullback\" = price falls that far (for a short, rises) and the buy waits there; \"breakout\" = price rises that far (short: falls). The planned size comes from the position sizing, so first_percent + all allocation_percent is at most 100. Levels must move further out; at most 8 levels; levels can't be combined with max_entries above 1. max_wait_days withdraws a level that many trading days after the first entry. max_hold_days closes the position at the open that many trading days after the first entry. No further entries are bought once a staged target is taken. Example (buy a quarter now and a quarter at each 3% dip): {\"first_percent\":25,\"levels\":[{\"trigger\":\"pullback\",\"value\":3,\"unit\":\"PERCENT\",\"allocation_percent\":25},{\"trigger\":\"pullback\",\"value\":6,\"unit\":\"PERCENT\",\"allocation_percent\":25},{\"trigger\":\"pullback\",\"value\":9,\"unit\":\"PERCENT\",\"allocation_percent\":25}],\"max_hold_days\":60}. Not available for webhook strategies.",
   properties: {
     first_percent: { type: "number", description: "Share of the planned size bought when the entry rule fires, 1–100; default = whatever the levels leave" },
     levels: {
@@ -116,9 +116,9 @@ const entryPlanSchema = {
 
 const styleSchema = {
   type: "string",
-  enum: ["intraday", "swing", "positional"],
+  enum: ["intraday", "swing"],
   description:
-    "How long the strategy expects to hold. swing = days to weeks, positional = weeks to months (long-term investing). Swing and positional strategies are always delivery, long only and on daily (1d) or weekly (1wk) candles (they may read a weekly or monthly trend as another timeframe inside their rules), and suit staged entries (entry_plan) and staged targets. Omit for ordinary strategies.",
+    "How long the strategy expects to hold. swing = days to weeks. There is no positional/long-term style: holding an investment for months or years is not an algo strategy — tell the user to hold it in their broker account instead. Swing strategies are always delivery, long only and on daily (1d) or weekly (1wk) candles (they may read a weekly or monthly trend as another timeframe inside their rules), and suit staged entries (entry_plan) and staged targets. Omit for ordinary strategies.",
 };
 
 export const AGENT_TOOLS: MantleTool[] = [
@@ -285,7 +285,7 @@ export const AGENT_TOOLS: MantleTool[] = [
           entry: { anyOf: [{ type: "string" }, { type: "object" }], description: "Entry condition (see CONDITIONS)" },
           exit: { anyOf: [{ type: "string" }, { type: "object" }, { type: "null" }], description: "Exit condition (see CONDITIONS); null = no rule-based exit (needs a stop-loss, take-profit or trailing stop)" },
           max_entries: { type: "number", description: "Max entries per position (pyramiding); default 1" },
-          timeframe: { type: "string", enum: ["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d", "1wk"], description: "Candle timeframe the strategy runs on (1wk = weekly: checked once a week after Friday's close, orders at the next Monday open; swing and positional strategies suit 1d or 1wk). Use an intraday one (1m–4h) whenever the rules involve times of day; default 1d." },
+          timeframe: { type: "string", enum: ["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d", "1wk"], description: "Candle timeframe the strategy runs on (1wk = weekly: checked once a week after Friday's close, orders at the next Monday open; swing strategies suit 1d or 1wk). Use an intraday one (1m–4h) whenever the rules involve times of day; default 1d." },
           no_entry_after: { type: ["string", "null"], description: "Intraday only: no new entries at/after this IST time, e.g. \"14:30\"" },
           product: { type: "string", enum: ["intraday", "delivery"], description: "Intraday (squared off the same day; needs a 1m–4h timeframe; required for short selling) or delivery (may be held overnight, long only). Default: intraday for intraday timeframes, delivery for 1d. MTF isn't available yet." },
           order_type: { type: "string", enum: ["market", "limit"], description: "Entry order type; default market" },
@@ -435,7 +435,7 @@ export const AGENT_TOOLS: MantleTool[] = [
             },
           },
           max_entries: { type: "number" },
-          timeframe: { type: "string", enum: ["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d", "1wk"], description: "Candle timeframe the strategy runs on (1wk = weekly: checked once a week after Friday's close, orders at the next Monday open; swing and positional strategies suit 1d or 1wk). Use an intraday one (1m–4h) whenever the rules involve times of day; default 1d." },
+          timeframe: { type: "string", enum: ["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d", "1wk"], description: "Candle timeframe the strategy runs on (1wk = weekly: checked once a week after Friday's close, orders at the next Monday open; swing strategies suit 1d or 1wk). Use an intraday one (1m–4h) whenever the rules involve times of day; default 1d." },
           no_entry_after: { type: ["string", "null"], description: "Intraday only: no new entries at/after this IST time, e.g. \"14:30\"" },
           product: { type: "string", enum: ["intraday", "delivery"], description: "Intraday (squared off the same day; needs a 1m–4h timeframe; required for short selling) or delivery (may be held overnight, long only). Default: intraday for intraday timeframes, delivery for 1d. MTF isn't available yet." },
           order_type: { type: "string", enum: ["market", "limit"], description: "Entry order type; default market" },
@@ -692,8 +692,8 @@ async function proposeStrategy(userId: string, a: Record<string, unknown>): Prom
   let style: ReturnType<typeof styleFrom>;
   try {
     style = styleFrom(a.style);
-    // Swing and positional strategies are held overnight: daily candles, delivery, no intraday session rules.
-    const swingish = style === "SWING" || style === "POSITIONAL";
+    // Swing strategies are held overnight: daily candles, delivery, no intraday session rules.
+    const swingish = style === "SWING";
     const tfArg = timeframeArg(a.timeframe);
     const timeframe = swingish ? (tfArg === "1wk" ? "1wk" : "1d") : tfArg ?? "1d";
     const intraday = isIntraday(timeframe as CandleInterval);
@@ -997,7 +997,7 @@ async function proposeWorkspace(userId: string, a: Record<string, unknown>): Pro
     const instrument = str(a.instrument_symbol) ? await findInstrument(str(a.instrument_symbol)) : null;
     if (str(a.instrument_symbol) && !instrument) return fix(`Unknown instrument "${str(a.instrument_symbol)}". Call list_instruments and use an exact symbol.`);
     const style = styleFrom(a.style);
-    const swingish = (style === undefined ? base.style : style) === "SWING" || (style === undefined ? base.style : style) === "POSITIONAL";
+    const swingish = (style === undefined ? base.style : style) === "SWING";
     const tfArg = timeframeArg(a.timeframe);
     const timeframe = swingish ? (tfArg === "1wk" ? "1wk" : isIntraday(base.timeframe as CandleInterval) ? "1d" : tfArg ?? base.timeframe) : tfArg ?? base.timeframe;
     const order = orderArgs(a);

@@ -116,7 +116,9 @@ function frameAt(s: Scenario, tl: Timeline, ms: number) {
 }
 
 export default function StrategyReplay({ preview }: { preview: StrategyPreview }) {
-  const scenarios = useMemo(() => buildScenarios(preview), [preview]);
+  const [mode, setMode] = useState<"demo" | "real">("demo");
+  const scenarios = useMemo(() => buildScenarios(preview, mode), [preview, mode]);
+  const canSwitch = useMemo(() => buildScenarios(preview, "demo").some((s) => s.alsoReal), [preview]);
   const [selected, setSelected] = useState(0);
   const scenario = scenarios[Math.min(selected, scenarios.length - 1)];
   if (!scenario) return null;
@@ -141,9 +143,24 @@ export default function StrategyReplay({ preview }: { preview: StrategyPreview }
           >
             <span className="h-2 w-2 rounded-full" style={{ background: KIND_COLOR[s.shows] }} />
             {SCENARIO_TITLE[s.shows]}
-            {s.illustration && <span className={`rounded px-1 text-[9px] font-bold uppercase ${i === selected ? "bg-white/20" : "bg-brand-gold/20 text-[#8a7437]"}`}>Illustration</span>}
+            {s.illustration && <span className={`rounded px-1 text-[9px] font-bold uppercase ${i === selected ? "bg-white/20" : "bg-brand-gold/20 text-[#8a7437]"}`}>Demo</span>}
           </button>
         ))}
+        {canSwitch && (
+          <div className="ml-auto inline-flex rounded-full bg-brand-bg p-0.5 ring-1 ring-black/5" role="group" aria-label="Price path after the entry">
+            {(["demo", "real"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMode(m)}
+                aria-pressed={mode === m}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${mode === m ? "bg-brand-navy text-white" : "text-brand-navy/55 hover:text-brand-navy"}`}
+              >
+                {m === "demo" ? "Demo move" : "Real market move"}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <ReplayPlayer key={scenario.id} preview={preview} s={scenario} />
       {missing.length > 0 && (
@@ -329,8 +346,9 @@ function ReplayPlayer({ preview, s }: { preview: StrategyPreview; s: Scenario })
         <p>
           {s.illustration ? (
             <>
-              <strong className="text-brand-navy">Illustration:</strong> the chart and entry are real ({when(s.candles[s.signalIdx].time, preview.intraday)}); the price path after the entry is made up to show how your{" "}
-              {SCENARIO_TITLE[s.shows].toLowerCase().replace(" hit", "")} works with your settings — this outcome didn&apos;t happen in the last {preview.periodLabel}.
+              <strong className="text-brand-navy">Demo:</strong> the chart up to the entry is real — your entry condition matched on {when(s.candles[s.signalIdx].time, preview.intraday)}. After that the price path is made up, as a clean reference for how your{" "}
+              {SCENARIO_TITLE[s.shows].toLowerCase().replace(" hit", "")} works with your settings
+              {s.alsoReal ? <> — this did happen for real in the last {preview.periodLabel}; choose &ldquo;Real market move&rdquo; to watch the actual trade.</> : <> — this outcome didn&apos;t happen in the last {preview.periodLabel}.</>}
             </>
           ) : (
             <>
@@ -1089,7 +1107,7 @@ function ReplayChart({ preview, s, f }: { preview: StrategyPreview; s: Scenario;
           <g>
             <rect x={x(s.syntheticFrom) - slot / 2} width={Math.max(0, W - MR - (x(s.syntheticFrom) - slot / 2))} y={pricePane.top} height={pricePane.h} fill={`url(#${clipId}-hatch)`} opacity={0.5} />
             <text x={x(s.syntheticFrom) + 4} y={pricePane.top + pricePane.h - 6} fontSize={9} fill={C.text}>
-              illustration
+              demo move
             </text>
           </g>
         )}

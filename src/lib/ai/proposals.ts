@@ -47,7 +47,7 @@ export type AgentProposal =
         trailingSl: RiskLegDraft;
         /** Staged Target 1–3 (each sells a share and locks profit on the rest); replaces the single take-profit. */
         targets?: TargetLevel[];
-        /** Swing / positional strategies are held for days to months: daily candles, delivery, long only. */
+        /** Swing strategies are held for days to weeks: daily or weekly candles, delivery, long only. */
         style?: StrategyStyle | null;
         /** Multi-level entry plan: the signal buys a share, each further level buys more as price reaches it. */
         entryPlan?: EntryPlan;

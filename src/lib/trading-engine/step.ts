@@ -126,7 +126,7 @@ export interface EntryLevel {
 export interface EntryPlan {
   firstPercent: number;
   levels: EntryLevel[];
-  /** A swing/long-term time stop: the position is closed at the open this many trading days after the first entry. */
+  /** A swing time stop: the position is closed at the open this many trading days after the first entry. */
   maxHoldDays?: number;
 }
 
