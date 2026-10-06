@@ -40,7 +40,7 @@ describe("how targets are described", () => {
   it("one plain line per target", () => {
     expect(describeTargets(t)).toEqual([
       "Target 1: 5% from entry — sells 25% of the position, then locks the rest at that price",
-      "Target 2: 10% from entry — sells 25% of the position, then locks the rest 1% below it",
+      "Target 2: 10% from entry — sells 25% of the position, then moves the stop to 1% short of it",
     ]);
   });
   it("the one-line strategy summary mentions them instead of 'no target'", () => {

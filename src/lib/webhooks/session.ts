@@ -60,6 +60,7 @@ export async function getOrCreateActivePaperSession(
       trailingSlUnit: strategy.trailingSlUnit,
       trailingSlValue: strategy.trailingSlValue,
       maxPyramidEntries: strategy.maxPyramidEntries,
+      riskOptions: strategy.riskOptions ?? undefined,
       alertOnly: false,
       cash: DEFAULT_STARTING_CAPITAL,
       lastSyncedTime: latestTime,

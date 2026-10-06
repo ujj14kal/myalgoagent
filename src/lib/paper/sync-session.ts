@@ -7,10 +7,13 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 import type { ConditionNode } from "@/lib/strategy";
 import { conditionToText } from "@/lib/strategy/format";
 import { explainPaperOrder, type ExplainContext } from "@/lib/paper/explain";
-import type { RiskUnit } from "@/lib/trading-engine/step";
+import type { EngineMemo, RiskUnit } from "@/lib/trading-engine/step";
+import { parseRiskOptions } from "@/lib/trading-engine/risk-options";
 import { parseTargets } from "@/lib/trading-engine/targets-config";
 import { parseEntryPlan } from "@/lib/trading-engine/entry-plan-config";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+
+const DbNull = Prisma.DbNull;
 
 // Not a Server Action module: the scheduled job (an internal API route) and
 // the Sync button's action both call in here.
@@ -140,6 +143,9 @@ export async function syncPaperSessionFor(id: string, userId: string, opts: { sc
       positionPlannedQuantity: paperSession.positionPlannedQuantity,
       positionAnchorPrice: paperSession.positionAnchorPrice,
       positionLevelCursor: paperSession.positionLevelCursor,
+      positionTrailAfter: (paperSession.positionTrailAfter as { unit: RiskUnit; value: number } | null) ?? null,
+      riskOptions: parseRiskOptions(paperSession.riskOptions),
+      engineMemo: (paperSession.engineMemo as EngineMemo | null) ?? null,
       lastSyncedTime: paperSession.lastSyncedTime,
     },
     preCheck.allowNewEntries,
@@ -193,6 +199,8 @@ export async function syncPaperSessionFor(id: string, userId: string, opts: { sc
       positionPlannedQuantity: result.position ? result.position.plannedQuantity : null,
       positionAnchorPrice: result.position ? result.position.anchorPrice : null,
       positionLevelCursor: result.position ? result.position.levelCursor : 0,
+      positionTrailAfter: result.position?.trailAfter ? (result.position.trailAfter as unknown as Prisma.InputJsonValue) : DbNull,
+      engineMemo: result.memo ? (result.memo as unknown as Prisma.InputJsonValue) : DbNull,
       lastSyncedTime: result.lastSyncedTime,
       pendingLimitPrice: result.pendingEntry?.limitPrice ?? null,
       pendingLimitExpiresDay: result.pendingEntry?.expiresDay ?? null,

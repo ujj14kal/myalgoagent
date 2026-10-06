@@ -1,4 +1,5 @@
-import { entrySlice, lockFloor, targetPrice, targetsTakenFor } from "@/lib/trading-engine/step";
+import { entrySlice, lockFloor, stopLossDistance, targetPrice, targetsTakenFor, tighterStop, type RiskUnit } from "@/lib/trading-engine/step";
+import { engineRisk } from "@/lib/trading-engine/risk-options";
 import type { PaperSessionState } from "@/lib/paper/sync";
 
 /**
@@ -7,18 +8,27 @@ import type { PaperSessionState } from "@/lib/paper/sync";
  * the last of them — so a resumed strategy never re-sells a target or forgets one.
  */
 export function resyncStaged(state: PaperSessionState, realQty: number): PaperSessionState {
-  const targets = state.riskManagement?.targets;
-  if (!targets?.length || !state.positionEntryPrice || state.positionQuantity == null || realQty <= 0) return state;
+  if (!state.riskManagement?.targets?.length || !state.positionEntryPrice || state.positionQuantity == null || realQty <= 0) return state;
+  // The targets in price terms, exactly as the engine runs them (margin-based ones converted).
+  const rm = state.riskOptions ? engineRisk(state.riskManagement, state.riskOptions).riskManagement : state.riskManagement;
+  const targets = rm.targets!;
   const initial = state.positionInitialQuantity ?? state.positionQuantity;
   const taken = targetsTakenFor(targets, initial, realQty);
   if (taken === (state.positionTargetsHit ?? 0) && realQty === state.positionQuantity) return state;
   let lock: number | null = null;
-  if (taken > 0) {
-    const level = targets[taken - 1];
-    const tp = targetPrice(level, state.positionEntryPrice, undefined, state.direction);
-    if (tp !== null) lock = lockFloor(level, tp, state.positionEntryPrice, undefined, state.direction);
+  let trailAfter: { unit: RiskUnit; value: number } | null = null;
+  const entry = state.positionEntryPrice;
+  const stopDist = stopLossDistance(rm, entry, undefined);
+  for (let k = 0; k < taken; k++) {
+    // Replay each taken target's stop rule in order, as the engine applied them.
+    const level = targets[k];
+    const tp = targetPrice(level, entry, undefined, state.direction, stopDist);
+    if (tp === null) continue;
+    const prev = k > 0 ? targetPrice(targets[k - 1], entry, undefined, state.direction, stopDist) : null;
+    lock = tighterStop(lock, lockFloor(level, tp, entry, undefined, state.direction, prev), state.direction);
+    if (level.lock.mode === "TRAIL") trailAfter = { unit: level.lock.unit, value: level.lock.value };
   }
-  return { ...state, positionQuantity: realQty, positionTargetsHit: taken, positionLockedStopPrice: lock } as PaperSessionState;
+  return { ...state, positionQuantity: realQty, positionTargetsHit: taken, positionLockedStopPrice: lock, positionTrailAfter: trailAfter } as PaperSessionState;
 }
 
 /**

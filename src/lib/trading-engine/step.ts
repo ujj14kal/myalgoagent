@@ -32,6 +32,8 @@ export interface EnginePosition {
   anchorPrice?: number;
   /** Entry plan: the next further entry that can still fill. Entries that waited too long are skipped over, never blocking the ones after them. */
   levelCursor?: number;
+  /** Set by a target whose stop rule is TRAIL: from then on the stop trails the best price by this distance. */
+  trailAfter?: { unit: RiskUnit; value: number } | null;
 }
 
 export interface EngineState {
@@ -39,6 +41,25 @@ export interface EngineState {
   position: EnginePosition | null;
   /** A resting limit entry order waiting to fill (a broker DAY order). */
   pendingEntry?: PendingEntry | null;
+  /** What the daily-loss and drawdown limits need to remember between candles (see `EngineLimits`). */
+  memo?: EngineMemo;
+}
+
+/** Remembered across candles for the system limits: the day's starting cash and the highest cash so far. */
+export interface EngineMemo {
+  day?: number;
+  dayStartCash?: number;
+  peakCash?: number;
+  /** Set once the drawdown limit is reached: no new positions after that. */
+  halted?: boolean;
+}
+
+/** System-level limits on opening new positions. Exits are never blocked. */
+export interface EngineLimits {
+  /** No new positions for the rest of the day once the day's realised loss reaches this % of the day's starting capital. */
+  maxDailyLossPercent?: number | null;
+  /** No new positions at all once capital falls this % below its highest point. */
+  maxDrawdownPercent?: number | null;
 }
 
 export interface PendingEntry {
@@ -76,7 +97,8 @@ export interface PositionSizing {
   riskCapital?: number;
 }
 
-export type RiskUnit = "PERCENT" | "POINTS" | "ATR_MULTIPLE";
+/** R_MULTIPLE: a multiple of the stop-loss distance (2 = twice what the stop risks) — for targets only, and needs a stop-loss. */
+export type RiskUnit = "PERCENT" | "POINTS" | "ATR_MULTIPLE" | "R_MULTIPLE";
 
 export interface RiskLeg {
   enabled: boolean;
@@ -85,11 +107,23 @@ export interface RiskLeg {
 }
 
 /**
- * What happens to the rest of the position once a target is taken:
- *  FIXED  — the profit is locked at that target's own price: the remainder is stopped out if price falls back to it.
- *  MARGIN — the lock sits a margin below it (above, for a short), so price can pull back a little without giving up the lock.
+ * What happens to the stop on the rest of the position once a target is taken:
+ *  FIXED     — moved to that target's own price: the remainder is stopped out if price falls back to it.
+ *  MARGIN    — moved to a set distance short of that target (a custom stop), so price can pull back a little first.
+ *  BREAKEVEN — moved to the entry price: the rest can no longer lose.
+ *  PREVIOUS  — moved to the previous target's price (for Target 1: the entry price).
+ *  KEEP      — left where it was (the original stop-loss, or whatever an earlier target set).
+ *  TRAIL     — from the next candle it trails the best price since entry by this distance (points, % or ATR).
+ * A moved stop only ever tightens; it never loosens an earlier one.
  */
-export type TargetLock = { mode: "FIXED" } | { mode: "MARGIN"; unit: RiskUnit; value: number };
+export type TargetLock =
+  | { mode: "FIXED" }
+  | { mode: "MARGIN"; unit: RiskUnit; value: number }
+  | { mode: "BREAKEVEN" }
+  | { mode: "PREVIOUS" }
+  | { mode: "KEEP" }
+  | { mode: "TRAIL"; unit: RiskUnit; value: number };
+export const TARGET_LOCK_MODES = ["FIXED", "MARGIN", "BREAKEVEN", "PREVIOUS", "KEEP", "TRAIL"] as const;
 
 /** One staged target (TP1, TP2 or TP3): where it is, how much of the position it sells, and how the profit is then locked. */
 export interface TargetLevel {
@@ -138,6 +172,8 @@ export interface RiskManagementConfig {
   trailingSl: RiskLeg | null;
   /** Staged targets, in order. When present they replace the single `target`. */
   targets?: TargetLevel[];
+  /** Break-even: once price has moved this far in the position's favour, the stop moves to the entry price. */
+  breakEven?: RiskLeg | null;
 }
 
 /** The shape a risk leg takes as raw form/action input, before being
@@ -180,6 +216,10 @@ export interface EngineConfig {
   entryPlan?: EntryPlan;
   /** For each plan level (by index), whether its rule was true at the close of each candle; only SIGNAL levels need one. */
   levelSignals?: (boolean[] | undefined)[];
+  /** Intraday leverage (buying power as a multiple of capital); 1 = none. The price is never changed, only how much can be bought. */
+  leverage?: number;
+  /** Daily-loss and drawdown limits on new positions. */
+  limits?: EngineLimits;
 }
 
 export interface IntradaySession {
@@ -230,8 +270,8 @@ export function stopDistanceFor(config: { riskManagement?: RiskManagementConfig 
   return resolveRiskDistance(leg, price, atr) ?? undefined;
 }
 
-/** Converts a risk leg into an absolute price distance from the entry price. */
-export function resolveRiskDistance(leg: RiskLeg, entryPrice: number, atrAtEntry: number | undefined): number | null {
+/** Converts a risk leg into an absolute price distance from the entry price. An R multiple needs the stop-loss distance. */
+export function resolveRiskDistance(leg: RiskLeg, entryPrice: number, atrAtEntry: number | undefined, stopDistance?: number | null): number | null {
   switch (leg.unit) {
     case "PERCENT":
       return entryPrice * (leg.value / 100);
@@ -239,7 +279,14 @@ export function resolveRiskDistance(leg: RiskLeg, entryPrice: number, atrAtEntry
       return leg.value;
     case "ATR_MULTIPLE":
       return atrAtEntry !== undefined ? leg.value * atrAtEntry : null;
+    case "R_MULTIPLE":
+      return stopDistance != null && stopDistance > 0 ? leg.value * stopDistance : null;
   }
+}
+
+/** The stop-loss distance for a position entered at `entryPrice` (what an R multiple is a multiple of), or null without a stop. */
+export function stopLossDistance(rm: RiskManagementConfig | undefined, entryPrice: number, atr: number | undefined): number | null {
+  return rm?.stopLoss?.enabled ? resolveRiskDistance(rm.stopLoss, entryPrice, atr) : null;
 }
 
 /** Resolves stop-loss/target prices from an entry price — shared by a fresh
@@ -253,8 +300,8 @@ export function resolveRiskLevels(
   atr: number | undefined,
   direction: StrategyDirection = "LONG",
 ): { stopLossPrice: number | null; targetPrice: number | null } {
-  const stopLossDist = rm?.stopLoss?.enabled ? resolveRiskDistance(rm.stopLoss, entryPrice, atr) : null;
-  const targetDist = rm?.target?.enabled ? resolveRiskDistance(rm.target, entryPrice, atr) : null;
+  const stopLossDist = stopLossDistance(rm, entryPrice, atr);
+  const targetDist = rm?.target?.enabled ? resolveRiskDistance(rm.target, entryPrice, atr, stopLossDist) : null;
   const sign = direction === "SHORT" ? -1 : 1;
   return {
     stopLossPrice: stopLossDist !== null ? entryPrice - sign * stopLossDist : null,
@@ -314,7 +361,8 @@ export function validateTargets(targets: TargetLevel[] | undefined, singleTarget
     if (!Number.isFinite(t.value) || t.value <= 0) return `Target ${n} needs a distance above zero.`;
     if (!Number.isFinite(t.exitPercent) || t.exitPercent <= 0 || t.exitPercent > 100) return `Target ${n} must sell between 1% and 100% of the position.`;
     total += t.exitPercent;
-    if (t.lock.mode === "MARGIN" && (!Number.isFinite(t.lock.value) || t.lock.value <= 0)) return `Target ${n}'s margin needs a value above zero.`;
+    if ((t.lock.mode === "MARGIN" || t.lock.mode === "TRAIL") && (!Number.isFinite(t.lock.value) || t.lock.value <= 0)) return `Target ${n}'s ${t.lock.mode === "TRAIL" ? "trailing distance" : "margin"} needs a value above zero.`;
+    if ((t.lock.mode === "MARGIN" || t.lock.mode === "TRAIL") && t.lock.unit === "R_MULTIPLE") return `Target ${n}'s ${t.lock.mode === "TRAIL" ? "trailing distance" : "margin"} must be in points, % or ATR.`;
     if (t.lock.mode === "MARGIN" && t.lock.unit === t.unit && t.lock.value >= t.value) return `Target ${n}'s margin must be smaller than the target distance itself.`;
     if (prev && prev.unit === t.unit && t.value <= prev.value) return `Target ${n} must be further from the entry than Target ${n - 1}.`;
     prev = t;
@@ -323,25 +371,44 @@ export function validateTargets(targets: TargetLevel[] | undefined, singleTarget
   return null;
 }
 
-/** Price of staged target `index` for a position entered at `entryPrice`. */
-export function targetPrice(level: TargetLevel, entryPrice: number, atr: number | undefined, direction: StrategyDirection): number | null {
-  const dist = resolveRiskDistance({ enabled: true, unit: level.unit, value: level.value }, entryPrice, atr);
+/** Price of staged target `index` for a position entered at `entryPrice` (`stopDistance` for targets set as an R multiple). */
+export function targetPrice(level: TargetLevel, entryPrice: number, atr: number | undefined, direction: StrategyDirection, stopDistance?: number | null): number | null {
+  const dist = resolveRiskDistance({ enabled: true, unit: level.unit, value: level.value }, entryPrice, atr, stopDistance);
   if (dist === null) return null;
   return entryPrice + (direction === "SHORT" ? -1 : 1) * dist;
 }
 
 /**
- * The stop that protects the rest of the position once `level` is taken at `tp`. Never worse than the entry price,
- * so a taken target can only ever turn a position into a risk-free one, not into a loser.
+ * Where the stop on the rest of the position moves once `level` is taken at `tp` (`previousTp`: the target before it).
+ * Null = it doesn't move (KEEP, and TRAIL, which trails from the next candle). A moved stop is never worse than the
+ * entry price, so a taken target can only ever turn a position into a risk-free one, not into a loser.
  */
-export function lockFloor(level: TargetLevel, tp: number, entryPrice: number, atr: number | undefined, direction: StrategyDirection): number {
+export function lockFloor(level: TargetLevel, tp: number, entryPrice: number, atr: number | undefined, direction: StrategyDirection, previousTp?: number | null): number | null {
   const sign = direction === "SHORT" ? -1 : 1;
-  let floor = tp;
-  if (level.lock.mode === "MARGIN") {
-    const margin = resolveRiskDistance({ enabled: true, unit: level.lock.unit, value: level.lock.value }, entryPrice, atr) ?? 0;
-    floor = tp - sign * margin;
+  let floor: number;
+  switch (level.lock.mode) {
+    case "KEEP":
+    case "TRAIL":
+      return null;
+    case "BREAKEVEN":
+      return entryPrice;
+    case "PREVIOUS":
+      floor = previousTp ?? entryPrice;
+      break;
+    case "MARGIN":
+      floor = tp - sign * (resolveRiskDistance({ enabled: true, unit: level.lock.unit, value: level.lock.value }, entryPrice, atr) ?? 0);
+      break;
+    default:
+      floor = tp;
   }
   return sign === 1 ? Math.max(floor, entryPrice) : Math.min(floor, entryPrice);
+}
+
+/** The tighter of two stops (higher for a long, lower for a short); either may be absent. */
+export function tighterStop(a: number | null | undefined, b: number | null | undefined, direction: StrategyDirection): number | null {
+  if (a == null) return b ?? null;
+  if (b == null) return a;
+  return direction === "SHORT" ? Math.min(a, b) : Math.max(a, b);
 }
 
 /** Shares a target sells: its share of the original position, at least one, never more than what is left. */
@@ -371,8 +438,11 @@ export function targetsTakenFor(targets: TargetLevel[], initialQuantity: number,
  * nearest whole tradable unit (universal convention — never round up)
  * and never exceeds what `cash` can actually afford, regardless of mode.
  */
-export function computeQuantity(cash: number, fillPrice: number, sizing: PositionSizing, riskPerShare?: number): number {
-  const affordable = Math.floor(cash / fillPrice);
+export function computeQuantity(cash: number, fillPrice: number, sizing: PositionSizing, riskPerShare?: number, leverage = 1): number {
+  // Intraday leverage raises what the capital can buy (each rupee of margin carries `leverage` rupees of position);
+  // the share price itself never changes. Risk-based sizing still risks a share of the capital, not of the exposure.
+  const lev = Number.isFinite(leverage) && leverage > 1 ? leverage : 1;
+  const affordable = Math.floor((cash * lev) / fillPrice);
 
   switch (sizing.mode) {
     case "RISK_PERCENT": {
@@ -384,9 +454,9 @@ export function computeQuantity(cash: number, fillPrice: number, sizing: Positio
     case "FIXED_QUANTITY":
       return Math.min(Math.floor(sizing.value ?? 0), affordable);
     case "FIXED_CAPITAL":
-      return Math.floor(Math.min(sizing.value ?? 0, cash) / fillPrice);
+      return Math.floor((Math.min(sizing.value ?? 0, cash) * lev) / fillPrice);
     case "PERCENT_OF_CAPITAL":
-      return Math.floor((cash * (sizing.value ?? 0)) / 100 / fillPrice);
+      return Math.floor((cash * lev * (sizing.value ?? 0)) / 100 / fillPrice);
     case "FULL_CAPITAL":
     default:
       return affordable;
@@ -466,6 +536,8 @@ export type StepResult = {
   targetLevel?: number;
   /** Set when a further entry of a multi-level plan filled on this bar (level 2 = the first further entry). */
   entryLevel?: { level: number; quantity: number; price: number; /** When it fills: the candle that reached the price, or the open after a rule fired. */ time: number };
+  /** An entry signal on this candle was ignored because a system limit had been reached. */
+  blockedBy?: "daily_loss" | "drawdown";
 };
 
 /**
@@ -491,7 +563,39 @@ export function tradingDaysBetween(candles: Candle[], fromIdx: number, toIdx: nu
   return days;
 }
 
+/**
+ * One candle of the engine. The system limits wrap everything else: once the day's realised loss or the drawdown
+ * from the peak reaches its limit, no new position is opened (open ones still exit by their own rules).
+ */
 export function stepBar(candles: Candle[], i: number, entrySignal: boolean, exitSignal: boolean, state: EngineState, config: EngineConfig): StepResult {
+  const limits = config.limits;
+  if (!limits || (limits.maxDailyLossPercent == null && limits.maxDrawdownPercent == null)) return planStep(candles, i, entrySignal, exitSignal, state, config);
+  const day = istDayAndMinute(candles[i].time).day;
+  const prev = state.memo ?? {};
+  const memo: EngineMemo = prev.day === day ? { ...prev } : { ...prev, day, dayStartCash: state.cash };
+  memo.peakCash = Math.max(memo.peakCash ?? state.cash, state.cash);
+  const blocked = limitReached(memo, state.cash, limits);
+  const r = planStep(candles, i, blocked && !state.position ? false : entrySignal, exitSignal, blocked && !state.position ? { ...state, pendingEntry: null } : state, config);
+  // A pyramid add while blocked is undone by never letting the signal through above; record the cash after this candle.
+  const after: EngineMemo = { ...memo, peakCash: Math.max(memo.peakCash ?? r.state.cash, r.state.cash) };
+  if (limits.maxDrawdownPercent != null && after.peakCash! > 0 && ((after.peakCash! - r.state.cash) / after.peakCash!) * 100 >= limits.maxDrawdownPercent) after.halted = true;
+  const reason = blocked && entrySignal && !state.position ? limitReason(memo, state.cash, limits) : null;
+  return { ...r, state: { ...r.state, memo: after }, ...(reason ? { blockedBy: reason } : {}) };
+}
+
+/** Has a system limit stopped new positions? */
+export function limitReached(memo: EngineMemo, cash: number, limits: EngineLimits): boolean {
+  return limitReason(memo, cash, limits) !== null;
+}
+
+function limitReason(memo: EngineMemo, cash: number, limits: EngineLimits): "daily_loss" | "drawdown" | null {
+  if (memo.halted) return "drawdown";
+  if (limits.maxDrawdownPercent != null && memo.peakCash && ((memo.peakCash - cash) / memo.peakCash) * 100 >= limits.maxDrawdownPercent) return "drawdown";
+  if (limits.maxDailyLossPercent != null && memo.dayStartCash && ((memo.dayStartCash - cash) / memo.dayStartCash) * 100 >= limits.maxDailyLossPercent) return "daily_loss";
+  return null;
+}
+
+function planStep(candles: Candle[], i: number, entrySignal: boolean, exitSignal: boolean, state: EngineState, config: EngineConfig): StepResult {
   const plan = config.entryPlan;
   const pos0 = state.position;
   if (!plan || !pos0) return stepBarCore(candles, i, entrySignal, exitSignal, state, config);
@@ -584,8 +688,25 @@ function stepBarCore(
 
   if (state.position) {
     const bar = candles[i];
-    const pos = state.position;
     const rm = config.riskManagement;
+    let pos = state.position;
+    {
+      // Stops that move with the trade, judged on the best price of the candles before this one (never this candle's,
+      // which would assume its high came before its low): break-even, and the trail a taken target switched on.
+      const atr = config.atrAtEntry?.(pos.entryIdx);
+      const sign = isShort ? -1 : 1;
+      const moved = (pos.favorableExtreme - pos.entryPrice) * sign;
+      let lock = pos.lockedStopPrice ?? null;
+      if (rm?.breakEven?.enabled) {
+        const trigger = resolveRiskDistance(rm.breakEven, pos.entryPrice, atr, stopLossDistance(rm, pos.entryPrice, atr));
+        if (trigger !== null && trigger > 0 && moved >= trigger) lock = tighterStop(lock, pos.entryPrice, direction);
+      }
+      if (pos.trailAfter) {
+        const dist = resolveRiskDistance({ enabled: true, ...pos.trailAfter }, pos.entryPrice, atr);
+        if (dist !== null) lock = tighterStop(lock, pos.favorableExtreme - sign * dist, direction);
+      }
+      if (lock !== (pos.lockedStopPrice ?? null)) pos = { ...pos, lockedStopPrice: lock };
+    }
 
     // Intraday square-off time reached: close at this candle's open, before anything else.
     const session = config.session;
@@ -632,7 +753,8 @@ function stepBarCore(
     if (staged.length > taken) {
       const level = staged[taken];
       const atr = config.atrAtEntry?.(pos.entryIdx);
-      const tp = targetPrice(level, pos.entryPrice, atr, direction);
+      const stopDist = stopLossDistance(rm, pos.entryPrice, atr);
+      const tp = targetPrice(level, pos.entryPrice, atr, direction, stopDist);
       if (tp !== null && (isShort ? bar.low <= tp : bar.high >= tp)) {
         const initial = pos.initialQuantity ?? pos.quantity;
         const sellQty = targetQuantity(level, initial, pos.quantity);
@@ -642,13 +764,15 @@ function stepBarCore(
           return { state: { cash: state.cash + trade.netPnl, position: null }, trade, exitReason: "target", targetLevel: taken + 1 };
         }
         const part = closeTrade(candles, { ...pos, quantity: sellQty }, i, tp, config.brokeragePercent, direction);
-        const floor = lockFloor(level, tp, pos.entryPrice, atr, direction);
-        const nextLock = locked === null ? floor : isShort ? Math.min(locked, floor) : Math.max(locked, floor);
+        const previousTp = taken > 0 ? targetPrice(staged[taken - 1], pos.entryPrice, atr, direction, stopDist) : null;
+        const floor = lockFloor(level, tp, pos.entryPrice, atr, direction, previousTp);
+        const nextLock = tighterStop(locked, floor, direction);
+        const trailAfter = level.lock.mode === "TRAIL" ? { unit: level.lock.unit, value: level.lock.value } : (pos.trailAfter ?? null);
         return {
           state: {
             ...state,
             cash: state.cash + part.netPnl,
-            position: { ...pos, quantity: pos.quantity - sellQty, favorableExtreme, initialQuantity: initial, targetsHit: taken + 1, lockedStopPrice: nextLock },
+            position: { ...pos, quantity: pos.quantity - sellQty, favorableExtreme, initialQuantity: initial, targetsHit: taken + 1, lockedStopPrice: nextLock, trailAfter },
           },
           trade: part,
           exitReason: "target",
@@ -677,7 +801,7 @@ function stepBarCore(
       const order = config.entryOrder;
       const fillPrice = order?.type === "LIMIT" ? limitFill(nextBar, limitPriceFor(order, bar.close, direction), direction) : openFillPrice(nextBar.open);
       if (fillPrice === null) return { state: { ...state, position: { ...pos, favorableExtreme } } };
-      const addQuantity = computeQuantity(state.cash, fillPrice, config.positionSizing, stopDistanceFor(config, fillPrice, config.atrAtEntry?.(i + 1)));
+      const addQuantity = computeQuantity(state.cash, fillPrice, config.positionSizing, stopDistanceFor(config, fillPrice, config.atrAtEntry?.(i + 1)), config.leverage);
       if (addQuantity > 0) {
         const totalQuantity = pos.quantity + addQuantity;
         const blendedEntryPrice = (pos.entryPrice * pos.quantity + fillPrice * addQuantity) / totalQuantity;
@@ -700,6 +824,7 @@ function stepBarCore(
               plannedQuantity: pos.plannedQuantity,
               anchorPrice: pos.anchorPrice,
               levelCursor: pos.levelCursor,
+              trailAfter: pos.trailAfter,
             },
           },
         };
@@ -711,7 +836,7 @@ function stepBarCore(
 
   /** Opens a position at `fillIdx` for `fillPrice`, or reports that the size came out as zero. */
   const open = (fillIdx: number, fillPrice: number) => {
-    const wanted = computeQuantity(state.cash, fillPrice, config.positionSizing, stopDistanceFor(config, fillPrice, config.atrAtEntry?.(fillIdx)));
+    const wanted = computeQuantity(state.cash, fillPrice, config.positionSizing, stopDistanceFor(config, fillPrice, config.atrAtEntry?.(fillIdx)), config.leverage);
     if (wanted <= 0) return { state: { ...state, pendingEntry: null }, sizeTooSmall: true };
     // A multi-level plan buys only its first share now and keeps the rest of the planned size for its further levels.
     const plan = config.entryPlan;

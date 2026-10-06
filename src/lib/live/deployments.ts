@@ -1,4 +1,5 @@
 import { capitalProblem, fitToOrderLimit, INTRADAY_BUYING_POWER } from "@/lib/live/capital";
+import { parseRiskOptions } from "@/lib/trading-engine/risk-options";
 import "server-only";
 import type { LiveDeployment, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -99,7 +100,9 @@ export async function startDeployment(userId: string, input: { strategyId: strin
   // A strategy whose capital can't buy its first position would watch forever and never trade.
   const sizing = { mode: s.positionSizingMode, value: s.positionSizingValue };
   // Intraday trades are margin trades: the broker lends buying power, so the engine may size up to that multiple of the capital.
-  const leverage = s.productType === "INTRADAY" ? INTRADAY_BUYING_POWER : 1;
+  // The strategy's own leverage when it sets one; otherwise the usual intraday buying power.
+  const options = parseRiskOptions(s.riskOptions);
+  const leverage = s.productType === "INTRADAY" ? (options.leverage > 1 ? options.leverage : INTRADAY_BUYING_POWER) : 1;
   const lastPx = candles.at(-1)!.close * 1.0005;
   const stopDist = s.stopLossEnabled && s.stopLossUnit && s.stopLossValue != null ? resolveRiskDistance({ enabled: true, unit: s.stopLossUnit, value: s.stopLossValue }, lastPx, undefined) ?? undefined : undefined;
   const tooSmall = capitalProblem(sizing, input.capital, lastPx, s.instrument.symbol.replace(/\.NS$/, ""), leverage, stopDist);
@@ -122,6 +125,14 @@ export async function startDeployment(userId: string, input: { strategyId: strin
     },
     maxPyramidEntries: 1,
     entryPlan: parseEntryPlan(s.entryPlan) ?? null,
+    // The leverage is in `cash` below, so the engine applies none of its own; the loss limits are percentages of the
+    // capital, and `cash` is capital × leverage, so they're scaled to match.
+    riskOptions: {
+      ...options,
+      maxDailyLossPercent: options.maxDailyLossPercent != null ? options.maxDailyLossPercent / leverage : null,
+      maxDrawdownPercent: options.maxDrawdownPercent != null ? options.maxDrawdownPercent / leverage : null,
+    },
+    leverageInCash: true,
     timeframe: s.timeframe,
     noEntryAfterMinute: s.noEntryAfterMinute,
     squareOffMinute: s.squareOffMinute,
@@ -167,7 +178,7 @@ function dataFor(d: LiveDeployment): MarketDataProvider {
 
 /** The engine's position must match the broker's: when nothing is really held, the engine is flat too. */
 function flatten(state: PaperSessionState): PaperSessionState {
-  return { ...state, positionEntryTime: null, positionEntryPrice: null, positionQuantity: null, positionFavorableExtreme: null, positionStopLossPrice: null, positionTargetPrice: null, positionInitialQuantity: null, positionTargetsHit: 0, positionLockedStopPrice: null, positionPlannedQuantity: null, positionAnchorPrice: null, positionPyramidCount: null, positionLevelCursor: 0 } as PaperSessionState;
+  return { ...state, positionEntryTime: null, positionEntryPrice: null, positionQuantity: null, positionFavorableExtreme: null, positionStopLossPrice: null, positionTargetPrice: null, positionInitialQuantity: null, positionTargetsHit: 0, positionLockedStopPrice: null, positionPlannedQuantity: null, positionAnchorPrice: null, positionPyramidCount: null, positionLevelCursor: 0, positionTrailAfter: null } as PaperSessionState;
 }
 
 export async function setDeploymentStatus(userId: string, id: string, status: "ACTIVE" | "PAUSED" | "STOPPED") {
@@ -387,6 +398,8 @@ export async function runDeployment(id: string): Promise<"idle" | "acted" | "pau
     positionLevelCursor: result.position?.levelCursor ?? 0,
     positionPlannedQuantity: result.position?.plannedQuantity ?? null,
     positionAnchorPrice: result.position?.anchorPrice ?? null,
+    positionTrailAfter: result.position?.trailAfter ?? null,
+    engineMemo: result.memo,
     lastSyncedTime: result.lastSyncedTime,
   } as PaperSessionState;
   const after = acted && d.mode === "AUTO" ? await reconcile(d) : real;

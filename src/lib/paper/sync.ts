@@ -12,9 +12,12 @@ import {
   type EntryPlan,
   type ExitReason,
   type PositionSizing,
+  type EngineMemo,
   type RiskManagementConfig,
+  type RiskUnit,
   type StrategyDirection,
 } from "@/lib/trading-engine/step";
+import { engineRisk, type RiskOptions } from "@/lib/trading-engine/risk-options";
 
 const DEFAULT_MAX_PYRAMID_ENTRIES = 1;
 
@@ -68,13 +71,21 @@ export interface PaperSessionState {
   positionAnchorPrice?: number | null;
   /** Entry plan: the next further entry that can still fill. */
   positionLevelCursor?: number | null;
+  /** Set by a target whose stop rule is TRAIL: the distance the stop trails the best price by. */
+  positionTrailAfter?: { unit: RiskUnit; value: number } | null;
+  /** TP/SL reference, leverage, break-even and system limits (omitted = the defaults). */
+  riskOptions?: RiskOptions;
+  /** What the daily-loss and drawdown limits remembered at the last sync. */
+  engineMemo?: EngineMemo | null;
+  /** Live trading: the leverage is already in `cash` (capital × buying power), so the engine mustn't apply it again. */
+  leverageInCash?: boolean;
   lastSyncedTime: number | null;
 }
 
 export function usesAtr(rm: RiskManagementConfig | undefined): boolean {
   if (!rm) return false;
-  if ([rm.stopLoss, rm.target, rm.trailingSl].some((leg) => leg?.enabled && leg.unit === "ATR_MULTIPLE")) return true;
-  return (rm.targets ?? []).some((t) => t.unit === "ATR_MULTIPLE" || (t.lock.mode === "MARGIN" && t.lock.unit === "ATR_MULTIPLE"));
+  if ([rm.stopLoss, rm.target, rm.trailingSl, rm.breakEven].some((leg) => leg?.enabled && leg.unit === "ATR_MULTIPLE")) return true;
+  return (rm.targets ?? []).some((t) => t.unit === "ATR_MULTIPLE" || ((t.lock.mode === "MARGIN" || t.lock.mode === "TRAIL") && t.lock.unit === "ATR_MULTIPLE"));
 }
 
 export interface NewPaperOrder {
@@ -120,7 +131,10 @@ export interface SyncResult {
     plannedQuantity: number | null;
     anchorPrice: number | null;
     levelCursor: number;
+    trailAfter: { unit: RiskUnit; value: number } | null;
   } | null;
+  /** For the daily-loss and drawdown limits, saved for the next sync. */
+  memo: EngineMemo | null;
   lastSyncedTime: number | null;
   /** A limit entry order still resting at the end of this sync (saved for the next one). */
   pendingEntry: { limitPrice: number; expiresDay: number; fromTime: number } | null;
@@ -233,6 +247,7 @@ export async function syncPaperSession(
       signalAlerts,
       cash: session.cash,
       position: null,
+      memo: session.engineMemo ?? null,
       lastSyncedTime,
       pendingEntry: null,
       suppressedEntrySignal: false,
@@ -263,11 +278,13 @@ export async function syncPaperSession(
             stopLossPrice: session.positionStopLossPrice,
             targetPrice: session.positionTargetPrice,
             pyramidCount: session.positionPyramidCount ?? 1,
+            // A moved stop (a taken target, break-even or a trail) carries across syncs whatever set it.
+            lockedStopPrice: session.positionLockedStopPrice ?? null,
+            trailAfter: session.positionTrailAfter ?? null,
             ...(session.riskManagement?.targets?.length
               ? {
                   initialQuantity: session.positionInitialQuantity ?? session.positionQuantity,
                   targetsHit: session.positionTargetsHit ?? 0,
-                  lockedStopPrice: session.positionLockedStopPrice ?? null,
                 }
               : {}),
             ...(session.entryPlan ? { plannedQuantity: session.positionPlannedQuantity ?? session.positionQuantity, anchorPrice: session.positionAnchorPrice ?? session.positionEntryPrice, levelCursor: session.positionLevelCursor ?? Math.max(0, (session.positionPyramidCount ?? 1) - 1) } : {}),
@@ -277,10 +294,14 @@ export async function syncPaperSession(
       session.pendingLimitPrice != null && session.pendingLimitExpiresDay != null && session.pendingLimitFromTime != null
         ? { limitPrice: session.pendingLimitPrice, expiresDay: session.pendingLimitExpiresDay, fromTime: session.pendingLimitFromTime }
         : null,
+    memo: session.engineMemo ?? undefined,
   };
 
+  // Margin-based stops/targets become price moves; leverage and the limits go to the engine as they are.
+  const risk = session.riskOptions ? engineRisk(session.riskManagement ?? { stopLoss: null, target: null, trailingSl: null }, session.riskOptions) : null;
+  const riskManagement = risk?.riskManagement ?? session.riskManagement;
   let atrByTime: Map<number, number> | null = null;
-  if (usesAtr(session.riskManagement)) {
+  if (usesAtr(riskManagement)) {
     const atrPoints = computeIndicatorSeries(candles, "ATR", [DEFAULT_ATR_PERIOD]);
     atrByTime = new Map(atrPoints.map((p) => [p.time, p.value]));
   }
@@ -290,7 +311,9 @@ export async function syncPaperSession(
     brokeragePercent: session.brokeragePercent,
     slippagePercent: session.slippagePercent,
     positionSizing: session.positionSizing,
-    riskManagement: session.riskManagement,
+    riskManagement,
+    leverage: session.leverageInCash ? 1 : risk?.leverage,
+    limits: risk?.limits,
     atrAtEntry: atrByTimeFinal ? (idx: number) => atrByTimeFinal.get(candles[idx]?.time) : undefined,
     maxPyramidEntries: session.maxPyramidEntries ?? DEFAULT_MAX_PYRAMID_ENTRIES,
     direction: session.direction,
@@ -403,8 +426,10 @@ export async function syncPaperSession(
           plannedQuantity: state.position.plannedQuantity ?? null,
           anchorPrice: state.position.anchorPrice ?? null,
           levelCursor: state.position.levelCursor ?? 0,
+          trailAfter: state.position.trailAfter ?? null,
         }
       : null,
+    memo: state.memo ?? null,
     lastSyncedTime,
     pendingEntry: state.pendingEntry ?? null,
     suppressedEntrySignal,

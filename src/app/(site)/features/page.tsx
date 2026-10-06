@@ -89,9 +89,12 @@ const groups: Group[] = [
     items: [
       "Maximum loss per session and maximum consecutive losses",
       "Global emergency kill switch, plus pause or stop for any single session",
+      "Per-strategy maximum daily loss and maximum drawdown: once reached, no new positions open (existing ones still exit by their rules)",
+      "Intraday leverage with a choice of TP/SL reference — the share's actual price, or returns on the margin you put up — and a worked example showing entry, actual stop and target prices, margin used, leveraged exposure, ₹ P&L and % on margin",
+      "Targets as risk/reward multiples (1:2 = 2R), a break-even stop, and per-target stop rules: after TP1 move the stop to breakeven, after TP2 to TP1, trail by points, % or ATR, keep it, or set your own distance",
     ],
     soon: [
-      "Maximum daily loss, position size and portfolio exposure limits",
+      "Position size and portfolio exposure limits across strategies",
       "Per-strategy capital allocation and maximum trades per day",
       "Broker-disconnect and stale-data safety behavior",
     ],

@@ -1,3 +1,4 @@
+import { engineRisk, parseRiskOptions } from "@/lib/trading-engine/risk-options";
 import { withLevelConditions } from "@/lib/strategy/plan-conditions";
 import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/logger";
@@ -130,13 +131,16 @@ export async function computeStrategyPreview(userId: string | null, input: Strat
         direction: input.direction,
         session: engineSession(session, compiled.entryCondition),
         entryOrder: engineEntryOrder(session),
+        ...(input.riskOptions ? { riskOptions: parseRiskOptions(input.riskOptions) } : {}),
       },
       aux,
     );
 
     const entryWhy = firedParts(compiled.entryCondition, candles, aux);
     const checks = entryCheckers(candles, compiled.entryCondition, aux, readableRule);
-    const rm = { stopLoss: leg(input.stopLoss), target: leg(input.target), trailingSl: leg(input.trailingSl) };
+    // The lines drawn on the replay are in price terms, as the engine ran them (margin-based ones converted).
+    const rawRm = { stopLoss: leg(input.stopLoss), target: leg(input.target), trailingSl: leg(input.trailingSl) };
+    const rm = input.riskOptions ? { ...rawRm, ...engineRisk(rawRm, parseRiskOptions(input.riskOptions)).riskManagement } : rawRm;
     const usesAtr = [rm.stopLoss, rm.target, rm.trailingSl].some((l) => l?.unit === "ATR_MULTIPLE");
     const atrByTime = usesAtr ? new Map(computeIndicatorSeries(candles, "ATR", [14]).map((p) => [p.time, p.value])) : null;
     const atrAt = (idx: number) => atrByTime?.get(candles[idx]?.time);

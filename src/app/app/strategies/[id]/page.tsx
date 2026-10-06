@@ -1,3 +1,4 @@
+import { describeRiskOptions, parseRiskOptions } from "@/lib/trading-engine/risk-options";
 import Link from "next/link";
 import { describeEntryPlan } from "@/lib/describe-entry-plan";
 import { describeTargets } from "@/lib/describe-targets";
@@ -54,6 +55,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
   const isWebhook = strategy.mode === "WEBHOOK";
   const plan = parseEntryPlan(strategy.entryPlan);
   const stagedTargets = parseTargets(strategy.targetsConfig);
+  const riskNotes = describeRiskOptions(parseRiskOptions(strategy.riskOptions));
   // Go live: brokers logged in today and checked ready in the last 24 hours.
   const [liveUser, liveConns, liveDeployments] = await Promise.all([
     prisma.user.findUnique({ where: { id: session.user.id }, select: { liveTradingEnabledAt: true } }),
@@ -152,13 +154,19 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
         <p className="-mt-2 text-xs text-brand-navy/45">
           Data: {market.name}
           {!market.isOfficial && " (interim feed, not an official NSE/BSE source)"}
-          {" · "}{describeExecutionConfig({ ...strategy, targets: parseTargets(strategy.targetsConfig), entryPlan: parseEntryPlan(strategy.entryPlan) }).split(" · ")[0]}, not real-time · signals shown are a preview of where this
+          {" · "}{describeExecutionConfig({ ...strategy, targets: parseTargets(strategy.targetsConfig), entryPlan: parseEntryPlan(strategy.entryPlan), riskOptions: parseRiskOptions(strategy.riskOptions) }).split(" · ")[0]}, not real-time · signals shown are a preview of where this
           strategy would have triggered, not a backtest of P&amp;L.
         </p>
       )}
 
-      {!isWebhook && (plan || stagedTargets.length > 0 || strategy.style) && (
+      {(!isWebhook && (plan || stagedTargets.length > 0 || strategy.style)) || riskNotes.length > 0 ? (
         <div className="surface mb-4 space-y-3 p-4 text-sm text-brand-navy/75">
+          {riskNotes.length > 0 && (
+            <p>
+              <span className="font-semibold text-brand-navy">Leverage &amp; limits: </span>
+              {riskNotes.join(" · ")}
+            </p>
+          )}
           {strategy.style && (
             <p>
               <span className="font-semibold text-brand-navy">Style: </span>
@@ -186,7 +194,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
             </div>
           )}
         </div>
-      )}
+      ) : null}
 
       <div className="mt-6">
         {isWebhook ? (
@@ -263,6 +271,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
               limitValue: strategy.limitValue,
               style: strategy.style,
               targets: parseTargets(strategy.targetsConfig),
+              riskOptions: parseRiskOptions(strategy.riskOptions),
               entryPlan: parseEntryPlan(strategy.entryPlan) ?? null,
             }}
           />

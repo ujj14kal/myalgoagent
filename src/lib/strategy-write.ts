@@ -5,6 +5,7 @@ import { toRiskLeg, type EntryPlan, type PositionSizingMode, type RiskLegInput, 
 import { entryPlanToStore } from "@/lib/trading-engine/entry-plan-config";
 import { parseStyle, styleProblem, type StrategyStyle } from "@/lib/strategy/style";
 import { targetsToStore } from "@/lib/trading-engine/targets-config";
+import { DEFAULT_RISK_OPTIONS, isDefaultRiskOptions, parseRiskOptions, riskOptionsProblem, type RiskOptions } from "@/lib/trading-engine/risk-options";
 import { compile } from "@/lib/strategy-compile";
 import { normalizeSession } from "@/lib/strategy/session";
 import { isUniqueConstraintViolation } from "@/lib/prisma-errors";
@@ -47,6 +48,8 @@ export interface StrategyInput {
   orderType?: string;
   limitMode?: string | null;
   limitValue?: number | null;
+  /** TP/SL reference (price or margin), intraday leverage, break-even and the system's daily-loss / drawdown limits. */
+  riskOptions?: RiskOptions;
 }
 
 export function riskFields(input: StrategyInput) {
@@ -60,6 +63,15 @@ export function riskFields(input: StrategyInput) {
   const style = parseStyle(input.style);
   const styleIssue = styleProblem(style, { timeframe: session.timeframe, productType: session.productType, direction: input.direction });
   if (styleIssue) throw new Error(styleIssue);
+  // R multiples are a multiple of the stop-loss distance: targets only, and only with a stop-loss.
+  if (stopLoss.enabled && stopLoss.unit === "R_MULTIPLE") throw new Error("The stop-loss can't be set in R — R is the stop-loss distance. Use %, points or ATR.");
+  if (trailingSl.enabled && trailingSl.unit === "R_MULTIPLE") throw new Error("The trailing stop can't be set in R. Use %, points or ATR.");
+  const usesR = (target.enabled && target.unit === "R_MULTIPLE") || (input.targets ?? []).some((t) => t.unit === "R_MULTIPLE");
+  if (usesR && !stopLoss.enabled) throw new Error("A target set as a risk/reward multiple (R) needs a stop-loss: R is the stop-loss distance.");
+  const options = input.riskOptions ? parseRiskOptions(input.riskOptions) : DEFAULT_RISK_OPTIONS;
+  const optionsIssue = riskOptionsProblem(options, { productType: session.productType, stopLossOn: stopLoss.enabled });
+  if (optionsIssue) throw new Error(optionsIssue);
+  if ((options.breakEven || options.maxDailyLossPercent != null || options.maxDrawdownPercent != null) && input.mode === "WEBHOOK") throw new Error("Break-even and the daily-loss / drawdown limits aren't available for webhook strategies (their trades come straight from TradingView alerts).");
   const plan = entryPlanToStore(input.entryPlan, input.maxPyramidEntries);
   if (plan.error) throw new Error(plan.error);
   if (plan.json && input.mode === "WEBHOOK") throw new Error("Entry plans aren't available for webhook strategies.");
@@ -67,6 +79,7 @@ export function riskFields(input: StrategyInput) {
     style,
     entryPlan: plan.json ? (plan.json as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
     targetsConfig: staged.json ? (staged.json as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+    riskOptions: isDefaultRiskOptions(options) ? Prisma.DbNull : (options as unknown as Prisma.InputJsonValue),
     direction: input.direction,
     positionSizingMode: input.positionSizingMode,
     positionSizingValue: input.positionSizingValue,

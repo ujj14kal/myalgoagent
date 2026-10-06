@@ -1,6 +1,7 @@
 "use client";
 import { isIntraday } from "@/lib/market-data/timeframes";
 import { describeTargets } from "@/lib/describe-targets";
+import { describeRiskOptions } from "@/lib/trading-engine/risk-options";
 import { describeEntryPlan } from "@/lib/describe-entry-plan";
 import { STYLE_LABEL } from "@/lib/strategy/style";
 import InstrumentCombobox from "@/components/instrument-combobox";
@@ -353,9 +354,9 @@ function NumberInput({ value, onChange, step = "any", placeholder }: { value: nu
   );
 }
 
-type Leg = { enabled: boolean; unit: "PERCENT" | "POINTS" | "ATR_MULTIPLE"; value: number };
+type Leg = { enabled: boolean; unit: "PERCENT" | "POINTS" | "ATR_MULTIPLE" | "R_MULTIPLE"; value: number };
 
-function LegRow({ label, leg, onChange }: { label: string; leg: Leg; onChange: (l: Leg) => void }) {
+function LegRow({ label, leg, onChange, allowR = false }: { label: string; leg: Leg; onChange: (l: Leg) => void; /** Targets only: a multiple of the stop-loss distance. */ allowR?: boolean }) {
   return (
     <div className="grid grid-cols-[1fr_88px_110px] items-center gap-2">
       <label className="flex items-center gap-2 text-sm text-brand-navy">
@@ -374,6 +375,7 @@ function LegRow({ label, leg, onChange }: { label: string; leg: Leg; onChange: (
         <option value="PERCENT">%</option>
         <option value="POINTS">points</option>
         <option value="ATR_MULTIPLE">× ATR</option>
+        {(allowR || leg.unit === "R_MULTIPLE") && <option value="R_MULTIPLE">R (× stop)</option>}
       </select>
     </div>
   );
@@ -476,7 +478,7 @@ function StrategyFields({
         <span className={labelCls}>Risk rules</span>
         <div className="space-y-2 rounded-xl bg-brand-bg p-3 ring-1 ring-black/5">
           <LegRow label="Stop-loss" leg={draft.stopLoss} onChange={(l) => set("stopLoss", l)} />
-          <LegRow label="Take-profit" leg={draft.target} onChange={(l) => set("target", l)} />
+          <LegRow label="Take-profit" leg={draft.target} onChange={(l) => set("target", l)} allowR />
           <LegRow label="Trailing stop" leg={draft.trailingSl} onChange={(l) => set("trailingSl", l)} />
           {draft.targets && draft.targets.length > 0 && (
             <div className="space-y-1 border-t border-black/5 pt-2 text-xs text-brand-navy/75">
@@ -494,6 +496,15 @@ function StrategyFields({
                 <p key={line}>{line}</p>
               ))}
               <p className="text-brand-navy/50">Ask your assistant to change it.</p>
+            </div>
+          )}
+          {draft.riskOptions && describeRiskOptions(draft.riskOptions).length > 0 && (
+            <div className="space-y-1 border-t border-black/5 pt-2 text-xs text-brand-navy/75">
+              <p className="font-semibold text-brand-navy">Leverage &amp; limits</p>
+              {describeRiskOptions(draft.riskOptions).map((line) => (
+                <p key={line}>{line}</p>
+              ))}
+              <p className="text-brand-navy/50">Stops and targets still execute at the actual market price; leverage only changes the position size.</p>
             </div>
           )}
         </div>

@@ -1,3 +1,4 @@
+import type { RiskLegInput } from "@/lib/trading-engine/step";
 import { validateConditionNode } from "@/lib/strategy/validate";
 import { parseEntryPlan } from "@/lib/trading-engine/entry-plan-config";
 import { parseTargets } from "@/lib/trading-engine/targets-config";
@@ -35,9 +36,9 @@ export function emptyDefinition(instrumentId = ""): WorkspaceDefinition {
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
-const leg = (v: unknown, fallback: { enabled: boolean; unit: "PERCENT" | "POINTS" | "ATR_MULTIPLE"; value: number }) => {
+const leg = (v: unknown, fallback: RiskLegInput) => {
   if (!isObj(v)) return fallback;
-  const unit = v.unit === "POINTS" || v.unit === "ATR_MULTIPLE" ? v.unit : "PERCENT";
+  const unit = v.unit === "POINTS" || v.unit === "ATR_MULTIPLE" || v.unit === "R_MULTIPLE" ? v.unit : "PERCENT";
   return { enabled: v.enabled === true, unit, value: typeof v.value === "number" && Number.isFinite(v.value) ? v.value : fallback.value } as typeof fallback;
 };
 

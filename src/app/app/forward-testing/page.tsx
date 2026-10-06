@@ -1,3 +1,4 @@
+import { parseRiskOptions } from "@/lib/trading-engine/risk-options";
 import { parseTargets } from "@/lib/trading-engine/targets-config";
 import { parseEntryPlan } from "@/lib/trading-engine/entry-plan-config";
 import Link from "next/link";
@@ -123,6 +124,7 @@ export default async function ForwardTestingPage({ searchParams }: { searchParam
             targetValue: s.targetValue,
             targets: parseTargets(s.targetsConfig),
             entryPlan: parseEntryPlan(s.entryPlan),
+            riskOptions: parseRiskOptions(s.riskOptions),
             trailingSlEnabled: s.trailingSlEnabled,
             trailingSlUnit: s.trailingSlUnit,
             trailingSlValue: s.trailingSlValue,

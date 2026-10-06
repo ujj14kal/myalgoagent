@@ -1,25 +1,38 @@
 "use client";
 
 import { Plus, Trash2 } from "lucide-react";
-import { MAX_TARGETS, validateTargets, type RiskUnit, type TargetLevel } from "@/lib/trading-engine/step";
+import { MAX_TARGETS, validateTargets, type RiskUnit, type TargetLevel, type TargetLock } from "@/lib/trading-engine/step";
 import { describeTargets } from "@/lib/describe-targets";
 
-// Target 1–3: sell part of the position at each target and lock profit on the rest.
+// Target 1–3: sell part of the position at each target, then move the stop on the rest by the rule chosen.
 
 export interface TargetRow {
   unit: RiskUnit;
   value: number;
   exitPercent: number;
-  lock: "FIXED" | "MARGIN";
+  lock: TargetLock["mode"];
+  /** MARGIN and TRAIL: the distance and its unit. */
   marginUnit: RiskUnit;
   marginValue: number;
 }
 
-const UNITS: { value: RiskUnit; label: string }[] = [
+const DISTANCE_UNITS: { value: RiskUnit; label: string }[] = [
   { value: "PERCENT", label: "%" },
   { value: "POINTS", label: "Points" },
   { value: "ATR_MULTIPLE", label: "× ATR(14)" },
 ];
+/** Targets can also be a risk/reward multiple: R = the stop-loss distance. */
+const UNITS: { value: RiskUnit; label: string }[] = [...DISTANCE_UNITS, { value: "R_MULTIPLE", label: "R (× stop)" }];
+
+const STOP_RULES: { value: TargetLock["mode"]; label: string; help: string }[] = [
+  { value: "FIXED", label: "Move to this target", help: "The rest is sold if price falls back to this target's own price." },
+  { value: "BREAKEVEN", label: "Move to breakeven", help: "The stop moves to your entry price: the rest can no longer lose." },
+  { value: "PREVIOUS", label: "Move to the previous target", help: "The stop moves to the previous target's price (for Target 1, your entry price)." },
+  { value: "TRAIL", label: "Trail behind the price", help: "From the next candle the stop follows the best price by the distance you set, and never moves back." },
+  { value: "MARGIN", label: "Move to a set distance short of it", help: "A custom stop: the set distance below this target (above, for a short), so price can pull back a little first." },
+  { value: "KEEP", label: "Keep it where it was", help: "The stop doesn't move: the original stop-loss (or what an earlier target set) still applies." },
+];
+const hasDistance = (m: TargetLock["mode"]) => m === "MARGIN" || m === "TRAIL";
 
 export function targetsToRows(levels: TargetLevel[] | undefined): TargetRow[] {
   return (levels ?? []).map((t) => ({
@@ -27,13 +40,13 @@ export function targetsToRows(levels: TargetLevel[] | undefined): TargetRow[] {
     value: t.value,
     exitPercent: t.exitPercent,
     lock: t.lock.mode,
-    marginUnit: t.lock.mode === "MARGIN" ? t.lock.unit : t.unit,
-    marginValue: t.lock.mode === "MARGIN" ? t.lock.value : 1,
+    marginUnit: t.lock.mode === "MARGIN" || t.lock.mode === "TRAIL" ? t.lock.unit : t.unit === "R_MULTIPLE" ? "PERCENT" : t.unit,
+    marginValue: t.lock.mode === "MARGIN" || t.lock.mode === "TRAIL" ? t.lock.value : 1,
   }));
 }
 
 export function rowsToTargets(rows: TargetRow[]): TargetLevel[] {
-  return rows.map((r) => ({ unit: r.unit, value: r.value, exitPercent: r.exitPercent, lock: r.lock === "MARGIN" ? { mode: "MARGIN", unit: r.marginUnit, value: r.marginValue } : { mode: "FIXED" } }));
+  return rows.map((r) => ({ unit: r.unit, value: r.value, exitPercent: r.exitPercent, lock: hasDistance(r.lock) ? ({ mode: r.lock, unit: r.marginUnit, value: r.marginValue } as TargetLock) : ({ mode: r.lock } as TargetLock) }));
 }
 
 const numberCls =
@@ -45,7 +58,7 @@ const selectCls = "min-w-0 rounded-lg border border-brand-navy/15 px-2 py-1.5 te
  * directly), points targets on the stock's latest price when known (points only mean something against a real price).
  */
 function example(row: TargetRow, direction: "LONG" | "SHORT", latest: number | null): string | null {
-  if (row.unit === "ATR_MULTIPLE" || (row.lock === "MARGIN" && row.marginUnit !== row.unit)) return null;
+  if (row.unit === "ATR_MULTIPLE" || row.unit === "R_MULTIPLE" || row.lock !== "FIXED" && row.lock !== "MARGIN" || (row.lock === "MARGIN" && row.marginUnit !== row.unit)) return null;
   const sign = direction === "SHORT" ? -1 : 1;
   const points = row.unit === "POINTS";
   const entry = points ? (latest ?? 1000) : 100;
@@ -128,28 +141,23 @@ export default function StagedTargetsFields({
                 </button>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-                <span className="w-16 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Lock</span>
-                <div className="flex overflow-hidden rounded-full border border-brand-navy/15 text-xs" role="radiogroup" aria-label={`Target ${i + 1} lock`}>
-                  {(["FIXED", "MARGIN"] as const).map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      role="radio"
-                      aria-checked={r.lock === m}
-                      onClick={() => set(i, { lock: m })}
-                      title={m === "FIXED" ? "The rest is sold if price falls back to this target's own price." : "The lock sits a margin below the target, so price can pull back a little before the rest is sold."}
-                      className={`px-3 py-1 font-medium ${r.lock === m ? "bg-brand-primary text-white" : "bg-white text-brand-navy/60 hover:bg-brand-bg"}`}
-                    >
-                      {m === "FIXED" ? "Fixed" : "With margin"}
-                    </button>
-                  ))}
-                </div>
-                {r.lock === "MARGIN" && (
+                <span className="w-16 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Then</span>
+                <label className="flex items-center gap-1.5 text-xs text-brand-navy/60">
+                  the stop on the rest:
+                  <select value={r.lock} aria-label={`Target ${i + 1} stop rule`} onChange={(e) => set(i, { lock: e.target.value as TargetLock["mode"] })} className={selectCls}>
+                    {STOP_RULES.map((m) => (
+                      <option key={m.value} value={m.value}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {hasDistance(r.lock) && (
                   <label className="flex items-center gap-1.5 text-xs text-brand-navy/60">
-                    Margin
-                    <input type="number" min={0} step="any" value={r.marginValue} aria-label={`Target ${i + 1} margin`} onChange={(e) => set(i, { marginValue: Number(e.target.value) })} className={numberCls} />
-                    <select value={r.marginUnit} aria-label={`Target ${i + 1} margin unit`} onChange={(e) => set(i, { marginUnit: e.target.value as RiskUnit })} className={selectCls}>
-                      {UNITS.map((u) => (
+                    {r.lock === "TRAIL" ? "Trail by" : "Distance"}
+                    <input type="number" min={0} step="any" value={r.marginValue} aria-label={`Target ${i + 1} ${r.lock === "TRAIL" ? "trailing distance" : "margin"}`} onChange={(e) => set(i, { marginValue: Number(e.target.value) })} className={numberCls} />
+                    <select value={r.marginUnit} aria-label={`Target ${i + 1} distance unit`} onChange={(e) => set(i, { marginUnit: e.target.value as RiskUnit })} className={selectCls}>
+                      {DISTANCE_UNITS.map((u) => (
                         <option key={u.value} value={u.value}>
                           {u.label}
                         </option>
@@ -158,12 +166,12 @@ export default function StagedTargetsFields({
                   </label>
                 )}
               </div>
+              <p className="mt-1 text-[11px] text-brand-navy/45">{STOP_RULES.find((m) => m.value === r.lock)?.help}</p>
               {example(r, direction, latestPrice) && <p className="mt-2 text-xs text-brand-navy/50">{example(r, direction, latestPrice)}</p>}
             </div>
           ))}
           <p className="text-xs text-brand-navy/50">
-            <strong className="font-semibold text-brand-navy/70">Fixed:</strong> after a target is taken, the rest is sold if price falls back to that target&apos;s own price.{" "}
-            <strong className="font-semibold text-brand-navy/70">With margin:</strong> the lock sits that margin below the target (above, for a short), so price can pull back a little without giving up the lock. A lock is never worse than your entry price.
+            A moved stop only ever tightens, and (except &ldquo;Keep&rdquo; and &ldquo;Trail&rdquo;) is never worse than your entry price. A target in <strong className="font-semibold text-brand-navy/70">R</strong> is a multiple of the stop-loss distance (needs a stop-loss): 2R with a 2% stop is 4% away.
           </p>
           <p className={`text-xs ${sold > 100 ? "font-medium text-brand-sell" : "text-brand-navy/50"}`}>
             Sells {Math.round(sold * 100) / 100}% of the position across the targets{sold < 100 ? `; the other ${Math.round((100 - sold) * 100) / 100}% keeps running under your stop, trailing stop or exit rule.` : "."}

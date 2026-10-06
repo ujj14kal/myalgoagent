@@ -383,6 +383,9 @@ model Strategy {
   // Swing / long-term: how long it expects to hold (INTRADAY, SWING or POSITIONAL; null = derived from the product) and its multi-level entry plan { firstPercent, levels, maxHoldDays }.
   style               String?
   entryPlan           Json?
+  // Trading-system risk options (see RiskOptions): TP/SL reference (price or margin), intraday leverage, break-even,
+  // daily-loss and drawdown limits. Null = the defaults (price-based, no leverage, no limits).
+  riskOptions         Json?
   // Set when this strategy was compiled from a workspace version: its rules come from the workspace, so edit the workspace and publish a new version.
   workspaceVersionId  String?            @unique
   trailingSlEnabled   Boolean            @default(false)
@@ -430,6 +433,8 @@ enum RiskUnit {
   PERCENT
   POINTS
   ATR_MULTIPLE
+  // A multiple of the stop-loss distance (targets only).
+  R_MULTIPLE
 }
 
 model BacktestRun {
@@ -452,6 +457,7 @@ model BacktestRun {
   targetValue         Float?
   targetsConfig       Json?
   entryPlan           Json?
+  riskOptions         Json?
   trailingSlEnabled   Boolean            @default(false)
   trailingSlUnit      RiskUnit?
   trailingSlValue     Float?
@@ -540,6 +546,7 @@ model PaperSession {
   targetValue              Float?
   targetsConfig            Json?
   entryPlan                Json?
+  riskOptions              Json?
   trailingSlEnabled        Boolean            @default(false)
   trailingSlUnit           RiskUnit?
   trailingSlValue          Float?
@@ -587,6 +594,10 @@ model PaperSession {
   positionAnchorPrice      Float?
   // Entry plan: the next further entry that can still fill (levels that waited too long are skipped).
   positionLevelCursor      Int                @default(0)
+  // Set by a target whose stop rule is TRAIL: { unit, value } the stop trails the best price by.
+  positionTrailAfter       Json?
+  // What the daily-loss and drawdown limits remember between candles (EngineMemo).
+  engineMemo               Json?
   lastSyncedTime           Int?
   status                   PaperSessionStatus @default(ACTIVE)
   createdAt                DateTime           @default(now())

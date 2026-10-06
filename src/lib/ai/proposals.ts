@@ -1,3 +1,4 @@
+import type { RiskOptions } from "@/lib/trading-engine/risk-options";
 import type { StrategyInput } from "@/lib/strategy-actions";
 import type { EntryPlan, TargetLevel } from "@/lib/trading-engine/step";
 import type { StrategyStyle } from "@/lib/strategy/style";
@@ -8,7 +9,7 @@ import { NEVER_EXIT_CONDITION, type ConditionNode } from "@/lib/strategy/types";
 // agent's reply (AgentMessage.proposal) so it survives reloads; the status
 // records what the user decided.
 
-export type RiskUnitName = "PERCENT" | "POINTS" | "ATR_MULTIPLE";
+export type RiskUnitName = "PERCENT" | "POINTS" | "ATR_MULTIPLE" | "R_MULTIPLE";
 export type SizingModeName = "FULL_CAPITAL" | "FIXED_QUANTITY" | "FIXED_CAPITAL" | "PERCENT_OF_CAPITAL" | "RISK_PERCENT";
 export type ProposalStatus = "pending" | "confirmed" | "rejected";
 
@@ -51,6 +52,8 @@ export type AgentProposal =
         style?: StrategyStyle | null;
         /** Multi-level entry plan: the signal buys a share, each further level buys more as price reaches it. */
         entryPlan?: EntryPlan;
+        /** TP/SL reference, intraday leverage, break-even and the system's loss limits. */
+        riskOptions?: RiskOptions;
         positionSizingMode: SizingModeName;
         positionSizingValue: number | null;
       };
@@ -183,6 +186,7 @@ export function toStrategyInput(
     ...(d.targets?.length ? { targets: d.targets } : {}),
     ...(d.style ? { style: d.style } : {}),
     ...(d.entryPlan ? { entryPlan: d.entryPlan } : {}),
+    ...(d.riskOptions ? { riskOptions: d.riskOptions } : {}),
     maxPyramidEntries: d.maxPyramidEntries && d.maxPyramidEntries > 0 ? Math.floor(d.maxPyramidEntries) : 1,
     timeframe: d.timeframe ?? "1d",
     noEntryAfterMinute: d.noEntryAfterMinute ?? null,

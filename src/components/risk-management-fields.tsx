@@ -17,14 +17,17 @@ const UNIT_OPTIONS: { value: RiskUnit; label: string }[] = [
   { value: "POINTS", label: "Points" },
   { value: "ATR_MULTIPLE", label: "× ATR(14)" },
 ];
+/** A target can also be a risk/reward multiple: R = the stop-loss distance. */
+const TARGET_UNIT_OPTIONS = [...UNIT_OPTIONS, { value: "R_MULTIPLE" as RiskUnit, label: "R (× stop)" }];
 
 /**
  * The price a stop-loss, target or trailing stop works out to for an example entry, so "100 points" or "2%" is never
  * left abstract. Every real trade uses its own entry price; this only shows the arithmetic.
  */
-export function legPrice(kind: "stop" | "target" | "trail", leg: Pick<RiskLegState, "unit" | "value">, entry: number, direction: "LONG" | "SHORT"): number | null {
+export function legPrice(kind: "stop" | "target" | "trail", leg: Pick<RiskLegState, "unit" | "value">, entry: number, direction: "LONG" | "SHORT", stopDistance?: number | null): number | null {
   if (!(entry > 0) || !(leg.value > 0) || leg.unit === "ATR_MULTIPLE") return null;
-  const move = leg.unit === "POINTS" ? leg.value : (entry * leg.value) / 100;
+  if (leg.unit === "R_MULTIPLE" && !(stopDistance && stopDistance > 0)) return null;
+  const move = leg.unit === "POINTS" ? leg.value : leg.unit === "R_MULTIPLE" ? leg.value * stopDistance! : (entry * leg.value) / 100;
   // A target is in the trade's favour; a stop (and a trailing stop's starting level) is against it.
   const favour = kind === "target" ? 1 : -1;
   const sign = direction === "LONG" ? 1 : -1;
@@ -34,13 +37,15 @@ export function legPrice(kind: "stop" | "target" | "trail", leg: Pick<RiskLegSta
 
 const rupees = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
-function legExample(kind: "stop" | "target" | "trail", leg: RiskLegState, entry: number | null, direction: "LONG" | "SHORT", entryIsReal: boolean): string {
+function legExample(kind: "stop" | "target" | "trail", leg: RiskLegState, entry: number | null, direction: "LONG" | "SHORT", entryIsReal: boolean, stop?: RiskLegState): string {
   const what = kind === "target" ? "Target" : kind === "stop" ? "Stop loss" : "Trailing stop starts at";
-  const amount = leg.unit === "POINTS" ? `${leg.value} points` : leg.unit === "PERCENT" ? `${leg.value}%` : `${leg.value} × ATR(14)`;
+  const amount = leg.unit === "POINTS" ? `${leg.value} points` : leg.unit === "PERCENT" ? `${leg.value}%` : leg.unit === "R_MULTIPLE" ? `${leg.value}R (${leg.value} × the stop-loss distance)` : `${leg.value} × ATR(14)`;
   const dir = kind === "target" ? (direction === "LONG" ? "above" : "below") : direction === "LONG" ? "below" : "above";
   if (leg.unit === "ATR_MULTIPLE") return `${what} ${amount} ${dir} the entry price — worked out from the stock's volatility at the time of each trade.`;
   const e = entry ?? 1000;
-  const p = legPrice(kind, leg, e, direction);
+  if (leg.unit === "R_MULTIPLE" && !stop?.enabled) return "A target in R needs a stop-loss: R is the stop-loss distance. Turn the stop-loss on.";
+  const stopPx = stop?.enabled ? legPrice("stop", stop, e, direction) : null;
+  const p = legPrice(kind, leg, e, direction, stopPx !== null ? Math.abs(e - stopPx) : null);
   if (p === null) return `${what} ${amount} ${dir} the entry price.`;
   return `${what} ${amount} ${dir} the entry: ${entryIsReal ? "at today's price" : "for an entry at"} ${rupees(e)} that is ${rupees(p)} (${direction === "LONG" ? "long" : "short"}). Each trade uses its own entry price.`;
 }
@@ -53,6 +58,7 @@ function RiskLegRow({
   onChange,
   direction,
   entry,
+  stop,
 }: {
   kind: "stop" | "target" | "trail";
   label: string;
@@ -61,6 +67,8 @@ function RiskLegRow({
   onChange: (leg: RiskLegState) => void;
   direction: "LONG" | "SHORT";
   entry: number | null;
+  /** Targets: the stop-loss, for targets set in R. */
+  stop?: RiskLegState;
 }) {
   return (
     <div className="flex h-full flex-col rounded-xl border border-brand-navy/10 p-3">
@@ -89,7 +97,7 @@ function RiskLegRow({
             onChange={(e) => onChange({ ...leg, unit: e.target.value as RiskUnit })}
             className="min-w-0 flex-1 rounded-lg border border-brand-navy/15 px-2 py-1.5 text-sm outline-none focus:border-brand-primary"
           >
-            {UNIT_OPTIONS.map((u) => (
+            {(kind === "target" ? TARGET_UNIT_OPTIONS : UNIT_OPTIONS).map((u) => (
               <option key={u.value} value={u.value}>
                 {u.label}
               </option>
@@ -97,7 +105,7 @@ function RiskLegRow({
           </select>
         </div>
       )}
-      {leg.enabled && leg.value > 0 && <p className="mt-2 text-xs leading-relaxed text-brand-navy/55">{legExample(kind, leg, entry, direction, entry !== null)}</p>}
+      {leg.enabled && leg.value > 0 && <p className="mt-2 text-xs leading-relaxed text-brand-navy/55">{legExample(kind, leg, entry, direction, entry !== null, stop)}</p>}
     </div>
   );
 }
@@ -139,7 +147,8 @@ export default function RiskManagementFields({
           direction={direction}
           entry={entryPrice}
           label="Target"
-          hint="Exit automatically once this much profit is reached."
+          hint="Exit automatically once this much profit is reached — or set it as a risk/reward multiple (R) of the stop."
+          stop={stopLoss}
           leg={target}
           onChange={onTargetChange}
         />

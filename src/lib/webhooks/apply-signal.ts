@@ -1,3 +1,4 @@
+import { engineRisk, parseRiskOptions } from "@/lib/trading-engine/risk-options";
 import { prisma } from "@/lib/prisma";
 import { marketDataFor, type MarketDataProvider } from "@/lib/market-data";
 import { evaluateRisk } from "@/lib/risk/evaluate";
@@ -11,14 +12,16 @@ export interface ApplySignalResult {
   error?: string;
 }
 
+/** The session's stops and target in price terms (margin-based ones converted with its leverage). */
 function riskManagementFromSession(session: PaperSession): RiskManagementConfig {
-  return {
+  const rm: RiskManagementConfig = {
     stopLoss: session.stopLossEnabled ? { enabled: true, unit: session.stopLossUnit!, value: session.stopLossValue! } : null,
     target: session.targetEnabled ? { enabled: true, unit: session.targetUnit!, value: session.targetValue! } : null,
     trailingSl: session.trailingSlEnabled
       ? { enabled: true, unit: session.trailingSlUnit!, value: session.trailingSlValue! }
       : null,
   };
+  return engineRisk(rm, parseRiskOptions(session.riskOptions)).riskManagement;
 }
 
 /**
@@ -103,7 +106,7 @@ export async function applyWebhookSignal(session: PaperSession, action: WebhookA
   const positionSizing: PositionSizing = { mode: session.positionSizingMode, value: session.positionSizingValue };
 
   if (opensPosition) {
-    const quantity = computeQuantity(session.cash, price, positionSizing, stopDistanceFor({ riskManagement: riskManagementFromSession(session) }, price, undefined));
+    const quantity = computeQuantity(session.cash, price, positionSizing, stopDistanceFor({ riskManagement: riskManagementFromSession(session) }, price, undefined), parseRiskOptions(session.riskOptions).leverage);
     if (quantity <= 0) {
       return { executed: false, error: "Configured position size rounds to 0 shares at the current price" };
     }

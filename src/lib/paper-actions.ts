@@ -84,6 +84,7 @@ async function startPaperSessionCore(userId: string, input: StartPaperSessionInp
         targetValue: strategy.targetValue,
         targetsConfig: strategy.targetsConfig ?? Prisma.DbNull,
         entryPlan: strategy.entryPlan ?? Prisma.DbNull,
+        riskOptions: strategy.riskOptions ?? Prisma.DbNull,
         trailingSlEnabled: strategy.trailingSlEnabled,
         trailingSlUnit: strategy.trailingSlUnit,
         trailingSlValue: strategy.trailingSlValue,

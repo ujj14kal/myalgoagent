@@ -12,6 +12,8 @@ import SimpleConditionPicker, { ALL_CATEGORIES, fitsSimpleMode, unwrapForSimpleM
 import StrategyCodeEditor from "@/components/strategy-code-editor";
 import PositionSizingFields from "@/components/position-sizing-fields";
 import RiskManagementFields, { type RiskLegState } from "@/components/risk-management-fields";
+import RiskOptionsFields from "@/components/risk-options-fields";
+import { DEFAULT_RISK_OPTIONS, parseRiskOptions, type RiskOptions } from "@/lib/trading-engine/risk-options";
 import DraftAutoSaveToast from "@/components/draft-autosave-toast";
 import CandlePatternIllustration from "@/components/candle-pattern-illustration";
 import StrategyPreview from "@/components/strategy-preview";
@@ -177,6 +179,8 @@ export interface StrategyInitial {
   /** Staged Target 1–3 and the multi-level entry plan, when the strategy uses them. */
   targets?: TargetLevel[];
   entryPlan?: EntryPlan | null;
+  /** TP/SL reference, intraday leverage, break-even and the system's loss limits. */
+  riskOptions?: RiskOptions;
 }
 
 /** A row of pill buttons for one choice. */
@@ -363,6 +367,7 @@ export default function StrategyBuilderForm({
   const [trailingSl, setTrailingSl] = useState<RiskLegState>(
     toRiskLegState(initial?.trailingSlEnabled ?? false, initial?.trailingSlUnit ?? null, initial?.trailingSlValue ?? null, 1.5),
   );
+  const [riskOptions, setRiskOptions] = useState<RiskOptions>(initial?.riskOptions ? parseRiskOptions(initial.riskOptions) : DEFAULT_RISK_OPTIONS);
 
   /** Choosing swing moves the strategy to what such a strategy can be: daily candles, delivery, long only. */
   function chooseStyle(next: "STANDARD" | "SWING") {
@@ -517,6 +522,8 @@ export default function StrategyBuilderForm({
       orderType,
       limitMode: orderType === "LIMIT" ? limitMode : null,
       limitValue: orderType === "LIMIT" ? limitValue : null,
+      // Leverage is intraday only: a delivery strategy always runs at 1×, price-based.
+      riskOptions: productType === "INTRADAY" ? riskOptions : { ...riskOptions, leverage: 1, reference: "PRICE" },
     };
   }
   useEffect(() => {
@@ -915,7 +922,7 @@ export default function StrategyBuilderForm({
           </>
         )}
 
-        <BuilderSection step={mode === "WEBHOOK" ? 3 : 4} title="Risk management" subtitle="Stop-loss, take-profit and trailing stop" sectionRef={riskRef}>
+        <BuilderSection step={mode === "WEBHOOK" ? 3 : 4} title="Risk management" subtitle="Stop-loss, take-profit, trailing stop, leverage and limits" sectionRef={riskRef}>
           <RiskManagementFields
             stopLoss={stopLoss}
             target={target}
@@ -939,6 +946,7 @@ export default function StrategyBuilderForm({
               }}
             />
           )}
+          <RiskOptionsFields value={riskOptions} onChange={setRiskOptions} productType={productType} stopLoss={stopLoss} target={target} entryPrice={examplePrice} webhook={mode === "WEBHOOK"} />
           {mode !== "WEBHOOK" && intraday && (
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <SessionTimeField

@@ -19,6 +19,8 @@ import {
   type EntryPlan,
 } from "@/lib/trading-engine/step";
 
+import { engineRisk, type RiskOptions } from "@/lib/trading-engine/risk-options";
+
 const DEFAULT_ATR_PERIOD = 14;
 
 export interface BacktestConfig {
@@ -33,13 +35,15 @@ export interface BacktestConfig {
   entryOrder?: EntryOrder;
   /** Multi-level entry plan (swing): omitted = one entry per position. */
   entryPlan?: EntryPlan;
+  /** TP/SL reference, leverage, break-even and system limits: omitted = the defaults. */
+  riskOptions?: RiskOptions;
 }
 
 function usesAtr(rm: RiskManagementConfig | undefined, plan?: EntryPlan): boolean {
   if (plan?.levels.some((l) => l.unit === "ATR_MULTIPLE")) return true;
   if (!rm) return false;
-  if ([rm.stopLoss, rm.target, rm.trailingSl].some((leg) => leg?.enabled && leg.unit === "ATR_MULTIPLE")) return true;
-  return (rm.targets ?? []).some((t) => t.unit === "ATR_MULTIPLE" || (t.lock.mode === "MARGIN" && t.lock.unit === "ATR_MULTIPLE"));
+  if ([rm.stopLoss, rm.target, rm.trailingSl, rm.breakEven].some((leg) => leg?.enabled && leg.unit === "ATR_MULTIPLE")) return true;
+  return (rm.targets ?? []).some((t) => t.unit === "ATR_MULTIPLE" || ((t.lock.mode === "MARGIN" || t.lock.mode === "TRAIL") && t.lock.unit === "ATR_MULTIPLE"));
 }
 
 /** The parts of a position that was built or sold in stages: each sale, and each further entry. */
@@ -184,12 +188,15 @@ export function runBacktest(
   aux?: AuxCandleMap,
 ): BacktestResult {
   const { entry, exit } = evaluateConditionsPerBar(candles, entryCondition, exitCondition, aux);
+  // Margin-based stops/targets become price moves; leverage and the limits go to the engine as they are.
+  const risk = config.riskOptions ? engineRisk(config.riskManagement ?? { stopLoss: null, target: null, trailingSl: null }, config.riskOptions) : null;
+  const riskManagement = risk?.riskManagement ?? config.riskManagement;
 
   // ATR is only computed when a risk leg actually needs it — it's an
   // indicator series like any other, reused here rather than duplicating
   // the ATR math.
   let atrByTime: Map<number, number> | null = null;
-  if (usesAtr(config.riskManagement, config.entryPlan)) {
+  if (usesAtr(riskManagement, config.entryPlan)) {
     const atrPoints = computeIndicatorSeries(candles, "ATR", [DEFAULT_ATR_PERIOD]);
     atrByTime = new Map(atrPoints.map((p) => [p.time, p.value]));
   }
@@ -199,7 +206,9 @@ export function runBacktest(
     brokeragePercent: config.brokeragePercent,
     slippagePercent: config.slippagePercent,
     positionSizing: config.positionSizing,
-    riskManagement: config.riskManagement,
+    riskManagement,
+    leverage: risk?.leverage,
+    limits: risk?.limits,
     atrAtEntry: atrByTimeFinal ? (entryIdx: number) => atrByTimeFinal.get(candles[entryIdx]?.time) : undefined,
     maxPyramidEntries: config.maxPyramidEntries,
     direction: config.direction,

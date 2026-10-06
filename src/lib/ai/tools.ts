@@ -17,6 +17,8 @@ import { getBrokerAccount, getMarketOverview, getOptionChainSummary, getQuote } 
 import { NEW_STRATEGY_ID, toStrategyInput, type AgentProposal, type PlanStep, type RiskUnitName, type SizingModeName } from "./proposals";
 import { DEFAULT_SQUARE_OFF_MINUTE } from "@/lib/strategy/session";
 import { targetsFrom } from "./targets-arg";
+import { riskOptionsFrom, riskOptionsSchema } from "./risk-options-arg";
+import { parseRiskOptions, type RiskOptions } from "@/lib/trading-engine/risk-options";
 import { logicFrom } from "./workspace-arg";
 import { workspaceTools } from "./workspace-tool-schemas";
 import { emptyDefinition, parseDefinition } from "@/lib/workspace/definition";
@@ -64,7 +66,7 @@ const riskLegSchema = {
   type: "object",
   properties: {
     value: { type: "number", description: "Distance, e.g. 2 for 2%" },
-    unit: { type: "string", enum: ["PERCENT", "POINTS", "ATR_MULTIPLE"] },
+    unit: { type: "string", enum: ["PERCENT", "POINTS", "ATR_MULTIPLE", "R_MULTIPLE"], description: "R_MULTIPLE (take_profit only, needs stop_loss): a multiple of the stop-loss distance, e.g. 2 = a 1:2 risk/reward" },
   },
   required: ["value", "unit"],
 };
@@ -73,16 +75,16 @@ const targetsSchema = {
   type: "array",
   maxItems: 3,
   description:
-    "Staged targets, in order (Target 1, 2, 3). Each sells exit_percent of the ORIGINAL position when price reaches it, then locks profit on what is left: lock \"fixed\" = the rest is sold if price falls back to that target's own price; lock \"margin\" = the lock sits margin_value below it (above for a short), so price can pull back a little first. The total sold across targets is at most 100%; each target must be further from the entry than the one before; the lock never sits worse than the entry price. Use INSTEAD of take_profit, never together — but they work fine alongside an exit rule (e.g. exit when RSI > 70) and a stop-loss: whichever comes first closes what is left. Example: [{\"value\":5,\"unit\":\"PERCENT\",\"exit_percent\":25,\"lock\":\"fixed\"},{\"value\":10,\"unit\":\"PERCENT\",\"exit_percent\":25,\"lock\":\"margin\",\"margin_value\":1,\"margin_unit\":\"PERCENT\"}]. Not available for webhook strategies.",
+    "Staged targets, in order (Target 1, 2, 3). Each sells exit_percent of the ORIGINAL position when price reaches it, then moves the stop on the rest by its lock rule: \"fixed\" = to that target's own price; \"breakeven\" = to the entry price; \"previous\" = to the previous target's price (Target 1: the entry); \"keep\" = leave it; \"trail\" = from the next candle trail the best price by margin_value (margin_unit); \"margin\" = a set distance (margin_value) short of the target. E.g. \"after TP1 move SL to breakeven, after TP2 move it to TP1\" = TP1 lock breakeven, TP2 lock previous. A target's unit can be R_MULTIPLE (a multiple of the stop-loss distance; needs stop_loss). The total sold across targets is at most 100%; each target must be further from the entry than the one before; a moved stop only tightens and (except keep/trail) is never worse than the entry. Use INSTEAD of take_profit, never together — but they work fine alongside an exit rule (e.g. exit when RSI > 70) and a stop-loss: whichever comes first closes what is left. Example: [{\"value\":5,\"unit\":\"PERCENT\",\"exit_percent\":25,\"lock\":\"fixed\"},{\"value\":10,\"unit\":\"PERCENT\",\"exit_percent\":25,\"lock\":\"margin\",\"margin_value\":1,\"margin_unit\":\"PERCENT\"}]. Not available for webhook strategies.",
   items: {
     type: "object",
     properties: {
       value: { type: "number", description: "Distance from the entry, e.g. 5 for 5%" },
-      unit: { type: "string", enum: ["PERCENT", "POINTS", "ATR_MULTIPLE"] },
+      unit: { type: "string", enum: ["PERCENT", "POINTS", "ATR_MULTIPLE", "R_MULTIPLE"] },
       exit_percent: { type: "number", description: "Share of the original position sold at this target, 1–100" },
-      lock: { type: "string", enum: ["fixed", "margin"], description: "How profit is locked once this target is taken; default fixed" },
-      margin_value: { type: "number", description: "Margin lock only: how far below the target (above, for a short) the lock sits" },
-      margin_unit: { type: "string", enum: ["PERCENT", "POINTS", "ATR_MULTIPLE"], description: "Margin lock only; default = the target's unit" },
+      lock: { type: "string", enum: ["fixed", "breakeven", "previous", "keep", "trail", "margin"], description: "Where the stop on the rest moves once this target is taken; default fixed" },
+      margin_value: { type: "number", description: "trail: how far behind the best price the stop trails; margin: how far short of the target the stop sits" },
+      margin_unit: { type: "string", enum: ["PERCENT", "POINTS", "ATR_MULTIPLE"], description: "For trail/margin; default = the target's unit (% for R targets)" },
     },
     required: ["value", "unit", "exit_percent"],
   },
@@ -298,6 +300,7 @@ export const AGENT_TOOLS: MantleTool[] = [
           entry_plan: entryPlanSchema,
           style: styleSchema,
           trailing_stop: riskLegSchema,
+          risk_options: riskOptionsSchema,
           position_sizing: {
             type: "object",
             properties: {
@@ -427,6 +430,7 @@ export const AGENT_TOOLS: MantleTool[] = [
           style: { anyOf: [styleSchema, { type: "null" }], description: "Changes the strategy style; null clears it. Omit to keep the saved one." },
           targets: { anyOf: [targetsSchema, { type: "null" }], description: "Replaces the staged Target 1–3 entirely; null removes them. Omit to keep the saved ones. A strategy has either targets or a take_profit, never both — setting one of them requires clearing the other." },
           trailing_stop: { anyOf: [riskLegSchema, { type: "null" }], description: "null removes it" },
+          risk_options: { ...riskOptionsSchema, description: `${riskOptionsSchema.description} Fields left out keep the saved ones; null clears that one.` },
           position_sizing: {
             type: "object",
             properties: {
@@ -522,7 +526,7 @@ async function uniqueStrategyName(userId: string, name: string): Promise<string>
 function leg(v: unknown): { enabled: boolean; unit: RiskUnitName; value: number } {
   const o = (v ?? {}) as { value?: unknown; unit?: unknown };
   const value = num(o.value);
-  const unit = o.unit === "POINTS" || o.unit === "ATR_MULTIPLE" ? o.unit : "PERCENT";
+  const unit = o.unit === "POINTS" || o.unit === "ATR_MULTIPLE" || o.unit === "R_MULTIPLE" ? o.unit : "PERCENT";
   return value && value > 0 ? { enabled: true, unit, value } : { enabled: false, unit: "PERCENT", value: 0 };
 }
 
@@ -715,9 +719,11 @@ async function proposeStrategy(userId: string, a: Record<string, unknown>): Prom
   }
   const sizing = sizingFrom(a.position_sizing);
   let stagedTargets: ReturnType<typeof targetsFrom>;
+  let riskOpts: RiskOptions | undefined;
   let plan: ReturnType<typeof entryPlanFrom>;
   try {
     stagedTargets = targetsFrom(a.targets);
+    riskOpts = riskOptionsFrom(a.risk_options);
     plan = await fillPlanCustomRefs(userId, entryPlanFrom(a.entry_plan, Math.max(1, Math.floor(num(a.max_entries) ?? 1))));
   } catch (err) {
     return { result: { error: `${readableIssues(err)} Fix it and call propose_strategy again.` } };
@@ -735,6 +741,7 @@ async function proposeStrategy(userId: string, a: Record<string, unknown>): Prom
     ...(stagedTargets?.length ? { targets: stagedTargets } : {}),
     ...(style ? { style } : {}),
     ...(plan ? { entryPlan: plan } : {}),
+    ...(riskOpts ? { riskOptions: riskOpts } : {}),
     positionSizingMode: sizing.mode,
     positionSizingValue: sizing.value,
     maxPyramidEntries: Math.max(1, Math.floor(num(a.max_entries) ?? 1)),
@@ -809,11 +816,14 @@ async function proposeStrategyUpdate(userId: string, a: Record<string, unknown>)
     key in a ? (a[key] === null ? { enabled: false, unit: "PERCENT" as RiskUnitName, value: 0 } : leg(a[key])) : saved;
   const sizing = sizingFrom(a.position_sizing, { mode: s.positionSizingMode, value: s.positionSizingValue });
   let nextTargets;
+  let nextRiskOptions: RiskOptions;
   let nextPlan: ReturnType<typeof parseEntryPlan>;
   let nextStyle: ReturnType<typeof styleFrom>;
   try {
     // Omitted = keep the saved targets; null or an empty list removes them.
     nextTargets = targetsFrom(a.targets) ?? parseTargets(s.targetsConfig);
+    // Omitted = keep the saved options; fields given change only themselves.
+    nextRiskOptions = riskOptionsFrom(a.risk_options, parseRiskOptions(s.riskOptions)) ?? parseRiskOptions(s.riskOptions);
     // Omitted = keep the saved entry plan; null removes it.
     const planArg = await fillPlanCustomRefs(userId, entryPlanFrom(a.entry_plan, Math.max(1, Math.floor(num(a.max_entries) ?? s.maxPyramidEntries))));
     nextPlan = planArg === undefined ? parseEntryPlan(s.entryPlan) : planArg ?? undefined;
@@ -858,6 +868,7 @@ async function proposeStrategyUpdate(userId: string, a: Record<string, unknown>)
     ...(nextTargets.length ? { targets: nextTargets } : {}),
     ...(nextStyle ? { style: nextStyle } : {}),
     ...(nextPlan ? { entryPlan: nextPlan } : {}),
+    riskOptions: nextRiskOptions,
     positionSizingMode: sizing.mode,
     positionSizingValue: sizing.value,
     maxPyramidEntries: Math.max(1, Math.floor(num(a.max_entries) ?? s.maxPyramidEntries)),

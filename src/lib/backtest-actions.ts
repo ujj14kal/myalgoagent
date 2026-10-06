@@ -13,6 +13,7 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 import type { ConditionNode } from "@/lib/strategy";
 import { Prisma } from "@prisma/client";
 import { parseTargets } from "@/lib/trading-engine/targets-config";
+import { parseRiskOptions } from "@/lib/trading-engine/risk-options";
 import { parseEntryPlan } from "@/lib/trading-engine/entry-plan-config";
 import { userMarketDataReady } from "@/lib/market-data/for-user";
 
@@ -102,6 +103,7 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
         session: engineSession(strategy, entryCondition),
         entryOrder: engineEntryOrder(strategy),
         entryPlan,
+        riskOptions: parseRiskOptions(strategy.riskOptions),
       },
       aux,
     );
@@ -126,6 +128,7 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
         targetValue: strategy.targetValue,
         targetsConfig: strategy.targetsConfig ?? Prisma.DbNull,
         entryPlan: strategy.entryPlan ?? Prisma.DbNull,
+        riskOptions: strategy.riskOptions ?? Prisma.DbNull,
         trailingSlEnabled: strategy.trailingSlEnabled,
         trailingSlUnit: strategy.trailingSlUnit,
         trailingSlValue: strategy.trailingSlValue,

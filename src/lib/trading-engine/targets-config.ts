@@ -1,10 +1,25 @@
-import { MAX_TARGETS, validateTargets, type RiskUnit, type TargetLevel } from "./step";
+import { MAX_TARGETS, validateTargets, type RiskUnit, type TargetLevel, type TargetLock } from "./step";
 
 // Staged targets are stored as JSON on the strategy and copied onto each backtest and forward test, like the
 // other risk settings. Reading them back is defensive: anything malformed is dropped rather than trusted.
 
-const UNITS: RiskUnit[] = ["PERCENT", "POINTS", "ATR_MULTIPLE"];
+const UNITS: RiskUnit[] = ["PERCENT", "POINTS", "ATR_MULTIPLE", "R_MULTIPLE"];
 const isUnit = (u: unknown): u is RiskUnit => UNITS.includes(u as RiskUnit);
+
+/** A stored stop rule; anything unknown is the original behaviour (lock at the target's price). */
+function lockOf(l: { mode?: string; unit?: unknown; value?: unknown } | undefined): TargetLock {
+  switch (l?.mode) {
+    case "MARGIN":
+    case "TRAIL":
+      return isUnit(l.unit) && typeof l.value === "number" ? { mode: l.mode, unit: l.unit, value: l.value } : { mode: "FIXED" };
+    case "BREAKEVEN":
+    case "PREVIOUS":
+    case "KEEP":
+      return { mode: l.mode };
+    default:
+      return { mode: "FIXED" };
+  }
+}
 
 export function parseTargets(json: unknown): TargetLevel[] {
   if (!Array.isArray(json)) return [];
@@ -12,8 +27,7 @@ export function parseTargets(json: unknown): TargetLevel[] {
   for (const raw of json.slice(0, MAX_TARGETS)) {
     const t = raw as Partial<TargetLevel> & { lock?: { mode?: string; unit?: unknown; value?: unknown } };
     if (!t || !isUnit(t.unit) || typeof t.value !== "number" || typeof t.exitPercent !== "number") continue;
-    const lock = t.lock?.mode === "MARGIN" && isUnit(t.lock.unit) && typeof t.lock.value === "number" ? ({ mode: "MARGIN", unit: t.lock.unit, value: t.lock.value } as const) : ({ mode: "FIXED" } as const);
-    out.push({ unit: t.unit, value: t.value, exitPercent: t.exitPercent, lock });
+    out.push({ unit: t.unit, value: t.value, exitPercent: t.exitPercent, lock: lockOf(t.lock) });
   }
   return out;
 }
