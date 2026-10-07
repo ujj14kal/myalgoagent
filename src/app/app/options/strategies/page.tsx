@@ -27,7 +27,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
   if (!userId) return null;
   const live = !!marketExtrasFor(userId);
   const sp = await searchParams;
-  const tab = qEnum(sp.tab, ["strategies", "forward", "backtests"] as const, "strategies");
+  // Without the live option-price feed there is nothing to backtest or forward test, but strategies can still be saved and kept.
+  const tab = live ? qEnum(sp.tab, ["strategies", "forward", "backtests"] as const, "strategies") : "strategies";
   const q = qText(sp.q);
   const state = qEnum(sp.state, ["all", "ACTIVE", "STOPPED", "DONE", "RUNNING", "FAILED"] as const, "all");
   const { page, size } = readPageQuery(sp, 10);
@@ -59,12 +60,14 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
         description="Multi-leg options strategies defined around the at-the-money strike — backtested day by day on real historical option prices, with combined stop-loss and target."
       />
       <OptionsTabs active="/app/options/strategies" />
-      {!live ? (
-        <p className="surface mt-6 p-6 text-center text-sm text-brand-navy/60">
-          Options backtests run on real historical option prices from the live market-data feed, which isn&apos;t enabled for your account yet.
+      {!live && (
+        <p className="surface mt-6 p-4 text-sm text-brand-navy/65">
+          Options backtests and forward tests run on real option prices from the live market-data feed, which isn&apos;t enabled for your account yet. You can still save strategies here — build one from the contracts you pick in the Options Lab — and they&apos;ll be ready to test once it is.
         </p>
-      ) : (
+      )}
+      {(
         <div className="mt-6 space-y-4">
+          {live && (
           <ListTabs
             basePath="/app/options/strategies"
             params={params}
@@ -75,6 +78,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
             ]}
             active={tab}
           />
+          )}
           <ListToolbar
             params={params}
             search={{ placeholder: tab === "strategies" ? "Search name or underlying…" : "Search by strategy…" }}
@@ -89,6 +93,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
           {tab === "strategies" && (
             <>
               <StrategyList
+                canTest={live}
                 total={sCount}
                 strategies={strategies.map((s) => ({
                   id: s.id,

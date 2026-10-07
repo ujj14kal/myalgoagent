@@ -24,7 +24,7 @@ export default function StrategyFromLegs({ legs, underlying, step, atmStrike, ex
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-brand-navy">Make these legs a strategy</p>
-          <p className="text-xs text-brand-navy/50">Save the position you built as a strategy you can backtest on real option prices and forward test. Strikes are kept as “N strikes from at-the-money”, so it re-picks them each day.</p>
+          <p className="text-xs text-brand-navy/50">Save the position you built as an options strategy — to backtest on real option prices and forward test where that feed is enabled for your account. Strikes are kept as “N strikes from at-the-money”, so it re-picks them each day.</p>
         </div>
         {!open && !saved && (
           <button type="button" onClick={() => setOpen(true)} className="inline-flex items-center gap-1.5 rounded-full bg-brand-primary px-4 py-2 text-sm font-semibold text-white">
@@ -36,7 +36,7 @@ export default function StrategyFromLegs({ legs, underlying, step, atmStrike, ex
         <p className="mt-3 text-sm font-medium text-brand-buy">
           Strategy saved.{" "}
           <Link href="/app/options/strategies" className="font-semibold text-brand-primary hover:underline">
-            Open it to backtest or forward test →
+            See it in your options strategies →
           </Link>
         </p>
       )}

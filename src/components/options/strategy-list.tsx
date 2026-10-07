@@ -68,7 +68,7 @@ function Launcher({ id }: { id: string }) {
   );
 }
 
-export default function StrategyList({ strategies, total }: { strategies: (OptionStrategyInput & { id: string })[]; /** How many the user has in all (the list may be one page). */ total?: number }) {
+export default function StrategyList({ strategies, total, canTest = true }: { strategies: (OptionStrategyInput & { id: string })[]; /** How many the user has in all (the list may be one page). */ total?: number; /** Backtests and forward tests need the live option-price feed; without it strategies can still be saved, edited and deleted. */ canTest?: boolean }) {
   const any = (total ?? strategies.length) > 0;
   const [editing, setEditing] = useState<string | "new" | null>(any ? null : "new");
   const [testing, setTesting] = useState<string | null>(null);
@@ -107,6 +107,7 @@ export default function StrategyList({ strategies, total }: { strategies: (Optio
                   <p className="mt-1 text-xs text-brand-navy/70">{s.legs.map(legText).join(" · ")}</p>
                 </div>
                 <div className="flex items-center gap-1">
+                  {canTest && (
                   <button
                     type="button"
                     onClick={() => setTesting(testing === s.id ? null : s.id)}
@@ -114,6 +115,8 @@ export default function StrategyList({ strategies, total }: { strategies: (Optio
                   >
                     <FlaskConical size={13} /> Backtest
                   </button>
+                  )}
+                  {canTest && (
                   <button
                     type="button"
                     title="Hypothetical trades on live option prices each day — no orders"
@@ -128,6 +131,7 @@ export default function StrategyList({ strategies, total }: { strategies: (Optio
                   >
                     <Activity size={13} /> Forward test
                   </button>
+                  )}
                   <button type="button" onClick={() => setEditing(s.id)} aria-label="Edit" className="rounded-full p-2 text-brand-navy/45 hover:text-brand-primary">
                     <Pencil size={14} />
                   </button>
@@ -143,7 +147,7 @@ export default function StrategyList({ strategies, total }: { strategies: (Optio
                   </button>
                 </div>
               </div>
-              {testing === s.id && <Launcher id={s.id} />}
+              {canTest && testing === s.id && <Launcher id={s.id} />}
             </>
           )}
         </section>
