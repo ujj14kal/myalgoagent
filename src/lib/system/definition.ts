@@ -4,12 +4,15 @@ import { parseEntryPlan } from "@/lib/trading-engine/entry-plan-config";
 import { parseTargets } from "@/lib/trading-engine/targets-config";
 import { DEFAULT_RISK_OPTIONS, parseRiskOptions } from "@/lib/trading-engine/risk-options";
 import { CONNECTIONS } from "@/lib/workspace/types";
-import { CONCEPT_CLASSES, CONFLICT_RULES, TIMEFRAME_ROLES, type BlockDefinition, type ConceptClass, type ConceptDefinition, type ConceptNode, type OppositeAction, type TimeframeRole, type TradingSystemDefinition } from "./types";
+import { CONCEPT_CLASSES, CONFLICT_RULES, DEFAULT_CONCEPT_ENTRY, type BlockDefinition, type ConceptClass, type ConceptDefinition, type ConceptEntry, type ConceptNode, type OppositeAction, type TradingSystemDefinition } from "./types";
 
 // Blocks, concepts and trading systems are stored as JSON. Reading them back is defensive and bounded: anything
 // malformed is dropped or repaired rather than trusted, and nothing can grow without limit.
 
 export const SYSTEM_LIMITS = { conceptNodes: 60, depth: 5, concepts: 20, windows: 8, bytes: 100_000 } as const;
+
+/** Chart sizes a block may be read on. */
+export const TIMEFRAMES = ["1m", "2m", "3m", "5m", "15m", "30m", "60m", "4h", "1d", "1wk"];
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -28,15 +31,15 @@ export function parseBlockDefinition(json: unknown): BlockDefinition | null {
   } catch {
     return null;
   }
-  return { schema: 1, condition: json.condition as BlockDefinition["condition"] };
+  const tf = typeof json.timeframe === "string" && TIMEFRAMES.includes(json.timeframe) ? json.timeframe : null;
+  return { schema: 1, condition: json.condition as BlockDefinition["condition"], ...(tf ? { timeframe: tf } : {}) };
 }
 
 function parseConceptNode(v: unknown, depth: number, budget: { n: number }): ConceptNode | null {
   if (!isObj(v) || depth > SYSTEM_LIMITS.depth || ++budget.n > SYSTEM_LIMITS.conceptNodes) return null;
   if (v.type === "block") {
     if (typeof v.blockId !== "string" || !v.blockId) return null;
-    const timeframe = TIMEFRAME_ROLES.includes(v.timeframe as TimeframeRole) ? (v.timeframe as TimeframeRole) : undefined;
-    return { type: "block", blockId: v.blockId.slice(0, 40), ...(v.optional === true ? { optional: true } : {}), ...(timeframe && timeframe !== "primary" ? { timeframe } : {}) };
+    return { type: "block", blockId: v.blockId.slice(0, 40), ...(v.optional === true ? { optional: true } : {}) };
   }
   if (v.type === "group") {
     if (!CONNECTIONS.includes(v.connection as never)) return null;
@@ -49,7 +52,10 @@ function parseConceptNode(v: unknown, depth: number, budget: { n: number }): Con
 
 export function parseConceptDefinition(json: unknown): ConceptDefinition | null {
   if (!isObj(json) || json.schema !== 1 || tooBig(json)) return null;
-  return { schema: 1, logic: json.logic == null ? null : parseConceptNode(json.logic, 0, { n: 0 }) };
+  const e = isObj(json.entry) ? json.entry : {};
+  const entry: ConceptEntry = { trigger: e.trigger === "WHILE_VALID" ? "WHILE_VALID" : "FORMED", confirmBars: Math.max(0, Math.min(50, Math.floor(num(e.confirmBars) ?? 0))) };
+  const isDefault = entry.trigger === DEFAULT_CONCEPT_ENTRY.trigger && entry.confirmBars === 0;
+  return { schema: 1, logic: json.logic == null ? null : parseConceptNode(json.logic, 0, { n: 0 }), ...(isDefault ? {} : { entry }) };
 }
 
 export const parseConceptClass = (v: unknown): ConceptClass => (CONCEPT_CLASSES.includes(v as ConceptClass) ? (v as ConceptClass) : "BULLISH");
@@ -67,7 +73,7 @@ export function emptySystem(instrumentId = ""): TradingSystemDefinition {
     concepts: [],
     instrumentType: "STOCK",
     instrumentId,
-    timeframes: { primary: "15m", confirmation: null, higher: null },
+    timeframes: { primary: "15m" },
     productType: "INTRADAY",
     sessions: { noEntryAfterMinute: 14 * 60 + 45, squareOffMinute: 15 * 60 + 15, entryWindows: [], noTradeWindows: [] },
     capital: { total: 100_000, maxUtilizationPercent: 100 },
@@ -115,12 +121,12 @@ export function parseSystemDefinition(json: unknown): TradingSystemDefinition | 
   const concepts = (Array.isArray(json.concepts) ? json.concepts : [])
     .filter((c): c is Record<string, unknown> => isObj(c) && typeof c.conceptId === "string" && !seen.has(c.conceptId) && !!seen.add(c.conceptId))
     .slice(0, SYSTEM_LIMITS.concepts)
-    .map((c) => ({ conceptId: c.conceptId as string, enabled: c.enabled !== false }));
+    .map((c) => ({ conceptId: c.conceptId as string, enabled: c.enabled !== false, ...(c.role === "EXIT" ? { role: "EXIT" as const } : {}) }));
   const productType = json.productType === "DELIVERY" ? "DELIVERY" : "INTRADAY";
   return {
     ...base,
     concepts,
-    timeframes: { primary: tfOrNull(tf.primary) ?? base.timeframes.primary, confirmation: tfOrNull(tf.confirmation), higher: tfOrNull(tf.higher) },
+    timeframes: { primary: (tfOrNull(tf.primary) && TIMEFRAMES.includes(tfOrNull(tf.primary)!) ? tfOrNull(tf.primary)! : base.timeframes.primary) },
     productType,
     sessions: {
       noEntryAfterMinute: num(sessions.noEntryAfterMinute),

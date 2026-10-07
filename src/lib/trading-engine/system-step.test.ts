@@ -120,7 +120,32 @@ describe("signals from concepts", () => {
       3,
     );
     expect(s[1]).toMatchObject({ bull: true, bullValid: true, bear: false, bullConfidence: 0.5, bullRank: 0, bullSince: 1 });
-    // Bullish is still valid on candle 2 but didn't newly fire; bearish fired again after a gap.
-    expect(s[2]).toMatchObject({ bull: false, bullValid: true, bear: true, bearValid: true, bullConfidence: 1, bullRank: 2, bullSince: 1, bearSince: 2 });
+    // A second bullish concept becoming valid is a new setup (it fires); the first is still valid. Bearish fired again after a gap.
+    expect(s[2]).toMatchObject({ bull: true, bullValid: true, bear: true, bearValid: true, bullConfidence: 1, bullRank: 2, bullSince: 1, bearSince: 2 });
+  });
+});
+
+describe("how a concept's entry is considered", () => {
+  const one = (valid: boolean[], entry?: { trigger: "FORMED" | "WHILE_VALID"; confirmBars: number }) => systemSignals([{ side: "BULLISH", valid, optionals: [], timeframeRank: 0, entry }], valid.length).map((x) => x.bull);
+  it("once, when it becomes valid (default)", () => expect(one([false, true, true, true, false, true])).toEqual([false, true, false, false, false, true]));
+  it("on every candle it is valid", () => expect(one([false, true, true, false, true], { trigger: "WHILE_VALID", confirmBars: 0 })).toEqual([false, true, true, false, true]));
+  it("only after it has held N more candles", () => {
+    expect(one([true, true, true, true], { trigger: "FORMED", confirmBars: 2 })).toEqual([false, false, true, false]);
+    expect(one([true, true, false, true, true, true], { trigger: "WHILE_VALID", confirmBars: 1 })).toEqual([false, true, false, false, true, true]);
+  });
+  it("an exit-only concept never signals an entry but is reported while valid", () => {
+    const s = systemSignals([{ side: "BEARISH", valid: [false, true, true], optionals: [], timeframeRank: 0, role: "EXIT" }], 3);
+    expect(s.map((x) => [x.bear, x.bearValid, x.bearExit])).toEqual([[false, false, false], [false, false, true], [false, false, true]]);
+  });
+});
+
+describe("an exit-only concept", () => {
+  it("closes a long even where opposite setups are ignored, and never reverses it", () => {
+    const candles = bars([100, 100, 104, 104, 100, 98, 98]);
+    const r = rules({ opposite: { whenLong: "IGNORE", whenShort: "IGNORE", confirmBars: 3 } });
+    const { steps, state } = run(candles, [sig({ bull: true }), sig(), sig(), sig({ bearExit: true }), sig(), sig()], r);
+    const exit = steps.find((x) => x.trade)!;
+    expect([exit.systemExit, exit.tradeSide, exit.opened]).toEqual(["opposite_signal", "LONG", undefined]);
+    expect(state.side).toBeNull();
   });
 });

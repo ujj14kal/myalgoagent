@@ -5,6 +5,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { AI_VOICE } from "@/lib/ai/config";
 import { synthesizeStream } from "@/lib/ai/speech-synth";
 import { speechChunks, toSpeech } from "@/lib/ai/speech-text";
+import { logError, logWarn } from "@/lib/logger";
 
 // Reads one of the agent's replies aloud. Takes a message id, not free text, so
 // it can only ever voice the user's own agent replies. With `c` it returns just
@@ -29,6 +30,7 @@ export async function GET(request: NextRequest) {
     if (limited) return NextResponse.json({ error: limited }, { status: 429 });
   }
 
+  const started = Date.now();
   const message = await prisma.agentMessage.findFirst({
     where: { id: messageId, role: "ASSISTANT", conversation: { userId } },
     select: { content: true },
@@ -46,9 +48,11 @@ export async function GET(request: NextRequest) {
   let audio: ReadableStream;
   try {
     audio = await synthesizeStream(text, { userId });
-  } catch {
+  } catch (err) {
+    logError("agent-voice:speech-route", err, { userId, piece });
     return NextResponse.json({ error: "Voice isn't available right now." }, { status: 502 });
   }
+  logWarn("agent-voice:speech-served", `piece ${piece ?? "all"} ready`, { userId, piece, ms: Date.now() - started });
   // Streamed, so playback starts before the whole reply is synthesised.
   return new Response(audio, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "private, max-age=3600" } });
 }

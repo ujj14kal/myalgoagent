@@ -34,6 +34,9 @@ export interface SystemSignals {
   bear: boolean;
   bullValid: boolean;
   bearValid: boolean;
+  /** An exit-only concept is valid now: a bearish one closes longs, a bullish one closes shorts (never opens anything). */
+  bullExit?: boolean;
+  bearExit?: boolean;
   bullConfidence: number;
   bearConfidence: number;
   bullRank: number;
@@ -122,10 +125,15 @@ export function stepSystemBar(candles: Candle[], i: number, sig: SystemSignals, 
   if (state.side && (engine.position || engine.pendingEntry)) {
     const side = state.side;
     const opposite = side === "LONG" ? sig.bearValid : sig.bullValid;
+    const exitOnly = side === "LONG" ? !!sig.bearExit : !!sig.bullExit;
     const same = side === "LONG" ? sig.bull : sig.bear;
-    const action = side === "LONG" ? rules.opposite.whenLong : rules.opposite.whenShort;
+    const baseAction = side === "LONG" ? rules.opposite.whenLong : rules.opposite.whenShort;
     const run = opposite ? state.oppositeRun + 1 : 0;
-    const acts = !!engine.position && opposite && action !== "IGNORE" && run > rules.opposite.confirmBars;
+    // The other side's setup acts after its confirmation wait; an exit-only concept just closes the position (it
+    // has already held for its own entry wait), and never reverses.
+    const oppositeActs = opposite && baseAction !== "IGNORE" && run > rules.opposite.confirmBars;
+    const action = oppositeActs ? baseAction : "EXIT";
+    const acts = !!engine.position && (oppositeActs || exitOnly);
     const r = stepBar(candles, i, same && canEnter, acts, engine, cfg(side));
     const closed = !!r.trade && !r.state.position;
     if (!closed) {
@@ -169,40 +177,61 @@ export function stepSystemBar(candles: Candle[], i: number, sig: SystemSignals, 
 
 /** Per-candle signals from each concept's validity and optional-block series. */
 export function systemSignals(
-  concepts: { side: "BULLISH" | "BEARISH"; valid: (boolean | undefined)[]; optionals: (boolean | undefined)[][]; timeframeRank: number }[],
+  concepts: {
+    side: "BULLISH" | "BEARISH";
+    valid: (boolean | undefined)[];
+    optionals: (boolean | undefined)[][];
+    timeframeRank: number;
+    /** How the entry is considered (default: once, when the setup becomes valid). */
+    entry?: { trigger: "FORMED" | "WHILE_VALID"; confirmBars: number };
+    role?: "ENTRY" | "EXIT";
+  }[],
   length: number,
 ): SystemSignals[] {
   const out: SystemSignals[] = [];
   let bullSince: number | null = null;
   let bearSince: number | null = null;
-  let prevBull = false;
-  let prevBear = false;
+  // Each concept's own run of valid candles, so its entry trigger and confirmation wait can be applied per concept.
+  const runs = concepts.map(() => 0);
   for (let i = 0; i < length; i++) {
     let bull = false;
     let bear = false;
+    let bullFire = false;
+    let bearFire = false;
+    let bullExit = false;
+    let bearExit = false;
     let bullConfidence = 0;
     let bearConfidence = 0;
     let bullRank = -1;
     let bearRank = -1;
-    for (const c of concepts) {
+    for (const [k, c] of concepts.entries()) {
+      runs[k] = c.valid[i] ? runs[k] + 1 : 0;
       if (!c.valid[i]) continue;
+      const hold = Math.max(0, c.entry?.confirmBars ?? 0);
+      const ready = runs[k] >= hold + 1; // held long enough to count
+      if (c.role === "EXIT") {
+        if (ready) (c.side === "BULLISH" ? (bullExit = true) : (bearExit = true));
+        continue;
+      }
+      const fires = c.entry?.trigger === "WHILE_VALID" ? ready : runs[k] === hold + 1;
+      if (!ready) continue;
       // Confidence: the share of the concept's optional blocks present now (a concept without optional blocks: 1).
       const confidence = c.optionals.length ? c.optionals.filter((o) => o[i]).length / c.optionals.length : 1;
       if (c.side === "BULLISH") {
         bull = true;
+        bullFire = bullFire || fires;
         bullConfidence = Math.max(bullConfidence, confidence);
         bullRank = Math.max(bullRank, c.timeframeRank);
       } else {
         bear = true;
+        bearFire = bearFire || fires;
         bearConfidence = Math.max(bearConfidence, confidence);
         bearRank = Math.max(bearRank, c.timeframeRank);
       }
     }
     bullSince = bull ? (bullSince ?? i) : null;
     bearSince = bear ? (bearSince ?? i) : null;
-    out.push({ bull: bull && !prevBull, bear: bear && !prevBear, bullValid: bull, bearValid: bear, bullConfidence, bearConfidence, bullRank, bearRank, bullSince, bearSince });
-    prevBull = bull;
-    prevBear = bear;
+    out.push({ bull: bullFire, bear: bearFire, bullValid: bull, bearValid: bear, bullExit, bearExit, bullConfidence, bearConfidence, bullRank, bearRank, bullSince, bearSince });
   }
   return out;
 }

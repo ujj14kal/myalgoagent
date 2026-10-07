@@ -19,7 +19,7 @@ const sections: LegalSection[] = [
       "Maximum loss per session, as a percentage of its starting capital",
       "Maximum consecutive losses",
       "Per-strategy stop-loss, take-profit and trailing stop — in %, points or ATR multiples",
-      "Connect strategies into one plan in a workspace, with every connection spelled out, every problem listed before you can publish, and published versions that never change under a running trade",
+      "Build a trading system in three clear layers — blocks, concepts, then the system that decides instrument, capital, sizing, stops, targets and what to do when setups conflict — with every problem listed before you can publish, and published versions that never change under a running trade",
       "Size each trade by the amount you are willing to lose: risk a set percentage of your capital and the shares are worked out from your stop-loss distance",
       "Build a position in stages: a multi-level entry plan buys part on the signal and the rest as price reaches each level or a rule holds, with the stop measured from your average entry and an optional maximum holding period",
       "Take profit in stages: up to three targets, each selling a share of the position and locking profit on the rest — at the target's own price or with a margin to pull back",

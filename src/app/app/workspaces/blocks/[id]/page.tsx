@@ -22,7 +22,7 @@ export default async function BlockPage({ params }: { params: Promise<{ id: stri
   return (
     <div>
       <PageHeader eyebrow="Workspace · Block" title={block.name} icon={Blocks} description="A reusable market component. Concepts combine blocks; trading systems decide what to trade." />
-      <BlockEditor id={block.id} initialName={block.name} initialDescription={block.description ?? ""} initialCondition={def?.condition} usedBy={usedBy} />
+      <BlockEditor id={block.id} initialName={block.name} initialDescription={block.description ?? ""} initialCondition={def?.condition} initialTimeframe={def?.timeframe ?? null} usedBy={usedBy} />
     </div>
   );
 }

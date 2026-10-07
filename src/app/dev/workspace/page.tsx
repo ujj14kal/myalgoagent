@@ -16,7 +16,7 @@ const BLOCKS = [
   { id: "b2", name: "My BOS", text: "Bullish break of structure (swing 3)" },
   { id: "b3", name: "My FVG", text: "Bullish fair value gap" },
   { id: "b4", name: "My FVG retest", text: "Bullish FVG retest" },
-  { id: "b5", name: "HTF trend up", text: "Close > EMA(50)" },
+  { id: "b5", name: "HTF trend up", text: "Close > EMA(50) (1H chart)" },
 ];
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ layer?: string }> }) {
@@ -31,14 +31,14 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ l
         <ConceptEditor
           blocks={BLOCKS}
           initialName="My Bullish SMC Entry"
-          initialLogic={{ type: "group", connection: "SEQUENCE", bars: 10, children: [{ type: "block", blockId: "b1" }, { type: "block", blockId: "b2" }, { type: "block", blockId: "b3" }, { type: "block", blockId: "b4" }, { type: "block", blockId: "b5", optional: true, timeframe: "higher" }] }}
+          initialLogic={{ type: "group", connection: "SEQUENCE", bars: 10, children: [{ type: "block", blockId: "b1" }, { type: "block", blockId: "b2" }, { type: "block", blockId: "b3" }, { type: "block", blockId: "b4" }, { type: "block", blockId: "b5", optional: true }] }}
         />
       ) : (
         <SystemEditor
           id="dev"
           initialName="Nifty SMC intraday"
           initialDescription=""
-          initialDraft={{ ...emptySystem(instruments[0]?.id ?? ""), concepts: [{ conceptId: "c1", enabled: true }, { conceptId: "c2", enabled: true }], timeframes: { primary: "5m", confirmation: "15m", higher: "60m" } }}
+          initialDraft={{ ...emptySystem(instruments[0]?.id ?? ""), concepts: [{ conceptId: "c1", enabled: true }, { conceptId: "c2", enabled: true }], timeframes: { primary: "5m" } }}
           latestVersion={0}
           archived={false}
           instruments={instruments}

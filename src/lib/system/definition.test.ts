@@ -11,6 +11,10 @@ describe("layer 1: blocks are only a rule", () => {
     expect(namesInstrument(withInstrument.condition)).toBe(true);
     expect(parseBlockDefinition(withInstrument)).toBeNull();
   });
+  it("can name the chart it is read on", () => {
+    expect(parseBlockDefinition({ ...bos, timeframe: "60m" })!.timeframe).toBe("60m");
+    expect(parseBlockDefinition({ ...bos, timeframe: "7m" })!.timeframe).toBeUndefined();
+  });
   it("rejects junk", () => {
     expect(parseBlockDefinition({ schema: 1, condition: { kind: "nope" } })).toBeNull();
     expect(parseBlockDefinition({ schema: 2, condition: bos.condition })).toBeNull();
@@ -18,9 +22,15 @@ describe("layer 1: blocks are only a rule", () => {
 });
 
 describe("layer 2: concepts combine blocks", () => {
-  it("keeps connections, optional blocks and timeframe roles; drops junk", () => {
+  it("keeps connections and optional blocks; drops junk and any per-block timeframe role", () => {
     const d = parseConceptDefinition({ schema: 1, logic: { type: "group", connection: "SEQUENCE", bars: 10.7, children: [{ type: "block", blockId: "a" }, { type: "block", blockId: "b", optional: true, timeframe: "higher" }, { type: "block", blockId: "" }, { type: "group", connection: "NOPE", children: [] }] } });
-    expect(d!.logic).toEqual({ type: "group", connection: "SEQUENCE", bars: 10, children: [{ type: "block", blockId: "a" }, { type: "block", blockId: "b", optional: true, timeframe: "higher" }] });
+    expect(d!.logic).toEqual({ type: "group", connection: "SEQUENCE", bars: 10, children: [{ type: "block", blockId: "a" }, { type: "block", blockId: "b", optional: true }] });
+    expect(d!.entry).toBeUndefined(); // the default entry (once, when it becomes valid) isn't stored
+  });
+  it("keeps how the entry is considered", () => {
+    const logic = { type: "block", blockId: "a" };
+    expect(parseConceptDefinition({ schema: 1, logic, entry: { trigger: "WHILE_VALID", confirmBars: 3.9 } })!.entry).toEqual({ trigger: "WHILE_VALID", confirmBars: 3 });
+    expect(parseConceptDefinition({ schema: 1, logic, entry: { trigger: "???", confirmBars: 999 } })!.entry).toEqual({ trigger: "FORMED", confirmBars: 50 });
   });
   it("is read from the agent's words by block name", () => {
     const ids: Record<string, string> = { "my bos": "b1", "my fvg": "b2" };

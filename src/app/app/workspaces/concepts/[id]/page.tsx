@@ -28,6 +28,7 @@ export default async function ConceptPage({ params }: { params: Promise<{ id: st
         initialDescription={concept.description ?? ""}
         initialClassification={parseConceptClass(concept.classification)}
         initialLogic={parseConceptDefinition(concept.definition)?.logic ?? null}
+        initialEntry={parseConceptDefinition(concept.definition)?.entry}
         blocks={blocks}
         usedBy={usedBy}
       />

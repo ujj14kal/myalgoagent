@@ -14,7 +14,7 @@ import { blockProblems, conceptProblems, describeConcept } from "@/lib/system/co
 import { conceptBlockIds, emptySystem, parseBlockDefinition, parseConceptClass, parseConceptDefinition, parseSystemDefinition, SYSTEM_LIMITS } from "@/lib/system/definition";
 import { checkSystem } from "@/lib/system/store";
 import { conceptLogicFrom } from "./concept-arg";
-import { CONFLICT_RULES, TIMEFRAME_ROLES, type BlockDefinition, type ConceptNode, type ConflictRule, type OppositeAction, type TimeframeRole, type TradingSystemDefinition } from "@/lib/system/types";
+import { CONFLICT_RULES, type BlockDefinition, type ConceptEntry, type ConflictRule, type OppositeAction, type TradingSystemDefinition } from "@/lib/system/types";
 
 // The agent's tools for the workspace's three layers. Each layer is proposed on its own, matching the builders:
 //   propose_block   — one market component (a rule); no instrument, side, size or exits.
@@ -87,7 +87,7 @@ const findSystem = (userId: string, ref: string) =>
 // ---------- schemas ----------
 
 const conceptNode =
-  'A node: {"block":"<block name>","optional":true|false,"timeframe":"primary"|"confirmation"|"higher"} (optional blocks don\'t decide validity, they raise confidence; timeframe is the system\'s role, default primary), or {"connection":"AND"|"OR"|"SEQUENCE"|"CONFIRMATION"|"VETO"|"DEPENDENCY","bars":<candles>,"children":[<nodes>]}. A bare list means AND.';
+  'A node: {"block":"<block name>","optional":true|false} (optional blocks don\'t decide validity, they raise confidence), or {"connection":"AND"|"OR"|"SEQUENCE"|"CONFIRMATION"|"VETO"|"DEPENDENCY","bars":<candles>,"children":[<nodes>]}. A bare list means AND.';
 
 export function systemTools(riskLegSchema: object, targetsSchema: object, entryPlanSchema: object): MantleTool[] {
   return [
@@ -112,6 +112,7 @@ export function systemTools(riskLegSchema: object, targetsSchema: object, entryP
             block: { type: "string", description: "Name or id of an existing block to change" },
             description: { type: "string" },
             condition: { description: "The rule, exactly as in CONDITIONS (smart-money components use the smc form)." },
+            timeframe: { type: ["string", "null"], description: "The chart this component is read on (1m 3m 5m 15m 30m 60m 4h 1d 1wk), e.g. 60m for an hourly trend block. Omit for the chart the trading system trades on." },
           },
           required: ["condition"],
         },
@@ -131,7 +132,9 @@ export function systemTools(riskLegSchema: object, targetsSchema: object, entryP
             description: { type: "string" },
             classification: { type: "string", enum: ["bullish", "bearish"] },
             logic: { description: conceptNode },
-            new_blocks: { type: "array", items: { type: "object", properties: { name: { type: "string" }, condition: { description: "As in CONDITIONS" } }, required: ["name", "condition"] }, description: "Blocks to create with this concept (names the logic uses)." },
+            entry_trigger: { type: "string", enum: ["formed", "while_valid"], description: "How the entry is considered: once when the setup first becomes valid (default), or on every candle it is valid." },
+            entry_wait_bars: { type: "number", description: "Wait for confirmation: candles the setup must have held before it signals (0 = at once)." },
+            new_blocks: { type: "array", items: { type: "object", properties: { name: { type: "string" }, condition: { description: "As in CONDITIONS" }, timeframe: { type: ["string", "null"], description: "The chart this block is read on (1m 3m 5m 15m 30m 60m 4h 1d 1wk), e.g. 60m for an hourly trend block; omit for the chart the trading system trades on." } }, required: ["name", "condition"] }, description: "Blocks to create with this concept (names the logic uses)." },
           },
         },
       },
@@ -141,18 +144,16 @@ export function systemTools(riskLegSchema: object, targetsSchema: object, entryP
       function: {
         name: "propose_trading_system",
         description:
-          "Prepare a TRADING SYSTEM — the user's concepts plus every trading decision — for review, optionally publishing it as a version (a strategy to backtest, forward test and take live). Concepts must already exist (propose_concept first). Intraday: bullish concepts open longs, bearish ones open shorts; delivery is long only (bearish concepts can only close a long). Decide: instrument; timeframes (primary trades on; confirmation and higher are what concepts' blocks read on); product; sessions (no_entry_after, square_off_at, entry_windows, no_trade_windows); capital and max_capital_use_pct; position_sizing; stops/targets (multi-target exits with stop rules), risk_options (leverage, TP/SL reference price|margin, break-even, daily-loss and drawdown limits); conflict (both sides valid while flat): bullish | bearish | first | higher_timeframe | confidence | ignore | wait (+confirm_bars); when_long_bearish / when_short_bullish: ignore | exit | reverse, with opposite_confirm_bars to wait for confirmation; order_type. Pass `system` (name) to change an existing one; fields left out keep their saved values.",
+          "Prepare a TRADING SYSTEM — the user's concepts plus every trading decision — for review, optionally publishing it as a version (a strategy to backtest, forward test and take live). Concepts must already exist (propose_concept first). Intraday: bullish concepts open longs, bearish ones open shorts; delivery is long only (bearish concepts can only close a long). Decide: instrument; timeframe (the chart it trades on; a block on another chart names it itself); product; sessions (no_entry_after, square_off_at, entry_windows, no_trade_windows); capital and max_capital_use_pct; position_sizing; stops/targets (multi-target exits with stop rules), risk_options (leverage, TP/SL reference price|margin, break-even, daily-loss and drawdown limits); conflict (both sides valid while flat): bullish | bearish | first | higher_timeframe | confidence | ignore | wait (+confirm_bars); when_long_bearish / when_short_bullish: ignore | exit | reverse, with opposite_confirm_bars to wait for confirmation; order_type. Pass `system` (name) to change an existing one; fields left out keep their saved values.",
         parameters: {
           type: "object",
           properties: {
             name: { type: "string" },
             system: { type: "string", description: "Name or id of an existing trading system to change" },
             description: { type: "string" },
-            concepts: { type: "array", items: { type: "string" }, description: "The concepts it trades, by name (replaces the list)." },
+            concepts: { type: "array", items: { anyOf: [{ type: "string" }, { type: "object", properties: { name: { type: "string" }, role: { type: "string", enum: ["entry", "exit"], description: "entry (default) opens positions; exit only closes the opposite side's (a bearish exit concept closes longs)" } }, required: ["name"] }] }, description: "The concepts it uses, by name (replaces the list). Use {name, role:\"exit\"} for a concept that only closes positions." },
             instrument_symbol: { type: "string" },
-            timeframe: { type: "string", description: "Primary timeframe: 1m 3m 5m 15m 30m 60m 4h 1d 1wk" },
-            confirmation_timeframe: { type: ["string", "null"] },
-            higher_timeframe: { type: ["string", "null"] },
+            timeframe: { type: "string", description: "The chart the system trades on: 1m 3m 5m 15m 30m 60m 4h 1d 1wk" },
             product: { type: "string", enum: ["intraday", "delivery"] },
             no_entry_after: { type: ["string", "null"] },
             square_off_at: { type: ["string", "null"] },
@@ -243,13 +244,14 @@ export async function proposeBlock(userId: string, a: Record<string, unknown>, h
   if (!name) return fix("A name is required, e.g. \"My BOS\".");
   try {
     const condition = await withCustom(userId, toConditionNode(a.condition, "condition"));
-    const definition: BlockDefinition = { schema: 1, condition };
-    if (!parseBlockDefinition(definition)) return fix("The condition isn't a valid rule.");
+    const tfArg = a.timeframe === undefined || a.timeframe === null || a.timeframe === "" ? undefined : h.timeframeArg(a.timeframe);
+    const definition: BlockDefinition = { schema: 1, condition, ...(tfArg ? { timeframe: tfArg } : {}) };
+    if (!parseBlockDefinition(definition)) return fix("The condition isn't a valid rule (a block can't read another instrument — the trading system chooses it).");
     const issues = blockProblems(definition, name);
     if (!existing && (await prisma.block.findFirst({ where: { userId, nameNormalized: name.toLowerCase() }, select: { id: true } }))) return fix(`The user already has a block called "${name}". Pass block:"${name}" to change it, or choose another name.`);
     const t = text(condition);
     return {
-      result: { ok: true, rule: t, warnings: issues.map((i) => i.message), note: NOTE },
+      result: { ok: true, rule: t, warnings: issues.map((i) => i.message), note: `${NOTE} IF THE USER DESCRIBED A WHOLE SETUP OF SEVERAL COMPONENTS (a concept), this was the wrong tool: call propose_concept ONCE now with all the components in new_blocks — it replaces this review.` },
       proposal: { kind: "block", status: "pending", draft: { name, description: str(a.description) || existing?.description || undefined, ...(existing ? { blockId: existing.id } : {}), definition, text: t } },
     };
   } catch (err) {
@@ -283,9 +285,12 @@ export async function proposeConcept(userId: string, a: Record<string, unknown>,
       const bName = str(nb.name).slice(0, 80);
       if (await prisma.block.findFirst({ where: { userId, nameNormalized: bName.toLowerCase() }, select: { id: true } })) return fix(`new_blocks: the user already has a block called "${bName}" — reference it in the logic instead of creating it again.`);
       const condition = await withCustom(userId, toConditionNode(nb.condition, `new_blocks #${i + 1}.condition`));
-      const issues = blockProblems({ schema: 1, condition }, bName);
+      const tf = nb.timeframe === undefined || nb.timeframe === null || nb.timeframe === "" ? undefined : h.timeframeArg(nb.timeframe);
+      const def: BlockDefinition = { schema: 1, condition, ...(tf ? { timeframe: tf } : {}) };
+      if (!parseBlockDefinition(def)) return fix(`new_blocks #${i + 1}: that isn't a valid rule (a block can't read another instrument).`);
+      const issues = blockProblems(def, bName);
       if (issues.length) return fix(issues.map((x) => x.message).join(" "));
-      newBlocks.push({ name: bName, definition: { schema: 1, condition }, text: text(condition) });
+      newBlocks.push({ name: bName, definition: def, text: `${text(condition)}${tf ? ` (on the ${tf} chart)` : ""}` });
     }
     const userBlocks = await prisma.block.findMany({ where: { userId }, select: { id: true, name: true, definition: true } });
     const blockOf = (ref: string): string | null => {
@@ -298,7 +303,11 @@ export async function proposeConcept(userId: string, a: Record<string, unknown>,
     const base = existing ? parseConceptDefinition(existing.definition) : null;
     const logic = a.logic !== undefined ? conceptLogicFrom(a.logic, blockOf) : (base?.logic ?? null);
     if (!logic) return fix("logic is required: the blocks and how they combine.");
-    const definition = { schema: 1 as const, logic };
+    const trig = str(a.entry_trigger).toLowerCase();
+    if (trig && trig !== "formed" && trig !== "while_valid") return fix('entry_trigger must be "formed" or "while_valid".');
+    const baseEntry = base?.entry ?? { trigger: "FORMED" as const, confirmBars: 0 };
+    const entry: ConceptEntry = { trigger: trig ? (trig === "while_valid" ? "WHILE_VALID" : "FORMED") : baseEntry.trigger, confirmBars: Math.max(0, Math.floor(num(a.entry_wait_bars) ?? baseEntry.confirmBars)) };
+    const definition = { schema: 1 as const, logic, ...(entry.trigger === "FORMED" && entry.confirmBars === 0 ? {} : { entry }) };
     const lookup: Record<string, { name: string; definition: BlockDefinition }> = {};
     for (const b of userBlocks) {
       const d = parseBlockDefinition(b.definition);
@@ -342,15 +351,16 @@ export async function proposeTradingSystem(userId: string, a: Record<string, unk
     let concepts = base.concepts;
     if (Array.isArray(a.concepts)) {
       concepts = [];
-      for (const ref of a.concepts.slice(0, SYSTEM_LIMITS.concepts)) {
-        const c = await findConcept(userId, String(ref));
-        if (!c) return fix(`The user has no concept "${String(ref)}". Call get_my_workspace for exact names, or create it with propose_concept first.`);
-        if ("ambiguous" in c) return { result: { error: `"${String(ref)}" matches several concepts (${c.ambiguous.join(", ")}). Ask the user which one.` } };
-        if (!concepts.some((x) => x.conceptId === c.id)) concepts.push({ conceptId: c.id, enabled: true });
+      for (const raw of a.concepts.slice(0, SYSTEM_LIMITS.concepts)) {
+        const refName = isObj(raw) ? str(raw.name) : String(raw);
+        const role = isObj(raw) && str(raw.role).toLowerCase() === "exit" ? ("EXIT" as const) : undefined;
+        const c = await findConcept(userId, refName);
+        if (!c) return fix(`The user has no concept "${refName}". Call get_my_workspace for exact names, or create it with propose_concept first.`);
+        if ("ambiguous" in c) return { result: { error: `"${refName}" matches several concepts (${c.ambiguous.join(", ")}). Ask the user which one.` } };
+        if (!concepts.some((x) => x.conceptId === c.id)) concepts.push({ conceptId: c.id, enabled: true, ...(role ? { role } : {}) });
       }
     }
     const primary = h.timeframeArg(a.timeframe) ?? base.timeframes.primary;
-    const optTf = (k: string, cur: string | null) => (k in a ? (a[k] === null || a[k] === "" ? null : (h.timeframeArg(a[k]) ?? null)) : cur);
     const order = h.orderArgs(a);
     const intradayTf = /m$|h$/.test(primary);
     const productType = (order.productType as "INTRADAY" | "DELIVERY" | undefined) ?? (a.timeframe !== undefined ? (intradayTf ? "INTRADAY" : "DELIVERY") : base.productType);
@@ -383,7 +393,7 @@ export async function proposeTradingSystem(userId: string, a: Record<string, unk
       ...base,
       concepts,
       instrumentId: instrument?.id ?? base.instrumentId,
-      timeframes: { primary, confirmation: optTf("confirmation_timeframe", base.timeframes.confirmation), higher: optTf("higher_timeframe", base.timeframes.higher) },
+      timeframes: { primary },
       productType,
       sessions: {
         noEntryAfterMinute: noEntry === undefined ? base.sessions.noEntryAfterMinute : noEntry,

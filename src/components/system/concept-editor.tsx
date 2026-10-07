@@ -7,17 +7,16 @@ import { AlertTriangle, CheckCircle2, Copy, Plus, Trash2, TrendingDown, Trending
 import { CONNECTION_HELP, CONNECTION_LABEL, DEFAULT_BARS, usesBars } from "@/lib/workspace/compile";
 import { CONNECTIONS, type Connection } from "@/lib/workspace/types";
 import { checkConcept, deleteConcept, duplicateConcept, saveConcept } from "@/lib/system-actions";
-import { TIMEFRAME_ROLES, type ConceptClass, type ConceptNode, type SystemIssue, type TimeframeRole } from "@/lib/system/types";
+import { DEFAULT_CONCEPT_ENTRY, type ConceptClass, type ConceptEntry, type ConceptNode, type SystemIssue } from "@/lib/system/types";
 import { friendlyError } from "@/lib/friendly-error";
 
 // The Concept Builder: blocks combined into one setup — all at once, in sequence within N candles, confirmed by,
-// unless, only after — with optional blocks that raise confidence and each block read on a timeframe role. A concept
+// unless, only after — with optional blocks that raise confidence, and how its entry is considered. A concept
 // is classified bullish or bearish and only ever says "setup valid": it never trades.
 
 export type BlockOption = { id: string; name: string; text: string };
 const selectCls = "rounded-lg border border-brand-navy/15 bg-white px-2 py-1.5 text-sm outline-none focus:border-brand-primary";
 const label = "mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40";
-const ROLE_TEXT: Record<TimeframeRole, string> = { primary: "primary timeframe", confirmation: "confirmation timeframe", higher: "higher timeframe" };
 const MAX_DEPTH = 4;
 
 function BlockLeaf({ node, blocks, onChange, onRemove }: { node: Extract<ConceptNode, { type: "block" }>; blocks: BlockOption[]; onChange: (n: ConceptNode) => void; onRemove: () => void }) {
@@ -29,11 +28,6 @@ function BlockLeaf({ node, blocks, onChange, onRemove }: { node: Extract<Concept
           {!b && <option value={node.blockId}>(deleted block)</option>}
           {blocks.map((x) => (
             <option key={x.id} value={x.id}>{x.name}</option>
-          ))}
-        </select>
-        <select value={node.timeframe ?? "primary"} aria-label="Read on" onChange={(e) => onChange({ ...node, timeframe: e.target.value === "primary" ? undefined : (e.target.value as TimeframeRole) })} className={selectCls}>
-          {TIMEFRAME_ROLES.map((r) => (
-            <option key={r} value={r}>on the {ROLE_TEXT[r]}</option>
           ))}
         </select>
         <label className="flex items-center gap-1.5 text-xs text-brand-navy/65">
@@ -106,6 +100,7 @@ export default function ConceptEditor({
   initialDescription = "",
   initialClassification = "BULLISH",
   initialLogic = null,
+  initialEntry = DEFAULT_CONCEPT_ENTRY,
   blocks,
   usedBy = [],
 }: {
@@ -114,6 +109,7 @@ export default function ConceptEditor({
   initialDescription?: string;
   initialClassification?: ConceptClass;
   initialLogic?: ConceptNode | null;
+  initialEntry?: ConceptEntry;
   blocks: BlockOption[];
   usedBy?: { id: string; name: string }[];
 }) {
@@ -122,12 +118,13 @@ export default function ConceptEditor({
   const [description, setDescription] = useState(initialDescription);
   const [classification, setClassification] = useState<ConceptClass>(initialClassification);
   const [logic, setLogic] = useState<ConceptNode>(initialLogic ?? { type: "group", connection: "SEQUENCE", bars: 10, children: [] });
+  const [entry, setEntry] = useState<ConceptEntry>(initialEntry);
   const [issues, setIssues] = useState<SystemIssue[] | null>(null);
   const [text, setText] = useState("");
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [dirty, setDirty] = useState(!id);
   const [busy, start] = useTransition();
-  const definition = { schema: 1, logic };
+  const definition = { schema: 1, logic, entry };
 
   const edit = (n: ConceptNode) => {
     setLogic(n);
@@ -212,7 +209,31 @@ export default function ConceptEditor({
         ) : (
           <LogicTree node={logic} blocks={blocks} onChange={edit} />
         )}
-        <p className="mt-2 text-xs text-brand-navy/45">Each block is read on the primary timeframe unless you choose the confirmation or higher one; the trading system that uses this concept sets what those are.</p>
+        <p className="mt-2 text-xs text-brand-navy/45">Each block is read on the chart it was built for (a block can name its own, e.g. an hourly trend); otherwise on the chart the trading system trades on.</p>
+      </section>
+
+      <section className="surface p-4 sm:p-5">
+        <p className="text-sm font-semibold text-brand-navy">How the entry is considered</p>
+        <p className="mb-3 text-xs text-brand-navy/50">When this setup counts as an entry signal. The trading system decides what to do with the signal (open, size, stops).</p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {([
+            ["FORMED", "Once, when the setup becomes valid", "One signal on the candle every required block has come together. It must go invalid and form again to signal again."],
+            ["WHILE_VALID", "On every candle it is valid", "A signal on each candle the setup holds — so a flat system can still enter later while the setup is still valid."],
+          ] as const).map(([k, title, help]) => (
+            <label key={k} className={`flex cursor-pointer gap-2 rounded-xl border p-3 text-sm ${entry.trigger === k ? "border-brand-primary bg-brand-primary/5" : "border-brand-navy/10"}`}>
+              <input type="radio" name="entry-trigger" checked={entry.trigger === k} onChange={() => { setEntry({ ...entry, trigger: k }); setDirty(true); setIssues(null); }} className="mt-0.5" />
+              <span>
+                <span className="block font-semibold text-brand-navy">{title}</span>
+                <span className="block text-xs text-brand-navy/50">{help}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        <label className="mt-3 flex flex-wrap items-center gap-2 text-xs text-brand-navy/60">
+          <span className="font-semibold text-brand-navy">Wait for confirmation:</span> the setup must have held for
+          <input type="number" min={0} max={50} value={entry.confirmBars} onChange={(e) => { setEntry({ ...entry, confirmBars: Math.max(0, Math.min(50, Math.floor(Number(e.target.value)) || 0)) }); setDirty(true); setIssues(null); }} className="w-16 rounded-lg border border-brand-navy/15 px-2 py-1.5 text-sm outline-none focus:border-brand-primary" aria-label="Confirmation candles" />
+          more candle{entry.confirmBars === 1 ? "" : "s"} before it signals (0 = at once)
+        </label>
       </section>
 
       <section className="surface space-y-3 p-4 sm:p-5">

@@ -6,7 +6,7 @@ import type { ConditionNode } from "@/lib/strategy/types";
 
 const smc = (pattern: string, side = "BULLISH"): BlockDefinition => ({ schema: 1, condition: { kind: "signal", signal: { family: "SMC", pattern, side } } as ConditionNode });
 const rsiAbove = (n: number): BlockDefinition => ({ schema: 1, condition: { kind: "comparison", left: { kind: "indicator", type: "RSI", params: [14] }, operator: "GT", right: { kind: "constant", value: n } } });
-const blocks = { sweep: { name: "My liquidity sweep", definition: smc("LIQUIDITY_SWEEP") }, bos: { name: "My BOS", definition: smc("BOS") }, fvg: { name: "My FVG", definition: smc("FVG") }, retest: { name: "My FVG retest", definition: smc("FVG_RETEST") }, trend: { name: "HTF trend up", definition: rsiAbove(50) }, bearBos: { name: "Bearish BOS", definition: smc("BOS", "BEARISH") } };
+const blocks = { sweep: { name: "My liquidity sweep", definition: smc("LIQUIDITY_SWEEP") }, bos: { name: "My BOS", definition: smc("BOS") }, fvg: { name: "My FVG", definition: smc("FVG") }, retest: { name: "My FVG retest", definition: smc("FVG_RETEST") }, trend: { name: "HTF trend up", definition: { ...rsiAbove(50), timeframe: "60m" } }, bearBos: { name: "Bearish BOS", definition: smc("BOS", "BEARISH") } };
 
 // "My Bullish SMC Entry": Liquidity Sweep → BOS → FVG → FVG retest, in order, each within 10 candles.
 const bullishSmc: ConceptSnapshot = {
@@ -20,7 +20,7 @@ const bullishSmc: ConceptSnapshot = {
       type: "group",
       connection: "SEQUENCE",
       bars: 10,
-      children: [{ type: "block", blockId: "sweep" }, { type: "block", blockId: "bos" }, { type: "block", blockId: "fvg" }, { type: "block", blockId: "retest" }, { type: "block", blockId: "trend", optional: true, timeframe: "higher" }],
+      children: [{ type: "block", blockId: "sweep" }, { type: "block", blockId: "bos" }, { type: "block", blockId: "fvg" }, { type: "block", blockId: "retest" }, { type: "block", blockId: "trend", optional: true }],
     },
   },
 };
@@ -31,7 +31,7 @@ const system = (over: Partial<TradingSystemDefinition> = {}): TradingSystemDefin
   concepts: [{ conceptId: "c1", enabled: true }, { conceptId: "c2", enabled: true }],
   instrumentType: "STOCK",
   instrumentId: "inst",
-  timeframes: { primary: "5m", confirmation: "15m", higher: "60m" },
+  timeframes: { primary: "5m" },
   productType: "INTRADAY",
   sessions: { noEntryAfterMinute: 14 * 60 + 30, squareOffMinute: 15 * 60 + 15, entryWindows: [], noTradeWindows: [] },
   capital: { total: 100_000, maxUtilizationPercent: 100 },
@@ -67,17 +67,20 @@ describe("blocks", () => {
 });
 
 describe("concepts", () => {
-  it("compile the sequence; optional blocks go to confidence, on their timeframe role", () => {
-    const { runtime, issues } = compileConcept(bullishSmc, { primary: "5m", confirmation: "15m", higher: "60m" });
+  it("compile the sequence; optional blocks go to confidence, on the chart their block names", () => {
+    const { runtime, issues } = compileConcept(bullishSmc);
     expect(issues).toEqual([]);
     expect(runtime!.side).toBe("BULLISH");
     expect(runtime!.optionals).toHaveLength(1);
-    expect(runtime!.timeframeRank).toBe(2);
+    expect(runtime!.timeframeRank).toBe(60); // its longest block reads the 60-minute chart
     expect(JSON.stringify(runtime!.optionals[0])).toContain('"timeframe":"60m"');
     expect(JSON.stringify(runtime!.condition)).not.toContain("RSI"); // the optional trend filter doesn't decide validity
   });
-  it("need the system to set a timeframe a block is read on", () => {
-    expect(compileConcept(bullishSmc, { primary: "5m", confirmation: null, higher: null }).issues[0].message).toMatch(/higher timeframe/);
+  it("keeps its entry trigger for the engine", () => {
+    const withEntry = { ...bullishSmc, definition: { ...bullishSmc.definition, entry: { trigger: "WHILE_VALID" as const, confirmBars: 2 } } };
+    expect(compileConcept(withEntry).runtime!.entry).toEqual({ trigger: "WHILE_VALID", confirmBars: 2 });
+    expect(compileConcept(bullishSmc).runtime!.entry).toEqual({ trigger: "FORMED", confirmBars: 0 });
+    expect(compileConcept({ ...bullishSmc, definition: { ...bullishSmc.definition, entry: { trigger: "FORMED" as const, confirmBars: 99 } } }).issues[0].message).toMatch(/0 to 50/);
   });
   it("explain what's wrong", () => {
     expect(conceptProblems({ schema: 1, logic: null }, blocks)[0].message).toMatch(/no blocks yet/);
@@ -86,7 +89,7 @@ describe("concepts", () => {
     expect(conceptProblems({ schema: 1, logic: { type: "block", blockId: "gone" } }, blocks)[0].message).toMatch(/no longer exists/);
   });
   it("read as one sentence", () => {
-    expect(describeConcept(bullishSmc.definition, blocks)).toBe("My liquidity sweep → My BOS → My FVG → My FVG retest (each within 10 candles); optional: HTF trend up (higher timeframe) [optional]");
+    expect(describeConcept(bullishSmc.definition, blocks)).toBe("My liquidity sweep → My BOS → My FVG → My FVG retest (each within 10 candles); optional: HTF trend up (60m) [optional]");
   });
 });
 
@@ -100,11 +103,11 @@ describe("trading systems", () => {
     expect(c.shortEntry).not.toBeNull();
   });
   it("delivery systems can't short: bearish concepts only close longs, and need a bullish one", () => {
-    const c = compileSystem(system({ productType: "DELIVERY", timeframes: { primary: "1d", confirmation: null, higher: "1wk" }, riskOptions: DEFAULT_RISK_OPTIONS }), [bullishSmc, bearishSmc]);
+    const c = compileSystem(system({ productType: "DELIVERY", timeframes: { primary: "1d" }, riskOptions: DEFAULT_RISK_OPTIONS }), [bullishSmc, bearishSmc]);
     expect(c.shortEntry).toBeNull();
     expect(c.runtime!.allowShort).toBe(false);
     expect(c.warnings.some((w) => /can't go short/.test(w.message))).toBe(true);
-    const onlyBear = compileSystem(system({ productType: "DELIVERY", timeframes: { primary: "1d", confirmation: null, higher: null }, riskOptions: DEFAULT_RISK_OPTIONS, concepts: [{ conceptId: "c2", enabled: true }] }), [bearishSmc]);
+    const onlyBear = compileSystem(system({ productType: "DELIVERY", timeframes: { primary: "1d" }, riskOptions: DEFAULT_RISK_OPTIONS, concepts: [{ conceptId: "c2", enabled: true }] }), [bearishSmc]);
     expect(onlyBear.errors.some((e) => /bullish concept/.test(e.message))).toBe(true);
   });
   it("checks every system decision", () => {
@@ -112,5 +115,13 @@ describe("trading systems", () => {
     const text = c.errors.map((e) => e.message).join(" | ");
     for (const want of [/at least one concept/, /instrument/, /capital this system/, /between 1% and 100%/, /Sizing by risk needs a stop-loss/, /must end after it starts/, /at least 1 candle/]) expect(text).toMatch(want);
     expect(c.runtime).toBeNull();
+  });
+  it("exit-only concepts never open positions, and a system needs one that does", () => {
+    const c = compileSystem(system({ concepts: [{ conceptId: "c1", enabled: true }, { conceptId: "c2", enabled: true, role: "EXIT" }] }), [bullishSmc, bearishSmc]);
+    expect(c.errors).toEqual([]);
+    expect(c.shortEntry).toBeNull(); // the bearish concept only closes longs
+    expect(c.runtime!.concepts.map((x) => x.role)).toEqual(["ENTRY", "EXIT"]);
+    const only = compileSystem(system({ concepts: [{ conceptId: "c2", enabled: true, role: "EXIT" }] }), [bearishSmc]);
+    expect(only.errors.some((e) => /only closes positions/.test(e.message))).toBe(true);
   });
 });

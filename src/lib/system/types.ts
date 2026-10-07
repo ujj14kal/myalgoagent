@@ -10,7 +10,7 @@ import type { RiskOptions } from "@/lib/trading-engine/risk-options";
 //                                                                else: no instrument, capital, size, side, TP/SL or orders.
 //  CONCEPT        "How do components combine into a setup?"   — blocks joined by connections (all / any / in sequence
 //                                                                / confirmed by / unless / only after), some optional,
-//                                                                each on a timeframe role; classified Bullish or Bearish.
+//                                                                classified Bullish or Bearish, with how its entry is considered.
 //                                                                It outputs "setup valid" — it never trades.
 //  TRADING SYSTEM "What do I do with these setups?"           — picks concepts and makes every trading decision:
 //                                                                instrument, timeframes, sessions, capital, sizing,
@@ -19,14 +19,12 @@ import type { RiskOptions } from "@/lib/trading-engine/risk-options";
 // Publishing a trading system snapshots the blocks and concepts it uses into the version, so what was tested is
 // exactly what runs even if a block is edited later.
 
-/** Which of the trading system's timeframes a block is read on. The system decides what they are. */
-export type TimeframeRole = "primary" | "confirmation" | "higher";
-export const TIMEFRAME_ROLES: TimeframeRole[] = ["primary", "confirmation", "higher"];
-
 export interface BlockDefinition {
   schema: 1;
   /** The component's logic: any rule the builder can express (indicators, price, patterns, smart-money, time, custom indicators). */
   condition: ConditionNode;
+  /** The chart the component is read on, e.g. "60m" for an hourly trend block; omitted = the chart the trading system trades on. */
+  timeframe?: string | null;
 }
 
 export type ConceptClass = "BULLISH" | "BEARISH";
@@ -39,14 +37,23 @@ export type ConceptNode =
       blockId: string;
       /** Optional blocks don't decide whether the setup is valid; each one present raises its confidence. */
       optional?: boolean;
-      /** The timeframe this block is read on (default primary). */
-      timeframe?: TimeframeRole;
     }
   | { type: "group"; connection: Connection; bars?: number; children: ConceptNode[] };
+
+/** How a valid setup becomes an entry. */
+export interface ConceptEntry {
+  /** FORMED: once, on the candle the setup becomes valid. WHILE_VALID: on any candle it is valid (and the system is flat). */
+  trigger: "FORMED" | "WHILE_VALID";
+  /** The setup must have stayed valid this many extra candles first (0 = enter at once). */
+  confirmBars: number;
+}
+export const DEFAULT_CONCEPT_ENTRY: ConceptEntry = { trigger: "FORMED", confirmBars: 0 };
 
 export interface ConceptDefinition {
   schema: 1;
   logic: ConceptNode | null;
+  /** How its entry is considered (default: once, when the setup becomes valid). */
+  entry?: ConceptEntry;
 }
 
 /** A concept as stored in a published system version: its name, side and its blocks' logic, resolved. */
@@ -67,11 +74,13 @@ export type OppositeAction = "IGNORE" | "EXIT" | "REVERSE";
 
 export interface TradingSystemDefinition {
   schema: 2;
-  concepts: { conceptId: string; enabled: boolean }[];
+  /** `role`: ENTRY (default) concepts open positions; EXIT concepts only close the opposite side's positions. */
+  concepts: { conceptId: string; enabled: boolean; role?: "ENTRY" | "EXIT" }[];
   /** Asset class: only NSE stocks and indices can be traded here today. */
   instrumentType: "STOCK";
   instrumentId: string;
-  timeframes: { primary: string; confirmation: string | null; higher: string | null };
+  /** The chart the system trades on. Blocks that need another chart name it themselves. */
+  timeframes: { primary: string };
   productType: "INTRADAY" | "DELIVERY";
   sessions: {
     noEntryAfterMinute: number | null;
@@ -110,14 +119,17 @@ export interface TradingSystemDefinition {
   limitValue: number | null;
 }
 
-/** What the engine needs per concept: its rule, its optional (confidence) rules, and its timeframe rank. */
+/** What the engine needs per concept: its rule, its optional (confidence) rules, its entry trigger and its timeframe rank. */
 export interface ConceptRuntime {
   name: string;
   side: ConceptClass;
   condition: ConditionNode;
   optionals: ConditionNode[];
-  /** 0 = primary, 1 = confirmation, 2 = higher: the highest role among its blocks. */
+  /** The longest chart (in minutes) any of its blocks is read on; 0 = all on the system's own chart. */
   timeframeRank: number;
+  entry?: ConceptEntry;
+  /** EXIT concepts never open a position; they only close the opposite side's. */
+  role?: "ENTRY" | "EXIT";
 }
 
 /** Stored on the published strategy: everything the two-way engine needs beyond the strategy's own fields. */

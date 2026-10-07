@@ -745,9 +745,7 @@ function ProposalFields({
           </Field>
           <div className="space-y-2 rounded-xl bg-brand-bg p-3 text-sm text-brand-navy/80">
             <p>
-              <strong className="text-brand-navy">Trades:</strong> {p.draft.instrumentSymbol ?? "—"} · {d.productType === "INTRADAY" ? "intraday (long and short)" : "delivery (long only)"} · {d.timeframes.primary}
-              {d.timeframes.confirmation ? ` + ${d.timeframes.confirmation}` : ""}
-              {d.timeframes.higher ? ` + ${d.timeframes.higher}` : ""} candles
+              <strong className="text-brand-navy">Trades:</strong> {p.draft.instrumentSymbol ?? "—"} · {d.productType === "INTRADAY" ? "intraday (long and short)" : "delivery (long only)"} · {d.timeframes.primary} candles
             </p>
             <div>
               <strong className="text-brand-navy">Concepts:</strong>

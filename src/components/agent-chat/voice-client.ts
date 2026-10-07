@@ -251,23 +251,35 @@ export function speakMessage(
   let n = 0;
   let started = false;
 
+  // The host sometimes answers a piece with a passing 5xx (a busy or just-started server), and the same request
+  // works a moment later — so a failed piece is retried a couple of times before giving up on it.
+  const makePiece = async (k: number): Promise<string | null> => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const r = await fetch(urlOf(k), { signal: me.abort.signal });
+        if (r.ok) return URL.createObjectURL(await r.blob());
+        if (r.status < 500 && r.status !== 429) return null; // a real refusal (not signed in, no such reply…)
+      } catch {
+        if (me.abort.signal.aborted) return null;
+      }
+      await new Promise((res) => setTimeout(res, 350 * 2 ** attempt));
+      if (!mine()) return null;
+    }
+    return null;
+  };
   const fetchAhead = (k: number) => {
     if (k >= total || me.ahead.has(k)) return;
-    me.ahead.set(
-      k,
-      fetch(urlOf(k), { signal: me.abort.signal })
-        .then((r) => (r.ok ? r.blob() : null))
-        .then((b) => (b ? URL.createObjectURL(b) : null))
-        .catch(() => null)
-    );
+    me.ahead.set(k, makePiece(k));
   };
   const playPiece = async (k: number) => {
     if (!mine()) return;
     if (k === 0 && !me.ahead.has(0)) a.src = urlOf(0);
     else {
-      const ready = await me.ahead.get(k);
+      // A piece that couldn't be made ahead of time gets one more try now, with the same retries.
+      const ready = (await me.ahead.get(k)) ?? (await makePiece(k));
       if (!mine()) return;
-      a.src = ready ?? urlOf(k);
+      if (!ready) return failed();
+      a.src = ready;
     }
     fetchAhead(k + 1);
     a.play().catch(() => {
@@ -295,12 +307,32 @@ export function speakMessage(
     release(me);
     h.onEnd?.();
   };
-  a.onerror = () => {
+  const failed = () => {
     if (!mine()) return;
     playing = null;
     release(me);
     h.onError?.("Voice playback isn't available right now.");
     h.onEnd?.();
+  };
+  // A piece streamed straight into the player that fails is retried once as a downloaded file (with retries).
+  const retriedStream = new Set<number>();
+  a.onerror = () => {
+    if (!mine()) return;
+    // Resetting the player (stopSpeaking → load()) queues an "empty source" error that can arrive after the next reply
+    // has started but before its own source is set (the first sentence arrives inline, so it is set a tick later).
+    // That error belongs to the old source: ignore it, or the new reply is wrongly reported as unplayable.
+    if (!a.getAttribute("src")) return;
+    if (!retriedStream.has(n) && !a.src.startsWith("blob:")) {
+      retriedStream.add(n);
+      void makePiece(n).then((u) => {
+        if (!mine()) return;
+        if (!u) return failed();
+        a.src = u;
+        a.play().catch(failed);
+      });
+      return;
+    }
+    failed();
   };
   void playPiece(0);
 }

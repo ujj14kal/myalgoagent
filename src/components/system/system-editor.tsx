@@ -41,7 +41,7 @@ const CONFLICT_TEXT: Record<ConflictRule, string> = {
   BULLISH: "Bullish takes priority",
   BEARISH: "Bearish takes priority",
   FIRST: "First signal wins",
-  HIGHER_TIMEFRAME: "Higher-timeframe concept wins",
+  HIGHER_TIMEFRAME: "Concept on the longer chart wins",
   CONFIDENCE: "Stronger confidence wins",
   IGNORE: "Ignore both",
   WAIT: "Wait for confirmation",
@@ -50,7 +50,7 @@ const CONFLICT_HELP: Record<ConflictRule, string> = {
   BULLISH: "Go long.",
   BEARISH: "Go short (intraday only).",
   FIRST: "Take the side whose setup became valid first; a tie is ignored.",
-  HIGHER_TIMEFRAME: "Take the side whose concept reads the higher timeframe; a tie is ignored.",
+  HIGHER_TIMEFRAME: "Take the side whose concept uses a block on a longer chart (e.g. an hourly trend block); a tie is ignored.",
   CONFIDENCE: "Take the side with more of its optional blocks present; a tie is ignored.",
   IGNORE: "Open nothing while both are valid.",
   WAIT: "Open nothing until one side has stayed valid on its own for the candles below.",
@@ -162,6 +162,7 @@ export default function SystemEditor({
     const intra = isIntraday(timeframes.primary as CandleInterval);
     change({ timeframes, ...(patch.primary ? { productType: intra ? def.productType : "DELIVERY" } : {}) });
   };
+  const setRole = (conceptId: string, role: "ENTRY" | "EXIT") => change({ concepts: def.concepts.map((x) => (x.conceptId === conceptId ? { ...x, role: role === "EXIT" ? "EXIT" : undefined } : x)) });
 
   function save(then?: () => void) {
     if (planned.error) return setMessage({ tone: "error", text: planned.error });
@@ -218,7 +219,7 @@ export default function SystemEditor({
         {archived && <p className="mt-3 text-xs font-medium text-brand-sell">This trading system is archived. Reactivate it to publish new versions.</p>}
       </section>
 
-      <Section step={1} title="Concepts" subtitle="The setups this system trades. Their logic is edited in the Concept Builder">
+      <Section step={1} title="Concepts" subtitle="Which concepts are active. A concept either opens positions or only closes the opposite side's (an exit rule); its logic is edited in the Concept Builder">
         {def.concepts.length === 0 ? (
           <p className="rounded-lg border border-dashed border-brand-navy/20 px-3 py-4 text-center text-xs text-brand-navy/45">No concepts yet. Add a bullish one to open longs and a bearish one to open shorts (or close longs).</p>
         ) : (
@@ -232,6 +233,10 @@ export default function SystemEditor({
                     {c ? <Link href={`/app/workspaces/concepts/${c.id}`} className="block truncate font-medium text-brand-navy hover:underline">{c.name}</Link> : <span className="block font-medium text-brand-sell">(deleted concept)</span>}
                     {c && <span className="block truncate text-xs text-brand-navy/45" title={c.text}>{c.classification === "BEARISH" ? "Bearish" : "Bullish"} · {c.text}</span>}
                   </span>
+                  <select value={ref.role === "EXIT" ? "EXIT" : "ENTRY"} onChange={(e) => setRole(ref.conceptId, e.target.value as "ENTRY" | "EXIT")} aria-label="What this concept does" className="rounded-lg border border-brand-navy/15 bg-white px-2 py-1 text-xs outline-none focus:border-brand-primary">
+                    <option value="ENTRY">Opens positions</option>
+                    <option value="EXIT">Only closes {c?.classification === "BEARISH" ? "longs" : "shorts"}</option>
+                  </select>
                   <label className="flex items-center gap-1 text-xs text-brand-navy/60">
                     <input type="checkbox" checked={ref.enabled} onChange={(e) => change({ concepts: def.concepts.map((x) => (x.conceptId === ref.conceptId ? { ...x, enabled: e.target.checked } : x)) })} /> on
                   </label>
@@ -267,28 +272,13 @@ export default function SystemEditor({
         </div>
       </Section>
 
-      <Section step={3} title="Timeframes" subtitle="Concepts read their blocks on these roles">
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div>
-            <label className={label}>Primary (trades on)</label>
-            <select value={def.timeframes.primary} onChange={(e) => setTf({ primary: e.target.value })} className={selectCls}>
-              {TIMEFRAMES.map((t) => <option key={t} value={t}>{TF_LABEL[t] ?? t}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={label}>Confirmation</label>
-            <select value={def.timeframes.confirmation ?? ""} onChange={(e) => setTf({ confirmation: e.target.value || null })} className={selectCls}>
-              <option value="">Not used</option>
-              {TIMEFRAMES.map((t) => <option key={t} value={t}>{TF_LABEL[t] ?? t}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={label}>Higher</label>
-            <select value={def.timeframes.higher ?? ""} onChange={(e) => setTf({ higher: e.target.value || null })} className={selectCls}>
-              <option value="">Not used</option>
-              {TIMEFRAMES.map((t) => <option key={t} value={t}>{TF_LABEL[t] ?? t}</option>)}
-            </select>
-          </div>
+      <Section step={3} title="Timeframe & product" subtitle="The chart the system trades on, and how positions are held">
+        <div>
+          <label className={label}>Trades on</label>
+          <select value={def.timeframes.primary} onChange={(e) => setTf({ primary: e.target.value })} className={selectCls} aria-label="Timeframe">
+            {TIMEFRAMES.map((t) => <option key={t} value={t}>{TF_LABEL[t] ?? t}</option>)}
+          </select>
+          <p className="mt-1.5 text-xs text-brand-navy/40">Signals are read at each candle&rsquo;s close on this chart. A block that lives on another chart (an hourly trend, say) names it in the Block Builder.</p>
         </div>
         <div className="mt-4">
           <label className={label}>Product</label>

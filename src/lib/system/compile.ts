@@ -8,11 +8,12 @@ import { connectionLogic, CONNECTION_LABEL, DEFAULT_BARS, usesBars } from "@/lib
 import { CONNECTIONS } from "@/lib/workspace/types";
 import { validateEntryPlan, validatePositionSizing, validateTargets } from "@/lib/trading-engine/step";
 import { riskOptionsProblem } from "@/lib/trading-engine/risk-options";
-import type { BlockDefinition, ConceptDefinition, ConceptNode, ConceptRuntime, ConceptSnapshot, SystemIssue, SystemRuntime, TimeframeRole, TradingSystemDefinition } from "./types";
+import { DEFAULT_CONCEPT_ENTRY, type BlockDefinition, type ConceptDefinition, type ConceptNode, type ConceptRuntime, type ConceptSnapshot, type SystemIssue, type SystemRuntime, type TradingSystemDefinition } from "./types";
 
 const MIN_CHILDREN: Record<string, number> = { AND: 1, OR: 1, SEQUENCE: 2, CONFIRMATION: 2, VETO: 2, DEPENDENCY: 2 };
-const ROLE_RANK: Record<TimeframeRole, number> = { primary: 0, confirmation: 1, higher: 2 };
-export const ROLE_LABEL: Record<TimeframeRole, string> = { primary: "primary timeframe", confirmation: "confirmation timeframe", higher: "higher timeframe" };
+/** Minutes per chart size, to tell which of two blocks reads the longer chart. */
+const MINUTES: Record<string, number> = { "1m": 1, "2m": 2, "3m": 3, "5m": 5, "15m": 15, "30m": 30, "60m": 60, "4h": 240, "1d": 1440, "1wk": 10080 };
+export const timeframeMinutes = (tf: string | null | undefined) => (tf ? (MINUTES[tf] ?? 0) : 0);
 
 /**
  * Reads every part of a rule on another timeframe (operands and patterns that don't already name one). The
@@ -52,7 +53,7 @@ export function blockProblems(def: BlockDefinition, name = "This block"): System
   return issues;
 }
 
-type ConceptCtx = { blocks: Record<string, { name: string; definition: BlockDefinition }>; tf: Record<TimeframeRole, string | null>; issues: SystemIssue[]; optionals: ConditionNode[]; rank: number };
+type ConceptCtx = { blocks: Record<string, { name: string; definition: BlockDefinition }>; issues: SystemIssue[]; optionals: ConditionNode[]; rank: number };
 
 function build(node: ConceptNode, where: string, ctx: ConceptCtx): ConditionNode | null {
   if (node.type === "block") {
@@ -61,13 +62,10 @@ function build(node: ConceptNode, where: string, ctx: ConceptCtx): ConditionNode
       ctx.issues.push({ where, message: "A block in this concept no longer exists. Add it again or remove it." });
       return null;
     }
-    const role = node.timeframe ?? "primary";
-    if (role !== "primary" && !ctx.tf[role]) {
-      ctx.issues.push({ where, message: `“${b.name}” is read on the ${ROLE_LABEL[role]}, but the trading system hasn't set one. Set it in the system's Timeframes, or read the block on the primary timeframe.` });
-      return null;
-    }
-    ctx.rank = Math.max(ctx.rank, ROLE_RANK[role]);
-    return onTimeframe(b.definition.condition, role === "primary" ? null : ctx.tf[role]);
+    // A block is read on its own chart when it names one (an hourly trend block), else on the system's chart.
+    const tf = b.definition.timeframe ?? null;
+    ctx.rank = Math.max(ctx.rank, timeframeMinutes(tf));
+    return onTimeframe(b.definition.condition, tf);
   }
   if (!CONNECTIONS.includes(node.connection)) {
     ctx.issues.push({ where, message: `Unknown connection "${node.connection}".` });
@@ -99,19 +97,20 @@ function build(node: ConceptNode, where: string, ctx: ConceptCtx): ConditionNode
 }
 
 /** A concept's runtime form: the setup rule, its optional (confidence) rules and its timeframe rank. */
-export function compileConcept(c: ConceptSnapshot, tf: Record<TimeframeRole, string | null>): { runtime: ConceptRuntime | null; issues: SystemIssue[] } {
-  const ctx: ConceptCtx = { blocks: c.blocks, tf, issues: [], optionals: [], rank: 0 };
+export function compileConcept(c: ConceptSnapshot): { runtime: ConceptRuntime | null; issues: SystemIssue[] } {
+  const ctx: ConceptCtx = { blocks: c.blocks, issues: [], optionals: [], rank: 0 };
   if (!c.definition.logic) return { runtime: null, issues: [{ where: c.name, message: `“${c.name}” has no blocks yet. Add the blocks that make up the setup.` }] };
   const condition = build(c.definition.logic, c.name, ctx);
   if (!condition || ctx.issues.length) return { runtime: null, issues: ctx.issues };
   for (const i of checkConditionFeasibility(condition, "entry")) ctx.issues.push({ where: c.name, message: i.message });
-  return { runtime: { name: c.name, side: c.classification, condition, optionals: ctx.optionals, timeframeRank: ctx.rank }, issues: ctx.issues };
+  const entry = c.definition.entry ?? DEFAULT_CONCEPT_ENTRY;
+  if (!(Number.isInteger(entry.confirmBars) && entry.confirmBars >= 0 && entry.confirmBars <= 50)) ctx.issues.push({ where: c.name, message: "The wait before entry must be a whole number of candles from 0 to 50." });
+  return { runtime: { name: c.name, side: c.classification, condition, optionals: ctx.optionals, timeframeRank: ctx.rank, entry }, issues: ctx.issues };
 }
 
 /** Problems with a concept on its own (before any system sets timeframes): every block exists and the logic is complete. */
 export function conceptProblems(def: ConceptDefinition, blocks: Record<string, { name: string; definition: BlockDefinition }>, name = "This concept"): SystemIssue[] {
-  const all = { primary: "x", confirmation: "x", higher: "x" };
-  return compileConcept({ id: "", name, classification: "BULLISH", definition: def, blocks }, all).issues;
+  return compileConcept({ id: "", name, classification: "BULLISH", definition: def, blocks }).issues;
 }
 
 export interface CompiledSystem {
@@ -129,16 +128,12 @@ const anyOf = (xs: ConditionNode[]): ConditionNode | null => (xs.length === 0 ? 
 export function compileSystem(def: TradingSystemDefinition, concepts: ConceptSnapshot[]): CompiledSystem {
   const errors: SystemIssue[] = [];
   const warnings: SystemIssue[] = [];
-  const tf = { primary: def.timeframes.primary, confirmation: def.timeframes.confirmation, higher: def.timeframes.higher } as Record<TimeframeRole, string | null>;
   const byId = new Map(concepts.map((c) => [c.id, c]));
 
   if (!def.instrumentId) errors.push({ where: "Instruments", message: "Choose the instrument this system trades." });
   if (def.instrumentType !== "STOCK") errors.push({ where: "Instruments", message: "Only NSE stocks and indices can be traded by a system today." });
   const intraday = isIntraday(def.timeframes.primary as CandleInterval);
   if (def.productType === "INTRADAY" && !intraday) errors.push({ where: "Timeframes", message: "An intraday system needs an intraday primary timeframe (1 minute to 4 hours)." });
-  for (const role of ["confirmation", "higher"] as const) {
-    if (def.timeframes[role] && def.timeframes[role] === def.timeframes.primary) warnings.push({ where: "Timeframes", message: `The ${ROLE_LABEL[role]} is the same as the primary one.` });
-  }
 
   const runtimes: ConceptRuntime[] = [];
   const enabled = def.concepts.filter((c) => c.enabled);
@@ -149,14 +144,19 @@ export function compileSystem(def: TradingSystemDefinition, concepts: ConceptSna
       errors.push({ where: "Concepts", message: "A concept in this system no longer exists. Remove it or add it again." });
       continue;
     }
-    const { runtime, issues } = compileConcept(c, tf);
+    const { runtime, issues } = compileConcept(c);
     errors.push(...issues);
-    if (runtime) runtimes.push(runtime);
+    if (runtime) runtimes.push({ ...runtime, role: ref.role === "EXIT" ? "EXIT" : "ENTRY" });
   }
-  const bull = runtimes.filter((r) => r.side === "BULLISH");
-  const bear = runtimes.filter((r) => r.side === "BEARISH");
+  // ENTRY concepts open positions; EXIT concepts only close the opposite side's (a bearish one closes longs).
+  const entries = runtimes.filter((r) => r.role !== "EXIT");
+  const exitOnly = runtimes.filter((r) => r.role === "EXIT");
+  const bull = entries.filter((r) => r.side === "BULLISH");
+  const bear = entries.filter((r) => r.side === "BEARISH");
   const allowShort = def.productType === "INTRADAY";
-  if (runtimes.length && !bull.length && !allowShort) errors.push({ where: "Concepts", message: "A delivery system can only hold long positions, so it needs at least one bullish concept (bearish ones can only close a long)." });
+  if (runtimes.length && entries.length === 0) errors.push({ where: "Concepts", message: "Every concept here only closes positions. Add at least one that opens them." });
+  if (exitOnly.some((r) => r.side === "BULLISH") && !allowShort) warnings.push({ where: "Concepts", message: "A bullish exit concept closes short positions, and a delivery system never holds one." });
+  if (runtimes.length && entries.length > 0 && !bull.length && !allowShort) errors.push({ where: "Concepts", message: "A delivery system can only hold long positions, so it needs at least one bullish concept (bearish ones can only close a long)." });
   if (bear.length && !allowShort && def.opposite.whenLong === "IGNORE") warnings.push({ where: "Position management", message: "Bearish concepts do nothing in a delivery system unless “Long + bearish setup” is set to exit." });
   if (bear.length && !allowShort && def.opposite.whenLong === "REVERSE") warnings.push({ where: "Position management", message: "A delivery system can't go short, so “reverse” only exits the long." });
 
@@ -201,11 +201,12 @@ export function compileSystem(def: TradingSystemDefinition, concepts: ConceptSna
 }
 
 /** A concept's logic in one sentence (block names and connections). */
-export function describeConcept(def: ConceptDefinition, blocks: Record<string, { name: string }>): string {
+export function describeConcept(def: ConceptDefinition, blocks: Record<string, { name: string; definition?: { timeframe?: string | null } }>): string {
   const walk = (n: ConceptNode): string => {
     if (n.type === "block") {
       const name = blocks[n.blockId]?.name ?? "a missing block";
-      return `${name}${n.timeframe && n.timeframe !== "primary" ? ` (${ROLE_LABEL[n.timeframe]})` : ""}${n.optional ? " [optional]" : ""}`;
+      const tf = blocks[n.blockId]?.definition?.timeframe;
+      return `${name}${tf ? ` (${tf})` : ""}${n.optional ? " [optional]" : ""}`;
     }
     const req = n.children.filter((c) => !(c.type === "block" && c.optional)).map(walk);
     const opt = n.children.filter((c) => c.type === "block" && c.optional).map(walk);
@@ -225,7 +226,10 @@ export function describeConcept(def: ConceptDefinition, blocks: Record<string, {
                 : `${req.slice(1).join(" and ")}, only after ${req[0]} held for ${span}`;
     return `(${core}${opt.length ? `; optional: ${opt.join(", ")}` : ""})`;
   };
-  return def.logic ? walk(def.logic).replace(/^\((.*)\)$/, "$1") : "no blocks yet";
+  const setup = def.logic ? walk(def.logic).replace(/^\((.*)\)$/, "$1") : "no blocks yet";
+  const e = def.entry;
+  const when = !e || (e.trigger === "FORMED" && e.confirmBars === 0) ? "" : ` — enters ${e.trigger === "WHILE_VALID" ? "on any candle it is valid" : "when it first becomes valid"}${e.confirmBars > 0 ? `, once it has held ${e.confirmBars} more candle${e.confirmBars === 1 ? "" : "s"}` : ""}`;
+  return setup + when;
 }
 
 /** A rule in words, for block previews. */

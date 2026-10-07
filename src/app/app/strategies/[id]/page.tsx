@@ -28,7 +28,19 @@ import PageHeader from "@/components/ui/page-header";
 import GoLive from "@/components/live/go-live";
 import { brokerReadiness } from "@/lib/live/broker-readiness";
 import StatusBadge from "@/components/ui/status-badge";
+import { parseSystemRuntime, systemConditions, systemSignalSeries } from "@/lib/system/signals";
 import { userMarketDataReady } from "@/lib/market-data/for-user";
+
+const CONFLICT_PLAIN: Record<string, string> = {
+  BULLISH: "bullish takes priority",
+  BEARISH: "bearish takes priority",
+  FIRST: "the setup that became valid first wins",
+  HIGHER_TIMEFRAME: "the concept using the longer chart wins",
+  CONFIDENCE: "the side with more optional blocks present wins",
+  IGNORE: "nothing is opened",
+  WAIT: "nothing is opened until one side holds alone",
+};
+const OPPOSITE_PLAIN: Record<string, string> = { IGNORE: "ignored", EXIT: "the position is closed", REVERSE: "the position is closed and the other side opened" };
 
 export const metadata = { title: "Strategy", robots: { index: false } };
 
@@ -63,7 +75,9 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
     prisma.liveDeployment.findMany({ where: { strategyId: strategy.id, status: { in: ["ACTIVE", "PAUSED"] } }, select: { broker: true } }),
   ]);
   const goLiveBrokers = brokerReadiness(liveConns);
-  const entryCondition = strategy.entryCondition as unknown as ConditionNode;
+  // A strategy published from a trading system trades both ways: its concepts, not one entry/exit rule, decide.
+  const system = parseSystemRuntime(strategy.systemRuntime);
+  const entryCondition = (system ? systemConditions(system) : strategy.entryCondition) as unknown as ConditionNode;
   const exitCondition = strategy.exitCondition as unknown as ConditionNode;
 
   const webhookAlerts = isWebhook
@@ -97,7 +111,16 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
   // A webhook-mode strategy has no real condition tree (see
   // NEVER_EXIT_CONDITION usage in strategy-actions.ts) — evaluating it would
   // just show a misleadingly empty "signals preview," so skip it entirely.
-  const signals = !isWebhook && candles.length > 0 ? evaluateStrategy(candles, entryCondition, exitCondition, aux) : [];
+  // For a trading system the chart marks each candle a bullish concept signals (▲ entry marker) and each a bearish one does (▼ exit marker).
+  const signals =
+    !isWebhook && candles.length > 0
+      ? system
+        ? systemSignalSeries(candles, system, aux).flatMap((s, i) => [
+            ...(s.bull ? [{ time: candles[i].time, type: "entry" as const }] : []),
+            ...(s.bear ? [{ time: candles[i].time, type: "exit" as const }] : []),
+          ])
+        : evaluateStrategy(candles, entryCondition, exitCondition, aux)
+      : [];
 
   const overlays: Overlay[] = [];
   if (!isWebhook && candles.length > 0) {
@@ -128,7 +151,11 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="font-medium text-brand-navy">{strategy.instrument.symbol}</span>
             <span>— {strategy.instrument.name}</span>
-            <StatusBadge status={strategy.direction === "SHORT" ? "SHORT" : "LONG"} />
+            {system ? (
+              <span className="rounded-full bg-brand-navy/[0.06] px-2 py-0.5 text-xs font-semibold text-brand-navy/70">Trading system · {system.allowShort ? "long & short" : "long only"}</span>
+            ) : (
+              <StatusBadge status={strategy.direction === "SHORT" ? "SHORT" : "LONG"} />
+            )}
           </span>
         }
         actions={
@@ -222,8 +249,33 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
         )}
       </div>
 
-      {strategy.workspaceVersion && (
+      {system && (
         <div className="mt-10 surface p-5 text-sm text-brand-navy/70">
+          <p className="font-semibold text-brand-navy">What this trading system does</p>
+          <p className="mt-1 text-xs text-brand-navy/50">The chart marks ▲ where a bullish concept signals and ▼ where a bearish one does. What each signal does to a position is decided by the system&apos;s rules below.</p>
+          <ul className="mt-3 space-y-1.5">
+            {system.concepts.map((c) => (
+              <li key={c.name} className="flex gap-2">
+                <span className={`shrink-0 font-semibold ${c.side === "BEARISH" ? "text-brand-sell" : "text-brand-buy"}`}>{c.side === "BEARISH" ? "▼ Bearish" : "▲ Bullish"}</span>
+                <span>
+                  <span className="font-medium text-brand-navy">{c.name}</span>
+                  <span className="text-brand-navy/55"> — {c.role === "EXIT" ? `only closes ${c.side === "BEARISH" ? "longs" : "shorts"}` : `opens ${c.side === "BEARISH" ? "shorts" : "longs"}`}</span>
+                  {c.entry && (c.entry.trigger === "WHILE_VALID" || c.entry.confirmBars > 0) && (
+                    <span className="text-brand-navy/55"> · {c.entry.trigger === "WHILE_VALID" ? "signals on every candle it holds" : "signals once"}{c.entry.confirmBars > 0 ? `, after holding ${c.entry.confirmBars} more candle${c.entry.confirmBars === 1 ? "" : "s"}` : ""}</span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs">
+            <span className="font-semibold text-brand-navy">Both sides valid at once while flat:</span> {CONFLICT_PLAIN[system.conflict.rule]}{system.conflict.rule === "WAIT" ? ` (${system.conflict.confirmBars} candles)` : ""}.{" "}
+            <span className="font-semibold text-brand-navy">Long + bearish setup:</span> {OPPOSITE_PLAIN[system.opposite.whenLong]}. <span className="font-semibold text-brand-navy">Short + bullish setup:</span> {OPPOSITE_PLAIN[system.opposite.whenShort]}
+            {system.opposite.confirmBars > 0 ? ` (after it holds ${system.opposite.confirmBars} candle${system.opposite.confirmBars === 1 ? "" : "s"})` : ""}.
+          </p>
+        </div>
+      )}
+      {strategy.workspaceVersion && (
+        <div className="mt-6 surface p-5 text-sm text-brand-navy/70">
           <p className="font-semibold text-brand-navy">Built from a workspace</p>
           <p className="mt-1">
             This is version {strategy.workspaceVersion.version} of{" "}

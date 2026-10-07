@@ -9,6 +9,7 @@ import { conditionToText } from "@/lib/strategy/format";
 import type { ConditionNode } from "@/lib/strategy/types";
 import { deleteBlock, duplicateBlock, saveBlock } from "@/lib/system-actions";
 import { BLANK_BLOCK_CONDITION, BLOCK_TEMPLATES } from "@/lib/system/templates";
+import { TIMEFRAMES } from "@/lib/system/definition";
 import type { SystemIssue } from "@/lib/system/types";
 import { friendlyError } from "@/lib/friendly-error";
 
@@ -23,12 +24,14 @@ export default function BlockEditor({
   initialName = "",
   initialDescription = "",
   initialCondition,
+  initialTimeframe = null,
   usedBy = [],
 }: {
   id?: string;
   initialName?: string;
   initialDescription?: string;
   initialCondition?: ConditionNode;
+  initialTimeframe?: string | null;
   /** Concepts that use this block (it can't be deleted while any do). */
   usedBy?: { id: string; name: string }[];
 }) {
@@ -36,6 +39,7 @@ export default function BlockEditor({
   const [name, setName] = useState(initialName);
   const [description, setDescription] = useState(initialDescription);
   const [condition, setCondition] = useState<ConditionNode>(asGroup(initialCondition ?? BLANK_BLOCK_CONDITION));
+  const [timeframe, setTimeframe] = useState<string | null>(initialTimeframe);
   const [issues, setIssues] = useState<SystemIssue[]>([]);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [dirty, setDirty] = useState(!id);
@@ -62,7 +66,7 @@ export default function BlockEditor({
 
   function save() {
     start(async () => {
-      const r = await saveBlock({ id, name, description, definition: { schema: 1, condition } });
+      const r = await saveBlock({ id, name, description, definition: { schema: 1, condition, ...(timeframe ? { timeframe } : {}) } });
       if ("error" in r) return setMessage({ tone: "error", text: friendlyError(r.error, "Couldn't save the block.") });
       setIssues(r.issues);
       setDirty(false);
@@ -135,7 +139,14 @@ export default function BlockEditor({
             {text}
           </p>
         )}
-        <p className="mt-2 text-xs text-brand-navy/45">Read on the trading system&rsquo;s primary timeframe unless a concept reads it on its confirmation or higher timeframe. Parts that name their own timeframe keep it.</p>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-brand-navy/60">
+          <label htmlFor="block-tf" className="font-semibold text-brand-navy">Read on</label>
+          <select id="block-tf" value={timeframe ?? ""} onChange={(e) => { setTimeframe(e.target.value || null); setDirty(true); setIssues([]); }} className="rounded-lg border border-brand-navy/15 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-brand-primary">
+            <option value="">the chart the trading system trades on</option>
+            {TIMEFRAMES.map((t) => <option key={t} value={t}>{t === "60m" ? "1H" : t === "4h" ? "4H" : t === "1d" ? "1D" : t === "1wk" ? "1W" : t} chart</option>)}
+          </select>
+          <span>Set one for a component that lives on another chart, e.g. an hourly trend. Parts of the rule that name their own chart keep it.</span>
+        </div>
       </section>
 
       <section className="surface space-y-3 p-4 sm:p-5">

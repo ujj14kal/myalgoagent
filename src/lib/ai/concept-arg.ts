@@ -1,6 +1,6 @@
 import { CONNECTIONS, type Connection } from "@/lib/workspace/types";
 import { SYSTEM_LIMITS } from "@/lib/system/definition";
-import { TIMEFRAME_ROLES, type ConceptNode, type TimeframeRole } from "@/lib/system/types";
+import type { ConceptNode } from "@/lib/system/types";
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
@@ -18,9 +18,7 @@ export function conceptLogicFrom(raw: unknown, blockOf: (ref: string) => string 
     if (typeof v.block === "string") {
       const id = blockOf(v.block);
       if (!id) throw new Error(`${where}: the user has no block "${v.block}". Use an exact name from get_my_workspace, or add it to new_blocks.`);
-      const tf = str(v.timeframe).toLowerCase();
-      if (tf && !TIMEFRAME_ROLES.includes(tf as TimeframeRole)) throw new Error(`${where}: timeframe must be primary, confirmation or higher.`);
-      return { type: "block", blockId: id, ...(v.optional === true ? { optional: true } : {}), ...(tf && tf !== "primary" ? { timeframe: tf as TimeframeRole } : {}) };
+      return { type: "block", blockId: id, ...(v.optional === true ? { optional: true } : {}) };
     }
     if (typeof v.connection === "string") {
       const connection = v.connection.toUpperCase() as Connection;

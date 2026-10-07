@@ -18,7 +18,7 @@ export function systemSignalSeries(candles: Candle[], rt: SystemRuntime, aux: Au
   const concepts = rt.concepts.map((c) => {
     const valid = levels[k++];
     const optionals = c.optionals.map(() => levels[k++]);
-    return { side: c.side, valid, optionals, timeframeRank: c.timeframeRank };
+    return { side: c.side, valid, optionals, timeframeRank: c.timeframeRank, entry: c.entry, role: c.role };
   });
   return systemSignals(concepts, candles.length);
 }

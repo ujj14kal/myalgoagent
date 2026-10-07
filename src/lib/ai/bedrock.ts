@@ -88,7 +88,7 @@ async function checkGuardrail(text: string, source: "INPUT" | "OUTPUT", signal: 
 export type ToolRunner = (name: string, args: string) => Promise<{ result: unknown; proposal?: AgentProposal }>;
 
 /** Most tool rounds per message — enough to look something up, then prepare an action. */
-const MAX_TOOL_ROUNDS = 4;
+const MAX_TOOL_ROUNDS = 6;
 
 async function converseMantle({
   model,
@@ -170,7 +170,8 @@ async function converseMantle({
       try {
         const out = await runTool!(call.function.name, call.function.arguments);
         result = out.result;
-        if (out.proposal) proposal = out.proposal;
+        // A single block never replaces the concept (or system) already prepared this turn.
+        if (out.proposal && !(out.proposal.kind === "block" && (proposal?.kind === "concept" || proposal?.kind === "workspace"))) proposal = out.proposal;
       } catch {
         result = { error: "That lookup failed. Tell the user briefly and continue without it." };
       }
