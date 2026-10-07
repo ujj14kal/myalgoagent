@@ -24,6 +24,10 @@ const securityHeaders = [
       // blob: = local previews (e.g. a profile photo before upload).
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
+      // The assistant's voice: replies arrive as audio files made in the browser (blob:), and the player is unlocked with a
+      // tiny data: clip. Without this line they fall under default-src 'self' and the browser refuses to play them
+      // ("Media load rejected by URL safety check").
+      "media-src 'self' blob: data:",
       // Google's OAuth pages, our own API/market-data routes, GA4's beacon
       // endpoints (gtag sends hits to both of these hosts), and Amazon
       // Transcribe streaming for voice chat (a pre-signed WebSocket).
