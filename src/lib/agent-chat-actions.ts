@@ -1,6 +1,7 @@
 "use server";
 
 import { forModel, redactSecrets } from "@/lib/ai/redact";
+import { forDescribe } from "@/lib/ai/describe-indicator";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -192,7 +193,7 @@ export async function sendAgentMessage(input: {
           const note = p ? `\n\n[${PROPOSAL_TITLES[p.kind]} proposal — ${p.status === "pending" ? "not decided yet" : p.status} by the user]` : "";
           return { role: m.role === "USER" ? ("user" as const) : ("assistant" as const), text: m.content + note };
         }),
-        { role: "user" as const, text: forModel(raw) },
+        { role: "user" as const, text: forDescribe(forModel(raw)) },
       ],
     };
     // Voice: start making the first sentence's audio while the reply goes through its safety
