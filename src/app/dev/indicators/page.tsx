@@ -35,7 +35,6 @@ export default async function Page() {
       <CustomIndicatorsRoot items={samples}>
         <DevIndicatorCharts candles={candles} samples={samples} />
         <CustomIndicatorList
-          instruments={instruments}
           items={samples.map((s, i) => ({ id: String(i), name: s.name, description: null, def: s.def, summary: describeCustom(s.def) }))}
           total={samples.length}
           counts={Object.fromEntries(CUSTOM_CLASSES.map((c) => [c, samples.filter((s) => classifyCustom(s.def) === c).length])) as Record<CustomClass, number>}

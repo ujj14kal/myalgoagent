@@ -12,13 +12,23 @@ export function defaultRiskLeg(value: number): RiskLegState {
   return { enabled: false, unit: "PERCENT", value };
 }
 
-const UNIT_OPTIONS: { value: RiskUnit; label: string }[] = [
-  { value: "PERCENT", label: "%" },
-  { value: "POINTS", label: "Points" },
-  { value: "ATR_MULTIPLE", label: "× ATR(14)" },
-];
+/** What a stop-loss / target is measured on: the share's price, or the capital the user trades with. */
+export type RiskBasisChoice = "PRICE" | "CAPITAL";
+
+const UNIT_OPTIONS: Record<RiskBasisChoice, { value: RiskUnit; label: string }[]> = {
+  PRICE: [
+    { value: "PERCENT", label: "% of share price" },
+    { value: "POINTS", label: "Points (₹ per share)" },
+    { value: "ATR_MULTIPLE", label: "× ATR(14)" },
+  ],
+  CAPITAL: [
+    { value: "PERCENT", label: "% of capital" },
+    { value: "POINTS", label: "₹ of capital" },
+    { value: "ATR_MULTIPLE", label: "× ATR(14)" },
+  ],
+};
 /** A target can also be a risk/reward multiple: R = the stop-loss distance. */
-const TARGET_UNIT_OPTIONS = [...UNIT_OPTIONS, { value: "R_MULTIPLE" as RiskUnit, label: "R (× stop)" }];
+const targetUnits = (basis: RiskBasisChoice) => [...UNIT_OPTIONS[basis], { value: "R_MULTIPLE" as RiskUnit, label: "R (× stop)" }];
 
 /**
  * The price a stop-loss, target or trailing stop works out to for an example entry, so "100 points" or "2%" is never
@@ -37,8 +47,16 @@ export function legPrice(kind: "stop" | "target" | "trail", leg: Pick<RiskLegSta
 
 const rupees = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
-function legExample(kind: "stop" | "target" | "trail", leg: RiskLegState, entry: number | null, direction: "LONG" | "SHORT", entryIsReal: boolean, stop?: RiskLegState): string {
+/** The illustration capital used where the real one isn't known (the strategy's capital is chosen when it is backtested or run). */
+const EXAMPLE_CAPITAL = 100_000;
+
+function legExample(kind: "stop" | "target" | "trail", leg: RiskLegState, entry: number | null, direction: "LONG" | "SHORT", entryIsReal: boolean, stop?: RiskLegState, basis: RiskBasisChoice = "PRICE"): string {
   const what = kind === "target" ? "Target" : kind === "stop" ? "Stop loss" : "Trailing stop starts at";
+  if (basis === "CAPITAL" && (leg.unit === "PERCENT" || leg.unit === "POINTS")) {
+    const money = leg.unit === "PERCENT" ? (EXAMPLE_CAPITAL * leg.value) / 100 : leg.value;
+    const verb = kind === "target" ? "makes" : kind === "stop" ? "loses" : "starts trailing at a";
+    return `${what}: the trade ${verb === "starts trailing at a" ? "trails by an amount equal to" : verb} ${leg.unit === "PERCENT" ? `${leg.value}% of your capital` : rupees(leg.value)}${leg.unit === "PERCENT" ? ` — ${rupees(money)} on an example ₹1,00,000` : ""}. The price it triggers at depends on how many shares you hold, so it moves with your position size.`;
+  }
   const amount = leg.unit === "POINTS" ? `${leg.value} points` : leg.unit === "PERCENT" ? `${leg.value}%` : leg.unit === "R_MULTIPLE" ? `${leg.value}R (${leg.value} × the stop-loss distance)` : `${leg.value} × ATR(14)`;
   const dir = kind === "target" ? (direction === "LONG" ? "above" : "below") : direction === "LONG" ? "below" : "above";
   if (leg.unit === "ATR_MULTIPLE") return `${what} ${amount} ${dir} the entry price — worked out from the stock's volatility at the time of each trade.`;
@@ -51,6 +69,7 @@ function legExample(kind: "stop" | "target" | "trail", leg: RiskLegState, entry:
 }
 
 function RiskLegRow({
+  basis,
   kind,
   label,
   hint,
@@ -60,6 +79,7 @@ function RiskLegRow({
   entry,
   stop,
 }: {
+  basis: RiskBasisChoice;
   kind: "stop" | "target" | "trail";
   label: string;
   hint: string;
@@ -97,7 +117,7 @@ function RiskLegRow({
             onChange={(e) => onChange({ ...leg, unit: e.target.value as RiskUnit })}
             className="min-w-0 flex-1 rounded-lg border border-brand-navy/15 px-2 py-1.5 text-sm outline-none focus:border-brand-primary"
           >
-            {(kind === "target" ? TARGET_UNIT_OPTIONS : UNIT_OPTIONS).map((u) => (
+            {(kind === "target" ? targetUnits(basis) : UNIT_OPTIONS[basis]).map((u) => (
               <option key={u.value} value={u.value}>
                 {u.label}
               </option>
@@ -105,7 +125,7 @@ function RiskLegRow({
           </select>
         </div>
       )}
-      {leg.enabled && leg.value > 0 && <p className="mt-2 text-xs leading-relaxed text-brand-navy/55">{legExample(kind, leg, entry, direction, entry !== null, stop)}</p>}
+      {leg.enabled && leg.value > 0 && <p className="mt-2 text-xs leading-relaxed text-brand-navy/55">{legExample(kind, leg, entry, direction, entry !== null, stop, basis)}</p>}
     </div>
   );
 }
@@ -119,7 +139,15 @@ export default function RiskManagementFields({
   onTrailingSlChange,
   direction = "LONG",
   entryPrice = null,
+  basis,
+  onBasisChange,
+  sizingByRisk = false,
 }: {
+  /** What the legs are measured on. Omit to hide the choice (everything is on the share price). */
+  basis?: RiskBasisChoice;
+  onBasisChange?: (b: RiskBasisChoice) => void;
+  /** Risk-based position sizing works out the shares from a share-price stop, so capital can't be chosen with it. */
+  sizingByRisk?: boolean;
   direction?: "LONG" | "SHORT";
   /** The stock's latest price, used as the example entry; a ₹1,000 example is used until it loads. */
   entryPrice?: number | null;
@@ -130,10 +158,30 @@ export default function RiskManagementFields({
   onTargetChange: (leg: RiskLegState) => void;
   onTrailingSlChange: (leg: RiskLegState) => void;
 }) {
+  const b: RiskBasisChoice = basis ?? "PRICE";
   return (
     <div>
+      {onBasisChange && (
+        <div className="mb-3 rounded-xl bg-brand-bg p-3">
+          <p className="text-xs font-semibold text-brand-navy">Stop-loss and target are measured on</p>
+          <div className="mt-2 flex w-fit overflow-hidden rounded-full border border-brand-navy/15" role="radiogroup" aria-label="Stop-loss and target are measured on">
+            {([["PRICE", "Share price"], ["CAPITAL", "Capital"]] as const).map(([v, text]) => (
+              <button key={v} type="button" role="radio" aria-checked={b === v} disabled={v === "CAPITAL" && sizingByRisk} onClick={() => onBasisChange(v)} className={`px-4 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40 ${b === v ? "bg-brand-primary text-white" : "bg-white text-brand-navy/60 hover:bg-brand-bg"}`}>
+                {text}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-brand-navy/55">
+            {b === "PRICE"
+              ? "A % is a move in the share's price and points are ₹ per share. The same move whatever you hold."
+              : "A % is a share of your capital you are willing to lose or make on the trade, and ₹ is a rupee amount of profit or loss. The price it triggers at depends on how many shares you hold."}
+            {sizingByRisk && " Capital can't be used while the position is sized by risk (the shares come from a share-price stop)."}
+          </p>
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-3">
         <RiskLegRow
+          basis={b}
           kind="stop"
           direction={direction}
           entry={entryPrice}
@@ -143,6 +191,7 @@ export default function RiskManagementFields({
           onChange={onStopLossChange}
         />
         <RiskLegRow
+          basis={b}
           kind="target"
           direction={direction}
           entry={entryPrice}
@@ -153,6 +202,7 @@ export default function RiskManagementFields({
           onChange={onTargetChange}
         />
         <RiskLegRow
+          basis={b}
           kind="trail"
           direction={direction}
           entry={entryPrice}

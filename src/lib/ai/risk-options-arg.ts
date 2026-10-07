@@ -20,8 +20,8 @@ export function riskOptionsFrom(v: unknown, base: RiskOptions = DEFAULT_RISK_OPT
   }
   if ("tp_sl_reference" in o) {
     const r = String(o.tp_sl_reference).toLowerCase();
-    if (r !== "price" && r !== "margin") throw new Error('risk_options.tp_sl_reference: "price" or "margin".');
-    out.reference = r === "margin" ? "MARGIN" : "PRICE";
+    if (r !== "price" && r !== "capital" && r !== "margin") throw new Error('risk_options.tp_sl_reference: "price" or "capital".');
+    out.reference = r === "price" ? "PRICE" : "CAPITAL";
   }
   if ("break_even" in o) {
     if (o.break_even === null) out.breakEven = null;
@@ -48,10 +48,10 @@ export function riskOptionsFrom(v: unknown, base: RiskOptions = DEFAULT_RISK_OPT
 export const riskOptionsSchema = {
   type: "object",
   description:
-    "Trading-system risk options. leverage: intraday buying power as a multiple of capital (1–20; INTRADAY product only — the price is never multiplied, only how many shares the capital buys). tp_sl_reference: \"price\" (default: % stop/targets are moves in the share's price) or \"margin\" (they are returns on the margin a leveraged position uses: at 5×, a 10% stop on margin = a 2% price move; needs leverage > 1). break_even: {value, unit} moves the stop to the entry once price moves that far in favour (unit PERCENT/POINTS/ATR_MULTIPLE/R_MULTIPLE). max_daily_loss_pct: no new positions for the rest of the day once the day's loss reaches this % of capital. max_drawdown_pct: no new positions at all once capital falls this % below its peak. Use only when the user asks for them.",
+    "Trading-system risk options. leverage: intraday buying power as a multiple of capital (1–20; INTRADAY product only — the price is never multiplied, only how many shares the capital buys). tp_sl_reference: \"price\" (default: a % stop-loss/target is a move in the share's price, points are ₹ per share) or \"capital\" (a % is that % of the user's capital won or lost on the trade, points are a ₹ amount of P&L: e.g. a 1% capital stop on ₹1,00,000 loses ₹1,000 whatever the share price; cannot be combined with risk-based position sizing). Use \"capital\" when the user says their stop/target is a % of capital or a rupee amount of loss/profit. break_even: {value, unit} moves the stop to the entry once price moves that far in favour (unit PERCENT/POINTS/ATR_MULTIPLE/R_MULTIPLE). max_daily_loss_pct: no new positions for the rest of the day once the day's loss reaches this % of capital. max_drawdown_pct: no new positions at all once capital falls this % below its peak. Use only when the user asks for them.",
   properties: {
     leverage: { type: "number" },
-    tp_sl_reference: { type: "string", enum: ["price", "margin"] },
+    tp_sl_reference: { type: "string", enum: ["price", "capital"] },
     break_even: { anyOf: [{ type: "object", properties: { value: { type: "number" }, unit: { type: "string", enum: UNITS } }, required: ["value"] }, { type: "null" }] },
     max_daily_loss_pct: { anyOf: [{ type: "number" }, { type: "null" }] },
     max_drawdown_pct: { anyOf: [{ type: "number" }, { type: "null" }] },

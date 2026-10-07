@@ -167,7 +167,7 @@ export function compileSystem(def: TradingSystemDefinition, concepts: ConceptSna
     errors.push({ where: "Position sizing", message: err instanceof Error ? err.message : "The position size isn't valid." });
   }
   if (def.positionSizingMode === "RISK_PERCENT" && !def.stopLoss.enabled) errors.push({ where: "Position sizing", message: "Sizing by risk needs a stop-loss: its distance decides how many shares fit within the amount you risk." });
-  const opts = riskOptionsProblem(def.riskOptions, { productType: def.productType, stopLossOn: def.stopLoss.enabled });
+  const opts = riskOptionsProblem(def.riskOptions, { productType: def.productType, stopLossOn: def.stopLoss.enabled, sizingMode: def.positionSizingMode });
   if (opts) errors.push({ where: "Risk management", message: opts });
   for (const [name, leg] of [["Stop-loss", def.stopLoss], ["Target", def.target], ["Trailing stop", def.trailingSl]] as const) {
     if (leg.enabled && !(leg.value > 0)) errors.push({ where: "Risk management", message: `${name} is on but its distance is ${leg.value}. Enter a number above 0.` });

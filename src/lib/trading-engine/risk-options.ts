@@ -1,13 +1,14 @@
-import type { EngineLimits, RiskLeg, RiskManagementConfig, RiskUnit, TargetLevel } from "./step";
+import type { EngineLimits, RiskBasis, RiskLeg, RiskManagementConfig, RiskUnit } from "./step";
 
 // The trading system's risk options, stored as JSON on a strategy (and copied onto each backtest and forward test):
-//  - TP/SL reference: PRICE (stops and targets are moves in the share's price) or MARGIN (they are returns on the
-//    margin a leveraged intraday position uses — the engine turns them into the price moves that produce them);
+//  - TP/SL reference: PRICE (stops and targets are moves in the share's price) or CAPITAL (a % leg is that % of the
+//    capital won or lost on the trade, a points leg a ₹ amount — the engine turns them into the price move that
+//    produces that P&L for the position's size);
 //  - intraday leverage: how much position each rupee of capital carries (the price itself never changes);
 //  - break-even: move the stop to the entry once price has moved this far in the position's favour;
 //  - daily-loss and drawdown limits: stop opening new positions once losses reach them.
 
-export type TpSlReference = "PRICE" | "MARGIN";
+export type TpSlReference = "PRICE" | "CAPITAL";
 
 export interface RiskOptions {
   reference: TpSlReference;
@@ -33,7 +34,8 @@ export function parseRiskOptions(json: unknown): RiskOptions {
   const be = o.breakEven as { unit?: unknown; value?: unknown } | null | undefined;
   const lev = num(o.leverage);
   return {
-    reference: o.reference === "MARGIN" ? "MARGIN" : "PRICE",
+    // "MARGIN" is the earlier name of CAPITAL.
+    reference: o.reference === "CAPITAL" || o.reference === "MARGIN" ? "CAPITAL" : "PRICE",
     leverage: lev && lev >= 1 && lev <= MAX_LEVERAGE ? lev : 1,
     breakEven: be && UNITS.includes(be.unit as RiskUnit) && num(be.value) && (be.value as number) > 0 ? { unit: be.unit as RiskUnit, value: be.value as number } : null,
     maxDailyLossPercent: num(o.maxDailyLossPercent) && (o.maxDailyLossPercent as number) > 0 ? (o.maxDailyLossPercent as number) : null,
@@ -46,10 +48,10 @@ export function parseRiskOptions(json: unknown): RiskOptions {
 export const isDefaultRiskOptions = (o: RiskOptions) => o.reference === "PRICE" && o.leverage === 1 && !o.breakEven && o.maxDailyLossPercent == null && o.maxDrawdownPercent == null && o.maxCapitalUsePercent == null;
 
 /** Why these options can't be used with this strategy, or null when they're fine. */
-export function riskOptionsProblem(o: RiskOptions, ctx: { productType: string; stopLossOn: boolean }): string | null {
+export function riskOptionsProblem(o: RiskOptions, ctx: { productType: string; stopLossOn: boolean; sizingMode?: string }): string | null {
   if (!(o.leverage >= 1) || o.leverage > MAX_LEVERAGE) return `Leverage must be between 1× and ${MAX_LEVERAGE}×.`;
   if (o.leverage > 1 && ctx.productType !== "INTRADAY") return "Leverage applies only to intraday positions. Choose the intraday product, or set leverage to 1×.";
-  if (o.reference === "MARGIN" && o.leverage === 1) return "Margin-based stops and targets need leverage above 1× (at 1× the margin is the whole position, so it's the same as price-based).";
+  if (o.reference === "CAPITAL" && ctx.sizingMode === "RISK_PERCENT") return "Sizing by risk works out the shares from a stop-loss measured on the share's price, so it can't be combined with a stop-loss measured on capital. Measure the stop-loss on the share price, or choose another way to size the position.";
   if (o.breakEven && o.breakEven.unit === "R_MULTIPLE" && !ctx.stopLossOn) return "A break-even set in R needs a stop-loss (R is the stop-loss distance).";
   if (o.breakEven && !(o.breakEven.value > 0)) return "The break-even trigger needs a distance above zero.";
   if (o.maxDailyLossPercent != null && (o.maxDailyLossPercent <= 0 || o.maxDailyLossPercent > 100)) return "The daily loss limit must be between 0% and 100%.";
@@ -58,27 +60,11 @@ export function riskOptionsProblem(o: RiskOptions, ctx: { productType: string; s
   return null;
 }
 
-/**
- * Margin-based → price-based: a percentage of the margin is that percentage divided by the leverage in the price.
- * (5× leverage, 10% on margin = a 2% price move.) Points, ATR and R-multiple distances are already in price terms.
- */
-function leg<T extends { unit: RiskUnit; value: number }>(l: T, o: RiskOptions): T {
-  return o.reference === "MARGIN" && o.leverage > 1 && l.unit === "PERCENT" ? { ...l, value: l.value / o.leverage } : l;
-}
-
-/** The engine's risk settings in price terms, plus the leverage and limits — what every engine path runs with. */
-export function engineRisk(rm: RiskManagementConfig, o: RiskOptions): { riskManagement: RiskManagementConfig; leverage: number; limits?: EngineLimits; maxCapitalUsePercent: number | null } {
-  const l = (x: RiskLeg | null) => (x ? leg(x, o) : x);
-  const targets = rm.targets?.map((t): TargetLevel => ({ ...leg(t, o), lock: t.lock.mode === "MARGIN" || t.lock.mode === "TRAIL" ? leg(t.lock, o) : t.lock }));
-  const riskManagement: RiskManagementConfig = {
-    stopLoss: l(rm.stopLoss),
-    target: l(rm.target),
-    trailingSl: l(rm.trailingSl),
-    ...(targets?.length ? { targets } : {}),
-    ...(o.breakEven ? { breakEven: leg({ enabled: true, ...o.breakEven }, o) } : {}),
-  };
+/** The engine's risk settings, plus what the legs are measured on, the leverage and the limits — what every engine path runs with. */
+export function engineRisk(rm: RiskManagementConfig, o: RiskOptions): { riskManagement: RiskManagementConfig; riskBasis: RiskBasis; leverage: number; limits?: EngineLimits; maxCapitalUsePercent: number | null } {
+  const riskManagement: RiskManagementConfig = { ...rm, ...(o.breakEven ? { breakEven: { enabled: true, ...o.breakEven } } : {}) };
   const limits = o.maxDailyLossPercent != null || o.maxDrawdownPercent != null ? { maxDailyLossPercent: o.maxDailyLossPercent, maxDrawdownPercent: o.maxDrawdownPercent } : undefined;
-  return { riskManagement, leverage: o.leverage, ...(limits ? { limits } : {}), maxCapitalUsePercent: o.maxCapitalUsePercent ?? null };
+  return { riskManagement, riskBasis: o.reference === "CAPITAL" ? "CAPITAL" : "PRICE", leverage: o.leverage, ...(limits ? { limits } : {}), maxCapitalUsePercent: o.maxCapitalUsePercent ?? null };
 }
 
 /** Every figure a user needs to see what a stop or target means: shown beside the settings (pure, for the preview). */
@@ -107,14 +93,16 @@ export function riskExample(input: { entry: number; capital: number; stop: RiskL
   const quantity = input.quantity ?? Math.max(1, Math.floor((capital * lev) / entry));
   const exposure = quantity * entry;
   const margin = exposure / lev;
+  const onCapital = options.reference === "CAPITAL";
   const priceDist = (l: RiskLeg | null, stopDist: number | null) => {
     if (!l?.enabled) return null;
-    const p = leg(l, options);
+    const p = l;
     switch (p.unit) {
+      // Measured on capital: the % of capital (or ₹ amount) the trade should lose or make, over the position's shares.
       case "PERCENT":
-        return (entry * p.value) / 100;
+        return onCapital ? ((p.value / 100) * capital) / quantity : (entry * p.value) / 100;
       case "POINTS":
-        return p.value;
+        return onCapital ? p.value / quantity : p.value;
       case "R_MULTIPLE":
         return stopDist != null ? p.value * stopDist : null;
       default:
@@ -147,7 +135,7 @@ export function riskExample(input: { entry: number; capital: number; stop: RiskL
 export function describeRiskOptions(o: RiskOptions): string[] {
   const out: string[] = [];
   if (o.leverage > 1) out.push(`${o.leverage}× intraday leverage`);
-  if (o.reference === "MARGIN") out.push(`% stops and targets measured on margin (÷${o.leverage} in price)`);
+  if (o.reference === "CAPITAL") out.push("stop-loss and target measured on capital (% of capital or a ₹ amount), not the share price");
   if (o.breakEven) out.push(`stop to breakeven after ${o.breakEven.unit === "PERCENT" ? `${o.breakEven.value}%` : o.breakEven.unit === "POINTS" ? `${o.breakEven.value} pts` : o.breakEven.unit === "R_MULTIPLE" ? `${o.breakEven.value}R` : `${o.breakEven.value}× ATR`} in favour`);
   if (o.maxDailyLossPercent != null) out.push(`no new positions after a ${o.maxDailyLossPercent}% daily loss`);
   if (o.maxDrawdownPercent != null) out.push(`halts after a ${o.maxDrawdownPercent}% drawdown`);

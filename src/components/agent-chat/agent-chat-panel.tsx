@@ -98,6 +98,30 @@ function Inline({ text, onNavigate }: { text: string; onNavigate: () => void }) 
   );
 }
 
+/** A formula or rule from a reply: kept exactly as written, wrapped inside the bubble, with a Copy button. */
+function CodeBlock({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      /* clipboard blocked — the text stays selectable */
+    }
+  };
+  return (
+    <div className="overflow-hidden rounded-xl bg-brand-bg ring-1 ring-brand-navy/10">
+      <div className="flex items-center justify-end border-b border-brand-navy/[0.06] bg-brand-primary/[0.04] px-2.5 py-1">
+        <button type="button" onClick={copy} className="text-[11px] font-semibold text-brand-primary hover:underline">
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      <pre className="whitespace-pre-wrap break-words px-3 py-2.5 font-mono text-[12px] leading-relaxed text-brand-navy [overflow-wrap:anywhere]">{text}</pre>
+    </div>
+  );
+}
+
 /** Numbers, money and percentages line up on the right, like a statement. */
 const NUMERIC = /^[-+−]?[₹$]?\s?[\d,]+(\.\d+)?\s?(%|x|×|[kKLCr]+)?$/;
 
@@ -117,6 +141,7 @@ function ReplyBody({ content, onNavigate }: { content: string; onNavigate: () =>
             </p>
           );
         }
+        if (g.kind === "code") return <CodeBlock key={gi} text={g.text} />;
         if (g.kind === "table") {
           const align = g.header.map((_, ci) => {
             const col = g.rows.map((r) => r[ci]).filter(Boolean);
@@ -130,7 +155,7 @@ function ReplyBody({ content, onNavigate }: { content: string; onNavigate: () =>
               </span>
             ));
           return (
-            <div key={gi} className="overflow-x-auto rounded-xl bg-white ring-1 ring-brand-navy/10">
+            <div key={gi} className="overflow-x-auto rounded-xl bg-white ring-1 ring-brand-navy/10 [overflow-wrap:normal]">
               <table className="w-full border-collapse text-[12.5px] leading-snug">
                 <thead>
                   <tr className="bg-brand-primary/[0.06]">
@@ -317,9 +342,9 @@ function StrategyDraftCard({ fields, onNavigate }: { fields: { label: string; va
       </div>
       <dl className="divide-y divide-black/5 px-3">
         {fields.map((f, i) => (
-          <div key={i} className="grid grid-cols-[92px_1fr] gap-2 py-1.5 text-[13px]">
+          <div key={i} className="grid grid-cols-[92px_minmax(0,1fr)] gap-2 py-1.5 text-[13px]">
             <dt className="text-brand-navy/50">{f.label}</dt>
-            <dd className="font-medium text-brand-navy">{f.value}</dd>
+            <dd className="min-w-0 break-words font-medium text-brand-navy [overflow-wrap:anywhere]">{f.value}</dd>
           </div>
         ))}
       </dl>
@@ -849,7 +874,7 @@ export default function AgentChatPanel({
                               transition={{ type: "spring", stiffness: 420, damping: 32 }}
                               className="flex justify-end"
                             >
-                              <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-gradient-to-br from-brand-primary to-brand-primary-light px-4 py-2.5 text-sm leading-relaxed text-white shadow-[0_6px_16px_-8px_rgba(71,24,152,0.6)]">
+                              <div className="min-w-0 max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-gradient-to-br from-brand-primary to-brand-primary-light px-4 py-2.5 text-sm leading-relaxed text-white shadow-[0_6px_16px_-8px_rgba(71,24,152,0.6)]">
                                 {m.content}
                               </div>
                             </motion.li>
@@ -864,7 +889,7 @@ export default function AgentChatPanel({
                               <div className="flex items-start gap-2.5">
                               <AgentAvatar pose={m.guardrailHit ? "alert" : "idle"} size={30} className="mt-0.5" />
                               <div
-                                className={`max-w-[86%] rounded-2xl rounded-tl-md px-4 py-3 text-sm leading-relaxed text-brand-navy/85 shadow-[0_1px_2px_rgba(14,27,45,0.05)] ${
+                                className={`min-w-0 max-w-[86%] break-words rounded-2xl rounded-tl-md px-4 py-3 [overflow-wrap:anywhere] text-sm leading-relaxed text-brand-navy/85 shadow-[0_1px_2px_rgba(14,27,45,0.05)] ${
                                   m.guardrailHit ? "bg-brand-gold/10 ring-1 ring-brand-gold/30" : "bg-white ring-1 ring-black/[0.06]"
                                 }`}
                               >

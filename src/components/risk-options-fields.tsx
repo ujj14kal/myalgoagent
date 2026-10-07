@@ -40,50 +40,20 @@ export default function RiskOptionsFields({
   const problem = riskOptionsProblem(value, { productType, stopLossOn: stopLoss.enabled });
   const entry = entryPrice ?? 100;
   const ex = riskExample({ entry, capital, stop: stopLoss, target, options: value });
-  const margin = value.reference === "MARGIN";
 
   return (
     <div className="mt-4 rounded-xl border border-brand-navy/10 p-3">
-      <p className="text-sm font-medium text-brand-navy">Leverage, TP/SL reference and limits</p>
-      <p className="mt-0.5 text-xs text-brand-navy/45">System-level choices: how much position each rupee of capital carries, what your stop-loss and target percentages are measured against, and when the system stops opening new positions.</p>
+      <p className="text-sm font-medium text-brand-navy">Leverage and limits</p>
+      <p className="mt-0.5 text-xs text-brand-navy/45">System-level choices: how much position each rupee of capital carries, a break-even rule, and when the system stops opening new positions. What the stop-loss and target are measured on (share price or capital) is chosen above.</p>
 
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
         <div className="space-y-3">
           <label className="flex flex-wrap items-center gap-2 text-xs text-brand-navy/65">
             <span className="w-32 font-semibold text-brand-navy">Intraday leverage</span>
-            <input type="number" min={1} max={MAX_LEVERAGE} step="0.5" value={value.leverage} disabled={!intraday} aria-label="Intraday leverage" onChange={(e) => set({ leverage: Math.max(1, Number(e.target.value) || 1), ...(Number(e.target.value) <= 1 ? { reference: "PRICE" } : {}) })} className={`${numberCls} disabled:bg-brand-bg`} />
+            <input type="number" min={1} max={MAX_LEVERAGE} step="0.5" value={value.leverage} disabled={!intraday} aria-label="Intraday leverage" onChange={(e) => set({ leverage: Math.max(1, Number(e.target.value) || 1) })} className={`${numberCls} disabled:bg-brand-bg`} />
             <span>×</span>
             <span className="w-full text-[11px] text-brand-navy/45">{intraday ? `Buying power = capital × leverage. Your broker's own limit applies (it varies by stock, usually up to 5×).` : "Delivery positions are bought outright, so leverage applies to intraday only."}</span>
           </label>
-
-          <div className="text-xs text-brand-navy/65">
-            <span className="mb-1 block font-semibold text-brand-navy">TP/SL reference</span>
-            <div className="flex overflow-hidden rounded-full border border-brand-navy/15" role="radiogroup" aria-label="TP/SL reference">
-              {(
-                [
-                  ["PRICE", "Actual price"],
-                  ["MARGIN", "Leverage-adjusted (on margin)"],
-                ] as const
-              ).map(([m, label]) => (
-                <button
-                  key={m}
-                  type="button"
-                  role="radio"
-                  aria-checked={value.reference === m}
-                  disabled={m === "MARGIN" && !(intraday && value.leverage > 1)}
-                  onClick={() => set({ reference: m })}
-                  className={`flex-1 px-3 py-1.5 font-medium disabled:cursor-not-allowed disabled:opacity-40 ${value.reference === m ? "bg-brand-primary text-white" : "bg-white text-brand-navy/60 hover:bg-brand-bg"}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <p className="mt-1 text-[11px] text-brand-navy/45">
-              {margin
-                ? `Your % stop-loss and targets are returns on the margin: at ${value.leverage}×, a ${value.leverage * 2}% stop on margin is a 2% move in the price. The orders still go in at real market prices.`
-                : "Your % stop-loss and targets are moves in the share's price. Leverage changes how many shares you hold, never the price."}
-            </p>
-          </div>
 
           {!webhook && (
             <>
@@ -152,7 +122,7 @@ export default function RiskOptionsFields({
                 </td>
               </tr>
               <tr>
-                <td>Loss at the stop · on margin</td>
+                <td>Loss at the stop · of margin</td>
                 <td className="!text-brand-sell">
                   {rupees(ex.stopPnl, true)} · {pct(ex.stopPctOfMargin)}
                 </td>
@@ -164,14 +134,14 @@ export default function RiskOptionsFields({
                 </td>
               </tr>
               <tr>
-                <td>Profit at the target · on margin</td>
+                <td>Profit at the target · of margin</td>
                 <td className="!text-brand-buy">
                   {rupees(ex.targetPnl, true)} · {pct(ex.targetPctOfMargin)}
                 </td>
               </tr>
             </tbody>
           </table>
-          <p className="mt-2 text-[11px] text-brand-navy/45">Before charges. Stops and targets execute at the actual market prices shown; leverage only changes the size of the position and so the ₹ and % on your margin. A short is the mirror image. Every real trade uses its own entry price.</p>
+          <p className="mt-2 text-[11px] text-brand-navy/45">Before charges. Stops and targets execute at the actual market prices shown; leverage only changes the size of the position and so the ₹ and % on your margin. When they are measured on capital, the price they trigger at is whatever move produces that profit or loss for these shares. A short is the mirror image. Every real trade uses its own entry price.</p>
         </div>
       </div>
     </div>

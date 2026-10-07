@@ -23,6 +23,8 @@ const DISTANCE_UNITS: { value: RiskUnit; label: string }[] = [
 ];
 /** Targets can also be a risk/reward multiple: R = the stop-loss distance. */
 const UNITS: { value: RiskUnit; label: string }[] = [...DISTANCE_UNITS, { value: "R_MULTIPLE", label: "R (× stop)" }];
+/** The same units, worded for what they are measured on. */
+const worded = (units: { value: RiskUnit; label: string }[], capital: boolean) => (capital ? units.map((u) => (u.value === "PERCENT" ? { ...u, label: "% of capital" } : u.value === "POINTS" ? { ...u, label: "₹ of capital" } : u)) : units);
 
 const STOP_RULES: { value: TargetLock["mode"]; label: string; help: string }[] = [
   { value: "FIXED", label: "Move to this target", help: "The rest is sold if price falls back to this target's own price." },
@@ -77,7 +79,10 @@ export default function StagedTargetsFields({
   direction,
   singleTargetOn,
   latestPrice = null,
+  onCapital = false,
 }: {
+  /** Distances are a share of capital / a ₹ amount rather than moves in the share's price. */
+  onCapital?: boolean;
   rows: TargetRow[];
   onChange: (rows: TargetRow[]) => void;
   direction: "LONG" | "SHORT";
@@ -124,7 +129,7 @@ export default function StagedTargetsFields({
                   Profit of
                   <input type="number" min={0} step="any" value={r.value} aria-label={`Target ${i + 1} distance`} onChange={(e) => set(i, { value: Number(e.target.value) })} className={numberCls} />
                   <select value={r.unit} aria-label={`Target ${i + 1} unit`} onChange={(e) => set(i, { unit: e.target.value as RiskUnit })} className={selectCls}>
-                    {UNITS.map((u) => (
+                    {worded(UNITS, onCapital).map((u) => (
                       <option key={u.value} value={u.value}>
                         {u.label}
                       </option>
@@ -157,7 +162,7 @@ export default function StagedTargetsFields({
                     {r.lock === "TRAIL" ? "Trail by" : "Distance"}
                     <input type="number" min={0} step="any" value={r.marginValue} aria-label={`Target ${i + 1} ${r.lock === "TRAIL" ? "trailing distance" : "margin"}`} onChange={(e) => set(i, { marginValue: Number(e.target.value) })} className={numberCls} />
                     <select value={r.marginUnit} aria-label={`Target ${i + 1} distance unit`} onChange={(e) => set(i, { marginUnit: e.target.value as RiskUnit })} className={selectCls}>
-                      {DISTANCE_UNITS.map((u) => (
+                      {worded(DISTANCE_UNITS, onCapital).map((u) => (
                         <option key={u.value} value={u.value}>
                           {u.label}
                         </option>

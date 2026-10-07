@@ -342,8 +342,8 @@ export default function SystemEditor({
       </Section>
 
       <Section step={6} title="Risk management" subtitle="Stop-loss, take-profit, R:R, trailing, break-even, leverage and the system's loss limits">
-        <RiskManagementFields stopLoss={def.stopLoss} target={def.target} trailingSl={def.trailingSl} onStopLossChange={(l) => change({ stopLoss: l })} onTargetChange={(l) => change({ target: l })} onTrailingSlChange={(l) => change({ trailingSl: l })} />
-        <StagedTargetsFields rows={targetRows} direction="LONG" singleTargetOn={def.target.enabled} onChange={(rows) => { setTargetRows(rows); setDirty(true); setCheck(null); if (rows.length > 0 && def.target.enabled) change({ target: { ...def.target, enabled: false } }); }} />
+        <RiskManagementFields stopLoss={def.stopLoss} target={def.target} trailingSl={def.trailingSl} onStopLossChange={(l) => change({ stopLoss: l })} onTargetChange={(l) => change({ target: l })} onTrailingSlChange={(l) => change({ trailingSl: l })} basis={def.riskOptions.reference} onBasisChange={(reference) => change({ riskOptions: { ...def.riskOptions, reference } })} sizingByRisk={def.positionSizingMode === "RISK_PERCENT"} />
+        <StagedTargetsFields onCapital={def.riskOptions.reference === "CAPITAL"} rows={targetRows} direction="LONG" singleTargetOn={def.target.enabled} onChange={(rows) => { setTargetRows(rows); setDirty(true); setCheck(null); if (rows.length > 0 && def.target.enabled) change({ target: { ...def.target, enabled: false } }); }} />
         <RiskOptionsFields value={def.riskOptions} onChange={(o) => change({ riskOptions: o })} productType={def.productType} stopLoss={def.stopLoss} target={def.target} entryPrice={null} />
         <p className="mt-2 text-xs text-brand-navy/45">Examples above show a long; a short is the mirror image (stop above the entry, targets below).</p>
       </Section>

@@ -215,6 +215,7 @@ export function runBacktest(
     riskManagement,
     leverage: risk?.leverage,
     limits: risk?.limits,
+    riskBasis: risk?.riskBasis,
     maxCapitalUsePercent: risk?.maxCapitalUsePercent,
     atrAtEntry: atrByTimeFinal ? (entryIdx: number) => atrByTimeFinal.get(candles[entryIdx]?.time) : undefined,
     maxPyramidEntries: config.maxPyramidEntries,

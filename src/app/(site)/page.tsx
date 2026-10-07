@@ -32,7 +32,7 @@ const capabilities = [
   { title: "Your broker account, in one place", text: "Real holdings, positions, funds and orders from your connected broker." },
   { title: "Alerts & notifications", text: "Signal, fill and risk-limit alerts, delivered in the app as they happen." },
   { title: "Go Live on your own broker", text: "A tested strategy keeps running here and sends its orders to your broker automatically — intraday or delivery, within your per-order and daily limits, with pause, exit-now, stop and a kill switch. Switched on account by account." },
-  { title: "Custom indicators", text: "Write a formula, draw a line on the chart or describe it to your agent — then use it in rules, backtests and forward tests." },
+  { title: "Custom indicators", text: "Describe an indicator to your agent in plain words — it writes the formula you can read, builds a strategy around it and lets you preview and replay it before saving." },
   { title: "An AI agent you can talk to", text: "Type or speak: it drafts strategies, backtests and limits for you to review, reads the market and your account, and never places an order on its own." },
 ];
 

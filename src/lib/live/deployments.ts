@@ -112,7 +112,7 @@ export async function startDeployment(userId: string, input: { strategyId: strin
   const options = parseRiskOptions(s.riskOptions);
   const leverage = s.productType === "INTRADAY" ? (options.leverage > 1 ? options.leverage : INTRADAY_BUYING_POWER) : 1;
   const lastPx = candles.at(-1)!.close * 1.0005;
-  const stopDist = s.stopLossEnabled && s.stopLossUnit && s.stopLossValue != null ? resolveRiskDistance({ enabled: true, unit: s.stopLossUnit, value: s.stopLossValue }, lastPx, undefined) ?? undefined : undefined;
+  const stopDist = options.reference !== "CAPITAL" && s.stopLossEnabled && s.stopLossUnit && s.stopLossValue != null ? resolveRiskDistance({ enabled: true, unit: s.stopLossUnit, value: s.stopLossValue }, lastPx, undefined) ?? undefined : undefined;
   const tooSmall = capitalProblem(sizing, input.capital, lastPx, s.instrument.symbol.replace(/\.NS$/, ""), leverage, stopDist);
   if (tooSmall) throw new LiveCheckError(tooSmall);
 
@@ -124,7 +124,8 @@ export async function startDeployment(userId: string, input: { strategyId: strin
     brokeragePercent: 0.03,
     slippagePercent: 0.05,
     // Risk-based sizing takes its percentage of the capital set here, not of the (larger) intraday buying power.
-    positionSizing: { mode: s.positionSizingMode, value: s.positionSizingValue, ...(s.positionSizingMode === "RISK_PERCENT" ? { riskCapital: input.capital } : {}) },
+    // The capital the user gave this strategy: risk-based sizing and capital-measured stops/targets are a share of it, not of the larger intraday buying power.
+    positionSizing: { mode: s.positionSizingMode, value: s.positionSizingValue, riskCapital: input.capital },
     riskManagement: {
       stopLoss: s.stopLossEnabled ? { enabled: true, unit: s.stopLossUnit!, value: s.stopLossValue! } : null,
       target: s.targetEnabled ? { enabled: true, unit: s.targetUnit!, value: s.targetValue! } : null,

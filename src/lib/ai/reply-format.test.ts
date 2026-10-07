@@ -70,3 +70,21 @@ describe("groupReply prose", () => {
     expect(groupReply("Use RSI | MACD together").map((x) => x.kind)).toEqual(["p"]);
   });
 });
+
+describe("fenced code in a reply", () => {
+  it("is one code block, kept exactly, with the text around it intact", () => {
+    const g = groupReply("Paste this:\n```\nif(low > highest(ref(high,1),3),\n   low - highest(ref(high,1),3),\n   0)\n```\nThen save it.");
+    expect(g.map((x) => x.kind)).toEqual(["p", "code", "p"]);
+    expect(g[1]).toEqual({ kind: "code", text: "if(low > highest(ref(high,1),3),\n   low - highest(ref(high,1),3),\n   0)" });
+  });
+  it("takes a language tag, keeps blank lines inside, and tolerates a missing closing fence", () => {
+    const g = groupReply("```text\nline one\n\nline two");
+    expect(g).toEqual([{ kind: "code", text: "line one\n\nline two", lang: "text" }]);
+  });
+  it("doesn't turn pipes or list markers inside the block into tables or lists", () => {
+    const g = groupReply("```\n| a | b |\n- not a list\n```");
+    expect(g).toHaveLength(1);
+    expect(g[0].kind).toBe("code");
+  });
+});
+

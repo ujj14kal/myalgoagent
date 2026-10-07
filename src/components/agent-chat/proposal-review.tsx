@@ -20,6 +20,7 @@ import {
   Layers,
   ListChecks,
   Network,
+  Eye,
   Blocks,
   Boxes,
   OctagonX,
@@ -47,6 +48,9 @@ import { setPaperSessionStatus, startPaperSession, startPaperSessionForAgent, sy
 import { toggleKillSwitch, updateRiskSettings } from "@/lib/risk-actions";
 import { createWorkspace, publishWorkspace, saveWorkspaceDraft } from "@/lib/workspace-actions";
 import { saveBlock, saveConcept } from "@/lib/system-actions";
+import { saveCustomIndicator } from "@/lib/custom-indicator-actions";
+import { describeCustom, classifyCustom } from "@/lib/custom-indicator";
+import { NEW_STRATEGY_DRAFT_FROM_KEY, NEW_STRATEGY_DRAFT_KEY } from "@/lib/strategy-draft-key";
 import { addToWatchlist, removeFromWatchlist } from "@/lib/watchlist-actions";
 
 const ICONS: Record<AgentProposal["kind"], React.ReactNode> = {
@@ -138,6 +142,16 @@ function confirmLabel(p: AgentProposal): string {
   }
 }
 
+/** Saves the custom indicators a strategy proposal defines to the user's library, before the strategy that uses them is created. */
+async function saveNewIndicators(d: Extract<AgentProposal, { kind: "strategy" }>["draft"]): Promise<string | null> {
+  for (const ci of d.customIndicators ?? []) {
+    const r = await saveCustomIndicator({ name: ci.name, description: ci.description, def: ci.def });
+    // Already saved earlier (e.g. a retry after a failed step): the strategy carries its own copy either way.
+    if (!r.ok && !/already have/i.test(r.error)) return `Couldn't save the custom indicator “${ci.name}”: ${r.error}`;
+  }
+  return null;
+}
+
 /** Turns the builder's collected-issues JSON (or a plain message) into readable text. */
 function readableError(err: string): string {
   if (err === "DUPLICATE_NAME") return "You already have a strategy with this name — give it a different name.";
@@ -159,6 +173,8 @@ async function execute(p: AgentProposal, instrumentId: string | null, go: (path:
   switch (p.kind) {
     case "strategy": {
       if (!instrumentId) return "Pick an instrument for this strategy.";
+      const indicatorProblem = await saveNewIndicators(p.draft);
+      if (indicatorProblem) return indicatorProblem;
       const res = await createStrategy(toStrategyInput(p.draft, instrumentId));
       if (res?.error) return readableError(res.error);
       if (res?.id) go(`/app/strategies/${res.id}`);
@@ -289,6 +305,11 @@ async function runPlan(
         onStep(i, "failed");
         return { error: "Pick an instrument for the strategy first.", lastPath };
       }
+      const indicatorProblem = await saveNewIndicators(step.draft);
+      if (indicatorProblem) {
+        onStep(i, "failed");
+        return { error: indicatorProblem, lastPath };
+      }
       res = await createStrategyForAgent(toStrategyInput(step.draft, instrumentId));
       if ("id" in res) {
         newStrategyId = res.id;
@@ -334,6 +355,22 @@ export function ProposalCard({
     rejected: { label: "Rejected", cls: "bg-brand-navy/5 text-brand-navy/50" },
   };
   const s = status[proposal.status];
+  const router = useRouter();
+  // A strategy that already has its instrument can be opened straight in the builder (preview, replay animation, every option).
+  const strategy = proposal.kind === "strategy" ? proposal.draft : proposal.kind === "plan" ? proposal.steps.find((st) => st.kind === "strategy")?.draft : undefined;
+  const previewNow = () => {
+    if (!strategy?.instrumentId) return;
+    try {
+      sessionStorage.setItem(NEW_STRATEGY_DRAFT_KEY, JSON.stringify(toStrategyInput(strategy as Extract<AgentProposal, { kind: "strategy" }>["draft"], strategy.instrumentId)));
+      sessionStorage.setItem(NEW_STRATEGY_DRAFT_FROM_KEY, "agent");
+    } catch {
+      onReview();
+      return;
+    }
+    // Already on the New Strategy page: it only reads the draft when it loads, so reload it to show this one.
+    if (window.location.pathname === "/app/strategies/new") window.location.reload();
+    else router.push("/app/strategies/new");
+  };
   return (
     <motion.div
       initial={{ opacity: 0, y: 8, scale: 0.98 }}
@@ -350,13 +387,20 @@ export function ProposalCard({
         <span className="block truncate text-xs text-brand-navy/60">{proposalSummary(proposal)}</span>
       </span>
       {proposal.status === "pending" && (
-        <button
-          type="button"
-          onClick={onReview}
-          className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-brand-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-primary-light"
-        >
-          Review <ArrowRight size={12} />
-        </button>
+        <span className="flex shrink-0 items-center gap-1.5">
+          {strategy?.instrumentId && (
+            <button type="button" onClick={previewNow} className="inline-flex items-center gap-1 rounded-lg border border-brand-primary/30 px-2.5 py-1.5 text-xs font-semibold text-brand-primary hover:bg-brand-primary/5">
+              <Eye size={12} /> Preview
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onReview}
+            className="inline-flex items-center gap-1 rounded-lg bg-brand-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-primary-light"
+          >
+            Review <ArrowRight size={12} />
+          </button>
+        </span>
       )}
     </motion.div>
   );
@@ -510,6 +554,23 @@ function StrategyFields({
         </>
       )}
       </StrategyTimeframeContext.Provider>
+      {draft.customIndicators && draft.customIndicators.length > 0 && (
+        <div>
+          <span className={labelCls}>New custom indicator{draft.customIndicators.length === 1 ? "" : "s"}</span>
+          <div className="space-y-2 rounded-xl bg-brand-bg p-3 ring-1 ring-black/5">
+            {draft.customIndicators.map((ci) => (
+              <div key={ci.name} className="min-w-0 text-xs text-brand-navy/75">
+                <p className="font-semibold text-brand-navy">
+                  {ci.name} <span className="ml-1 rounded-full bg-brand-navy/[0.06] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-navy/55">{classifyCustom(ci.def)}</span>
+                </p>
+                <p className="mt-0.5 break-words font-mono text-[12px] [overflow-wrap:anywhere]">{describeCustom(ci.def)}</p>
+                {ci.description && <p className="mt-0.5 text-brand-navy/55">{ci.description}</p>}
+              </div>
+            ))}
+            <p className="text-[11px] text-brand-navy/45">Saved to your Custom Indicators when you create the strategy, and used in its rules below.</p>
+          </div>
+        </div>
+      )}
       <div>
         <span className={labelCls}>Risk rules</span>
         <div className="space-y-2 rounded-xl bg-brand-bg p-3 ring-1 ring-black/5">
@@ -925,6 +986,22 @@ export function ProposalReviewModal({
   const [stepStates, setStepStates] = useState<StepState[]>(proposal.kind === "plan" ? proposal.steps.map(() => "waiting") : []);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  // A strategy can be opened in the full builder — chart preview, replay animation and every option — before it is created.
+  const previewable = draft.kind === "strategy" ? draft.draft : draft.kind === "plan" ? draft.steps.find((st) => st.kind === "strategy")?.draft : undefined;
+  const openInBuilder = () => {
+    if (!previewable || !instrumentId) return;
+    try {
+      sessionStorage.setItem(NEW_STRATEGY_DRAFT_KEY, JSON.stringify(toStrategyInput(previewable as Extract<AgentProposal, { kind: "strategy" }>["draft"], instrumentId)));
+      sessionStorage.setItem(NEW_STRATEGY_DRAFT_FROM_KEY, "agent");
+    } catch {
+      setError("Your browser wouldn't keep the draft, so it can't be opened in the builder. Create it here instead.");
+      return;
+    }
+    // Already on the New Strategy page: it only reads the draft when it loads, so reload it to show this one.
+    if (window.location.pathname === "/app/strategies/new") window.location.reload();
+    else router.push("/app/strategies/new");
+    onDone();
+  };
   const destructive = (draft.kind === "kill_switch" && draft.draft.enabled) || (draft.kind === "paper_control" && draft.draft.action === "stop");
 
   useEffect(() => {
@@ -1052,6 +1129,11 @@ export function ProposalReviewModal({
 
           <div className="flex items-center gap-2 border-t border-black/5 bg-brand-bg/60 px-5 py-4">
             <p className="hidden flex-1 text-[11px] leading-snug text-brand-navy/45 sm:block">Nothing happens until you confirm.</p>
+            {previewable && (
+              <button type="button" onClick={openInBuilder} disabled={isPending || !instrumentId} title={instrumentId ? "Open this exact strategy in the builder to preview it on a chart, watch the replay and change anything" : "Pick an instrument first"} className="inline-flex items-center gap-1.5 rounded-xl border border-brand-primary/30 px-4 py-2.5 text-sm font-semibold text-brand-primary hover:bg-brand-primary/5 disabled:opacity-40">
+                <Eye size={15} /> Preview
+              </button>
+            )}
             <button type="button" onClick={reject} disabled={isPending} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-brand-navy/60 hover:bg-brand-navy/5 hover:text-brand-navy disabled:opacity-40">
               Reject
             </button>

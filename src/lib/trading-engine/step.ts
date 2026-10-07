@@ -166,6 +166,9 @@ export interface EntryPlan {
 
 export const MAX_ENTRY_LEVELS = 8;
 
+/** What stop-loss / target distances are measured on: the share's price (default), or the account's capital (a % of capital, or a ₹ amount, lost or gained on the trade). */
+export type RiskBasis = "PRICE" | "CAPITAL";
+
 export interface RiskManagementConfig {
   stopLoss: RiskLeg | null;
   target: RiskLeg | null;
@@ -200,6 +203,8 @@ export interface EngineConfig {
   // Omitted or all-null legs = no risk management, exits are driven purely
   // by the strategy's own exit condition (pre-existing behavior).
   riskManagement?: RiskManagementConfig;
+  /** PRICE (default) or CAPITAL: with CAPITAL a PERCENT leg is a % of capital and a POINTS leg a ₹ amount, both turned into the price move that produces that P&L for the position's size. */
+  riskBasis?: RiskBasis;
   // ATR value at the bar a position was entered on — required to resolve
   // an ATR_MULTIPLE leg. Only needed when a risk leg uses that unit.
   atrAtEntry?: (entryIdx: number) => number | undefined;
@@ -270,6 +275,25 @@ function fillTimeAllowed(session: IntradaySession | undefined, fillBar: Candle):
   if (session.noEntryAfterMinute != null && fillMinute >= session.noEntryAfterMinute) return false;
   if (session.squareOffMinute != null && fillMinute >= session.squareOffMinute) return false;
   return true;
+}
+
+/**
+ * Capital-measured legs as price legs for a position of `quantity` shares: a PERCENT leg is that % of `capital` (the
+ * profit or loss the trade should make at that level), a POINTS leg a ₹ amount; the price move that produces it is
+ * the amount ÷ the shares. ATR and R legs are already price distances and stay as they are.
+ */
+export function capitalLegs(rm: RiskManagementConfig | undefined, capital: number, quantity: number): RiskManagementConfig | undefined {
+  if (!rm || !(capital > 0) || !(quantity > 0)) return rm;
+  const conv = <T extends { unit: RiskUnit; value: number }>(l: T): T => (l.unit === "PERCENT" ? { ...l, unit: "POINTS", value: ((l.value / 100) * capital) / quantity } : l.unit === "POINTS" ? { ...l, value: l.value / quantity } : l);
+  const leg = <T extends { unit: RiskUnit; value: number } | null | undefined>(l: T): T => (l ? conv(l) : l);
+  return {
+    ...rm,
+    stopLoss: leg(rm.stopLoss),
+    target: leg(rm.target),
+    trailingSl: leg(rm.trailingSl),
+    ...(rm.breakEven !== undefined ? { breakEven: leg(rm.breakEven) } : {}),
+    ...(rm.targets ? { targets: rm.targets.map((t) => ({ ...conv(t), lock: t.lock.mode === "MARGIN" || t.lock.mode === "TRAIL" ? conv(t.lock) : t.lock })) } : {}),
+  };
 }
 
 /** The stop-loss distance a position entered at the price would carry: what risk-based sizing divides by. Undefined without a stop-loss. */
@@ -613,6 +637,7 @@ function planStep(candles: Candle[], i: number, entrySignal: boolean, exitSignal
   const isShort = direction === "SHORT";
   const bar = candles[i];
   const slip = (side: "open" | "close") => 1 + ((side === "open") === !isShort ? 1 : -1) * (config.slippagePercent / 100);
+  const rmFor = (quantity: number) => (config.riskBasis === "CAPITAL" ? capitalLegs(config.riskManagement, config.positionSizing.riskCapital ?? state.cash, quantity) : config.riskManagement);
 
   if (plan.maxHoldDays !== undefined && i > pos0.entryIdx && tradingDaysBetween(candles, pos0.entryIdx, i) >= plan.maxHoldDays) {
     const trade = closeTrade(candles, pos0, i, bar.open * slip("close"), config.brokeragePercent, direction);
@@ -631,7 +656,7 @@ function planStep(candles: Candle[], i: number, entrySignal: boolean, exitSignal
   const addShares = (p: EnginePosition, qty: number, fill: number): EnginePosition => {
     const total = p.quantity + qty;
     const blended = (p.entryPrice * p.quantity + fill * qty) / total;
-    const { stopLossPrice, targetPrice: tp } = resolveRiskLevels(config.riskManagement, blended, config.atrAtEntry?.(p.entryIdx), direction);
+    const { stopLossPrice, targetPrice: tp } = resolveRiskLevels(rmFor(total), blended, config.atrAtEntry?.(p.entryIdx), direction);
     return { ...p, entryPrice: blended, quantity: total, stopLossPrice, targetPrice: tp, pyramidCount: p.pyramidCount + 1, ...(p.initialQuantity !== undefined ? { initialQuantity: p.initialQuantity + qty } : {}) };
   };
 
@@ -690,6 +715,9 @@ function stepBarCore(
   const nextBar = candles[i + 1];
   const direction = config.direction ?? "LONG";
   const isShort = direction === "SHORT";
+  // The risk legs as price moves for a position of `quantity` shares (capital-measured legs depend on the size).
+  const capitalNow = config.positionSizing.riskCapital ?? state.cash;
+  const rmFor = (quantity: number) => (config.riskBasis === "CAPITAL" ? capitalLegs(config.riskManagement, capitalNow, quantity) : config.riskManagement);
   // A long buys to open (slippage costs you more) and sells to close
   // (slippage gets you less); a short is the mirror image on both sides.
   const openFillPrice = (open: number) => open * (1 + (isShort ? -1 : 1) * (config.slippagePercent / 100));
@@ -697,7 +725,8 @@ function stepBarCore(
 
   if (state.position) {
     const bar = candles[i];
-    const rm = config.riskManagement;
+    // A position sold in stages keeps the distances it was set up with: measured on its original size.
+    const rm = rmFor(state.position.initialQuantity ?? state.position.quantity);
     let pos = state.position;
     {
       // Stops that move with the trade, judged on the best price of the candles before this one (never this candle's,
@@ -817,7 +846,7 @@ function stepBarCore(
         const totalQuantity = pos.quantity + addQuantity;
         const blendedEntryPrice = (pos.entryPrice * pos.quantity + fillPrice * addQuantity) / totalQuantity;
         const atr = config.atrAtEntry?.(i + 1);
-        const { stopLossPrice, targetPrice } = resolveRiskLevels(config.riskManagement, blendedEntryPrice, atr, direction);
+        const { stopLossPrice, targetPrice } = resolveRiskLevels(rmFor(totalQuantity), blendedEntryPrice, atr, direction);
         return {
           state: {
             ...state,
@@ -854,7 +883,7 @@ function stepBarCore(
     const quantity = plan ? entrySlice(plan.firstPercent, wanted, 0) : wanted;
     if (quantity <= 0) return { state: { ...state, pendingEntry: null }, sizeTooSmall: true };
     const atr = config.atrAtEntry?.(fillIdx);
-    const { stopLossPrice, targetPrice } = resolveRiskLevels(config.riskManagement, fillPrice, atr, direction);
+    const { stopLossPrice, targetPrice } = resolveRiskLevels(rmFor(quantity), fillPrice, atr, direction);
     return {
       state: {
         cash: state.cash,

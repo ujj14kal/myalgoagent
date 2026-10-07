@@ -69,7 +69,8 @@ export function riskFields(input: StrategyInput) {
   const usesR = (target.enabled && target.unit === "R_MULTIPLE") || (input.targets ?? []).some((t) => t.unit === "R_MULTIPLE");
   if (usesR && !stopLoss.enabled) throw new Error("A target set as a risk/reward multiple (R) needs a stop-loss: R is the stop-loss distance.");
   const options = input.riskOptions ? parseRiskOptions(input.riskOptions) : DEFAULT_RISK_OPTIONS;
-  const optionsIssue = riskOptionsProblem(options, { productType: session.productType, stopLossOn: stopLoss.enabled });
+  const optionsIssue = riskOptionsProblem(options, { productType: session.productType, stopLossOn: stopLoss.enabled, sizingMode: input.positionSizingMode });
+  if (options.reference === "CAPITAL" && input.mode === "WEBHOOK") throw new Error("Stop-loss and target on capital aren't available for webhook strategies (their trades come straight from TradingView alerts). Use the share price.");
   if (optionsIssue) throw new Error(optionsIssue);
   if ((options.breakEven || options.maxDailyLossPercent != null || options.maxDrawdownPercent != null) && input.mode === "WEBHOOK") throw new Error("Break-even and the daily-loss / drawdown limits aren't available for webhook strategies (their trades come straight from TradingView alerts).");
   const plan = entryPlanToStore(input.entryPlan, input.maxPyramidEntries);

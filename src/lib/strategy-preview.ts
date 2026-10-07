@@ -1,3 +1,4 @@
+import { capitalLegs } from "@/lib/trading-engine/step";
 import { engineRisk, parseRiskOptions } from "@/lib/trading-engine/risk-options";
 import { withLevelConditions } from "@/lib/strategy/plan-conditions";
 import { prisma } from "@/lib/prisma";
@@ -140,7 +141,10 @@ export async function computeStrategyPreview(userId: string | null, input: Strat
     const checks = entryCheckers(candles, compiled.entryCondition, aux, readableRule);
     // The lines drawn on the replay are in price terms, as the engine ran them (margin-based ones converted).
     const rawRm = { stopLoss: leg(input.stopLoss), target: leg(input.target), trailingSl: leg(input.trailingSl) };
-    const rm = input.riskOptions ? { ...rawRm, ...engineRisk(rawRm, parseRiskOptions(input.riskOptions)).riskManagement } : rawRm;
+    const eng = input.riskOptions ? engineRisk(rawRm, parseRiskOptions(input.riskOptions)) : null;
+    const rm = eng ? { ...rawRm, ...eng.riskManagement } : rawRm;
+    // Legs measured on capital become the price move for each trade's own size.
+    const rmFor = (quantity: number) => (eng?.riskBasis === "CAPITAL" ? (capitalLegs(rm, PREVIEW.capital, quantity) ?? rm) : rm);
     const usesAtr = [rm.stopLoss, rm.target, rm.trailingSl].some((l) => l?.unit === "ATR_MULTIPLE");
     const atrByTime = usesAtr ? new Map(computeIndicatorSeries(candles, "ATR", [14]).map((p) => [p.time, p.value])) : null;
     const atrAt = (idx: number) => atrByTime?.get(candles[idx]?.time);
@@ -171,7 +175,7 @@ export async function computeStrategyPreview(userId: string | null, input: Strat
               signalIdx: Math.max(0, entryIdx - 1),
               entryIdx,
               exitIdx,
-              ...tradeLevels(candles, entryIdx, exitIdx, entryPrice, rm, input.direction, atrAt),
+              ...tradeLevels(candles, entryIdx, exitIdx, entryPrice, rmFor(quantity), input.direction, atrAt),
               checks: checks(Math.max(0, entryIdx - 1)),
             },
           };

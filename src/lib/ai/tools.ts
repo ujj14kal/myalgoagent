@@ -232,32 +232,6 @@ export const AGENT_TOOLS: MantleTool[] = [
   {
     type: "function",
     function: {
-      name: "draft_custom_indicator",
-      description:
-        "Turn a user's own indicator idea into a custom indicator and give them a link to review, preview on a chart and save it (nothing is saved until they press Save). Pick the kind that matches their words: graph line (own pane: ratios, scores, oscillators) or price overlay (a line on the candles) from `formula`; signal markers (a true/false `formula`, marked where true, reads 1/0); channel (`upper` and `lower` formulas, optional `middle`); band (`middle` formula ± `width` formula, e.g. Bollinger-style); level (`price`); zone (`upper` and `lower` prices, optional `from` date); rectangle (a zone between `from` and `to` dates only). Trendlines are drawn on a chart by the user, not drafted. Formula language: prices open/high/low/close/volume/hl2/hlc3/ohlc4; + - * / ^; comparisons and/or (true = 1); fn(source, length) for sma, ema, wma, rma, rsi, stdev, highest, lowest, sum, change, ref, roc; abs, sqrt, log, min, max, if(cond, a, b), crossover(a, b), crossunder(a, b); and any built-in indicator by its strategy-language name with numeric settings, e.g. atr(14), supertrend(10, 3), vwap(). Example: (close - sma(close, 50)) / atr(14).",
-      parameters: {
-        type: "object",
-        properties: {
-          name: { type: "string" },
-          kind: { type: "string", enum: [...DRAFT_KINDS] },
-          formula: { type: "string", description: "For graph line, price overlay and signal markers." },
-          upper: { type: "string", description: "Channel: upper-line formula. Zone/rectangle: upper price." },
-          lower: { type: "string", description: "Channel: lower-line formula. Zone/rectangle: lower price." },
-          middle: { type: "string", description: "Band: middle-line formula. Channel: optional middle formula." },
-          width: { type: "string", description: "Band: width formula added above and taken off below the middle, e.g. 2 * stdev(close, 20)." },
-          price: { type: "number", description: "Level: the price." },
-          from: { type: "string", description: "YYYY-MM-DD. Level/zone: optional start. Rectangle: required." },
-          to: { type: "string", description: "YYYY-MM-DD. Rectangle only: last day it applies." },
-          pane: { type: "string", enum: ["price", "separate"], description: "Channel/band only: drawn on price (default) or in its own pane." },
-          description: { type: "string", description: "One sentence: what it measures." },
-        },
-        required: ["name", "kind"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
       name: "list_instruments",
       description: "Search the platform's instruments (every NSE-listed stock plus the main indices). Pass what the user said — a symbol, company name or part of one — and use an exact symbol from the results.",
       parameters: {
@@ -296,6 +270,30 @@ export const AGENT_TOOLS: MantleTool[] = [
           style: styleSchema,
           trailing_stop: riskLegSchema,
           risk_options: riskOptionsSchema,
+          custom_indicators: {
+            type: "array",
+            maxItems: 5,
+            description:
+              "NEW custom indicators this strategy's rules use (the user's own saved ones are referenced by name only). Define each here — same fields as an indicator: name, kind (graph line | price overlay | signal markers | channel | band | level | zone | rectangle) and its formula/upper/lower/middle/width/price/from/to/pane — then use it in entry/exit as {\"custom\":\"<name>\"} (add \"part\" for zones/channels/bands). They are saved to the user's Custom Indicators when they confirm the strategy. Formula language: prices open/high/low/close/volume/hl2/hlc3/ohlc4; + - * / ^; comparisons and/or (true = 1); fn(source, length) for sma, ema, wma, rma, rsi, stdev, highest, lowest, sum, change, ref, roc; abs, sqrt, log, min, max, if(cond, a, b), crossover(a, b), crossunder(a, b); built-in indicators by name with numbers, e.g. atr(14).",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                kind: { type: "string", enum: [...DRAFT_KINDS] },
+                formula: { type: "string" },
+                upper: { type: "string" },
+                lower: { type: "string" },
+                middle: { type: "string" },
+                width: { type: "string" },
+                price: { type: "number" },
+                from: { type: "string" },
+                to: { type: "string" },
+                pane: { type: "string", enum: ["price", "separate"] },
+                description: { type: "string", description: "One sentence: what it measures." },
+              },
+              required: ["name", "kind"],
+            },
+          },
           position_sizing: {
             type: "object",
             properties: {
@@ -631,11 +629,32 @@ async function fillPlanCustomRefs<P extends { levels: { condition?: ConditionNod
   return { ...plan, levels: plan!.levels.map((l) => (l.condition ? { ...l, condition: fillCustomRefs(l.condition, saved) } : l)) } as P;
 }
 
-async function withCustomDefs<T extends { entry?: ConditionNode; exit?: ConditionNode | null }>(userId: string, rules: T): Promise<T> {
+/** The custom indicators a strategy proposal defines (`custom_indicators`): checked now, saved to the user's library when they confirm. */
+async function newCustomIndicators(userId: string, a: Record<string, unknown>): Promise<{ name: string; description?: string; def: CustomIndicatorDef }[]> {
+  if (!Array.isArray(a.custom_indicators) || a.custom_indicators.length === 0) return [];
+  if (a.custom_indicators.length > 5) throw new Error("custom_indicators: at most 5 per strategy.");
+  const existing = new Set((await prisma.customIndicator.findMany({ where: { userId }, select: { name: true } })).map((r) => r.name.toLowerCase()));
+  const out: { name: string; description?: string; def: CustomIndicatorDef }[] = [];
+  for (const [i, raw] of a.custom_indicators.entries()) {
+    const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+    const name = str(o.name).slice(0, 60);
+    if (!name) throw new Error(`custom_indicators #${i + 1}: needs a name.`);
+    if (existing.has(name.toLowerCase())) throw new Error(`The user already has a custom indicator called "${name}" — use it by name in the rules ({"custom":"${name}"}) and leave it out of custom_indicators, or choose a different name.`);
+    if (out.some((x) => x.name.toLowerCase() === name.toLowerCase())) throw new Error(`custom_indicators: "${name}" is listed twice.`);
+    try {
+      out.push({ name, ...(str(o.description) ? { description: str(o.description).slice(0, 300) } : {}), def: draftDefFrom(o) });
+    } catch (err) {
+      throw new Error(`custom_indicators "${name}": ${err instanceof Error ? err.message : "that definition can't be used."}`);
+    }
+  }
+  return out;
+}
+
+async function withCustomDefs<T extends { entry?: ConditionNode; exit?: ConditionNode | null }>(userId: string, rules: T, extra: { name: string; def: CustomIndicatorDef }[] = []): Promise<T> {
   const text = JSON.stringify(rules);
   if (!text.includes('"custom"')) return rules;
   const rows = await prisma.customIndicator.findMany({ where: { userId }, select: { name: true, def: true } });
-  const saved = new Map(rows.map((r) => [r.name, r.def as unknown as CustomIndicatorDef]));
+  const saved = new Map([...rows.map((r) => [r.name, r.def as unknown as CustomIndicatorDef] as const), ...extra.map((x) => [x.name, x.def] as const)]);
   return {
     ...rules,
     ...(rules.entry ? { entry: fillCustomRefs(rules.entry, saved) } : {}),
@@ -682,8 +701,10 @@ async function proposeStrategy(userId: string, a: Record<string, unknown>): Prom
     return { result: { error: `Unknown instrument "${str(a.instrument_symbol)}". Call list_instruments and use an exact symbol, or omit it so the user picks one.` } };
   }
   let rules;
+  let newIndicators: Awaited<ReturnType<typeof newCustomIndicators>> = [];
   try {
-    rules = await withCustomDefs(userId, rulesFrom(a, true));
+    newIndicators = await newCustomIndicators(userId, a);
+    rules = await withCustomDefs(userId, rulesFrom(a, true), newIndicators);
   } catch (err) {
     return { result: { error: `${readableIssues(err)} Fix it and call propose_strategy again.` } };
   }
@@ -737,6 +758,7 @@ async function proposeStrategy(userId: string, a: Record<string, unknown>): Prom
     ...(style ? { style } : {}),
     ...(plan ? { entryPlan: plan } : {}),
     ...(riskOpts ? { riskOptions: riskOpts } : {}),
+    ...(newIndicators.length ? { customIndicators: newIndicators } : {}),
     positionSizingMode: sizing.mode,
     positionSizingValue: sizing.value,
     maxPyramidEntries: Math.max(1, Math.floor(num(a.max_entries) ?? 1)),
@@ -1120,25 +1142,6 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
           const parts = customParts(def);
           return { name: r.name, class: classifyCustom(def), definition: describeCustom(def), ...(parts.length > 1 ? { parts } : {}), description: r.description };
         }),
-      };
-    }
-    case "draft_custom_indicator": {
-      let def: CustomIndicatorDef;
-      try {
-        def = draftDefFrom(a);
-      } catch (err) {
-        return { result: { error: `${err instanceof Error ? err.message : "That definition can't be used."} Fix it and call draft_custom_indicator again.` } };
-      }
-      const parts = customParts(def);
-      return {
-        result: {
-          ok: true,
-          class: classifyCustom(def),
-          definition: describeCustom(def),
-          link: draftLink(def, str(a.name), str(a.description)),
-          button: `[[go:${draftLink(def, str(a.name), str(a.description))}|Preview and save it]]`,
-          note: `It is NOT saved yet — tell the user it's a draft. Put \`button\` in your reply exactly as given (the definition travels in its link, so never shorten it): they preview it on any chart and press Save. Once saved, it can be used in strategy rules${parts.length > 1 ? ` — reading its ${parts.join(", ")} part` : ""}.`,
-        },
       };
     }
     case "list_instruments": {

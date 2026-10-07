@@ -35,16 +35,47 @@ describe("the brief's examples", () => {
     expect(e.stopPctOfMargin).toBe(-10);
     expect(e.targetPctOfMargin).toBe(25);
   });
-  it("margin-based at 5×: 10% risk / 25% reward on the margin are the price moves of 2% and 5%", () => {
-    const e = riskExample({ entry: 100, capital: 20, stop: { enabled: true, unit: "PERCENT", value: 10 }, target: { enabled: true, unit: "PERCENT", value: 25 }, options: opts({ leverage: 5, reference: "MARGIN" }) });
-    expect(e).toMatchObject({ stopPrice: 98, targetPrice: 105, stopPctOfMargin: -10, targetPctOfMargin: 25, stopPctOfPrice: -2, targetPctOfPrice: 5 });
+  it("on capital: a 1% stop and 2% target on ₹20,000 are ₹200 lost / ₹400 made, whatever the price", () => {
+    // 200 shares at ₹100 (full capital, no leverage): ₹200 over 200 shares = ₹1 a share; ₹400 = ₹2 a share.
+    const e = riskExample({ entry: 100, capital: 20_000, stop: { enabled: true, unit: "PERCENT", value: 1 }, target: { enabled: true, unit: "PERCENT", value: 2 }, options: opts({ reference: "CAPITAL" }) });
+    expect(e).toMatchObject({ quantity: 200, stopPrice: 99, targetPrice: 102, stopPnl: -200, targetPnl: 400 });
+    // A ₹ amount of capital works the same way: ₹500 over 200 shares = ₹2.50 a share.
+    const f = riskExample({ entry: 100, capital: 20_000, stop: { enabled: true, unit: "POINTS", value: 500 }, target: null, options: opts({ reference: "CAPITAL" }) });
+    expect(f).toMatchObject({ stopPrice: 97.5, stopPnl: -500 });
   });
-  it("the engine runs margin-based settings in price terms (the price itself is never multiplied)", () => {
-    const rm = engineRisk({ stopLoss: { enabled: true, unit: "PERCENT", value: 10 }, target: null, trailingSl: { enabled: true, unit: "POINTS", value: 3 }, targets: [tgt("PERCENT", 15, 30, { mode: "MARGIN", unit: "PERCENT", value: 5 })] }, opts({ leverage: 5, reference: "MARGIN" }));
-    expect(rm.riskManagement.stopLoss).toMatchObject({ value: 2 });
-    expect(rm.riskManagement.trailingSl).toMatchObject({ unit: "POINTS", value: 3 });
-    expect(rm.riskManagement.targets![0]).toMatchObject({ value: 3, lock: { value: 1 } });
+  it("the engine gets the legs untouched, plus what they are measured on", () => {
+    const rm = engineRisk({ stopLoss: { enabled: true, unit: "PERCENT", value: 10 }, target: null, trailingSl: { enabled: true, unit: "POINTS", value: 3 } }, opts({ leverage: 5, reference: "CAPITAL" }));
+    expect(rm.riskManagement.stopLoss).toMatchObject({ unit: "PERCENT", value: 10 });
+    expect(rm.riskBasis).toBe("CAPITAL");
     expect(rm.leverage).toBe(5);
+    expect(engineRisk({ stopLoss: null, target: null, trailingSl: null }, DEFAULT_RISK_OPTIONS).riskBasis).toBe("PRICE");
+  });
+});
+
+describe("stop-loss and target measured on capital, in the engine", () => {
+  // 10 shares bought at ₹100 with ₹10,000 of capital. On the share price a 1% stop is ₹1 a share (₹10); on capital it is
+  // 1% of ₹10,000 = ₹100 over 10 shares = ₹10 a share.
+  const sizing = { mode: "FIXED_QUANTITY" as const, value: 10 };
+  const down = [bar(0, 100, 100, 100, 100), bar(1, 100, 100, 99.5, 100), bar(2, 100, 100, 89, 90), bar(3, 90, 90, 90, 90)];
+  it("share price: the stop is 1% below the entry", () => {
+    const r = run(down, cfg({ stopLoss: { enabled: true, unit: "PERCENT", value: 1 } }, { positionSizing: sizing }), [0], { cash: 10_000, position: null });
+    expect(r.steps.find((s) => s.trade)!.trade!.exitPrice).toBe(99);
+  });
+  it("capital: the stop is the price move that loses 1% of the capital", () => {
+    const r = run(down, cfg({ stopLoss: { enabled: true, unit: "PERCENT", value: 1 } }, { positionSizing: sizing, riskBasis: "CAPITAL" }), [0], { cash: 10_000, position: null });
+    const t = r.steps.find((s) => s.trade)!.trade!;
+    expect([t.exitPrice, t.netPnl]).toEqual([90, -100]);
+  });
+  it("capital, in rupees: a ₹50 target on 10 shares is ₹5 a share", () => {
+    const up = [bar(0, 100, 100, 100, 100), bar(1, 100, 100, 100, 100), bar(2, 100, 106, 100, 105), bar(3, 105, 105, 105, 105)];
+    const r = run(up, cfg({ target: { enabled: true, unit: "POINTS", value: 50 } }, { positionSizing: sizing, riskBasis: "CAPITAL" }), [0], { cash: 10_000, position: null });
+    const t = r.steps.find((s) => s.trade)!.trade!;
+    expect([t.exitPrice, t.netPnl]).toEqual([105, 50]);
+  });
+  it("can't be combined with sizing by risk", () => {
+    expect(riskOptionsProblem(opts({ reference: "CAPITAL" }), { productType: "DELIVERY", stopLossOn: true, sizingMode: "RISK_PERCENT" })).toMatch(/can't be combined/);
+    expect(riskOptionsProblem(opts({ reference: "CAPITAL" }), { productType: "DELIVERY", stopLossOn: true, sizingMode: "FIXED_QUANTITY" })).toBeNull();
+    expect(parseRiskOptions({ reference: "MARGIN" }).reference).toBe("CAPITAL"); // the earlier name
   });
 });
 
@@ -58,11 +89,10 @@ describe("leverage in sizing", () => {
     // 1% of 20,000 = ₹200 at ₹2 a share risk → 100 shares, within 1,000 affordable.
     expect(computeQuantity(20_000, 100, { mode: "RISK_PERCENT", value: 1 }, 2, 5)).toBe(100);
   });
-  it("is checked: only intraday, at most 20×, margin mode needs leverage", () => {
+  it("is checked: only intraday, at most 20×", () => {
     expect(riskOptionsProblem(opts({ leverage: 5 }), { productType: "DELIVERY", stopLossOn: true })).toMatch(/intraday/);
     expect(riskOptionsProblem(opts({ leverage: 25 }), { productType: "INTRADAY", stopLossOn: true })).toMatch(/between/);
-    expect(riskOptionsProblem(opts({ reference: "MARGIN" }), { productType: "INTRADAY", stopLossOn: true })).toMatch(/leverage above/);
-    expect(riskOptionsProblem(opts({ leverage: 5, reference: "MARGIN" }), { productType: "INTRADAY", stopLossOn: true })).toBeNull();
+    expect(riskOptionsProblem(opts({ leverage: 5, reference: "CAPITAL" }), { productType: "INTRADAY", stopLossOn: true })).toBeNull();
     expect(parseRiskOptions({ leverage: 99, reference: "x" })).toEqual(DEFAULT_RISK_OPTIONS);
   });
 });

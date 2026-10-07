@@ -34,7 +34,7 @@ export const EMPTY_STRATEGY: OptionStrategyInput = {
 };
 
 /** Create or edit a multi-leg options strategy (strikes relative to ATM). */
-export default function StrategyEditor({ initial = EMPTY_STRATEGY, onDone }: { initial?: OptionStrategyInput; onDone?: () => void }) {
+export default function StrategyEditor({ initial = EMPTY_STRATEGY, onDone, onCancel }: { initial?: OptionStrategyInput; onDone?: () => void; /** Cancel button; defaults to `onDone` where callers use one callback for both. */ onCancel?: () => void }) {
   const [s, setS] = useState<OptionStrategyInput>(initial);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -195,8 +195,8 @@ export default function StrategyEditor({ initial = EMPTY_STRATEGY, onDone }: { i
         <button type="button" disabled={pending} onClick={save} className="rounded-full bg-brand-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
           {pending ? "Saving…" : s.id ? "Save changes" : "Save strategy"}
         </button>
-        {onDone && (
-          <button type="button" onClick={onDone} className="rounded-full px-4 py-2 text-sm font-semibold text-brand-navy/60">
+        {(onCancel ?? onDone) && (
+          <button type="button" onClick={onCancel ?? onDone} className="rounded-full px-4 py-2 text-sm font-semibold text-brand-navy/60">
             Cancel
           </button>
         )}

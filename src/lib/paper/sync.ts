@@ -340,6 +340,7 @@ export async function syncPaperSession(
     riskManagement,
     leverage: session.leverageInCash ? 1 : risk?.leverage,
     limits: risk?.limits,
+    riskBasis: risk?.riskBasis,
     maxCapitalUsePercent: risk?.maxCapitalUsePercent,
     atrAtEntry: atrByTimeFinal ? (idx: number) => atrByTimeFinal.get(candles[idx]?.time) : undefined,
     maxPyramidEntries: session.maxPyramidEntries ?? DEFAULT_MAX_PYRAMID_ENTRIES,

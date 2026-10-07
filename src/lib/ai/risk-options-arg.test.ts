@@ -5,7 +5,7 @@ import { DEFAULT_RISK_OPTIONS } from "@/lib/trading-engine/risk-options";
 
 describe("risk_options argument", () => {
   it("reads every option", () => {
-    expect(riskOptionsFrom({ leverage: 5, tp_sl_reference: "margin", break_even: { value: 1, unit: "PERCENT" }, max_daily_loss_pct: 3, max_drawdown_pct: 10 })).toEqual({ reference: "MARGIN", leverage: 5, breakEven: { unit: "PERCENT", value: 1 }, maxDailyLossPercent: 3, maxDrawdownPercent: 10 });
+    expect(riskOptionsFrom({ leverage: 5, tp_sl_reference: "capital", break_even: { value: 1, unit: "PERCENT" }, max_daily_loss_pct: 3, max_drawdown_pct: 10 })).toEqual({ reference: "CAPITAL", leverage: 5, breakEven: { unit: "PERCENT", value: 1 }, maxDailyLossPercent: 3, maxDrawdownPercent: 10 });
   });
   it("keeps the saved ones for fields left out, and clears with null", () => {
     const saved = { ...DEFAULT_RISK_OPTIONS, leverage: 5, maxDailyLossPercent: 3 };
@@ -16,7 +16,7 @@ describe("risk_options argument", () => {
   });
   it("explains bad values", () => {
     expect(() => riskOptionsFrom({ leverage: 50 })).toThrow(/1 to 20/);
-    expect(() => riskOptionsFrom({ tp_sl_reference: "equity" })).toThrow(/price.*margin/);
+    expect(() => riskOptionsFrom({ tp_sl_reference: "equity" })).toThrow(/price.*capital/);
     expect(() => riskOptionsFrom({ max_daily_loss_pct: 0 })).toThrow(/percentage/);
   });
 });

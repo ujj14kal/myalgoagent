@@ -9,7 +9,9 @@ export type ReplyGroup =
   | { kind: "p"; lines: string[] }
   | { kind: "heading"; text: string }
   | { kind: "list"; ordered: boolean; /** First number of an ordered list, so "4." after a paragraph stays 4. */ start: number; items: string[] }
-  | { kind: "table"; header: string[]; rows: string[][]; align: Align[] };
+  | { kind: "table"; header: string[]; rows: string[][]; align: Align[] }
+  /** A fenced ``` block: shown as-is (a formula or a rule), wrapping rather than running out of the bubble. */
+  | { kind: "code"; text: string; lang?: string };
 
 const LIST_ITEM = /^\s*([-*•]|\d+[.)])\s+/;
 const HEADING = /^\s*#{1,6}\s+(.+?)\s*#*\s*$/;
@@ -46,6 +48,19 @@ export function groupReply(content: string): ReplyGroup[] {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    // A fenced code block runs to its closing fence (or the end of the reply); its lines are kept exactly.
+    const fence = /^\s*```\s*([\w+-]*)\s*$/.exec(line);
+    if (fence) {
+      const body: string[] = [];
+      let j = i + 1;
+      for (; j < lines.length && !/^\s*```\s*$/.test(lines[j]); j++) body.push(lines[j]);
+      const text = body.join("\n").replace(/^\n+|\s+$/g, "");
+      if (text) groups.push({ kind: "code", text, ...(fence[1] ? { lang: fence[1] } : {}) });
+      para = list = null;
+      blank = false;
+      i = j;
+      continue;
+    }
     if (!line.trim()) {
       blank = true;
       para = null;

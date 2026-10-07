@@ -11,8 +11,8 @@ import type { CandleInterval } from "@/lib/market-data";
 import SimpleConditionPicker, { ALL_CATEGORIES, fitsSimpleMode, unwrapForSimpleMode } from "@/components/simple-condition-picker";
 import StrategyCodeEditor from "@/components/strategy-code-editor";
 import PositionSizingFields from "@/components/position-sizing-fields";
+import { NEW_STRATEGY_DRAFT_KEY } from "@/lib/strategy-draft-key";
 import RiskManagementFields, { type RiskLegState } from "@/components/risk-management-fields";
-import RiskOptionsFields from "@/components/risk-options-fields";
 import { DEFAULT_RISK_OPTIONS, parseRiskOptions, type RiskOptions } from "@/lib/trading-engine/risk-options";
 import DraftAutoSaveToast from "@/components/draft-autosave-toast";
 import CandlePatternIllustration from "@/components/candle-pattern-illustration";
@@ -136,7 +136,7 @@ function BuilderSection({
   );
 }
 
-export const NEW_STRATEGY_DRAFT_KEY = "maa:new-strategy-draft";
+export { NEW_STRATEGY_DRAFT_KEY };
 
 /** Whether a rule uses the time of day (a time window, or a candle pattern limited to certain times). */
 function hasTimeRule(node: ConditionNode): boolean {
@@ -523,7 +523,7 @@ export default function StrategyBuilderForm({
       limitMode: orderType === "LIMIT" ? limitMode : null,
       limitValue: orderType === "LIMIT" ? limitValue : null,
       // Leverage is intraday only: a delivery strategy always runs at 1×, price-based.
-      riskOptions: productType === "INTRADAY" ? riskOptions : { ...riskOptions, leverage: 1, reference: "PRICE" },
+      riskOptions: productType === "INTRADAY" ? riskOptions : { ...riskOptions, leverage: 1 },
     };
   }
   useEffect(() => {
@@ -922,7 +922,7 @@ export default function StrategyBuilderForm({
           </>
         )}
 
-        <BuilderSection step={mode === "WEBHOOK" ? 3 : 4} title="Risk management" subtitle="Stop-loss, take-profit, trailing stop, leverage and limits" sectionRef={riskRef}>
+        <BuilderSection step={mode === "WEBHOOK" ? 3 : 4} title="Risk management" subtitle="Stop-loss, take-profit and trailing stop — in points or percent, on the share price or your capital" sectionRef={riskRef}>
           <RiskManagementFields
             stopLoss={stopLoss}
             target={target}
@@ -932,9 +932,12 @@ export default function StrategyBuilderForm({
             onTrailingSlChange={setTrailingSl}
             direction={direction}
             entryPrice={examplePrice}
+            // Webhook strategies get their stops from the alerts' own prices, so there's only the share price there.
+            {...(mode === "WEBHOOK" ? {} : { basis: riskOptions.reference, onBasisChange: (reference: "PRICE" | "CAPITAL") => setRiskOptions({ ...riskOptions, reference }), sizingByRisk: positionSizingMode === "RISK_PERCENT" })}
           />
           {mode !== "WEBHOOK" && (
             <StagedTargetsFields
+              onCapital={riskOptions.reference === "CAPITAL"}
               rows={targetRows}
               direction={direction}
               latestPrice={examplePrice}
@@ -946,7 +949,6 @@ export default function StrategyBuilderForm({
               }}
             />
           )}
-          <RiskOptionsFields value={riskOptions} onChange={setRiskOptions} productType={productType} stopLoss={stopLoss} target={target} entryPrice={examplePrice} webhook={mode === "WEBHOOK"} />
           {mode !== "WEBHOOK" && intraday && (
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <SessionTimeField

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import StrategyBuilderForm, { NEW_STRATEGY_DRAFT_KEY, type StrategyInitial } from "@/components/strategy-builder-form";
+import StrategyBuilderForm, { type StrategyInitial } from "@/components/strategy-builder-form";
+import { NEW_STRATEGY_DRAFT_FROM_KEY, NEW_STRATEGY_DRAFT_KEY } from "@/lib/strategy-draft-key";
 import type { StrategyInput } from "@/lib/strategy-actions";
 import { NEVER_EXIT_CONDITION } from "@/lib/strategy/types";
 
@@ -41,12 +42,14 @@ function toInitial(d: StrategyInput): StrategyInitial | null {
     style: d.style ?? null,
     targets: d.targets,
     entryPlan: d.entryPlan ?? null,
+    riskOptions: d.riskOptions,
   };
 }
 
 /** New Strategy: restores an unsaved strategy kept in this tab (e.g. after a reload), with a way to start fresh. */
 export default function NewStrategyWithDraft({ instruments }: { instruments: InstrumentOption[] }) {
   const [draft, setDraft] = useState<StrategyInitial | null>(null);
+  const [fromAgent, setFromAgent] = useState(false);
   const [key, setKey] = useState(0);
   useEffect(() => {
     try {
@@ -56,6 +59,7 @@ export default function NewStrategyWithDraft({ instruments }: { instruments: Ins
       if (d && instruments.some((i) => i.id === d.instrumentId)) {
         // eslint-disable-next-line react-hooks/set-state-in-effect -- restoring browser-kept state after mount (not available during render)
         setDraft(d);
+        setFromAgent(sessionStorage.getItem(NEW_STRATEGY_DRAFT_FROM_KEY) === "agent");
         setKey((k) => k + 1);
       }
     } catch {
@@ -67,12 +71,13 @@ export default function NewStrategyWithDraft({ instruments }: { instruments: Ins
     <>
       {draft && (
         <p className="mx-auto mb-3 flex max-w-4xl flex-wrap items-center gap-2 rounded-xl bg-brand-primary/[0.06] px-4 py-2.5 text-sm text-brand-navy/75">
-          Restored the strategy you were building.
+          {fromAgent ? "Opened from your assistant — this is the strategy it prepared. Preview it below, change anything, then save." : "Restored the strategy you were building."}
           <button
             type="button"
             onClick={() => {
               try {
                 sessionStorage.removeItem(NEW_STRATEGY_DRAFT_KEY);
+                sessionStorage.removeItem(NEW_STRATEGY_DRAFT_FROM_KEY);
               } catch {}
               setDraft(null);
               setKey((k) => k + 1);

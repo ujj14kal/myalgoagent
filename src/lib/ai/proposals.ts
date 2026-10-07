@@ -4,6 +4,7 @@ import type { EntryPlan, TargetLevel } from "@/lib/trading-engine/step";
 import type { StrategyStyle } from "@/lib/strategy/style";
 import type { BlockDefinition, ConceptClass, ConceptDefinition, TradingSystemDefinition } from "@/lib/system/types";
 import { NEVER_EXIT_CONDITION, type ConditionNode } from "@/lib/strategy/types";
+import type { CustomIndicatorDef } from "@/lib/custom-indicator";
 
 // An action the agent has prepared for the user to review. Stored on the
 // agent's reply (AgentMessage.proposal) so it survives reloads; the status
@@ -54,6 +55,8 @@ export type AgentProposal =
         entryPlan?: EntryPlan;
         /** TP/SL reference, intraday leverage, break-even and the system's loss limits. */
         riskOptions?: RiskOptions;
+        /** Custom indicators this strategy's rules use that the user doesn't have yet: saved to their library when they confirm. */
+        customIndicators?: { name: string; description?: string; def: CustomIndicatorDef }[];
         positionSizingMode: SizingModeName;
         positionSizingValue: number | null;
       };

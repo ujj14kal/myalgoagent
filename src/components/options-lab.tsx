@@ -15,6 +15,7 @@ import {
 import OptionChain, { type ChainContext } from "@/components/option-chain";
 import LiveBasket, { type BasketBroker } from "@/components/options/live-basket";
 import ContractPicker, { type Pick } from "@/components/options/contract-picker";
+import StrategyFromLegs from "@/components/options/strategy-from-legs";
 
 // Options Lab: pick contracts from the option chain (the user's own broker first; the licensed feed
 // for allowed accounts; otherwise free-trial estimates), then see the multi-leg payoff, breakevens
@@ -248,6 +249,7 @@ export default function OptionsLab({ basketBrokers = [] }: { basketBrokers?: Bas
               <LiveBasket brokers={basketBrokers} underlying={ctx.data.underlying} expiry={ctx.data.expiry} legs={legs} />
             </div>
           )}
+          <StrategyFromLegs legs={legs} underlying={ctx?.data.underlying ?? underlying} step={s.step} spot={s.spot} expiries={ctx?.data.expiries ?? []} expiry={ctx?.data.expiry ?? expiry} />
           <p className="mt-4 text-[11px] text-brand-navy/55">
             <strong className="font-semibold">Position Greeks below: calculated by us</strong> (Black–Scholes, from each leg&apos;s IV, the spot and the days left, at the rate set above) — not figures from your broker. Prices and IVs marked “market” come from {ctx && !estimate ? ctx.data.source.name : "a live chain"}.
           </p>
