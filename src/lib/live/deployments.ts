@@ -21,6 +21,7 @@ import { resyncEntryPlan, resyncStaged } from "./resync";
 import { resolveRiskDistance } from "@/lib/trading-engine/step";
 import { parseTargets } from "@/lib/trading-engine/targets-config";
 import { parseEntryPlan } from "@/lib/trading-engine/entry-plan-config";
+import { parseSystemRuntime } from "@/lib/system/signals";
 
 // Live deployments: a strategy trading on the user's own broker. The forward-
 // testing engine decides (same rules, same risk exits, same square-off); every
@@ -51,7 +52,9 @@ const REASON: Record<string, string> = {
   target: "target",
   trailing_stop: "trailing stop",
   square_off: "intraday square-off",
-  locked_profit: "the profit locked by an earlier target",
+  locked_profit: "the stop moved by an earlier target or break-even",
+  opposite_signal: "a setup of the other side (your system exits on it)",
+  reversal: "a setup of the other side (your system reverses on it)",
 };
 const reasonText = (r: string) => REASON[r] ?? r.replace(/_/g, " ");
 
@@ -76,6 +79,11 @@ export async function startDeployment(userId: string, input: { strategyId: strin
   if (s.mode === "WEBHOOK") throw new LiveCheckError("Webhook strategies run as forward tests only.");
   if (!s.instrument.symbol.endsWith(".NS")) throw new LiveCheckError(`${s.instrument.symbol} can't be traded — live strategies trade NSE stocks.`);
   if (s.direction === "SHORT" && s.productType !== "INTRADAY") throw new LiveCheckError("A short strategy must be intraday.");
+  // Trading systems go live long-only for now: live orders, reconciling and "Exit now" follow one side per deployment.
+  const system = parseSystemRuntime(s.systemRuntime);
+  if (system && system.allowShort && system.concepts.some((c) => c.side === "BEARISH")) {
+    throw new LiveCheckError("This trading system can open short positions, and live trading runs systems long-only for now. Forward test it, or set it to delivery (bearish setups then only close longs) to take it live.");
+  }
   const dup = await prisma.liveDeployment.findFirst({ where: { userId, strategyId: s.id, broker: input.broker, status: { in: ["ACTIVE", "PAUSED"] } } });
   if (dup) throw new LiveCheckError(`This strategy is already live on ${name}.`);
 
@@ -133,6 +141,7 @@ export async function startDeployment(userId: string, input: { strategyId: strin
       maxDrawdownPercent: options.maxDrawdownPercent != null ? options.maxDrawdownPercent / leverage : null,
     },
     leverageInCash: true,
+    ...(system ? { system: { ...system, allowShort: false } } : {}),
     timeframe: s.timeframe,
     noEntryAfterMinute: s.noEntryAfterMinute,
     squareOffMinute: s.squareOffMinute,
@@ -400,6 +409,7 @@ export async function runDeployment(id: string): Promise<"idle" | "acted" | "pau
     positionAnchorPrice: result.position?.anchorPrice ?? null,
     positionTrailAfter: result.position?.trailAfter ?? null,
     engineMemo: result.memo,
+    ...(state.system ? { positionDirection: result.positionDirection, systemMemo: result.systemMemo } : {}),
     lastSyncedTime: result.lastSyncedTime,
   } as PaperSessionState;
   const after = acted && d.mode === "AUTO" ? await reconcile(d) : real;

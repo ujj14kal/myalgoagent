@@ -5,18 +5,19 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import PageHeader from "@/components/ui/page-header";
 import Pager from "@/components/ui/pager";
-import WorkspaceEditor from "@/components/workspace/workspace-editor";
+import SystemEditor from "@/components/system/system-editor";
 import WorkspaceActionsBar from "@/components/workspace/workspace-actions-bar";
 import { pageWindow, readPageQuery } from "@/lib/pagination";
-import { parseDefinition } from "@/lib/workspace/definition";
+import { parseSystemDefinition } from "@/lib/system/definition";
+import { loadConceptOptions } from "@/lib/system/options";
 
-export const metadata = { title: "Workspace", robots: { index: false } };
+export const metadata = { title: "Trading system", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
 const VERSIONS_PER_PAGE = 10;
 const STATUS_LABEL: Record<string, string> = { ACTIVE: "Live", PAUSED: "Paused" };
 
-export default async function WorkspacePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+export default async function TradingSystemPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return null;
@@ -24,18 +25,12 @@ export default async function WorkspacePage({ params, searchParams }: { params: 
   const sp = await searchParams;
   const ws = await prisma.workspace.findFirst({ where: { id, userId } });
   if (!ws) notFound();
-  const draft = parseDefinition(ws.draft);
+  const draft = parseSystemDefinition(ws.draft);
   if (!draft) notFound();
 
-  const [instruments, strategies, versionTotal] = await Promise.all([
+  const [instruments, concepts, versionTotal] = await Promise.all([
     prisma.instrument.findMany({ orderBy: { symbol: "asc" }, select: { id: true, symbol: true, name: true } }),
-    // Strategies a plan can reuse: the user's own, not deleted, and not themselves compiled from a workspace.
-    prisma.strategy.findMany({
-      where: { userId, status: { not: "DELETED" }, workspaceVersionId: null },
-      orderBy: { name: "asc" },
-      take: 500,
-      select: { id: true, name: true, direction: true, mode: true, timeframe: true, instrument: { select: { symbol: true } } },
-    }),
+    loadConceptOptions(userId),
     prisma.workspaceVersion.count({ where: { workspaceId: id } }),
   ]);
   const { page, size } = readPageQuery(sp, VERSIONS_PER_PAGE);
@@ -56,28 +51,28 @@ export default async function WorkspacePage({ params, searchParams }: { params: 
   return (
     <div>
       <PageHeader
-        eyebrow={ws.status === "ARCHIVED" ? "Archived workspace" : ws.latestVersion > 0 ? `Version ${ws.latestVersion} published` : "Draft workspace"}
+        eyebrow={`Workspace · Trading system · ${ws.status === "ARCHIVED" ? "archived" : ws.latestVersion > 0 ? `version ${ws.latestVersion} published` : "draft"}`}
         title={ws.name}
         icon={Network}
-        description="Edit the plan here; nothing changes for a running version until you publish a new one."
+        description="Every trading decision lives here; the setups come from your concepts. Nothing changes for a running version until you publish a new one."
         actions={<WorkspaceActionsBar id={ws.id} archived={ws.status === "ARCHIVED"} />}
       />
-      <WorkspaceEditor
+      <SystemEditor
         id={ws.id}
         initialName={ws.name}
         initialDescription={ws.description ?? ""}
         initialDraft={draft}
         latestVersion={ws.latestVersion}
         archived={ws.status === "ARCHIVED"}
-        strategies={strategies.map((s) => ({ id: s.id, name: s.name, direction: s.direction, mode: s.mode, timeframe: s.timeframe, symbol: s.instrument.symbol.replace(/\.NS$/, "") }))}
+        concepts={concepts}
         instruments={instruments}
       />
 
       <section className="mx-auto mt-8 max-w-4xl">
         <h2 className="text-sm font-semibold text-brand-navy">Published versions</h2>
-        <p className="mt-0.5 text-xs text-brand-navy/50">Each version is a frozen copy of the plan and the strategy it produced. Backtest it, forward test it, then take it live from its strategy page.</p>
+        <p className="mt-0.5 text-xs text-brand-navy/50">Each version is a frozen copy of the system, its concepts and blocks, and the strategy it produced. Backtest it, forward test it, then take it live from its strategy page.</p>
         {versions.length === 0 ? (
-          <p className="surface mt-3 p-5 text-center text-sm text-brand-navy/50">Nothing published yet. When the plan checks out, publish version 1.</p>
+          <p className="surface mt-3 p-5 text-center text-sm text-brand-navy/50">Nothing published yet. When the system checks out, publish version 1.</p>
         ) : (
           <div className="mt-3 overflow-x-auto surface">
             <table className="data-table">

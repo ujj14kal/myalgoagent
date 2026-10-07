@@ -39,11 +39,14 @@ export default async function PaperSessionDetailPage({ params }: { params: Promi
   // A long opens with a BUY and closes with a SELL; a short is the mirror —
   // its opening fill is a SELL (sold to open) and its closing fill a BUY
   // (bought to cover), so which literal side counts as "entry" flips.
-  const opensPosition = (side: "BUY" | "SELL") => (paperSession.direction === "SHORT" ? side === "SELL" : side === "BUY");
+  // A trading system picks each position's side itself (stored per order); a strategy has one direction.
+  const isSystem = paperSession.systemRuntime != null;
+  const opensPosition = (o: { side: "BUY" | "SELL"; positionSide: "LONG" | "SHORT" | null }) => ((o.positionSide ?? paperSession.direction) === "SHORT" ? o.side === "SELL" : o.side === "BUY");
   const markers: Signal[] = paperSession.orders.map((o) => ({
     time: o.time,
-    type: opensPosition(o.side) ? ("entry" as const) : ("exit" as const),
+    type: opensPosition(o) ? ("entry" as const) : ("exit" as const),
   }));
+  const positionDirection = paperSession.positionDirection ?? paperSession.direction;
 
   const inPosition = paperSession.positionQuantity !== null;
   const latestClose = candles.at(-1)?.close ?? paperSession.positionEntryPrice ?? 0;
@@ -55,13 +58,13 @@ export default async function PaperSessionDetailPage({ params }: { params: Promi
   // closed trades — so equity must add the *unrealized gain* of an open
   // position, not its full notional value, or this would double-count the
   // entry cost as profit. Direction flips which way price moving helps.
-  const unrealizedGain = inPosition ? (paperSession.direction === "SHORT" ? entryPrice - latestClose : latestClose - entryPrice) * quantity : 0;
+  const unrealizedGain = inPosition ? (positionDirection === "SHORT" ? entryPrice - latestClose : latestClose - entryPrice) * quantity : 0;
   const equity = paperSession.cash + unrealizedGain;
   const pnl = equity - paperSession.startingCapital;
   const pnlPct = (pnl / paperSession.startingCapital) * 100;
   // Cash not tied up in the open position, so the cards add up to equity.
-  const availableCash = !inPosition ? paperSession.cash : paperSession.direction === "SHORT" ? paperSession.cash + entryPrice * quantity : paperSession.cash - entryPrice * quantity;
-  const signedPosition = paperSession.direction === "SHORT" ? -positionValue : positionValue;
+  const availableCash = !inPosition ? paperSession.cash : positionDirection === "SHORT" ? paperSession.cash + entryPrice * quantity : paperSession.cash - entryPrice * quantity;
+  const signedPosition = positionDirection === "SHORT" ? -positionValue : positionValue;
 
   return (
     <div>
@@ -73,7 +76,11 @@ export default async function PaperSessionDetailPage({ params }: { params: Promi
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="font-medium text-brand-navy">{paperSession.instrumentSymbol}</span>
             <StatusBadge status={paperSession.status} />
-            <StatusBadge status={paperSession.direction === "SHORT" ? "SHORT" : "LONG"} />
+            {isSystem ? (
+              <span className="rounded-full bg-brand-navy/[0.06] px-2 py-0.5 text-xs font-semibold text-brand-navy/70">Trading system · long &amp; short{inPosition ? ` · now ${positionDirection === "SHORT" ? "short" : "long"}` : ""}</span>
+            ) : (
+              <StatusBadge status={paperSession.direction === "SHORT" ? "SHORT" : "LONG"} />
+            )}
             <span>· {describePositionSizing(paperSession.positionSizingMode, paperSession.positionSizingValue)}</span>
           </span>
         }
@@ -123,6 +130,7 @@ export default async function PaperSessionDetailPage({ params }: { params: Promi
                   <td>{new Date(o.time * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}</td>
                   <td>
                     <StatusBadge status={o.side} />
+                    {o.positionSide && <span className="ml-1.5 text-xs text-brand-navy/55">{opensPosition(o) ? "opens" : "closes"} {o.positionSide === "SHORT" ? "short" : "long"}</span>}
                   </td>
                   <td className="num-cell">₹{formatPrice(o.price)}</td>
                   <td className="num-cell">{o.quantity}</td>

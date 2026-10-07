@@ -36,6 +36,7 @@ const clip = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n - 1)}…` : 
 function legText(leg: Leg): string {
   if (!leg) return "";
   if (leg.unit === "PERCENT") return `${leg.value}%`;
+  if (leg.unit === "R_MULTIPLE") return `${leg.value}R`;
   if (leg.unit === "POINTS") return `₹${leg.value}`;
   return `${leg.value}× ATR`;
 }
@@ -43,13 +44,16 @@ function legText(leg: Leg): string {
 export function explainPaperOrder(o: NewPaperOrder, c: ExplainContext): string {
   const isOpen = o.reason === "entry_rule" || o.reason === "pyramid" || o.reason === "entry_level";
   const qty = Number.isInteger(o.quantity) ? o.quantity : Number(o.quantity.toFixed(4));
-  const verb = isOpen ? (c.direction === "SHORT" ? "Sold short" : "Bought") : c.direction === "SHORT" ? "Bought back" : "Sold";
+  // A trading system chooses each position's side itself; a strategy has one.
+  const direction = o.positionSide ?? c.direction;
+  const verb = isOpen ? (direction === "SHORT" ? "Sold short" : "Bought") : direction === "SHORT" ? "Bought back" : "Sold";
   const head = `${verb} ${qty} ${c.symbol} at ${inr(o.price)} (${c.strategyName})`;
   const pnl = o.netPnl != null ? ` P&L ${signedInr(o.netPnl)} after fees.` : "";
   const day = (t: number) => when(t, c.intraday);
 
   switch (o.reason) {
     case "entry_rule":
+      if (o.conceptSide) return `${head} — a ${o.conceptSide === "BULLISH" ? "bullish" : "bearish"} concept's setup became valid at the close on ${day(o.signalTime)}, so the system ${direction === "SHORT" ? "went short" : "went long"} at the next open.`;
       if (o.viaLimit) {
         return `${head} — your entry rule (${clip(c.entryRule)}) fired, and your limit order filled on ${day(o.time)} at ${inr(o.price)} (your limit or better).`;
       }
@@ -71,7 +75,11 @@ export function explainPaperOrder(o: NewPaperOrder, c: ExplainContext): string {
     case "time_stop":
       return `${head} — the maximum holding period you set ended on ${day(o.signalTime)}, so the position was closed at the open.${pnl}`;
     case "locked_profit":
-      return `${head} — price came back to the profit locked by an earlier target on ${day(o.signalTime)}, so the rest was sold there.${pnl}`;
+      return `${head} — price came back to the stop moved by an earlier target or the break-even rule on ${day(o.signalTime)}, so the rest was closed there.${pnl}`;
+    case "opposite_signal":
+      return `${head} — a setup of the other side became valid on ${day(o.signalTime)}, and your system exits on that, so it closed at the next open.${pnl}`;
+    case "reversal":
+      return `${head} — a setup of the other side became valid on ${day(o.signalTime)}, and your system reverses on that: it closed here and opened the other way at the same open.${pnl}`;
     case "trailing_stop":
       return `${head} — your ${legText(c.trailingStop)} trailing stop was hit on ${day(o.signalTime)} (price moved that far back from its best level).${pnl}`;
     case "square_off":

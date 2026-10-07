@@ -220,6 +220,15 @@ export interface EngineConfig {
   leverage?: number;
   /** Daily-loss and drawdown limits on new positions. */
   limits?: EngineLimits;
+  /** The most of the capital (× leverage) one position may use, in %; omitted = all of it. */
+  maxCapitalUsePercent?: number | null;
+}
+
+/** The most shares a position may hold under the capital-use limit (Infinity when there's no limit). */
+export function capitalUseCap(cash: number, fillPrice: number, leverage: number | undefined, maxCapitalUsePercent: number | null | undefined): number {
+  if (maxCapitalUsePercent == null || !(maxCapitalUsePercent > 0) || maxCapitalUsePercent >= 100) return Infinity;
+  const lev = leverage && leverage > 1 ? leverage : 1;
+  return Math.floor((cash * lev * maxCapitalUsePercent) / 100 / fillPrice);
 }
 
 export interface IntradaySession {
@@ -525,7 +534,7 @@ function closeTrade(
  * intrabar order of price movement isn't knowable from candle data.
  */
 /** Why a position closed — reported with each trade so fills can be explained. */
-export type ExitReason = "trailing_stop" | "stop_loss" | "target" | "exit_rule" | "square_off" | "locked_profit" | "time_stop";
+export type ExitReason = "trailing_stop" | "stop_loss" | "target" | "exit_rule" | "square_off" | "locked_profit" | "time_stop" | "opposite_signal" | "reversal";
 
 export type StepResult = {
   state: EngineState;
@@ -801,7 +810,9 @@ function stepBarCore(
       const order = config.entryOrder;
       const fillPrice = order?.type === "LIMIT" ? limitFill(nextBar, limitPriceFor(order, bar.close, direction), direction) : openFillPrice(nextBar.open);
       if (fillPrice === null) return { state: { ...state, position: { ...pos, favorableExtreme } } };
-      const addQuantity = computeQuantity(state.cash, fillPrice, config.positionSizing, stopDistanceFor(config, fillPrice, config.atrAtEntry?.(i + 1)), config.leverage);
+      // An add may only take the position up to the capital-use limit.
+      const room = capitalUseCap(state.cash, fillPrice, config.leverage, config.maxCapitalUsePercent) - pos.quantity;
+      const addQuantity = Math.min(room, computeQuantity(state.cash, fillPrice, config.positionSizing, stopDistanceFor(config, fillPrice, config.atrAtEntry?.(i + 1)), config.leverage));
       if (addQuantity > 0) {
         const totalQuantity = pos.quantity + addQuantity;
         const blendedEntryPrice = (pos.entryPrice * pos.quantity + fillPrice * addQuantity) / totalQuantity;
@@ -836,7 +847,7 @@ function stepBarCore(
 
   /** Opens a position at `fillIdx` for `fillPrice`, or reports that the size came out as zero. */
   const open = (fillIdx: number, fillPrice: number) => {
-    const wanted = computeQuantity(state.cash, fillPrice, config.positionSizing, stopDistanceFor(config, fillPrice, config.atrAtEntry?.(fillIdx)), config.leverage);
+    const wanted = Math.min(capitalUseCap(state.cash, fillPrice, config.leverage, config.maxCapitalUsePercent), computeQuantity(state.cash, fillPrice, config.positionSizing, stopDistanceFor(config, fillPrice, config.atrAtEntry?.(fillIdx)), config.leverage));
     if (wanted <= 0) return { state: { ...state, pendingEntry: null }, sizeTooSmall: true };
     // A multi-level plan buys only its first share now and keeps the rest of the planned size for its further levels.
     const plan = config.entryPlan;

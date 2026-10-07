@@ -17,9 +17,13 @@ import {
   type IntradaySession,
   type EntryOrder,
   type EntryPlan,
+  type StepResult,
 } from "@/lib/trading-engine/step";
 
 import { engineRisk, type RiskOptions } from "@/lib/trading-engine/risk-options";
+import { startSystem, stepSystemBar } from "@/lib/trading-engine/system-step";
+import { systemRules, systemSignalSeries } from "@/lib/system/signals";
+import type { SystemRuntime } from "@/lib/system/types";
 
 const DEFAULT_ATR_PERIOD = 14;
 
@@ -37,6 +41,8 @@ export interface BacktestConfig {
   entryPlan?: EntryPlan;
   /** TP/SL reference, leverage, break-even and system limits: omitted = the defaults. */
   riskOptions?: RiskOptions;
+  /** A trading system: its concepts choose each position's side (the entry/exit rules passed in are not used). */
+  system?: SystemRuntime;
 }
 
 function usesAtr(rm: RiskManagementConfig | undefined, plan?: EntryPlan): boolean {
@@ -53,7 +59,7 @@ export type TradeLegs = {
 };
 
 /** A closed trade, plus why it closed ("end_of_data" = still open when the data ran out). A position sold or built in parts is ONE trade; `legs` has its parts. */
-export type BacktestTradeResult = EngineTrade & { exitReason?: ExitReason | "end_of_data"; legs?: TradeLegs };
+export type BacktestTradeResult = EngineTrade & { exitReason?: ExitReason | "end_of_data"; legs?: TradeLegs; /** Trading systems: this trade's side. */ direction?: StrategyDirection };
 
 /** The sales of one position, merged into the single trade it was: total shares, average entry and exit, summed P&L. */
 export function mergePositionTrades(parts: BacktestTradeResult[], targetLevels: (number | undefined)[], entries: TradeLegs["entries"]): BacktestTradeResult {
@@ -209,6 +215,7 @@ export function runBacktest(
     riskManagement,
     leverage: risk?.leverage,
     limits: risk?.limits,
+    maxCapitalUsePercent: risk?.maxCapitalUsePercent,
     atrAtEntry: atrByTimeFinal ? (entryIdx: number) => atrByTimeFinal.get(candles[entryIdx]?.time) : undefined,
     maxPyramidEntries: config.maxPyramidEntries,
     direction: config.direction,
@@ -227,8 +234,36 @@ export function runBacktest(
   let parts: BacktestTradeResult[] = [];
   let partLevels: (number | undefined)[] = [];
   let extraEntries: TradeLegs["entries"] = [];
+  // A trading system: the concepts' signals, and the side of the position as the system chose it.
+  const system = config.system;
+  const sigs = system ? systemSignalSeries(candles, system, aux ?? new Map()) : null;
+  const rules = system ? systemRules(system) : null;
+  let sys = startSystem(config.startingCapital);
+  let side: StrategyDirection | undefined = config.direction;
   for (let i = 0; i < candles.length; i++) {
-    const stepped = stepBar(candles, i, entry[i], exit[i], state, engineConfig);
+    let stepped: StepResult;
+    let tradeSide: StrategyDirection | undefined;
+    if (system && sigs && rules) {
+      const r = stepSystemBar(candles, i, sigs[i], sys, engineConfig, rules);
+      sys = r.system;
+      tradeSide = r.tradeSide;
+      stepped = r.systemExit ? { ...r, exitReason: r.systemExit } : r;
+      if (r.trade) parts.push({ ...r.trade, exitReason: stepped.exitReason, direction: r.tradeSide });
+      if (r.trade) partLevels.push(r.targetLevel);
+      state = r.state;
+      if (r.entryLevel) extraEntries.push({ level: r.entryLevel.level, time: r.entryLevel.time, price: r.entryLevel.price, quantity: r.entryLevel.quantity });
+      // A trade closed (the whole position): merge its parts; a reversal opens the next one at once.
+      if (r.trade && (!state.position || r.systemExit === "reversal")) {
+        trades.push({ ...mergePositionTrades(parts, partLevels, extraEntries), direction: tradeSide });
+        parts = [];
+        partLevels = [];
+        extraEntries = [];
+      }
+      side = sys.side ?? side;
+      equityCurve.push({ time: candles[i].time, equity: markToMarket(candles, i, state, sys.side ?? "LONG") });
+      continue;
+    }
+    stepped = stepBar(candles, i, entry[i], exit[i], state, engineConfig);
     state = stepped.state;
     if (stepped.entryLevel) extraEntries.push({ level: stepped.entryLevel.level, time: stepped.entryLevel.time, price: stepped.entryLevel.price, quantity: stepped.entryLevel.quantity });
     if (stepped.trade) {
@@ -247,12 +282,13 @@ export function runBacktest(
 
   if (state.position) {
     const lastIdx = candles.length - 1;
-    const closed = forceClose(candles, lastIdx, state, engineConfig);
+    const openSide = system ? (sys.side ?? "LONG") : config.direction;
+    const closed = forceClose(candles, lastIdx, state, { ...engineConfig, direction: openSide });
     state = closed.state;
     if (closed.trade) {
-      parts.push({ ...closed.trade, exitReason: "end_of_data" });
+      parts.push({ ...closed.trade, exitReason: "end_of_data", ...(system ? { direction: openSide } : {}) });
       partLevels.push(undefined);
-      trades.push(mergePositionTrades(parts, partLevels, extraEntries));
+      trades.push({ ...mergePositionTrades(parts, partLevels, extraEntries), ...(system ? { direction: openSide } : {}) });
     }
     if (equityCurve.length > 0) equityCurve[equityCurve.length - 1] = { time: candles[lastIdx].time, equity: state.cash };
   }

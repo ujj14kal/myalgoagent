@@ -2,7 +2,7 @@ import type { RiskOptions } from "@/lib/trading-engine/risk-options";
 import type { StrategyInput } from "@/lib/strategy-actions";
 import type { EntryPlan, TargetLevel } from "@/lib/trading-engine/step";
 import type { StrategyStyle } from "@/lib/strategy/style";
-import type { WorkspaceDefinition } from "@/lib/workspace/types";
+import type { BlockDefinition, ConceptClass, ConceptDefinition, TradingSystemDefinition } from "@/lib/system/types";
 import { NEVER_EXIT_CONDITION, type ConditionNode } from "@/lib/strategy/types";
 
 // An action the agent has prepared for the user to review. Stored on the
@@ -120,22 +120,53 @@ export type AgentProposal =
       draft: Extract<AgentProposal, { kind: "strategy" }>["draft"];
     }
   | {
-      // A workspace: several strategies and rules connected into one plan (created or updated, optionally published as a version).
+      // Workspace layer 1: a block — one reusable market component as a rule (created or updated).
+      kind: "block";
+      status: ProposalStatus;
+      resultId?: string;
+      draft: {
+        name: string;
+        description?: string;
+        /** Set when updating an existing block. */
+        blockId?: string;
+        definition: BlockDefinition;
+        /** The rule in plain words. */
+        text: string;
+      };
+    }
+  | {
+      // Workspace layer 2: a concept — blocks combined into a bullish or bearish setup, with any new blocks it needs.
+      kind: "concept";
+      status: ProposalStatus;
+      resultId?: string;
+      draft: {
+        name: string;
+        description?: string;
+        conceptId?: string;
+        classification: ConceptClass;
+        /** Block references are the user's block ids, or "new:<name>" for a block in `newBlocks`. */
+        definition: ConceptDefinition;
+        newBlocks: { name: string; definition: BlockDefinition; text: string }[];
+        /** The setup in plain words. */
+        text: string;
+      };
+    }
+  | {
+      // Workspace layer 3: a trading system — concepts plus every trading decision (created or updated, optionally published).
       kind: "workspace";
       status: ProposalStatus;
       resultId?: string;
       draft: {
         name: string;
         description?: string;
-        /** Set when updating an existing workspace. */
+        /** Set when updating an existing trading system. */
         workspaceId?: string;
-        definition: WorkspaceDefinition;
+        definition: TradingSystemDefinition;
         instrumentSymbol: string | null;
-        /** The entry and exit logic in plain words, and anything worth a look. */
-        entryText: string;
-        exitText: string;
+        /** Its concepts in plain words, and anything worth a look. */
+        concepts: { name: string; classification: ConceptClass; text: string }[];
         warnings: string[];
-        /** Publish the plan as the next version (an ordinary strategy to backtest, forward test and take live). */
+        /** Publish it as the next version (a strategy to backtest, forward test and take live). */
         publish: boolean;
         note?: string;
       };
@@ -165,7 +196,9 @@ export const PROPOSAL_TITLES: Record<AgentProposal["kind"], string> = {
   paper_control: "Forward test",
   strategy_archive: "Archive strategy",
   strategy_update: "Update strategy",
-  workspace: "Workspace",
+  block: "Workspace block",
+  concept: "Workspace concept",
+  workspace: "Trading system",
   plan: "Multi-step plan",
 };
 

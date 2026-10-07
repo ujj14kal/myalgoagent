@@ -4,6 +4,7 @@ import { INDICATOR_BY_KIND } from "./indicator-catalog";
 import { CANDLE_PATTERN_BY_KIND } from "./candle-pattern-catalog";
 import { CHART_PATTERN_BY_KIND } from "./chart-pattern-catalog";
 import { VOLUME_PATTERN_BY_KIND } from "./volume-pattern-catalog";
+import { SMC_KINDS, type SmcKind } from "@/lib/smc";
 import { VALID_INTERVALS } from "@/lib/market-data";
 
 const PRICE_FIELDS: PriceField[] = ["OPEN", "HIGH", "LOW", "CLOSE", "VOLUME"];
@@ -62,6 +63,21 @@ function validateSignal(v: unknown, path: string): asserts v is BooleanSignalKin
       throw new Error(`${path}.pattern: unrecognized volume pattern "${String(v.pattern)}"`);
     }
     validateTimeframe(v.timeframe, path);
+    return;
+  }
+
+  if (v.family === "SMC") {
+    const o = v as Record<string, unknown>;
+    if (typeof o.pattern !== "string" || !SMC_KINDS.includes(o.pattern as SmcKind)) throw new Error(`${path}.pattern: unrecognized smart-money component "${String(o.pattern)}" (one of ${SMC_KINDS.join(", ")})`);
+    if (o.side !== "BULLISH" && o.side !== "BEARISH") throw new Error(`${path}.side: BULLISH or BEARISH`);
+    const whole = (key: string, lo: number, hi: number) => {
+      if (o[key] === undefined) return;
+      if (typeof o[key] !== "number" || !Number.isInteger(o[key]) || (o[key] as number) < lo || (o[key] as number) > hi) throw new Error(`${path}.${key}: a whole number from ${lo} to ${hi}`);
+    };
+    whole("swing", 1, 20);
+    whole("maxAge", 1, 500);
+    if (o.minGapPct !== undefined && (typeof o.minGapPct !== "number" || o.minGapPct < 0 || o.minGapPct > 20)) throw new Error(`${path}.minGapPct: a % from 0 to 20`);
+    validateTimeframe(o.timeframe, path);
     return;
   }
 

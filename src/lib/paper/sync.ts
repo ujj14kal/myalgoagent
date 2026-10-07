@@ -15,9 +15,13 @@ import {
   type EngineMemo,
   type RiskManagementConfig,
   type RiskUnit,
+  type StepResult,
   type StrategyDirection,
 } from "@/lib/trading-engine/step";
 import { engineRisk, type RiskOptions } from "@/lib/trading-engine/risk-options";
+import { stepSystemBar, type SystemSignals, type SystemState } from "@/lib/trading-engine/system-step";
+import { systemConditions, systemRules, systemSignalSeries } from "@/lib/system/signals";
+import type { SystemRuntime } from "@/lib/system/types";
 
 const DEFAULT_MAX_PYRAMID_ENTRIES = 1;
 
@@ -79,8 +83,16 @@ export interface PaperSessionState {
   engineMemo?: EngineMemo | null;
   /** Live trading: the leverage is already in `cash` (capital × buying power), so the engine mustn't apply it again. */
   leverageInCash?: boolean;
+  /** A trading system: its concepts choose each position's side (entry/exit conditions and `direction` aren't used). */
+  system?: SystemRuntime | null;
+  /** Trading systems: the side of the open (or resting) position. */
+  positionDirection?: StrategyDirection | null;
+  /** Trading systems: how long an opposite setup has held, and a conflict waiting to resolve. */
+  systemMemo?: SystemMemo | null;
   lastSyncedTime: number | null;
 }
+
+export type SystemMemo = Pick<SystemState, "oppositeRun" | "waiting">;
 
 export function usesAtr(rm: RiskManagementConfig | undefined): boolean {
   if (!rm) return false;
@@ -105,6 +117,10 @@ export interface NewPaperOrder {
   targetLevel?: number;
   /** A further entry of a multi-level plan: which entry (2 = the first level after the signal's own). */
   entryLevel?: number;
+  /** Trading systems: the side of the position this order opened or closed. */
+  positionSide?: StrategyDirection;
+  /** Trading systems: the side of the concept whose setup opened it. */
+  conceptSide?: "BULLISH" | "BEARISH";
 }
 
 export interface SignalAlert {
@@ -135,6 +151,9 @@ export interface SyncResult {
   } | null;
   /** For the daily-loss and drawdown limits, saved for the next sync. */
   memo: EngineMemo | null;
+  /** Trading systems: the open position's side and the system's memory, saved for the next sync. */
+  positionDirection: StrategyDirection | null;
+  systemMemo: SystemMemo | null;
   lastSyncedTime: number | null;
   /** A limit entry order still resting at the end of this sync (saved for the next one). */
   pendingEntry: { limitPrice: number; expiresDay: number; fromTime: number } | null;
@@ -229,9 +248,14 @@ export async function syncPaperSession(
   // order goes out at its open instead of a candle late.
   const candles = opts.includeForming ? fetched : closedCandles(fetched, timeframe);
   const actionable = opts.includeForming ? closedCandles(fetched, timeframe).length : candles.length - 1;
-  const aux = await fetchAuxCandles(session.entryCondition, withLevelConditions(session.exitCondition, session.entryPlan), session.instrumentSymbol, range, timeframe, market);
+  const system = session.system ?? null;
+  const aux = await fetchAuxCandles(system ? systemConditions(system) : session.entryCondition, withLevelConditions(session.exitCondition, session.entryPlan), session.instrumentSymbol, range, timeframe, market);
 
-  const { entry, exit } = evaluateConditionsPerBar(candles, session.entryCondition, session.exitCondition, aux);
+  // A trading system's concepts give each candle a bullish and a bearish side; a strategy has one entry and exit rule.
+  const sigs: SystemSignals[] | null = system ? systemSignalSeries(candles, system, aux) : null;
+  const { entry, exit } = sigs && system
+    ? { entry: sigs.map((s) => s.bull || (s.bear && system.allowShort)), exit: sigs.map(() => false) }
+    : evaluateConditionsPerBar(candles, session.entryCondition, session.exitCondition, aux);
 
   if (session.alertOnly) {
     const signalAlerts: SignalAlert[] = [];
@@ -248,6 +272,8 @@ export async function syncPaperSession(
       cash: session.cash,
       position: null,
       memo: session.engineMemo ?? null,
+      positionDirection: null,
+      systemMemo: session.systemMemo ?? null,
       lastSyncedTime,
       pendingEntry: null,
       suppressedEntrySignal: false,
@@ -314,6 +340,7 @@ export async function syncPaperSession(
     riskManagement,
     leverage: session.leverageInCash ? 1 : risk?.leverage,
     limits: risk?.limits,
+    maxCapitalUsePercent: risk?.maxCapitalUsePercent,
     atrAtEntry: atrByTimeFinal ? (idx: number) => atrByTimeFinal.get(candles[idx]?.time) : undefined,
     maxPyramidEntries: session.maxPyramidEntries ?? DEFAULT_MAX_PYRAMID_ENTRIES,
     direction: session.direction,
@@ -325,9 +352,17 @@ export async function syncPaperSession(
     ),
     entryOrder: engineEntryOrder({ orderType: session.orderType ?? "MARKET", limitMode: session.limitMode ?? null, limitValue: session.limitValue ?? null }),
   };
-  // A long opens with a BUY and closes with a SELL; a short is the mirror.
-  const openSide = session.direction === "SHORT" ? "SELL" : "BUY";
-  const closeSide = session.direction === "SHORT" ? "BUY" : "SELL";
+  // A long opens with a BUY and closes with a SELL; a short is the mirror. A trading system picks the side per position.
+  const openSideOf = (d: StrategyDirection) => (d === "SHORT" ? "SELL" : "BUY") as "BUY" | "SELL";
+  const closeSideOf = (d: StrategyDirection) => (d === "SHORT" ? "BUY" : "SELL") as "BUY" | "SELL";
+  const rules = system ? systemRules(system) : null;
+  let sys: SystemState = {
+    engine: state,
+    side: state.position || state.pendingEntry ? (session.positionDirection ?? session.direction) : null,
+    oppositeRun: session.systemMemo?.oppositeRun ?? 0,
+    waiting: session.systemMemo?.waiting ?? null,
+  };
+  const conceptOf = (d: StrategyDirection) => (d === "SHORT" ? "BEARISH" : "BULLISH") as "BULLISH" | "BEARISH";
   const newOrders: NewPaperOrder[] = [];
   let lastSyncedTime = session.lastSyncedTime;
   let suppressedEntrySignal = false;
@@ -343,14 +378,29 @@ export async function syncPaperSession(
     const wasFlat = !state.position;
     const prevQuantity = state.position?.quantity ?? 0;
     const prevEntryPrice = state.position?.entryPrice ?? 0;
-    const stepped = stepBar(candles, i, allowNewEntries && entry[i], exit[i], state, engineConfig);
+    // The side before this candle (what an exit closes) and after it (what an entry or add opens).
+    const sideBefore: StrategyDirection = sys.side ?? session.direction;
+    let stepped: StepResult;
+    let systemExit: "opposite_signal" | "reversal" | undefined;
+    let reversedTo: StrategyDirection | undefined;
+    if (sigs && rules) {
+      const r = stepSystemBar(candles, i, sigs[i], { ...sys, engine: state }, engineConfig, rules, allowNewEntries);
+      sys = r.system;
+      stepped = r;
+      systemExit = r.systemExit;
+      if (r.systemExit === "reversal" && r.opened) reversedTo = r.opened;
+    } else {
+      stepped = stepBar(candles, i, allowNewEntries && entry[i], exit[i], state, engineConfig);
+    }
     state = stepped.state;
     if (stepped.sizeTooSmall) sizeTooSmall = true;
+    const sideAfter: StrategyDirection = sys.side ?? sideBefore;
+    const sideTag = (d: StrategyDirection) => (system ? { positionSide: d } : {});
 
     // A further entry of a multi-level plan filled on this bar (before anything that closed the position on the same bar).
     if (stepped.entryLevel) {
       newOrders.push({
-        side: openSide,
+        side: openSideOf(sideBefore),
         time: stepped.entryLevel.time,
         price: stepped.entryLevel.price,
         quantity: stepped.entryLevel.quantity,
@@ -359,24 +409,41 @@ export async function syncPaperSession(
         reason: "entry_level",
         signalTime: candles[i].time,
         entryLevel: stepped.entryLevel.level,
+        ...sideTag(sideBefore),
       });
     }
 
     if (stepped.trade) {
       newOrders.push({
-        side: closeSide,
+        side: closeSideOf(sideBefore),
         time: stepped.trade.exitTime,
         price: stepped.trade.exitPrice,
         quantity: stepped.trade.quantity,
         fees: stepped.trade.fees,
         netPnl: stepped.trade.netPnl,
-        reason: stepped.exitReason ?? "exit_rule",
+        reason: systemExit ?? stepped.exitReason ?? "exit_rule",
         signalTime: candles[i].time,
         ...(stepped.targetLevel ? { targetLevel: stepped.targetLevel } : {}),
+        ...sideTag(sideBefore),
       });
+      // Exit and reverse: the opposite position opened at the same open the exit filled at.
+      if (reversedTo && state.position) {
+        newOrders.push({
+          side: openSideOf(reversedTo),
+          time: candles[state.position.entryIdx].time,
+          price: state.position.entryPrice,
+          quantity: state.position.quantity,
+          fees: 0,
+          netPnl: null,
+          reason: "entry_rule",
+          signalTime: candles[i].time,
+          positionSide: reversedTo,
+          conceptSide: conceptOf(reversedTo),
+        });
+      }
     } else if (wasFlat && state.position) {
       newOrders.push({
-        side: openSide,
+        side: openSideOf(sideAfter),
         time: candles[state.position.entryIdx].time,
         price: state.position.entryPrice,
         quantity: state.position.quantity,
@@ -385,6 +452,7 @@ export async function syncPaperSession(
         reason: "entry_rule",
         signalTime: candles[i].time,
         viaLimit: engineConfig.entryOrder?.type === "LIMIT",
+        ...(system ? { positionSide: sideAfter, conceptSide: conceptOf(sideAfter) } : {}),
       });
     } else if (!wasFlat && !stepped.entryLevel && state.position && state.position.quantity > prevQuantity) {
       // A pyramid add — reconstruct this leg's own fill price from the
@@ -393,7 +461,7 @@ export async function syncPaperSession(
       const addedQuantity = state.position.quantity - prevQuantity;
       const addedNotional = state.position.entryPrice * state.position.quantity - prevEntryPrice * prevQuantity;
       newOrders.push({
-        side: openSide,
+        side: openSideOf(sideAfter),
         time: candles[i + 1]?.time ?? candles[i].time,
         price: addedNotional / addedQuantity,
         quantity: addedQuantity,
@@ -401,6 +469,7 @@ export async function syncPaperSession(
         netPnl: null,
         reason: "pyramid",
         signalTime: candles[i].time,
+        ...sideTag(sideAfter),
       });
     }
 
@@ -430,10 +499,12 @@ export async function syncPaperSession(
         }
       : null,
     memo: state.memo ?? null,
+    positionDirection: system ? (state.position || state.pendingEntry ? sys.side : null) : null,
+    systemMemo: system ? { oppositeRun: sys.oppositeRun, waiting: sys.waiting } : null,
     lastSyncedTime,
     pendingEntry: state.pendingEntry ?? null,
     suppressedEntrySignal,
     sizeTooSmall,
-    equity: candles.length > 0 ? markToMarket(candles, candles.length - 1, state, session.direction) : state.cash,
+    equity: candles.length > 0 ? markToMarket(candles, candles.length - 1, state, system ? (sys.side ?? "LONG") : session.direction) : state.cash,
   };
 }

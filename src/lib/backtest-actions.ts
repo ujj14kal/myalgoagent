@@ -14,6 +14,7 @@ import type { ConditionNode } from "@/lib/strategy";
 import { Prisma } from "@prisma/client";
 import { parseTargets } from "@/lib/trading-engine/targets-config";
 import { parseRiskOptions } from "@/lib/trading-engine/risk-options";
+import { parseSystemRuntime, systemConditions } from "@/lib/system/signals";
 import { parseEntryPlan } from "@/lib/trading-engine/entry-plan-config";
 import { userMarketDataReady } from "@/lib/market-data/for-user";
 
@@ -86,7 +87,9 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
     const exitCondition = strategy.exitCondition as unknown as ConditionNode;
 
     const entryPlan = parseEntryPlan(strategy.entryPlan);
-    const aux = await fetchAuxCandles(entryCondition, withLevelConditions(exitCondition, entryPlan), strategy.instrument.symbol, range, timeframe, market);
+    // A trading system reads its concepts (and their optional blocks), possibly on other timeframes.
+    const system = parseSystemRuntime(strategy.systemRuntime);
+    const aux = await fetchAuxCandles(system ? systemConditions(system) : entryCondition, withLevelConditions(exitCondition, entryPlan), strategy.instrument.symbol, range, timeframe, market);
 
     const result = runBacktest(
       candles,
@@ -104,6 +107,7 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
         entryOrder: engineEntryOrder(strategy),
         entryPlan,
         riskOptions: parseRiskOptions(strategy.riskOptions),
+        ...(system ? { system } : {}),
       },
       aux,
     );
@@ -129,6 +133,7 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
         targetsConfig: strategy.targetsConfig ?? Prisma.DbNull,
         entryPlan: strategy.entryPlan ?? Prisma.DbNull,
         riskOptions: strategy.riskOptions ?? Prisma.DbNull,
+        systemRuntime: strategy.systemRuntime ?? Prisma.DbNull,
         trailingSlEnabled: strategy.trailingSlEnabled,
         trailingSlUnit: strategy.trailingSlUnit,
         trailingSlValue: strategy.trailingSlValue,
@@ -165,6 +170,7 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
             netPnlPct: t.netPnlPct,
             holdingBars: t.holdingBars,
             legs: t.legs ? (t.legs as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+            ...(t.direction && system ? { direction: t.direction } : {}),
           })),
         },
       },

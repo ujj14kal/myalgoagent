@@ -19,12 +19,7 @@ import { DEFAULT_SQUARE_OFF_MINUTE } from "@/lib/strategy/session";
 import { targetsFrom } from "./targets-arg";
 import { riskOptionsFrom, riskOptionsSchema } from "./risk-options-arg";
 import { parseRiskOptions, type RiskOptions } from "@/lib/trading-engine/risk-options";
-import { logicFrom } from "./workspace-arg";
-import { workspaceTools } from "./workspace-tool-schemas";
-import { emptyDefinition, parseDefinition } from "@/lib/workspace/definition";
-import { checkDefinition } from "@/lib/workspace/store";
-import { describeLogic } from "@/lib/workspace/compile";
-import type { LogicNode, WorkspaceDefinition } from "@/lib/workspace/types";
+import { systemTools, getMyWorkspace, proposeBlock, proposeConcept, proposeTradingSystem, type SystemToolHelpers } from "./system-tools";
 import { entryPlanFrom, styleFrom } from "./entry-plan-arg";
 import { describeEntryPlan } from "@/lib/describe-entry-plan";
 import { parseEntryPlan } from "@/lib/trading-engine/entry-plan-config";
@@ -459,7 +454,7 @@ export const AGENT_TOOLS: MantleTool[] = [
       parameters: { type: "object", properties: { strategy: { type: "string" } }, required: ["strategy"] },
     },
   },
-  ...workspaceTools(riskLegSchema, targetsSchema, entryPlanSchema, styleSchema),
+  ...systemTools(riskLegSchema, targetsSchema, entryPlanSchema),
 ];
 
 export type ToolOutcome = { result: unknown; proposal?: AgentProposal };
@@ -778,7 +773,7 @@ async function proposeStrategyUpdate(userId: string, a: Record<string, unknown>)
   if ("ambiguous" in found) return ambiguityResult(found.ambiguous);
   const s = await prisma.strategy.findUnique({ where: { id: found.id }, include: { instrument: true } });
   if (!s) return { result: { error: "That strategy no longer exists." } };
-  if (s.workspaceVersionId) return { result: { error: `"${s.name}" was published from a workspace, so its rules come from there and it can't be edited on its own. Change the workspace with propose_workspace (get_my_workspaces shows it) and publish a new version instead.` } };
+  if (s.workspaceVersionId) return { result: { error: `"${s.name}" was published from a workspace, so its rules come from there and it can't be edited on its own. Change the trading system with propose_trading_system (get_my_workspace shows it) and publish a new version instead.` } };
   const webhook = s.mode === "WEBHOOK";
 
   let rules;
@@ -975,149 +970,9 @@ async function brokerGuide(userId: string, rawBroker?: string) {
   };
 }
 
-// ---------- workspaces ----------
+// ---------- workspace (blocks, concepts, trading systems) ----------
 
-/** Custom indicators named in a workspace's own rules are filled in from the user's saved ones. */
-async function fillLogicCustomRefs(userId: string, node: LogicNode | null): Promise<LogicNode | null> {
-  if (!node || !JSON.stringify(node).includes('"custom"')) return node;
-  const rows = await prisma.customIndicator.findMany({ where: { userId }, select: { name: true, def: true } });
-  const saved = new Map(rows.map((r) => [r.name, r.def as unknown as CustomIndicatorDef]));
-  const walk = (n: LogicNode): LogicNode => (n.type === "rule" ? { ...n, condition: fillCustomRefs(n.condition, saved) } : n.type === "group" ? { ...n, children: n.children.map(walk) } : n);
-  return walk(node);
-}
-
-async function findWorkspace(userId: string, ref: string) {
-  const r = ref.trim();
-  if (!r) return null;
-  return (
-    (await prisma.workspace.findFirst({ where: { id: r, userId } })) ??
-    (await prisma.workspace.findFirst({ where: { userId, nameNormalized: r.toLowerCase() } })) ??
-    (await prisma.workspace.findFirst({ where: { userId, name: { contains: r, mode: "insensitive" }, status: { not: "ARCHIVED" } }, orderBy: { updatedAt: "desc" } }))
-  );
-}
-
-async function proposeWorkspace(userId: string, a: Record<string, unknown>): Promise<ToolOutcome> {
-  const fix = (m: string) => ({ result: { error: `${m} Fix it and call propose_workspace again.` } });
-  const existing = str(a.workspace) ? await findWorkspace(userId, str(a.workspace)) : null;
-  if (str(a.workspace) && !existing) return { result: { error: `No workspace called "${str(a.workspace)}". Call get_my_workspaces to see them, or omit "workspace" to create a new one.` } };
-  const base: WorkspaceDefinition = (existing ? parseDefinition(existing.draft) : null) ?? emptyDefinition("");
-  const name = (str(a.name) || existing?.name || "").slice(0, 80);
-  if (!name) return fix("A name is required for a new workspace.");
-
-  try {
-    const instrument = str(a.instrument_symbol) ? await findInstrument(str(a.instrument_symbol)) : null;
-    if (str(a.instrument_symbol) && !instrument) return fix(`Unknown instrument "${str(a.instrument_symbol)}". Call list_instruments and use an exact symbol.`);
-    const style = styleFrom(a.style);
-    const swingish = (style === undefined ? base.style : style) === "SWING";
-    const tfArg = timeframeArg(a.timeframe);
-    const timeframe = swingish ? (tfArg === "1wk" ? "1wk" : isIntraday(base.timeframe as CandleInterval) ? "1d" : tfArg ?? base.timeframe) : tfArg ?? base.timeframe;
-    const order = orderArgs(a);
-    const intraday = isIntraday(timeframe as CandleInterval);
-    const sizing = sizingFrom(a.position_sizing, { mode: base.positionSizingMode, value: base.positionSizingValue });
-    const pickLeg = (key: string, saved: WorkspaceDefinition["stopLoss"]) => (key in a ? (a[key] === null ? { enabled: false, unit: "PERCENT" as RiskUnitName, value: 0 } : leg(a[key])) : saved);
-    const noEntry = clockArg(a.no_entry_after);
-    const squareOff = clockArg(a.square_off_at);
-    const maxEntries = Math.max(1, Math.floor(num(a.max_entries) ?? base.maxPyramidEntries));
-
-    // The strategies: resolved to the user's own, lettered in the order given.
-    let members = base.members;
-    if (Array.isArray(a.strategies)) {
-      const resolved: { id: string; name: string }[] = [];
-      for (const ref of a.strategies.slice(0, 20)) {
-        const m = await findStrategy(userId, String(ref));
-        if (!m) return fix(`The user has no strategy "${String(ref)}". Call get_my_strategies and use an exact name.`);
-        if ("ambiguous" in m) return { result: { error: `"${String(ref)}" matches several strategies (${m.ambiguous.join(", ")}). Ask the user which one.` } };
-        if (!resolved.some((r) => r.id === m.id)) resolved.push({ id: m.id, name: m.name });
-      }
-      members = resolved.map((r, i) => ({ id: "ABCDEFGHIJKLMNOPQRST"[i], strategyId: r.id }));
-    }
-    const memberNames = new Map<string, string>();
-    for (const m of members) {
-      const row = await prisma.strategy.findFirst({ where: { id: m.strategyId, userId }, select: { name: true } });
-      if (row) memberNames.set(m.id, row.name);
-    }
-    const memberOf = (ref: string): string | null => {
-      const r = ref.trim().toLowerCase();
-      for (const m of members) if (m.id.toLowerCase() === r || m.strategyId === ref.trim() || memberNames.get(m.id)?.toLowerCase() === r) return m.id;
-      return null;
-    };
-
-    let entry = base.entry;
-    if (a.entry !== undefined) entry = a.entry === null ? null : await fillLogicCustomRefs(userId, logicFrom(a.entry, memberOf, "entry"));
-    let exit = base.exit;
-    if ("exit" in a) exit = a.exit === null || a.exit === "" ? null : await fillLogicCustomRefs(userId, logicFrom(a.exit, memberOf, "exit"));
-
-    const targets = targetsFrom(a.targets);
-    const planArg = await fillPlanCustomRefs(userId, entryPlanFrom(a.entry_plan, maxEntries));
-    const def: WorkspaceDefinition = {
-      ...base,
-      instrumentId: instrument?.id ?? base.instrumentId,
-      direction: a.direction === "SHORT" || a.direction === "LONG" ? a.direction : base.direction,
-      timeframe,
-      style: style === undefined ? base.style : style,
-      productType: swingish ? "DELIVERY" : ((order.productType as "INTRADAY" | "DELIVERY" | undefined) ?? (timeframe !== base.timeframe ? (intraday ? "INTRADAY" : "DELIVERY") : base.productType)),
-      members,
-      entry,
-      exit,
-      positionSizingMode: sizing.mode,
-      positionSizingValue: sizing.value,
-      stopLoss: pickLeg("stop_loss", base.stopLoss),
-      target: pickLeg("take_profit", base.target),
-      trailingSl: pickLeg("trailing_stop", base.trailingSl),
-      targets: targets === undefined ? base.targets : targets,
-      entryPlan: planArg === undefined ? base.entryPlan : planArg,
-      maxPyramidEntries: maxEntries,
-      noEntryAfterMinute: intraday ? (noEntry === undefined ? base.noEntryAfterMinute : noEntry) : null,
-      squareOffMinute: intraday ? (squareOff === undefined ? base.squareOffMinute ?? DEFAULT_SQUARE_OFF_MINUTE : squareOff) : null,
-      orderType: (order.orderType as "MARKET" | "LIMIT" | undefined) ?? base.orderType,
-      limitMode: (order.limitMode as "PERCENT" | "PRICE" | null | undefined) ?? base.limitMode,
-      limitValue: order.limitValue ?? base.limitValue,
-    };
-
-    // Same checks as publishing, so the user is never shown a plan that couldn't be published.
-    const checked = await checkDefinition(userId, def);
-    const wantsPublish = a.publish === true;
-    if (checked.errors.length > 0) {
-      return { result: { error: `The workspace didn't pass validation: ${checked.errors.map((e) => `${e.where ? `${e.where}: ` : ""}${e.message}`).join(" ")} Fix it and call propose_workspace again.` } };
-    }
-    if (!existing) {
-      let candidate = name;
-      for (let n = 2; n < 50 && (await prisma.workspace.findFirst({ where: { userId, nameNormalized: candidate.toLowerCase() }, select: { id: true } })); n++) candidate = `${name.slice(0, 74)} (${n})`;
-      return finishWorkspaceProposal(candidate);
-    }
-    return finishWorkspaceProposal(name);
-
-    function finishWorkspaceProposal(finalName: string): ToolOutcome {
-      return {
-        result: {
-          ok: true,
-          entry: checked.entryText,
-          exit: def.exit ? checked.exitText : "none (stops, targets or holding limit close it)",
-          warnings: checked.warnings.map((w) => w.message),
-          note: "A review window is now open for the user. Briefly tell them what you prepared (the connections in plain words, and whether it publishes a version); do not repeat every field. Don't claim anything is saved or published — they confirm it.",
-        },
-        proposal: {
-          kind: "workspace",
-          status: "pending",
-          draft: {
-            name: finalName,
-            description: str(a.description) || existing?.description || undefined,
-            ...(existing ? { workspaceId: existing.id } : {}),
-            definition: def,
-            instrumentSymbol: checked.instrumentSymbol,
-            entryText: checked.entryText,
-            exitText: checked.exitText,
-            warnings: checked.warnings.map((w) => w.message),
-            publish: wantsPublish,
-            ...(str(a.note) ? { note: str(a.note).slice(0, 200) } : {}),
-          },
-        },
-      };
-    }
-  } catch (err) {
-    return fix(readableIssues(err));
-  }
-}
+const systemHelpers = (): SystemToolHelpers => ({ findInstrument, leg, sizingFrom, clockArg, orderArgs, timeframeArg, readableIssues });
 
 export async function runAgentTool(userId: string, name: string, rawArgs: string): Promise<ToolOutcome> {
   let a: Record<string, unknown> = {};
@@ -1153,7 +1008,7 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
           status: r.status,
           direction: r.direction,
           mode: r.mode,
-          fromWorkspace: r.workspaceVersion ? `${r.workspaceVersion.workspace.name} v${r.workspaceVersion.version} (edit the workspace, not this strategy)` : null,
+          fromWorkspace: r.workspaceVersion ? `${r.workspaceVersion.workspace.name} v${r.workspaceVersion.version} (edit the trading system, not this strategy)` : null,
           entry: r.mode === "WEBHOOK" ? "TradingView alerts" : rule(r.entryCondition),
           exit: r.mode === "WEBHOOK" ? "TradingView alerts" : rule(r.exitCondition),
           stopLoss: legText(r.stopLossEnabled, r.stopLossUnit, r.stopLossValue),
@@ -1302,34 +1157,14 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
       const score = (r: { symbol: string; name: string }) => (r.symbol.replace(/\.NS$/, "") === u ? 0 : r.symbol.startsWith(u) ? 1 : r.name.toUpperCase().startsWith(u) ? 2 : 3);
       return { result: rows.sort((x, y) => score(x) - score(y)).slice(0, 25) };
     }
-    case "get_my_workspaces": {
-      const rows = await prisma.workspace.findMany({ where: { userId }, orderBy: { updatedAt: "desc" }, take: 25 });
-      const defs = rows.map((r) => ({ r, def: parseDefinition(r.draft) }));
-      const strategyIds = [...new Set(defs.flatMap((d) => d.def?.members.map((m) => m.strategyId) ?? []))];
-      const names = new Map((await prisma.strategy.findMany({ where: { userId, id: { in: strategyIds } }, select: { id: true, name: true } })).map((s) => [s.id, s.name]));
-      const syms = new Map((await prisma.instrument.findMany({ where: { id: { in: defs.map((d) => d.def?.instrumentId).filter((x): x is string => !!x) } }, select: { id: true, symbol: true } })).map((i) => [i.id, i.symbol]));
-      return {
-        result: defs.map(({ r, def }) => {
-          const m = (def?.members ?? []).map((x) => ({ id: x.id, name: names.get(x.strategyId) ?? "(removed)" }));
-          return {
-            id: r.id,
-            name: r.name,
-            status: r.status,
-            versionsPublished: r.latestVersion,
-            instrument: def ? syms.get(def.instrumentId) ?? null : null,
-            direction: def?.direction,
-            style: def?.style ?? null,
-            timeframe: def?.timeframe,
-            strategies: m.map((x) => `${x.id}: ${x.name}`),
-            entryLogic: def ? describeLogic(def.entry, m) : null,
-            exitLogic: def?.exit ? describeLogic(def.exit, m) : "none",
-            link: `/app/workspaces/${r.id}`,
-          };
-        }),
-      };
-    }
-    case "propose_workspace":
-      return proposeWorkspace(userId, a);
+    case "get_my_workspace":
+      return getMyWorkspace(userId);
+    case "propose_block":
+      return proposeBlock(userId, a, systemHelpers());
+    case "propose_concept":
+      return proposeConcept(userId, a, systemHelpers());
+    case "propose_trading_system":
+      return proposeTradingSystem(userId, a, systemHelpers());
     case "propose_strategy":
       return proposeStrategy(userId, a);
     case "propose_strategy_update":

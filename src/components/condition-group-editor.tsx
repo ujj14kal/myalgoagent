@@ -9,6 +9,7 @@ import { INDICATOR_CATALOG, INDICATOR_BY_KIND, operandsScaleCompatible } from "@
 import { CANDLE_PATTERN_CATALOG } from "@/lib/strategy/candle-pattern-catalog";
 import { CHART_PATTERN_CATALOG } from "@/lib/strategy/chart-pattern-catalog";
 import { VOLUME_PATTERN_CATALOG } from "@/lib/strategy/volume-pattern-catalog";
+import { SMC_DEFAULTS, SMC_HELP, SMC_KINDS, SMC_LABEL, type SmcKind, type SmcSide } from "@/lib/smc";
 import { INTERVALS, intervalDurationSeconds } from "@/lib/market-data";
 import type { CandleInterval } from "@/lib/market-data";
 import CandlePatternIllustration from "@/components/candle-pattern-illustration";
@@ -89,6 +90,10 @@ function defaultChartPattern(): ConditionNode {
 
 function defaultVolumePattern(): ConditionNode {
   return { kind: "signal", signal: { family: "VOLUME_PATTERN", pattern: "VOLUME_SPIKE" } };
+}
+
+function defaultSmc(): ConditionNode {
+  return { kind: "signal", signal: { family: "SMC", pattern: "BOS", side: "BULLISH" } };
 }
 
 function minutesToTimeInput(minutes: number): string {
@@ -419,6 +424,56 @@ function SignalEditor({
         </button>
       </div>
       <ChartPatternIllustration pattern={signal.pattern} />
+      </div>
+    );
+  }
+
+  if (signal.family === "SMC") {
+    const set = (patch: Partial<typeof signal>) => onChange({ kind: "signal", signal: { ...signal, ...patch } });
+    const retest = signal.pattern === "FVG_RETEST" || signal.pattern === "ORDER_BLOCK_RETEST";
+    const gap = signal.pattern === "FVG" || signal.pattern === "FVG_RETEST";
+    const usesSwings = !gap;
+    const numCls = `${inputClass} w-16`;
+    return (
+      <div className="space-y-2 rounded-lg bg-brand-bg p-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <select className={inputClass} aria-label="Bullish or bearish" value={signal.side} onChange={(e) => set({ side: e.target.value as SmcSide })}>
+            <option value="BULLISH">Bullish</option>
+            <option value="BEARISH">Bearish</option>
+          </select>
+          <select className={inputClass} aria-label="Smart-money component" value={signal.pattern} onChange={(e) => set({ pattern: e.target.value as SmcKind })}>
+            {SMC_KINDS.map((k) => (
+              <option key={k} value={k}>
+                {SMC_LABEL[k]}
+              </option>
+            ))}
+          </select>
+          {usesSwings && (
+            <label className="flex items-center gap-1 text-xs text-brand-navy/60" title="Candles each side of a swing high/low; a swing is only known once that many candles after it have closed">
+              swings of
+              <input type="number" min={1} max={20} className={numCls} value={signal.swing ?? SMC_DEFAULTS.swing} onChange={(e) => set({ swing: Math.max(1, Math.min(20, Math.floor(Number(e.target.value) || 1))) })} />
+              candles
+            </label>
+          )}
+          {retest && (
+            <label className="flex items-center gap-1 text-xs text-brand-navy/60">
+              within
+              <input type="number" min={1} max={500} className={numCls} value={signal.maxAge ?? SMC_DEFAULTS.maxAge} onChange={(e) => set({ maxAge: Math.max(1, Math.min(500, Math.floor(Number(e.target.value) || 1))) })} />
+              candles
+            </label>
+          )}
+          {gap && (
+            <label className="flex items-center gap-1 text-xs text-brand-navy/60">
+              gap at least
+              <input type="number" min={0} max={20} step="0.05" className={numCls} value={signal.minGapPct ?? 0} onChange={(e) => set({ minGapPct: Math.max(0, Math.min(20, Number(e.target.value) || 0)) })} />%
+            </label>
+          )}
+          <TimeframeSelect value={signal.timeframe} onChange={(timeframe) => set({ timeframe })} />
+          <button type="button" onClick={onRemove} className="ml-auto text-xs text-brand-navy/40 hover:text-brand-sell">
+            Remove
+          </button>
+        </div>
+        <p className="text-[11px] text-brand-navy/55">{SMC_HELP[signal.pattern]}</p>
       </div>
     );
   }
@@ -769,6 +824,10 @@ export default function ConditionGroupEditor({
     onChange({ ...group, children: [...group.children, defaultVolumePattern()] });
   }
 
+  function addSmc() {
+    onChange({ ...group, children: [...group.children, defaultSmc()] });
+  }
+
   function addGroup() {
     onChange({
       ...group,
@@ -841,6 +900,9 @@ export default function ConditionGroupEditor({
         </button>
         <button type="button" onClick={addVolumePattern} className={pillButtonClass}>
           + Volume pattern
+        </button>
+        <button type="button" onClick={addSmc} className={pillButtonClass} title="Break of structure, change of character, liquidity sweep, fair value gap, order block">
+          + Smart money
         </button>
         {depth < 2 && (
           <button type="button" onClick={addGroup} className={pillButtonClass}>

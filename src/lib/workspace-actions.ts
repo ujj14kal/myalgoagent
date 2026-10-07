@@ -6,11 +6,11 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { isUniqueConstraintViolation } from "@/lib/prisma-errors";
-import { emptyDefinition, parseDefinition } from "@/lib/workspace/definition";
-import { checkDefinition, publishVersion } from "@/lib/workspace/store";
-import type { WorkspaceIssue } from "@/lib/workspace/types";
+import { emptySystem, parseSystemDefinition } from "@/lib/system/definition";
+import { checkSystem, publishSystem } from "@/lib/system/store";
+import type { SystemIssue } from "@/lib/system/types";
 
-// Server Actions for workspaces. Failures come back as plain data ({ error }), never thrown: Next.js hides the text of
+// Server Actions for trading systems (stored as workspaces: a draft and its published versions). Failures come back as plain data ({ error }), never thrown: Next.js hides the text of
 // errors thrown across a Server Action in production.
 
 type Err = { error: string };
@@ -27,12 +27,12 @@ export async function createWorkspace(input: { name: string; description?: strin
   const userId = await who();
   if (!userId) return { error: "Unauthorized" };
   const name = cleanName(input?.name);
-  if (!name) return { error: "Give the workspace a name." };
+  if (!name) return { error: "Give the trading system a name." };
   try {
     await enforceRateLimit(`workspace-write:${userId}`, 30, 60_000);
-    if ((await prisma.workspace.count({ where: { userId } })) >= 200) return { error: "You have reached the limit of 200 workspaces. Archive or delete some first." };
+    if ((await prisma.workspace.count({ where: { userId } })) >= 200) return { error: "You have reached the limit of 200 trading systems. Archive or delete some first." };
     const ws = await prisma.workspace.create({
-      data: { userId, name, nameNormalized: name.toLowerCase(), description: input.description?.trim().slice(0, 500) || null, draft: emptyDefinition(input.instrumentId ?? "") as unknown as Prisma.InputJsonValue },
+      data: { userId, name, nameNormalized: name.toLowerCase(), description: input.description?.trim().slice(0, 500) || null, draft: emptySystem(input.instrumentId ?? "") as unknown as Prisma.InputJsonValue },
     });
     revalidatePath("/app/workspaces");
     return { id: ws.id };
@@ -48,13 +48,13 @@ export async function saveWorkspaceDraft(id: string, input: { name?: string; des
   try {
     await enforceRateLimit(`workspace-write:${userId}`, 60, 60_000);
     const ws = await prisma.workspace.findFirst({ where: { id, userId }, select: { id: true, status: true } });
-    if (!ws) return { error: "Workspace not found." };
-    const def = parseDefinition(input.draft);
-    if (!def) return { error: "The plan is too large or isn't valid. Remove some rules and try again." };
+    if (!ws) return { error: "Trading system not found." };
+    const def = parseSystemDefinition(input.draft);
+    if (!def) return { error: "The trading system is too large or isn't valid." };
     const data: Prisma.WorkspaceUpdateInput = { draft: def as unknown as Prisma.InputJsonValue };
     if (input.name !== undefined) {
       const name = cleanName(input.name);
-      if (!name) return { error: "Give the workspace a name." };
+      if (!name) return { error: "Give the trading system a name." };
       data.name = name;
       data.nameNormalized = name.toLowerCase();
     }
@@ -69,28 +69,28 @@ export async function saveWorkspaceDraft(id: string, input: { name?: string; des
   }
 }
 
-export type WorkspaceCheck = { errors: WorkspaceIssue[]; warnings: WorkspaceIssue[]; entryText: string; exitText: string };
+export type WorkspaceCheck = { errors: SystemIssue[]; warnings: SystemIssue[]; concepts: { id: string; name: string; classification: string; text: string }[] };
 
-/** Checks a plan (the stored draft, or one being edited) without saving anything. */
+/** Checks a trading system being edited without saving anything. */
 export async function checkWorkspace(draft: unknown): Promise<WorkspaceCheck | Err> {
   const userId = await who();
   if (!userId) return { error: "Unauthorized" };
   try {
     await enforceRateLimit(`workspace-check:${userId}`, 60, 60_000);
-    const def = parseDefinition(draft);
-    if (!def) return { error: "The plan is too large or isn't valid." };
-    const c = await checkDefinition(userId, def);
-    return { errors: c.errors, warnings: c.warnings, entryText: c.entryText, exitText: c.exitText };
+    const def = parseSystemDefinition(draft);
+    if (!def) return { error: "The trading system is too large or isn't valid." };
+    const c = await checkSystem(userId, def);
+    return { errors: c.errors, warnings: c.warnings, concepts: c.concepts };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Something went wrong" };
   }
 }
 
-export async function publishWorkspace(id: string, note?: string): Promise<{ ok: true; version: number; strategyId: string } | { ok: false; errors: WorkspaceIssue[] } | Err> {
+export async function publishWorkspace(id: string, note?: string): Promise<{ ok: true; version: number; strategyId: string } | { ok: false; errors: SystemIssue[] } | Err> {
   const userId = await who();
   if (!userId) return { error: "Unauthorized" };
   try {
-    const r = await publishVersion(userId, id, note);
+    const r = await publishSystem(userId, id, note);
     if (r.ok) {
       revalidatePath(`/app/workspaces/${id}`);
       revalidatePath("/app/workspaces");
@@ -108,7 +108,7 @@ export async function duplicateWorkspace(id: string): Promise<{ id: string } | E
   try {
     await enforceRateLimit(`workspace-write:${userId}`, 30, 60_000);
     const src = await prisma.workspace.findFirst({ where: { id, userId } });
-    if (!src) return { error: "Workspace not found." };
+    if (!src) return { error: "Trading system not found." };
     for (let n = 2; n < 50; n++) {
       const name = `${src.name.slice(0, MAX_NAME - 8)} (copy${n > 2 ? ` ${n - 1}` : ""})`;
       const taken = await prisma.workspace.findFirst({ where: { userId, nameNormalized: name.toLowerCase() }, select: { id: true } });
@@ -128,7 +128,7 @@ export async function setWorkspaceStatus(id: string, status: "ARCHIVED" | "ACTIV
   const userId = await who();
   if (!userId) return { error: "Unauthorized" };
   const ws = await prisma.workspace.findFirst({ where: { id, userId }, select: { latestVersion: true } });
-  if (!ws) return { error: "Workspace not found." };
+  if (!ws) return { error: "Trading system not found." };
   await prisma.workspace.update({ where: { id }, data: { status: status === "ARCHIVED" ? "ARCHIVED" : ws.latestVersion > 0 ? "ACTIVE" : "DRAFT" } });
   revalidatePath(`/app/workspaces/${id}`);
   revalidatePath("/app/workspaces");
@@ -140,9 +140,9 @@ export async function deleteWorkspace(id: string): Promise<{ ok: true } | Err> {
   const userId = await who();
   if (!userId) return { error: "Unauthorized" };
   const ws = await prisma.workspace.findFirst({ where: { id, userId }, select: { id: true } });
-  if (!ws) return { error: "Workspace not found." };
+  if (!ws) return { error: "Trading system not found." };
   const live = await prisma.liveDeployment.count({ where: { userId, status: { in: ["ACTIVE", "PAUSED"] }, strategy: { workspaceVersion: { workspaceId: id } } } });
-  if (live > 0) return { error: "A version of this workspace is trading live. Stop it on Live Trading first." };
+  if (live > 0) return { error: "A version of this trading system is trading live. Stop it on Live Trading first." };
   await prisma.workspace.delete({ where: { id } });
   revalidatePath("/app/workspaces");
   return { ok: true };

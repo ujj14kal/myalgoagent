@@ -84,6 +84,8 @@ model User {
   optionForwardTests  OptionForwardTest[]
   customIndicators    CustomIndicator[]
   workspaces          Workspace[]
+  blocks              Block[]
+  concepts            Concept[]
 }
 
 enum OtpPurpose {
@@ -386,6 +388,9 @@ model Strategy {
   // Trading-system risk options (see RiskOptions): TP/SL reference (price or margin), intraday leverage, break-even,
   // daily-loss and drawdown limits. Null = the defaults (price-based, no leverage, no limits).
   riskOptions         Json?
+  // Set when this strategy is a published trading system (SystemRuntime): its bullish and bearish concepts, conflict
+  // and opposite-setup rules. The engine then chooses each position's side itself (long or short).
+  systemRuntime       Json?
   // Set when this strategy was compiled from a workspace version: its rules come from the workspace, so edit the workspace and publish a new version.
   workspaceVersionId  String?            @unique
   trailingSlEnabled   Boolean            @default(false)
@@ -458,6 +463,7 @@ model BacktestRun {
   targetsConfig       Json?
   entryPlan           Json?
   riskOptions         Json?
+  systemRuntime       Json?
   trailingSlEnabled   Boolean            @default(false)
   trailingSlUnit      RiskUnit?
   trailingSlValue     Float?
@@ -495,7 +501,7 @@ model BacktestRun {
 }
 
 model BacktestTrade {
-  id            String @id @default(cuid())
+  id            String             @id @default(cuid())
   backtestRunId String
   entryTime     Int
   entryPrice    Float
@@ -509,6 +515,8 @@ model BacktestTrade {
   holdingBars   Int
   // A position built or sold in parts shows as one trade; its parts (entries, target sales) are kept here.
   legs          Json?
+  // Trading systems trade both ways: this trade's side (null = the run's own direction).
+  direction     StrategyDirection?
 
   backtestRun BacktestRun @relation(fields: [backtestRunId], references: [id], onDelete: Cascade)
 }
@@ -547,6 +555,10 @@ model PaperSession {
   targetsConfig            Json?
   entryPlan                Json?
   riskOptions              Json?
+  systemRuntime            Json?
+  // Trading systems: the open position's side, and what the conflict / confirmation rules remember between syncs.
+  positionDirection        StrategyDirection?
+  systemMemo               Json?
   trailingSlEnabled        Boolean            @default(false)
   trailingSlUnit           RiskUnit?
   trailingSlValue          Float?
@@ -617,6 +629,8 @@ model PaperOrder {
   quantity       Float
   fees           Float
   netPnl         Float?
+  /// Trading systems: the side of the position this order opened or closed (null = the session's direction).
+  positionSide   StrategyDirection?
   createdAt      DateTime       @default(now())
 
   paperSession PaperSession  @relation(fields: [paperSessionId], references: [id], onDelete: Cascade)
@@ -1065,6 +1079,44 @@ enum WorkspaceStatus {
 // Several strategies and rules connected into one plan (see lib/workspace). The draft is edited freely; publishing a
 // version freezes a copy and compiles it into an ordinary strategy that runs through the usual backtest, forward test
 // and live engines, so a version that is live can never change under a running trade.
+// Layer 1 of the workspace: one reusable market component (My BOS, My FVG, London session…) — a condition only.
+model Block {
+  id             String   @id @default(cuid())
+  userId         String
+  name           String
+  nameNormalized String
+  description    String?
+  // BlockDefinition: { schema, condition }.
+  definition     Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, nameNormalized])
+  @@index([userId, updatedAt])
+}
+
+// Layer 2: blocks combined into a setup, classified BULLISH or BEARISH (a string, so more classes can be added).
+model Concept {
+  id             String   @id @default(cuid())
+  userId         String
+  name           String
+  nameNormalized String
+  description    String?
+  classification String
+  // ConceptDefinition: { schema, logic } — block references joined by connections.
+  definition     Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, nameNormalized])
+  @@index([userId, updatedAt])
+}
+
+// Layer 3: a trading system (draft = TradingSystemDefinition, schema 2; each version snapshots its concepts and blocks).
 model Workspace {
   id             String          @id @default(cuid())
   userId         String

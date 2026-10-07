@@ -6,6 +6,7 @@ const FAMILY_LABEL: Record<BooleanSignalKind["family"], string> = {
   CANDLE_PATTERN: "candle pattern",
   CHART_PATTERN: "chart pattern",
   VOLUME_PATTERN: "volume pattern",
+  SMC: "smart-money component",
 };
 
 // NSE's actual regular continuous-trading session for equity/index

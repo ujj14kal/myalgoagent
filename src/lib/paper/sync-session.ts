@@ -1,7 +1,8 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { marketDataFor, isIntraday, type CandleInterval } from "@/lib/market-data";
-import { syncPaperSession } from "@/lib/paper/sync";
+import { syncPaperSession, type SystemMemo } from "@/lib/paper/sync";
+import { parseSystemRuntime } from "@/lib/system/signals";
 import { evaluateRisk } from "@/lib/risk/evaluate";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import type { ConditionNode } from "@/lib/strategy";
@@ -63,7 +64,8 @@ export async function syncPaperSessionFor(id: string, userId: string, opts: { sc
   });
 
   const recentClosedOrders = await prisma.paperOrder.findMany({
-    where: { paperSessionId: id, side: "SELL" },
+    // Closing orders carry the realized P&L (a long's SELL, a short's BUY).
+    where: { paperSessionId: id, netPnl: { not: null } },
     orderBy: { time: "desc" },
     take: 20,
   });
@@ -81,7 +83,7 @@ export async function syncPaperSessionFor(id: string, userId: string, opts: { sc
     const recentCandles = await market.getHistoricalCandles(paperSession.instrumentSymbol, "5d", "1d");
     const latestClose = recentCandles.at(-1)?.close ?? paperSession.positionEntryPrice;
     const unrealizedGain =
-      (paperSession.direction === "SHORT" ? paperSession.positionEntryPrice - latestClose : latestClose - paperSession.positionEntryPrice) *
+      ((paperSession.positionDirection ?? paperSession.direction) === "SHORT" ? paperSession.positionEntryPrice - latestClose : latestClose - paperSession.positionEntryPrice) *
       paperSession.positionQuantity;
     priorEquity = paperSession.cash + unrealizedGain;
   }
@@ -146,6 +148,9 @@ export async function syncPaperSessionFor(id: string, userId: string, opts: { sc
       positionTrailAfter: (paperSession.positionTrailAfter as { unit: RiskUnit; value: number } | null) ?? null,
       riskOptions: parseRiskOptions(paperSession.riskOptions),
       engineMemo: (paperSession.engineMemo as EngineMemo | null) ?? null,
+      system: parseSystemRuntime(paperSession.systemRuntime),
+      positionDirection: paperSession.positionDirection,
+      systemMemo: (paperSession.systemMemo as SystemMemo | null) ?? null,
       lastSyncedTime: paperSession.lastSyncedTime,
     },
     preCheck.allowNewEntries,
@@ -157,7 +162,7 @@ export async function syncPaperSessionFor(id: string, userId: string, opts: { sc
       startingCapital: paperSession.startingCapital,
       currentEquity: result.equity,
       recentNetPnls: [
-        ...result.newOrders.filter((o) => o.side === "SELL").map((o) => o.netPnl ?? 0).reverse(),
+        ...result.newOrders.filter((o) => o.netPnl !== null).map((o) => o.netPnl ?? 0).reverse(),
         ...recentClosedOrders.map((o) => o.netPnl ?? 0),
       ],
     },
@@ -201,6 +206,8 @@ export async function syncPaperSessionFor(id: string, userId: string, opts: { sc
       positionLevelCursor: result.position ? result.position.levelCursor : 0,
       positionTrailAfter: result.position?.trailAfter ? (result.position.trailAfter as unknown as Prisma.InputJsonValue) : DbNull,
       engineMemo: result.memo ? (result.memo as unknown as Prisma.InputJsonValue) : DbNull,
+      positionDirection: result.positionDirection,
+      systemMemo: result.systemMemo ? (result.systemMemo as unknown as Prisma.InputJsonValue) : DbNull,
       lastSyncedTime: result.lastSyncedTime,
       pendingLimitPrice: result.pendingEntry?.limitPrice ?? null,
       pendingLimitExpiresDay: result.pendingEntry?.expiresDay ?? null,
@@ -220,6 +227,7 @@ export async function syncPaperSessionFor(id: string, userId: string, opts: { sc
           quantity: o.quantity,
           fees: o.fees,
           netPnl: o.netPnl,
+          positionSide: o.positionSide ?? null,
         },
       }),
     ),

@@ -26,11 +26,11 @@ export default function WorkspaceActionsBar({ id, archived }: { id: string; arch
         {archived ? "Reactivate" : "Archive"}
       </button>
       <button type="button" disabled={pending} className={`${btn} text-brand-sell`} onClick={() => {
-        if (!window.confirm("Delete this workspace? The strategies it published stay (as ordinary strategies); its drafts and version history are removed.")) return;
+        if (!window.confirm("Delete this trading system? The strategies it published stay; its draft and version history are removed.")) return;
         start(async () => {
           const r = await deleteWorkspace(id);
           if ("error" in r) return setError(r.error);
-          router.push("/app/workspaces");
+          router.push("/app/workspaces?tab=systems");
         });
       }}>
         Delete

@@ -1,3 +1,4 @@
+import { computeSmcSeries, SMC_LABEL } from "@/lib/smc";
 import { computeCustomSeries, customPane } from "@/lib/custom-indicator";
 import type { Candle } from "@/lib/market-data";
 import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
@@ -35,7 +36,7 @@ export type ReplayStudies = {
   /** Candles where a pattern in the rules was detected. */
   markers: {
     label: string;
-    family: "CANDLE_PATTERN" | "CHART_PATTERN" | "VOLUME_PATTERN";
+    family: "CANDLE_PATTERN" | "CHART_PATTERN" | "VOLUME_PATTERN" | "SMC";
     pattern: string;
     bars: number[];
     /** How many candles form the pattern, ending at the detected bar (candle patterns). */
@@ -191,7 +192,9 @@ export function buildReplayStudies(
         ? computeCandlePatternSeries(candles, sig.pattern)
         : sig.family === "CHART_PATTERN"
           ? computeChartPatternSeries(candles, sig.pattern)
-          : computeVolumePatternSeries(candles, sig.pattern);
+          : sig.family === "SMC"
+            ? computeSmcSeries(candles, sig.pattern, sig.side, { swing: sig.swing, maxAge: sig.maxAge, minGapPct: sig.minGapPct })
+            : computeVolumePatternSeries(candles, sig.pattern);
     const bars = series.flatMap((hit, i) => (hit ? [i] : []));
     const shapes: Record<number, ReplayShape> = {};
     if (sig.family === "CHART_PATTERN") {
@@ -445,6 +448,7 @@ function whereCaught(candles: Candle[], i: number, sig: Exclude<BooleanSignalKin
     const broke = lineAt !== undefined ? ` · closed ${inr(candles[i].close)} ${candles[i].close >= lineAt ? "above" : "below"} the ${lineName} ${inr(lineAt)}` : "";
     return `Completed on ${dateOf(candles, i)}${points.length ? ` — ${points.join(" · ")}` : ""}${broke}`;
   }
+  if (sig.family === "SMC") return `${sig.side === "BULLISH" ? "Bullish" : "Bearish"} ${SMC_LABEL[sig.pattern].toLowerCase()} on ${dateOf(candles, i)} — close ${inr(candles[i].close)}`;
   const avg = i >= 20 ? candles.slice(i - 20, i).reduce((a, c) => a + c.volume, 0) / 20 : 0;
   const ratio = avg > 0 ? `${(candles[i].volume / avg).toFixed(1)}× its 20-bar average` : "";
   switch (sig.pattern) {

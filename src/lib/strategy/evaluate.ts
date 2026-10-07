@@ -7,6 +7,7 @@ import { computeCandlePatternSeries } from "@/lib/candle-patterns";
 import { computeChartPatternSeries } from "@/lib/chart-patterns";
 import { computeVolumePatternSeries } from "@/lib/volume-patterns";
 import { atLevelSeries } from "@/lib/support-resistance";
+import { computeSmcSeries } from "@/lib/smc";
 import type { BooleanSignalKind, ComparisonOperator, ConditionNode, Operand } from "./types";
 import type { Signal } from "./types";
 
@@ -165,6 +166,8 @@ function signalKey(signal: BooleanSignalKind): string {
       return `CHART_PATTERN:${signal.pattern}:${timeframe ?? ""}`;
     case "VOLUME_PATTERN":
       return `VOLUME_PATTERN:${signal.pattern}:${timeframe ?? ""}`;
+    case "SMC":
+      return `SMC:${signal.pattern}:${signal.side}:${signal.swing ?? ""}:${signal.maxAge ?? ""}:${signal.minGapPct ?? ""}:${timeframe ?? ""}`;
   }
 }
 
@@ -191,6 +194,8 @@ function detectPattern(candles: Candle[], signal: BooleanSignalKind): boolean[] 
       return computeChartPatternSeries(candles, signal.pattern);
     case "VOLUME_PATTERN":
       return computeVolumePatternSeries(candles, signal.pattern);
+    case "SMC":
+      return computeSmcSeries(candles, signal.pattern, signal.side, { swing: signal.swing, maxAge: signal.maxAge, minGapPct: signal.minGapPct });
   }
 }
 
@@ -327,6 +332,15 @@ export function evaluateConditionsPerBar(
   }
 
   return { entry, exit };
+}
+
+/**
+ * Whether each rule is true at each candle's close (not only when it becomes true) — several rules at once, sharing
+ * one set of computed indicator series. Trading systems use it for each concept's validity and confidence.
+ */
+export function evaluateConditionLevels(candles: Candle[], conditions: ConditionNode[], aux: AuxCandleMap = new Map()): boolean[][] {
+  const { seriesOf, signalSeriesOf } = seriesResolvers(candles, aux);
+  return conditions.map((c) => candles.map((_, i) => evaluateNode(c, i, seriesOf, signalSeriesOf) ?? false));
 }
 
 export function evaluateStrategy(

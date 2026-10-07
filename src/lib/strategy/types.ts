@@ -1,4 +1,5 @@
 import type { CustomIndicatorDef, CustomPart } from "@/lib/custom-indicator";
+import type { SmcKind, SmcSide } from "@/lib/smc";
 import type { CandlePatternKind } from "@/lib/candle-patterns";
 import type { ChartPatternKind } from "@/lib/chart-patterns";
 import type { VolumePatternKind } from "@/lib/volume-patterns";
@@ -90,7 +91,10 @@ export type BooleanSignalKind =
       window?: { startMinute: number; endMinute: number };
     }
   | { family: "CHART_PATTERN"; pattern: ChartPatternKind; timeframe?: CandleInterval }
-  | { family: "VOLUME_PATTERN"; pattern: VolumePatternKind; timeframe?: CandleInterval };
+  | { family: "VOLUME_PATTERN"; pattern: VolumePatternKind; timeframe?: CandleInterval }
+  // Smart-money / market-structure components (lib/smc.ts): BOS, CHoCH, liquidity sweep, FVG and its retest, order
+  // block retest — each bullish or bearish, with its own swing size, age limit and minimum gap.
+  | { family: "SMC"; pattern: SmcKind; side: SmcSide; swing?: number; maxAge?: number; minGapPct?: number; timeframe?: CandleInterval };
 
 export type ConditionNode =
   | { kind: "group"; op: "AND" | "OR"; children: ConditionNode[] }

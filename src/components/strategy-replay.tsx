@@ -27,7 +27,7 @@ const C = {
   text: "rgba(14,27,45,0.55)",
 };
 const LINE_COLORS = ["#2563eb", "#0d9488", "#db2777", "#7c3aed", "#ea580c", "#0891b2"];
-const MARKER_COLOR = { CANDLE_PATTERN: "#7c3aed", CHART_PATTERN: "#0891b2", VOLUME_PATTERN: "#ea580c" } as const;
+const MARKER_COLOR = { CANDLE_PATTERN: "#7c3aed", CHART_PATTERN: "#0891b2", VOLUME_PATTERN: "#ea580c", SMC: "#be185d" } as const;
 const KIND_COLOR: Record<ScenarioKind, string> = { target: C.tp, stop_loss: C.sl, trailing_stop: C.trail, exit_rule: C.entry, square_off: "#64748b", end_of_data: "#64748b" };
 
 const W = 760;

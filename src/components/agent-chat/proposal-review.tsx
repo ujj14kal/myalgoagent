@@ -1,4 +1,5 @@
 "use client";
+import type { ConceptNode } from "@/lib/system/types";
 import { isIntraday } from "@/lib/market-data/timeframes";
 import { describeTargets } from "@/lib/describe-targets";
 import { describeRiskOptions } from "@/lib/trading-engine/risk-options";
@@ -19,6 +20,8 @@ import {
   Layers,
   ListChecks,
   Network,
+  Blocks,
+  Boxes,
   OctagonX,
   PencilLine,
   PlayCircle,
@@ -43,6 +46,7 @@ import { runBacktestAction, runBacktestForAgent } from "@/lib/backtest-actions";
 import { setPaperSessionStatus, startPaperSession, startPaperSessionForAgent, syncPaperSessionAction } from "@/lib/paper-actions";
 import { toggleKillSwitch, updateRiskSettings } from "@/lib/risk-actions";
 import { createWorkspace, publishWorkspace, saveWorkspaceDraft } from "@/lib/workspace-actions";
+import { saveBlock, saveConcept } from "@/lib/system-actions";
 import { addToWatchlist, removeFromWatchlist } from "@/lib/watchlist-actions";
 
 const ICONS: Record<AgentProposal["kind"], React.ReactNode> = {
@@ -56,6 +60,8 @@ const ICONS: Record<AgentProposal["kind"], React.ReactNode> = {
   paper_control: <RefreshCw size={16} />,
   strategy_archive: <Archive size={16} />,
   strategy_update: <PencilLine size={16} />,
+  block: <Blocks size={16} />,
+  concept: <Boxes size={16} />,
   workspace: <Network size={16} />,
   plan: <ListChecks size={16} />,
 };
@@ -88,6 +94,10 @@ export function proposalSummary(p: AgentProposal): string {
       return p.draft.strategyName;
     case "strategy_update":
       return `${p.draft.name}${p.draft.instrumentSymbol ? ` · ${p.draft.instrumentSymbol}` : ""}`;
+    case "block":
+      return `${p.draft.name} · block`;
+    case "concept":
+      return `${p.draft.name} · ${p.draft.classification === "BULLISH" ? "bullish" : "bearish"} concept`;
     case "workspace":
       return `${p.draft.name}${p.draft.instrumentSymbol ? ` · ${p.draft.instrumentSymbol}` : ""}${p.draft.publish ? " · publish a version" : " · save the draft"}`;
     case "plan":
@@ -117,8 +127,12 @@ function confirmLabel(p: AgentProposal): string {
       return "Archive";
     case "strategy_update":
       return "Save changes";
+    case "block":
+      return p.draft.blockId ? "Save block" : "Create block";
+    case "concept":
+      return p.draft.newBlocks.length ? `Create concept and ${p.draft.newBlocks.length} block${p.draft.newBlocks.length === 1 ? "" : "s"}` : p.draft.conceptId ? "Save concept" : "Create concept";
     case "workspace":
-      return p.draft.publish ? (p.draft.workspaceId ? "Save and publish" : "Create and publish") : p.draft.workspaceId ? "Save changes" : "Create workspace";
+      return p.draft.publish ? (p.draft.workspaceId ? "Save and publish" : "Create and publish") : p.draft.workspaceId ? "Save changes" : "Create trading system";
     case "plan":
       return `Run all ${p.steps.length} steps`;
   }
@@ -206,16 +220,38 @@ async function execute(p: AgentProposal, instrumentId: string | null, go: (path:
       go("/app/strategies");
       return null;
     }
+    case "block": {
+      const d = p.draft;
+      const r = await saveBlock({ id: d.blockId, name: d.name, description: d.description ?? null, definition: d.definition });
+      if ("error" in r) return r.error;
+      go(`/app/workspaces/blocks/${r.id}`);
+      return null;
+    }
+    case "concept": {
+      const d = p.draft;
+      // Blocks the concept needs are created first; their "new:<name>" references then become real ids.
+      const ids = new Map<string, string>();
+      for (const nb of d.newBlocks) {
+        const made = await saveBlock({ name: nb.name, definition: nb.definition });
+        if ("error" in made) return made.error;
+        ids.set(`new:${nb.name}`, made.id);
+      }
+      const fix = (n: ConceptNode | null): ConceptNode | null => (!n ? n : n.type === "block" ? { ...n, blockId: ids.get(n.blockId) ?? n.blockId } : { ...n, children: n.children.map((c) => fix(c)!) });
+      const r = await saveConcept({ id: d.conceptId, name: d.name, description: d.description ?? null, classification: d.classification, definition: { schema: 1, logic: fix(d.definition.logic) } });
+      if ("error" in r) return r.error;
+      go(`/app/workspaces/concepts/${r.id}`);
+      return null;
+    }
     case "workspace": {
       const d = p.draft;
       let id = d.workspaceId;
       if (!id) {
         const made = await createWorkspace({ name: d.name, description: d.description, instrumentId: d.definition.instrumentId });
-        if ("error" in made) return made.error === "DUPLICATE_NAME" ? "You already have a workspace with this name — give it a different name." : made.error;
+        if ("error" in made) return made.error === "DUPLICATE_NAME" ? "You already have a trading system with this name — give it a different name." : made.error;
         id = made.id;
       }
       const saved = await saveWorkspaceDraft(id, { name: d.name, description: d.description ?? null, draft: d.definition });
-      if ("error" in saved) return saved.error === "DUPLICATE_NAME" ? "You already have a workspace with this name — give it a different name." : saved.error;
+      if ("error" in saved) return saved.error === "DUPLICATE_NAME" ? "You already have a trading system with this name — give it a different name." : saved.error;
       if (d.publish) {
         const r = await publishWorkspace(id, d.note);
         if ("error" in r) return r.error;
@@ -662,32 +698,81 @@ function ProposalFields({
     case "strategy":
     case "strategy_update":
       return <StrategyFields draft={p.draft} onChange={(draft) => onChange({ ...p, draft })} instrumentId={instrumentId} onInstrument={onInstrument} />;
-    case "workspace":
+    case "block":
       return (
         <div className="space-y-4">
-          <Field label="Workspace name">
+          <Field label="Block name">
+            <input value={p.draft.name} maxLength={80} onChange={(e) => onChange({ ...p, draft: { ...p.draft, name: e.target.value } })} className={inputCls} />
+          </Field>
+          <Statement>
+            <strong>Present when:</strong> {p.draft.text}
+          </Statement>
+          <p className="text-xs text-brand-navy/40">A block is only a market component — no instrument, side, size or exits. Use it in a concept.</p>
+        </div>
+      );
+    case "concept":
+      return (
+        <div className="space-y-4">
+          <Field label="Concept name">
             <input value={p.draft.name} maxLength={80} onChange={(e) => onChange({ ...p, draft: { ...p.draft, name: e.target.value } })} className={inputCls} />
           </Field>
           <div className="space-y-2 rounded-xl bg-brand-bg p-3 text-sm text-brand-navy/80">
             <p>
-              <strong className="text-brand-navy">Trades:</strong> {p.draft.instrumentSymbol ?? "—"} · {p.draft.definition.direction === "SHORT" ? "short" : "long"} · {p.draft.definition.timeframe} candles{p.draft.definition.style ? ` · ${STYLE_LABEL[p.draft.definition.style]}` : ""}
+              <strong className="text-brand-navy">{p.draft.classification === "BULLISH" ? "Bullish" : "Bearish"} setup valid when:</strong> {p.draft.text}
             </p>
+            {p.draft.newBlocks.length > 0 && (
+              <div className="text-xs">
+                <p className="font-semibold text-brand-navy">New blocks created with it:</p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                  {p.draft.newBlocks.map((b) => (
+                    <li key={b.name}>
+                      {b.name} — {b.text}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-brand-navy/40">A concept only says “setup valid”. Instruments, sizes and exits are decided by the trading system that uses it.</p>
+        </div>
+      );
+    case "workspace": {
+      const d = p.draft.definition;
+      return (
+        <div className="space-y-4">
+          <Field label="Trading system name">
+            <input value={p.draft.name} maxLength={80} onChange={(e) => onChange({ ...p, draft: { ...p.draft, name: e.target.value } })} className={inputCls} />
+          </Field>
+          <div className="space-y-2 rounded-xl bg-brand-bg p-3 text-sm text-brand-navy/80">
             <p>
-              <strong className="text-brand-navy">Enters when:</strong> {p.draft.entryText}
+              <strong className="text-brand-navy">Trades:</strong> {p.draft.instrumentSymbol ?? "—"} · {d.productType === "INTRADAY" ? "intraday (long and short)" : "delivery (long only)"} · {d.timeframes.primary}
+              {d.timeframes.confirmation ? ` + ${d.timeframes.confirmation}` : ""}
+              {d.timeframes.higher ? ` + ${d.timeframes.higher}` : ""} candles
             </p>
-            <p>
-              <strong className="text-brand-navy">Exit rule:</strong> {p.draft.definition.exit ? p.draft.exitText : "none — it exits on its stops, targets or holding limit"}
+            <div>
+              <strong className="text-brand-navy">Concepts:</strong>
+              <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs">
+                {p.draft.concepts.map((c) => (
+                  <li key={c.name}>
+                    {c.name} ({c.classification === "BULLISH" ? "bullish" : "bearish"}): {c.text}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <p className="text-xs">
+              <strong className="text-brand-navy">Capital:</strong> {inr(d.capital.total)}, a position may use up to {d.capital.maxUtilizationPercent}% · <strong className="text-brand-navy">Conflicts:</strong> {d.conflict.rule.toLowerCase().replace("_", " ")} · <strong className="text-brand-navy">Long + bearish:</strong> {d.opposite.whenLong.toLowerCase()} · <strong className="text-brand-navy">Short + bullish:</strong> {d.opposite.whenShort.toLowerCase()}
+              {d.opposite.confirmBars > 0 ? ` (after ${d.opposite.confirmBars} candle${d.opposite.confirmBars === 1 ? "" : "s"})` : ""}
             </p>
-            {p.draft.definition.entryPlan && (
+            {d.entryPlan && (
               <ul className="list-disc space-y-0.5 pl-5 text-xs">
-                {describeEntryPlan(p.draft.definition.entryPlan, p.draft.definition.direction).map((l) => (
+                {describeEntryPlan(d.entryPlan, "LONG").map((l) => (
                   <li key={l}>{l}</li>
                 ))}
               </ul>
             )}
-            {p.draft.definition.targets && p.draft.definition.targets.length > 0 && (
+            {d.targets.length > 0 && (
               <ul className="list-disc space-y-0.5 pl-5 text-xs">
-                {describeTargets(p.draft.definition.targets).map((l) => (
+                {describeTargets(d.targets).map((l) => (
                   <li key={l}>{l}</li>
                 ))}
               </ul>
@@ -704,12 +789,13 @@ function ProposalFields({
             <input type="checkbox" className="mt-0.5 accent-brand-primary" checked={p.draft.publish} onChange={(e) => onChange({ ...p, draft: { ...p.draft, publish: e.target.checked } })} />
             <span>
               Publish it as a version now
-              <span className="block text-xs text-brand-navy/50">Freezes this plan and creates a strategy you can backtest, forward test and take live. Leave it off to just save the draft.</span>
+              <span className="block text-xs text-brand-navy/50">Freezes this system with its concepts and blocks and creates a strategy you can backtest, forward test and take live. Leave it off to just save the draft.</span>
             </span>
           </label>
-          <p className="text-xs text-brand-navy/40">To change the logic, ask your assistant, or open the workspace after saving.</p>
+          <p className="text-xs text-brand-navy/40">To change anything else, ask your assistant, or open the trading system after saving.</p>
         </div>
       );
+    }
     case "backtest":
       return (
         <div className="space-y-4">

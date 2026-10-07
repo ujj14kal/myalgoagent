@@ -16,6 +16,8 @@ export interface RiskOptions {
   breakEven: { unit: RiskUnit; value: number } | null;
   maxDailyLossPercent: number | null;
   maxDrawdownPercent: number | null;
+  /** The most of the capital (× leverage) one position may use, in %; null = all of it. */
+  maxCapitalUsePercent?: number | null;
 }
 
 export const DEFAULT_RISK_OPTIONS: RiskOptions = { reference: "PRICE", leverage: 1, breakEven: null, maxDailyLossPercent: null, maxDrawdownPercent: null };
@@ -36,11 +38,12 @@ export function parseRiskOptions(json: unknown): RiskOptions {
     breakEven: be && UNITS.includes(be.unit as RiskUnit) && num(be.value) && (be.value as number) > 0 ? { unit: be.unit as RiskUnit, value: be.value as number } : null,
     maxDailyLossPercent: num(o.maxDailyLossPercent) && (o.maxDailyLossPercent as number) > 0 ? (o.maxDailyLossPercent as number) : null,
     maxDrawdownPercent: num(o.maxDrawdownPercent) && (o.maxDrawdownPercent as number) > 0 ? (o.maxDrawdownPercent as number) : null,
+    ...(num(o.maxCapitalUsePercent) && (o.maxCapitalUsePercent as number) > 0 && (o.maxCapitalUsePercent as number) < 100 ? { maxCapitalUsePercent: o.maxCapitalUsePercent as number } : {}),
   };
 }
 
 /** True when nothing differs from the defaults (stored as null). */
-export const isDefaultRiskOptions = (o: RiskOptions) => o.reference === "PRICE" && o.leverage === 1 && !o.breakEven && o.maxDailyLossPercent == null && o.maxDrawdownPercent == null;
+export const isDefaultRiskOptions = (o: RiskOptions) => o.reference === "PRICE" && o.leverage === 1 && !o.breakEven && o.maxDailyLossPercent == null && o.maxDrawdownPercent == null && o.maxCapitalUsePercent == null;
 
 /** Why these options can't be used with this strategy, or null when they're fine. */
 export function riskOptionsProblem(o: RiskOptions, ctx: { productType: string; stopLossOn: boolean }): string | null {
@@ -51,6 +54,7 @@ export function riskOptionsProblem(o: RiskOptions, ctx: { productType: string; s
   if (o.breakEven && !(o.breakEven.value > 0)) return "The break-even trigger needs a distance above zero.";
   if (o.maxDailyLossPercent != null && (o.maxDailyLossPercent <= 0 || o.maxDailyLossPercent > 100)) return "The daily loss limit must be between 0% and 100%.";
   if (o.maxDrawdownPercent != null && (o.maxDrawdownPercent <= 0 || o.maxDrawdownPercent > 100)) return "The drawdown limit must be between 0% and 100%.";
+  if (o.maxCapitalUsePercent != null && (o.maxCapitalUsePercent <= 0 || o.maxCapitalUsePercent > 100)) return "The most capital one position may use must be between 1% and 100%.";
   return null;
 }
 
@@ -63,7 +67,7 @@ function leg<T extends { unit: RiskUnit; value: number }>(l: T, o: RiskOptions):
 }
 
 /** The engine's risk settings in price terms, plus the leverage and limits — what every engine path runs with. */
-export function engineRisk(rm: RiskManagementConfig, o: RiskOptions): { riskManagement: RiskManagementConfig; leverage: number; limits?: EngineLimits } {
+export function engineRisk(rm: RiskManagementConfig, o: RiskOptions): { riskManagement: RiskManagementConfig; leverage: number; limits?: EngineLimits; maxCapitalUsePercent: number | null } {
   const l = (x: RiskLeg | null) => (x ? leg(x, o) : x);
   const targets = rm.targets?.map((t): TargetLevel => ({ ...leg(t, o), lock: t.lock.mode === "MARGIN" || t.lock.mode === "TRAIL" ? leg(t.lock, o) : t.lock }));
   const riskManagement: RiskManagementConfig = {
@@ -74,7 +78,7 @@ export function engineRisk(rm: RiskManagementConfig, o: RiskOptions): { riskMana
     ...(o.breakEven ? { breakEven: leg({ enabled: true, ...o.breakEven }, o) } : {}),
   };
   const limits = o.maxDailyLossPercent != null || o.maxDrawdownPercent != null ? { maxDailyLossPercent: o.maxDailyLossPercent, maxDrawdownPercent: o.maxDrawdownPercent } : undefined;
-  return { riskManagement, leverage: o.leverage, ...(limits ? { limits } : {}) };
+  return { riskManagement, leverage: o.leverage, ...(limits ? { limits } : {}), maxCapitalUsePercent: o.maxCapitalUsePercent ?? null };
 }
 
 /** Every figure a user needs to see what a stop or target means: shown beside the settings (pure, for the preview). */

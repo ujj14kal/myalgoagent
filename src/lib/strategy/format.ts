@@ -1,3 +1,4 @@
+import { SMC_DEFAULTS, SMC_LABEL } from "@/lib/smc";
 import type { ConditionNode, Operand, BooleanSignalKind, ComparisonOperator } from "./types";
 import { INDICATOR_CATALOG } from "./indicator-catalog";
 import { PART_LABEL } from "@/lib/custom-indicator";
@@ -53,6 +54,10 @@ function signalToText(s: BooleanSignalKind): string {
     case "VOLUME_PATTERN":
       // "volume spike", not "volume spike volume".
       return `${humanize(s.pattern)}${/volume/i.test(s.pattern) ? "" : " (volume)"}${suffix(s)}`;
+    case "SMC": {
+      const extra = [s.swing && s.swing !== SMC_DEFAULTS.swing ? `${s.swing}-candle swings` : "", (s.pattern === "FVG_RETEST" || s.pattern === "ORDER_BLOCK_RETEST") && s.maxAge && s.maxAge !== SMC_DEFAULTS.maxAge ? `within ${s.maxAge} candles` : "", s.minGapPct ? `gap ≥ ${s.minGapPct}%` : ""].filter(Boolean);
+      return `${s.side === "BULLISH" ? "bullish" : "bearish"} ${SMC_LABEL[s.pattern].replace(/^\w/, (c) => c.toLowerCase())}${extra.length ? ` (${extra.join(", ")})` : ""}${suffix(s)}`;
+    }
   }
 }
 

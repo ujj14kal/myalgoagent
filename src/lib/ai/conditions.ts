@@ -5,6 +5,7 @@ import { INDICATOR_CATALOG, OSCILLATOR_KINDS, OSCILLATOR_SCALE_GROUP } from "@/l
 import { CANDLE_PATTERN_CATALOG } from "@/lib/strategy/candle-pattern-catalog";
 import { CHART_PATTERN_CATALOG } from "@/lib/strategy/chart-pattern-catalog";
 import { VOLUME_PATTERN_CATALOG } from "@/lib/strategy/volume-pattern-catalog";
+import { SMC_KINDS, type SmcKind } from "@/lib/smc";
 import type { BooleanSignalKind, ComparisonOperator, ConditionNode, Operand, PriceField } from "@/lib/strategy/types";
 import type { CandleInterval } from "@/lib/market-data";
 
@@ -209,6 +210,19 @@ export function toConditionNode(v: unknown, where = "condition"): ConditionNode 
   if ("volume_pattern" in v) {
     return { kind: "signal", signal: { family: "VOLUME_PATTERN", pattern: pattern(VOLUMES, v.volume_pattern, "volume", where) as never, ...(tf ? { timeframe: tf } : {}) } };
   }
+  if ("smc" in v) {
+    const kind = String(v.smc).toUpperCase().replace(/[\s-]+/g, "_");
+    const aliases: Record<string, SmcKind> = { BREAK_OF_STRUCTURE: "BOS", CHANGE_OF_CHARACTER: "CHOCH", SWEEP: "LIQUIDITY_SWEEP", FAIR_VALUE_GAP: "FVG", FAIR_VALUE_GAP_RETEST: "FVG_RETEST", ORDER_BLOCK: "ORDER_BLOCK_RETEST", OB_RETEST: "ORDER_BLOCK_RETEST" };
+    const smc = (SMC_KINDS as string[]).includes(kind) ? (kind as SmcKind) : aliases[kind];
+    if (!smc) throw new Error(`${where}: "smc" must be one of ${SMC_KINDS.join(", ")}.`);
+    const side = String(v.side ?? "").toLowerCase();
+    if (side !== "bullish" && side !== "bearish") throw new Error(`${where}: a smart-money component needs "side": "bullish" or "bearish".`);
+    const int = (x: unknown) => (typeof x === "number" && Number.isFinite(x) ? Math.round(x) : undefined);
+    const swing = int(v.swing);
+    const maxAge = int(v.max_age);
+    const minGap = typeof v.min_gap_pct === "number" ? v.min_gap_pct : undefined;
+    return { kind: "signal", signal: { family: "SMC", pattern: smc, side: side === "bullish" ? "BULLISH" : "BEARISH", ...(swing ? { swing } : {}), ...(maxAge ? { maxAge } : {}), ...(minGap ? { minGapPct: minGap } : {}), ...(tf ? { timeframe: tf } : {}) } };
+  }
 
   if ("left" in v && "right" in v) {
     const op = OPS[String(v.op ?? v.operator ?? "").toLowerCase().replace(/\s+/g, "_")];
@@ -240,6 +254,7 @@ export const CONDITION_REFERENCE = [
   `- candle pattern: {"candle_pattern":"HAMMER"} — ${CANDLE_PATTERN_CATALOG.map((p) => p.kind).join(", ")}`,
   `- chart pattern: {"chart_pattern":"DOUBLE_BOTTOM"} — ${CHART_PATTERN_CATALOG.map((p) => p.kind).join(", ")}`,
   `- volume pattern: {"volume_pattern":"VOLUME_SPIKE"} — ${VOLUME_PATTERN_CATALOG.map((p) => p.kind).join(", ")}`,
+  `- smart-money / market structure: {"smc":"BOS","side":"bullish"} — ${SMC_KINDS.join(", ")} (BOS = close beyond the last confirmed swing high/low; CHOCH = the first BOS against the previous one; LIQUIDITY_SWEEP = wick through the last swing low/high closing back inside; FVG = a three-candle gap forms; FVG_RETEST / ORDER_BLOCK_RETEST = price returns into an earlier gap / order block). Optional "swing" (candles each side of a swing, default 3), "max_age" (retests: candles a gap/order block stays valid, default 30), "min_gap_pct" (FVG). True/false like other patterns; swings only count once confirmed, so nothing looks ahead.`,
   '  Patterns can add "timeframe" to detect on another chart. A candle pattern can add "at_level": "support" or "resistance" to count only when the candle forms at that level (omit = anywhere). Whenever the user wants a pattern "at", "near" or "on" support/resistance, use at_level — never build your own close-vs-support comparison for it (that checks something different). Patterns and time windows are true/false conditions — never compare them to a value.',
   '- support / resistance levels are indicators on the price scale: {"indicator":"support"} is the nearest support level below price (swing lows that price bounced from), {"indicator":"resistance"} the nearest level above (swing highs price failed to break). Compare them with price, e.g. close crosses_above resistance (breakout), close < support (breakdown).',
   '- the user\'s own custom indicators (list_custom_indicators): {"custom":"<exact name>"} — zones, rectangles, channels and bands also need "part": "upper" | "middle" | "lower" | "inside" (inside = 1 while the close is in it, compare EQ 1), e.g. {"custom":"Demand zone","part":"lower"}; signal-marker indicators read 1 where true, 0 otherwise; or a formula written inline: {"formula":"(close - sma(close, 50)) / atr(14)","name":"Trend strength"}. Compare formulas that are ratios/scores/0-1 flags to fixed numbers, and price-level ones (lines, midlines) to price.',
