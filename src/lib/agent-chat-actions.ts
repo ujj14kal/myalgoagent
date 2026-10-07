@@ -1,7 +1,7 @@
 "use server";
 
 import { forModel, redactSecrets } from "@/lib/ai/redact";
-import { forDescribe } from "@/lib/ai/describe-indicator";
+import { DESCRIBE_INSTRUCTION, isDescribe } from "@/lib/ai/describe-indicator";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -184,7 +184,8 @@ export async function sendAgentMessage(input: {
     const request = {
       tools: AGENT_TOOLS,
       runTool: (name: string, args: string) => runAgentTool(userId, name, args),
-      system: buildSystemPrompt(agentName, userContext, { voice: input?.voice === true }),
+      // The Describe-it box asks for an indicator plus a strategy; its standing instruction travels in the system prompt (not the user text).
+      system: buildSystemPrompt(agentName, userContext, { voice: input?.voice === true }) + (isDescribe(raw) ? DESCRIBE_INSTRUCTION : ""),
       fast: input?.voice === true,
       turns: [
         ...history.reverse().map((m) => {
@@ -193,7 +194,7 @@ export async function sendAgentMessage(input: {
           const note = p ? `\n\n[${PROPOSAL_TITLES[p.kind]} proposal — ${p.status === "pending" ? "not decided yet" : p.status} by the user]` : "";
           return { role: m.role === "USER" ? ("user" as const) : ("assistant" as const), text: m.content + note };
         }),
-        { role: "user" as const, text: forDescribe(forModel(raw)) },
+        { role: "user" as const, text: forModel(raw) },
       ],
     };
     // Voice: start making the first sentence's audio while the reply goes through its safety

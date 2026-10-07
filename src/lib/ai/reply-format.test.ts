@@ -89,10 +89,11 @@ describe("fenced code in a reply", () => {
 });
 
 
-import { DESCRIBE_PREFIX, forDescribe } from "./describe-indicator";
+import { DESCRIBE_INSTRUCTION, DESCRIBE_PREFIX, isDescribe } from "./describe-indicator";
 describe("the Describe-it message", () => {
-  it("gets the build-now instruction for the model, and nothing else does", () => {
-    expect(forDescribe(`${DESCRIBE_PREFIX}volume surge`)).toMatch(/Do NOT ask which stock/);
-    expect(forDescribe("hello")).toBe("hello");
+  it("is recognised by its opening, and the instruction for the model says not to ask first", () => {
+    expect(isDescribe(`${DESCRIBE_PREFIX}volume surge`)).toBe(true);
+    expect(isDescribe("hello")).toBe(false);
+    expect(DESCRIBE_INSTRUCTION).toMatch(/Do not ask which stock/);
   });
 });
