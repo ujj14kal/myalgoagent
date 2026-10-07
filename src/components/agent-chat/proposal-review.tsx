@@ -376,10 +376,10 @@ export function ProposalCard({
       initial={{ opacity: 0, y: 8, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.3, delay: 0.08 }}
-      className="flex items-center gap-3 rounded-xl bg-brand-bg p-3 ring-1 ring-brand-primary/15"
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-brand-bg p-3 ring-1 ring-brand-primary/15"
     >
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-primary/10 text-brand-primary">{ICONS[proposal.kind]}</span>
-      <span className="min-w-0 flex-1">
+      <span className="min-w-0 flex-1 basis-36">
         <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="whitespace-nowrap text-[13px] font-semibold text-brand-navy">{PROPOSAL_TITLES[proposal.kind]}</span>
           <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${s.cls}`}>{s.label}</span>
@@ -387,7 +387,7 @@ export function ProposalCard({
         <span className="block truncate text-xs text-brand-navy/60">{proposalSummary(proposal)}</span>
       </span>
       {proposal.status === "pending" && (
-        <span className="flex shrink-0 items-center gap-1.5">
+        <span className="flex shrink-0 items-center gap-1.5 max-[430px]:w-full max-[430px]:justify-end">
           {strategy?.instrumentId && (
             <button type="button" onClick={previewNow} className="inline-flex items-center gap-1 rounded-lg border border-brand-primary/30 px-2.5 py-1.5 text-xs font-semibold text-brand-primary hover:bg-brand-primary/5">
               <Eye size={12} /> Preview

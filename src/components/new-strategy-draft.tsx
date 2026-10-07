@@ -50,6 +50,9 @@ function toInitial(d: StrategyInput): StrategyInitial | null {
 export default function NewStrategyWithDraft({ instruments }: { instruments: InstrumentOption[] }) {
   const [draft, setDraft] = useState<StrategyInitial | null>(null);
   const [fromAgent, setFromAgent] = useState(false);
+  // The builder keeps its own state in the same place as the draft the instant it mounts, so it must not mount until the
+  // draft has been read — or a blank form overwrites the strategy the assistant (or an earlier visit) left there.
+  const [ready, setReady] = useState(false);
   const [key, setKey] = useState(0);
   useEffect(() => {
     try {
@@ -60,11 +63,14 @@ export default function NewStrategyWithDraft({ instruments }: { instruments: Ins
         // eslint-disable-next-line react-hooks/set-state-in-effect -- restoring browser-kept state after mount (not available during render)
         setDraft(d);
         setFromAgent(sessionStorage.getItem(NEW_STRATEGY_DRAFT_FROM_KEY) === "agent");
+        sessionStorage.removeItem(NEW_STRATEGY_DRAFT_FROM_KEY); // only the first open says "from your assistant"
         setKey((k) => k + 1);
       }
     } catch {
       // unreadable draft — start fresh
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the draft lives in browser storage, which only exists after mount
+    setReady(true);
   }, [instruments]);
 
   return (
@@ -88,7 +94,14 @@ export default function NewStrategyWithDraft({ instruments }: { instruments: Ins
           </button>
         </p>
       )}
-      <StrategyBuilderForm key={key} instruments={instruments} initial={draft ?? undefined} />
+      {ready ? (
+        <StrategyBuilderForm key={key} instruments={instruments} initial={draft ?? undefined} />
+      ) : (
+        <div className="mx-auto max-w-4xl animate-pulse space-y-4" aria-busy="true" aria-label="Loading the strategy builder">
+          <div className="h-28 rounded-2xl bg-brand-navy/[0.05]" />
+          <div className="h-64 rounded-2xl bg-brand-navy/[0.05]" />
+        </div>
+      )}
     </>
   );
 }
