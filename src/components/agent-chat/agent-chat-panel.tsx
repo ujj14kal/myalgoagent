@@ -156,7 +156,7 @@ function ReplyBody({ content, onNavigate }: { content: string; onNavigate: () =>
             ));
           return (
             <div key={gi} className="overflow-x-auto rounded-xl bg-white ring-1 ring-brand-navy/10 [overflow-wrap:normal]">
-              <table className="w-full border-collapse text-[12.5px] leading-snug">
+              <table className="w-full border-collapse text-[12.5px] leading-snug [&_code]:whitespace-nowrap [&_code]:[word-break:normal]">
                 <thead>
                   <tr className="bg-brand-primary/[0.06]">
                     {g.header.map((h, i) => (
