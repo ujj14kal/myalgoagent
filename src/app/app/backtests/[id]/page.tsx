@@ -73,6 +73,8 @@ export default async function BacktestDetailPage({ params }: { params: Promise<{
           { time: t.exitTime, type: "exit" as const },
         ];
   });
+  // A trading system's trades each carry the side they were taken on.
+  const isSystem = run.systemRuntime != null;
   const equityCurve = run.equityCurve as unknown as { time: number; equity: number }[];
 
   return (
@@ -84,7 +86,11 @@ export default async function BacktestDetailPage({ params }: { params: Promise<{
         description={
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="font-medium text-brand-navy">{run.instrumentSymbol}</span>
-            <StatusBadge status={run.direction === "SHORT" ? "SHORT" : "LONG"} />
+            {isSystem ? (
+              <span className="rounded-full bg-brand-navy/[0.06] px-2 py-0.5 text-xs font-semibold text-brand-navy/70">Trading system</span>
+            ) : (
+              <StatusBadge status={run.direction === "SHORT" ? "SHORT" : "LONG"} />
+            )}
             <span>· {run.range} · started with {formatINR(run.startingCapital)} · {describePositionSizing(run.positionSizingMode, run.positionSizingValue)}</span>
           </span>
         }
@@ -130,6 +136,7 @@ export default async function BacktestDetailPage({ params }: { params: Promise<{
           <table className="data-table">
             <thead>
               <tr>
+                {isSystem && <th>Side</th>}
                 <th>Entry</th>
                 <th>Exit</th>
                 <th className="num-cell">Qty</th>
@@ -148,6 +155,7 @@ export default async function BacktestDetailPage({ params }: { params: Promise<{
                 return (
                   <Fragment key={t.id}>
                   <tr>
+                    {isSystem && <td><span className={`font-semibold ${t.direction === "SHORT" ? "text-brand-sell" : "text-brand-buy"}`}>{t.direction === "SHORT" ? "Short" : "Long"}</span></td>}
                     <td>{d(t.entryTime)}</td>
                     <td>{d(t.exitTime)}</td>
                     <td className="num-cell">{t.quantity}</td>
@@ -159,7 +167,7 @@ export default async function BacktestDetailPage({ params }: { params: Promise<{
                   </tr>
                   {legs && (
                     <tr>
-                      <td colSpan={8} className="bg-brand-bg px-4 py-2 text-xs text-brand-navy/60">
+                      <td colSpan={isSystem ? 9 : 8} className="bg-brand-bg px-4 py-2 text-xs text-brand-navy/60">
                         <span className="font-semibold text-brand-navy/70">Built and sold in parts: </span>
                         {describeLegs(legs, d)}
                       </td>
