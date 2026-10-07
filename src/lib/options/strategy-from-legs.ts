@@ -9,14 +9,15 @@ import type { OptionLeg } from "@/lib/options/positions";
 const MAX_OFFSET = 10;
 
 /** The strategy these legs describe, plus anything that couldn't be carried over exactly. */
-export function strategyFromLegs(args: { legs: OptionLeg[]; underlying: string; step: number; atm: number; expiries: string[]; expiry: string | null }): { input: OptionStrategyInput; notes: string[] } {
+export function strategyFromLegs(args: { legs: OptionLeg[]; underlying: string; step: number; atm: number; expiries: string[]; expiry: string | null }): { input: OptionStrategyInput; notes: string[]; /** Legs further than the strategy can hold from the at-the-money strike. */ tooFar: number[] } {
   const { legs, step, atm } = args;
   const notes: string[] = [];
+  const tooFar: number[] = [];
   const mapped: StrategyLeg[] = legs.slice(0, 6).map((l) => {
     const raw = step > 0 ? (l.strike - atm) / step : 0;
     const offset = Math.max(-MAX_OFFSET, Math.min(MAX_OFFSET, Math.round(raw)));
     if (Math.abs(raw - Math.round(raw)) > 0.01) notes.push(`${l.strike} isn't on the ${step}-point strike grid; it is saved as the nearest strike.`);
-    if (Math.abs(Math.round(raw)) > MAX_OFFSET) notes.push(`${l.strike} is more than ${MAX_OFFSET} strikes from the at-the-money strike; it is saved at ${MAX_OFFSET} strikes.`);
+    if (Math.abs(Math.round(raw)) > MAX_OFFSET) tooFar.push(l.strike);
     return { type: l.type, side: l.side, offset, lots: Math.max(1, Math.min(50, Math.round(l.lots))) };
   });
   if (legs.length > 6) notes.push("A strategy can have up to 6 legs; only the first 6 are kept.");
@@ -28,6 +29,7 @@ export function strategyFromLegs(args: { legs: OptionLeg[]; underlying: string; 
   const name = `${args.underlying} ${mapped.map((l) => `${l.side === "BUY" ? "long" : "short"} ${l.offset === 0 ? "ATM" : l.offset > 0 ? `+${l.offset}` : l.offset} ${l.type}`).join(" / ")}`.slice(0, 80);
   return {
     notes,
+    tooFar,
     input: {
       name,
       underlying: args.underlying.toUpperCase(),

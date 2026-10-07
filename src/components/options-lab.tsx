@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Info, Plus, Trash2 } from "lucide-react";
 import {
   STRATEGY_TEMPLATES,
@@ -62,6 +62,7 @@ export default function OptionsLab({ basketBrokers = [] }: { basketBrokers?: Bas
 
   const apply = (id: string, next = s) => {
     setTemplate(id);
+    edited.current = false;
     const built = buildTemplate(id, { spot: next.spot, step: next.step, expiryDays: next.expiryDays, iv: next.ivPct / 100, rate: next.ratePct / 100, lots: next.lots, lotSize: next.lotSize });
     // With a live chain, every leg is priced from the chain's quotes instead of the model.
     setLegs(
@@ -73,13 +74,36 @@ export default function OptionsLab({ basketBrokers = [] }: { basketBrokers?: Bas
         : built,
     );
   };
+  // Once the user has changed a leg themselves, the chain loading or changing expiry never rebuilds the position under them.
+  const edited = useRef(false);
   const onContext = (c: ChainContext) => {
     setCtx(c);
     const d = c.data;
     const iv = d.atmIv ?? d.assumedIv;
-    setS((prev) => ({ ...prev, spot: d.spot ?? prev.spot, step: d.step, expiryDays: Math.round(d.daysToExpiry * 100) / 100, lotSize: d.lotSize ?? prev.lotSize, ivPct: iv ? Math.round(iv * 1000) / 10 : prev.ivPct }));
+    const next: Settings = { ...s, spot: d.spot ?? s.spot, step: d.step, expiryDays: Math.round(d.daysToExpiry * 100) / 100, lotSize: d.lotSize ?? s.lotSize, ivPct: iv ? Math.round(iv * 1000) / 10 : s.ivPct };
+    setS(next);
+    // The starting template was built around a placeholder spot; build it again around the chain's real one, priced from its quotes.
+    if (!edited.current) {
+      const built = buildTemplate(template, { spot: next.spot, step: next.step, expiryDays: next.expiryDays, iv: next.ivPct / 100, rate: next.ratePct / 100, lots: next.lots, lotSize: next.lotSize });
+      const live = c.data.source.kind !== "estimate";
+      setLegs(
+        live
+          ? built.map((l) => {
+              const q = chainPrice(c, l.type, l.strike);
+              return q ? { ...l, premium: q.premium, premiumSource: "market" as const, iv: q.iv.value ?? l.iv, ivSource: q.iv.origin === "provided" ? ("market" as const) : q.iv.origin === "calculated" ? ("calculated" as const) : ("assumed" as const) } : l;
+            })
+          : built,
+      );
+    }
   };
-  const setLeg = (i: number, patch: Partial<OptionLeg>) => setLegs((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  const addLeg = (leg: OptionLeg) => {
+    edited.current = true;
+    setLegs((ls) => [...ls, leg]);
+  };
+  const setLeg = (i: number, patch: Partial<OptionLeg>) => {
+    edited.current = true;
+    setLegs((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  };
 
   const summary = useMemo(() => summarize(legs), [legs]);
   const greeks = useMemo(() => positionGreeks(legs, s.spot, rate), [legs, s.spot, rate]);
@@ -94,10 +118,10 @@ export default function OptionsLab({ basketBrokers = [] }: { basketBrokers?: Bas
         pick={pick}
         onPick={(patch) => setPick((p) => ({ ...p, ...patch }))}
         chain={ctx?.data ?? null}
-        onAdd={(leg) => setLegs((ls) => [...ls, leg])}
+        onAdd={addLeg}
         lots={s.lots}
       />
-      <OptionChain underlying={underlying} expiry={expiry} onExpiry={setExpiry} onAdd={(leg) => setLegs((ls) => [...ls, leg])} onContext={onContext} onPick={(k) => setPick((p) => ({ ...p, strike: k }))} lots={s.lots} />
+      <OptionChain underlying={underlying} expiry={expiry} onExpiry={setExpiry} onAdd={addLeg} onContext={onContext} onPick={(k) => setPick((p) => ({ ...p, strike: k }))} lots={s.lots} />
       <p className="flex items-start gap-2 rounded-xl bg-brand-bg px-4 py-3 text-xs leading-relaxed text-brand-navy/70 ring-1 ring-black/5">
         <Info size={15} className="mt-0.5 shrink-0 text-brand-primary" />
         <span>
@@ -166,12 +190,7 @@ export default function OptionsLab({ basketBrokers = [] }: { basketBrokers?: Bas
           <p className="text-sm font-semibold text-brand-navy">Legs</p>
           <button
             type="button"
-            onClick={() =>
-              setLegs((ls) => [
-                ...ls,
-                { kind: "OPTION", type: "CE", side: "BUY", strike: Math.round(s.spot / s.step) * s.step, premium: 100, lots: s.lots, lotSize: s.lotSize, expiryDays: s.expiryDays, iv: s.ivPct / 100 },
-              ])
-            }
+            onClick={() => addLeg({ kind: "OPTION", type: "CE", side: "BUY", strike: Math.round(s.spot / s.step) * s.step, premium: 100, lots: s.lots, lotSize: s.lotSize, expiryDays: s.expiryDays, iv: s.ivPct / 100 })}
             className="inline-flex items-center gap-1 text-xs font-semibold text-brand-primary hover:underline"
           >
             <Plus size={13} /> Add leg
@@ -224,7 +243,10 @@ export default function OptionsLab({ basketBrokers = [] }: { basketBrokers?: Bas
                     <SourceTag source={l.ivSource ?? "assumed"} />
                   </td>
                   <td className="py-1.5 text-right">
-                    <button type="button" onClick={() => setLegs((ls) => ls.filter((_, j) => j !== i))} aria-label="Remove leg" className="text-brand-navy/35 hover:text-brand-sell">
+                    <button type="button" onClick={() => {
+                        edited.current = true;
+                        setLegs((ls) => ls.filter((_, j) => j !== i));
+                      }} aria-label="Remove leg" className="text-brand-navy/35 hover:text-brand-sell">
                       <Trash2 size={15} />
                     </button>
                   </td>
@@ -249,7 +271,7 @@ export default function OptionsLab({ basketBrokers = [] }: { basketBrokers?: Bas
               <LiveBasket brokers={basketBrokers} underlying={ctx.data.underlying} expiry={ctx.data.expiry} legs={legs} />
             </div>
           )}
-          <StrategyFromLegs legs={legs} underlying={ctx?.data.underlying ?? underlying} step={s.step} spot={s.spot} expiries={ctx?.data.expiries ?? []} expiry={ctx?.data.expiry ?? expiry} />
+          <StrategyFromLegs legs={legs} underlying={ctx?.data.underlying ?? underlying} step={s.step} atmStrike={ctx?.data.atmStrike ?? Math.round(s.spot / s.step) * s.step} expiries={ctx?.data.expiries ?? []} expiry={ctx?.data.expiry ?? expiry} onRebuild={() => apply(template)} />
           <p className="mt-4 text-[11px] text-brand-navy/55">
             <strong className="font-semibold">Position Greeks below: calculated by us</strong> (Black–Scholes, from each leg&apos;s IV, the spot and the days left, at the rate set above) — not figures from your broker. Prices and IVs marked “market” come from {ctx && !estimate ? ctx.data.source.name : "a live chain"}.
           </p>

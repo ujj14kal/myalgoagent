@@ -25,7 +25,8 @@ describe("options strategy from the contracts picked in the Lab", () => {
   it("says what it could not carry over exactly", () => {
     const far = strategyFromLegs({ ...base, legs: [leg("CE", "BUY", 26000), leg("PE", "BUY", 24925)] });
     expect(far.input.legs.map((l) => l.offset)).toEqual([10, -1]);
-    expect(far.notes.join(" ")).toMatch(/more than 10 strikes/);
+    expect(far.tooFar).toEqual([26000].filter((k) => Math.round((k - 25000) / 50) > 10)); // 20 strikes away: can't be kept as a strategy
+    expect(strategyFromLegs({ ...base, legs: [leg("CE", "BUY", 25500)] }).tooFar).toEqual([]);
     expect(far.notes.join(" ")).toMatch(/isn't on the 50-point strike grid/);
     expect(strategyFromLegs({ ...base, legs: Array.from({ length: 8 }, () => leg("CE", "BUY", 25000)) }).input.legs).toHaveLength(6);
   });

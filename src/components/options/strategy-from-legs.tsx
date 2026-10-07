@@ -12,11 +12,11 @@ import type { OptionLeg } from "@/lib/options/positions";
 // the at-the-money strike" (so the strategy re-picks live strikes every day it trades), and the chosen expiry becomes an
 // expiry rule. Everything else (entry and exit time, days, stop-loss, target) is set in the same editor used everywhere.
 
-export default function StrategyFromLegs({ legs, underlying, step, spot, expiries, expiry }: { legs: OptionLeg[]; underlying: string; step: number; spot: number; expiries: string[]; expiry: string | null }) {
+export default function StrategyFromLegs({ legs, underlying, step, atmStrike, expiries, expiry, onRebuild }: { legs: OptionLeg[]; underlying: string; step: number; /** The chain's at-the-money strike. */ atmStrike: number; expiries: string[]; expiry: string | null; /** Rebuild the template position around the current spot. */ onRebuild?: () => void }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState(false);
-  const atm = Math.round(spot / step) * step;
+  const atm = atmStrike;
   const built = useMemo(() => strategyFromLegs({ legs, underlying, step, atm, expiries, expiry }), [legs, underlying, step, atm, expiries, expiry]);
 
   return (
@@ -42,6 +42,24 @@ export default function StrategyFromLegs({ legs, underlying, step, spot, expirie
       )}
       {open && (
         <div className="mt-4">
+          {built.tooFar.length > 0 ? (
+            <div className="rounded-lg bg-brand-sell/[0.07] p-3 text-sm text-brand-sell">
+              <p className="font-semibold">These legs are too far from the money to save as a strategy.</p>
+              <p className="mt-1 text-xs">
+                A strategy keeps each strike as “up to {10} strikes from at-the-money ({atm.toLocaleString("en-IN")} now)”, but {built.tooFar.map((k) => k.toLocaleString("en-IN")).join(", ")} {built.tooFar.length === 1 ? "is" : "are"} further out. Move {built.tooFar.length === 1 ? "that strike" : "those strikes"} closer
+                {onRebuild ? (
+                  <>
+                    , or{" "}
+                    <button type="button" onClick={onRebuild} className="font-semibold underline">
+                      rebuild the position around today&apos;s price
+                    </button>
+                  </>
+                ) : null}
+                .
+              </p>
+            </div>
+          ) : (
+            <>
           {built.notes.length > 0 && (
             <ul className="mb-3 list-disc space-y-0.5 rounded-lg bg-brand-gold/10 p-3 pl-7 text-xs text-brand-navy/75">
               {built.notes.map((n) => (
@@ -59,6 +77,8 @@ export default function StrategyFromLegs({ legs, underlying, step, spot, expirie
               router.refresh();
             }}
           />
+            </>
+          )}
         </div>
       )}
     </div>
