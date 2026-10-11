@@ -10,6 +10,7 @@ import ConditionGroupEditor, { ConditionOverridesContext, ExitTimeContext, Strat
 import type { CandleInterval } from "@/lib/market-data";
 import SimpleConditionPicker, { ALL_CATEGORIES, fitsSimpleMode, unwrapForSimpleMode } from "@/components/simple-condition-picker";
 import StrategyCodeEditor from "@/components/strategy-code-editor";
+import InfoTip from "@/components/ui/info-tip";
 import PositionSizingFields from "@/components/position-sizing-fields";
 import { NEW_STRATEGY_DRAFT_KEY } from "@/lib/strategy-draft-key";
 import RiskManagementFields, { type RiskLegState } from "@/components/risk-management-fields";
@@ -189,15 +190,21 @@ function PillChoice<T extends string>({
   value,
   options,
   onChange,
+  info,
 }: {
   label: string;
   value: T;
   options: { value: T; label: string; disabled?: boolean; note?: string }[];
   onChange: (v: T) => void;
+  /** The longer explanation, shown from the "i" beside the label. */
+  info?: React.ReactNode;
 }) {
   return (
     <div>
-      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">{label}</label>
+      <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
+        {label}
+        {info && <InfoTip label={`About ${label}`}>{info}</InfoTip>}
+      </label>
       <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={label}>
         {options.map((o) => (
           <button
@@ -703,18 +710,22 @@ export default function StrategyBuilderForm({
                     { value: "STANDARD", label: "Standard" },
                     { value: "SWING", label: "Swing", note: "days to weeks" },
                   ]}
+                  info={
+                    <>
+                      {swingish
+                        ? "Swing: held overnight on daily or weekly candles, delivery, long only. Your rules can still read a longer trend as another timeframe. Pair it with an entry plan and staged targets below."
+                        : "Standard: opens and closes by your rules, on any timeframe. Choose Swing for strategies that build and leave a position over days to weeks."}
+                      <span className="mt-1.5 block">Algo strategies are positions the engine opens, watches and closes by your rules. A long-term investment you plan to hold for months or years isn&apos;t one — hold it in your broker account instead.</span>
+                    </>
+                  }
                 />
-                <p className="mt-1.5 text-xs text-brand-navy/40">
-                  {swingish
-                    ? "Held overnight: daily or weekly candles, delivery, long only. Your rules can still read a longer trend as another timeframe. Pair it with an entry plan and staged targets below."
-                    : "Choose Swing for strategies that build and leave a position over days to weeks."}
-                </p>
-                <p className="mt-1 text-xs text-brand-navy/40">
-                  Algo strategies are positions the engine opens, watches and closes by your rules. A long-term investment you plan to hold for months or years isn&apos;t one — hold it in your broker account instead.
-                </p>
+                <p className="mt-1.5 text-xs text-brand-navy/40">Long-term investing isn&apos;t an algo strategy — hold it in your broker account.</p>
                 {!swingish && (
                   <div className="mt-4">
-                    <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Trading days</span>
+                    <span className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
+                      Trading days
+                      <InfoTip label="About trading days">New positions open only on the days you leave on. A position that is already open is still watched and closed every day — by its stop, target or exit rule.</InfoTip>
+                    </span>
                     <div className="flex flex-wrap gap-1.5" role="group" aria-label="Days of the week this strategy may open new positions">
                       {TRADING_DAYS.map(([n, label]) => {
                         const on = !riskOptions.tradingDays || riskOptions.tradingDays.includes(n);
@@ -736,17 +747,24 @@ export default function StrategyBuilderForm({
                         );
                       })}
                     </div>
-                    <p className="mt-1.5 text-xs text-brand-navy/40">
-                      {riskOptions.tradingDays ? `New positions open only on ${riskOptions.tradingDays.map((d) => TRADING_DAYS[d - 1][1]).join(", ")}.` : "New positions can open on any trading day."} A position that is already open is still watched and closed every day — by its stop, target or exit rule.
-                    </p>
+                    {riskOptions.tradingDays && <p className="mt-1.5 text-xs text-brand-navy/40">New positions open only on {riskOptions.tradingDays.map((d) => TRADING_DAYS[d - 1][1]).join(", ")}.</p>}
                   </div>
                 )}
               </div>
             )}
             {mode !== "WEBHOOK" && (
               <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
+                <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
                   Timeframe
+                  <InfoTip label="About timeframes">
+                    {intraday
+                      ? `Checks the rules on every ${STRATEGY_TIMEFRAMES.find((t) => t.value === timeframe)?.label} candle. History for shorter timeframes depends on your data source: your own broker's data goes back years; the free general feed keeps about ${
+                          timeframe === "1m" || timeframe === "3m" ? "7 days" : timeframe === "60m" || timeframe === "4h" ? "1 year" : "60 days"
+                        } at this size.`
+                      : timeframe === "1wk"
+                        ? "Checks the rules once a week, when the week's last session has closed; orders go out at the next Monday open. Needs years of history, so indicators are ready."
+                        : "Checks the rules once per day, on each daily candle."}
+                  </InfoTip>
                 </label>
                 <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Timeframe">
                   {STRATEGY_TIMEFRAMES.map((t) => (
@@ -766,15 +784,6 @@ export default function StrategyBuilderForm({
                     </button>
                   ))}
                 </div>
-                <p className="mt-1.5 text-xs text-brand-navy/40">
-                  {intraday
-                    ? `Checks the rules on every ${STRATEGY_TIMEFRAMES.find((t) => t.value === timeframe)?.label} candle. Intraday history is limited: about ${
-                        timeframe === "1m" || timeframe === "3m" ? "7 days" : timeframe === "60m" || timeframe === "4h" ? "1 year" : "60 days"
-                      } for backtests on the current data source.`
-                    : timeframe === "1wk"
-                      ? "Checks the rules once a week, when the week's last session has closed; orders go out at the next Monday open. Needs years of history, so indicators are ready."
-                      : "Checks the rules once per day, on each daily candle."}
-                </p>
               </div>
             )}
             {mode !== "WEBHOOK" && (
@@ -789,12 +798,8 @@ export default function StrategyBuilderForm({
                       { value: "DELIVERY", label: "Delivery" },
                       { value: "MTF" as "DELIVERY", label: "MTF", disabled: true, note: "coming soon" },
                     ]}
+                    info={productType === "INTRADAY" ? "Intraday: squared off the same day — never held overnight." : "Delivery: can be held overnight. Long only — short positions can't be carried overnight in the cash market."}
                   />
-                  <p className="mt-1.5 text-xs text-brand-navy/40">
-                    {productType === "INTRADAY"
-                      ? "Squared off the same day — never held overnight."
-                      : "Can be held overnight. Long only: short positions can't be carried overnight in the cash market."}
-                  </p>
                   {productType === "DELIVERY" && direction === "SHORT" && (
                     <p className="mt-1.5 text-xs font-medium text-brand-sell">Delivery can&apos;t be short — choose Intraday or Buy (Long).</p>
                   )}
@@ -808,10 +813,9 @@ export default function StrategyBuilderForm({
                       { value: "MARKET", label: "At market" },
                       { value: "LIMIT", label: "Limit" },
                     ]}
+                    info={orderType === "MARKET" ? "At market: fills at the next candle's open after the entry rule fires." : "Limit: a day order at a price you choose — it fills only if price reaches it that day."}
                   />
-                  {orderType === "MARKET" ? (
-                    <p className="mt-1.5 text-xs text-brand-navy/40">Fills at the next candle&apos;s open after the entry rule fires.</p>
-                  ) : (
+                  {orderType === "MARKET" ? null : (
                     <div className="mt-2 space-y-2">
                       <div className="flex w-fit overflow-hidden rounded-full border border-brand-navy/15">
                         {(["PERCENT", "PRICE"] as const).map((m) => (
@@ -862,8 +866,9 @@ export default function StrategyBuilderForm({
               <p className="-mt-3 text-xs font-medium text-brand-sell">Sizing by risk needs a stop-loss: its distance decides how many shares fit within the amount you risk. Turn the stop-loss on in Risk management below.</p>
             )}
             <div className="max-w-xs">
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
+              <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
                 Max entries per position
+                <InfoTip label="About max entries">1 = a single entry. Higher lets the strategy add to an open position (pyramiding).</InfoTip>
               </label>
               <input
                 type="number"
@@ -873,7 +878,6 @@ export default function StrategyBuilderForm({
                 onChange={(e) => setMaxPyramidEntries(Math.max(1, Number(e.target.value)))}
                 className="w-full rounded-lg border border-brand-navy/15 px-3 py-2 text-sm outline-none focus:border-brand-primary"
               />
-              <p className="mt-1.5 text-xs text-brand-navy/40">1 = a single entry. Higher lets the strategy add to an open position (pyramiding).</p>
             </div>
             {mode !== "WEBHOOK" && <EntryPlanFields state={plan} onChange={setPlan} direction={direction} pyramiding={maxPyramidEntries > 1} />}
           </div>

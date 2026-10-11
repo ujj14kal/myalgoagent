@@ -1,4 +1,13 @@
 import type { LucideIcon } from "lucide-react";
+import InfoTip from "@/components/ui/info-tip";
+
+/** A long text description is shown as its first sentence, with the whole of it behind an "i" — so the page opens clean. */
+function summarize(text: string): { lead: string; more: boolean } {
+  if (text.length <= 170) return { lead: text, more: false };
+  const cut = text.slice(0, 170);
+  const stop = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("— "), cut.lastIndexOf("; "));
+  return { lead: stop > 60 ? text.slice(0, stop + (cut[stop] === "." ? 1 : 0)).trimEnd() : cut.replace(/\s+\S*$/, "") + "…", more: true };
+}
 
 /** Consistent top-of-page header for every /app page. */
 export default function PageHeader({
@@ -25,7 +34,14 @@ export default function PageHeader({
         <div className="min-w-0">
           {eyebrow && <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-gold">{eyebrow}</p>}
           <h1 className="text-2xl font-bold tracking-tight text-brand-navy sm:text-[1.7rem]">{title}</h1>
-          {description && <p className="mt-1 max-w-3xl text-sm text-brand-navy/60">{description}</p>}
+          {description &&
+            (typeof description === "string" && summarize(description).more ? (
+              <p className="mt-1 max-w-3xl text-sm text-brand-navy/60">
+                {summarize(description).lead} <InfoTip label="More about this page">{description}</InfoTip>
+              </p>
+            ) : (
+              <p className="mt-1 max-w-3xl text-sm text-brand-navy/60">{description}</p>
+            ))}
         </div>
       </div>
       {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}

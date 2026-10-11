@@ -1,5 +1,6 @@
 "use client";
 
+import InfoTip from "@/components/ui/info-tip";
 import type { RiskUnit } from "@/lib/trading-engine/step";
 
 export interface RiskLegState {
@@ -100,8 +101,9 @@ function RiskLegRow({
           className="h-4 w-4 shrink-0 rounded border-brand-navy/30"
         />
         <span className="text-sm font-medium text-brand-navy">{label}</span>
+        <InfoTip label={`About ${label}`}>{hint}</InfoTip>
       </label>
-      <p className="mt-0.5 flex-1 text-xs text-brand-navy/40">{hint}</p>
+      <span className="flex-1" />
       {leg.enabled && (
         <div className="mt-2 flex items-center gap-2">
           <input

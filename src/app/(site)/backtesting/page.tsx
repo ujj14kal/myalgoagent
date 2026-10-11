@@ -52,13 +52,15 @@ const sections: LegalSection[] = [
       "Win rate, profit factor and expectancy",
       "Maximum drawdown and Sharpe ratio",
       "Trade count and average holding period",
-      "Equity curve and a trade-by-trade history",
+      "Equity curve, drawdown curve and a trade-by-trade history",
+      "Trading days, win and loss days, streaks, best and worst day and trade",
+      "A day-by-day calendar and a table of monthly and yearly returns",
+      "Several strategies backtested together, with one combined account value",
     ],
     soon: [
       "Average drawdown and recovery factor",
       "Sortino and Calmar ratios, volatility",
-      "Largest win/loss",
-      "Monthly/yearly returns and performance by instrument",
+      "Performance by instrument",
     ],
   },
   {

@@ -1,5 +1,6 @@
 "use client";
 
+import InfoTip from "@/components/ui/info-tip";
 import { Plus, Trash2 } from "lucide-react";
 import { MAX_ENTRY_LEVELS, validateEntryPlan, type EntryPlan, type RiskUnit } from "@/lib/trading-engine/step";
 import { describeEntryPlan } from "@/lib/describe-entry-plan";
@@ -101,9 +102,9 @@ export default function EntryPlanFields({
       <label className="flex items-start gap-2">
         <input type="checkbox" className="mt-0.5 accent-brand-primary" checked={state.enabled} onChange={(e) => set({ enabled: e.target.checked, levels: e.target.checked && state.levels.length === 0 ? [{ trigger: "PULLBACK", unit: "PERCENT", value: 3, allocation: 50, maxWait: null, rule: "" }] : state.levels })} />
         <span>
-          <span className="text-sm font-medium text-brand-navy">Build the position in stages (entry plan)</span>
-          <span className="mt-0.5 block text-xs text-brand-navy/40">
-            The entry rule {verb}s only a first share of the planned size. Each further entry adds more when price reaches a level, or when a rule holds. The planned size comes from the position size above.
+          <span className="flex items-center gap-1.5 text-sm font-medium text-brand-navy">
+            Build the position in stages (entry plan)
+            <InfoTip label="About the entry plan">The entry rule {verb}s only a first share of the planned size. Each further entry adds more when price reaches a level, or when a rule holds. The planned size comes from the position size above.</InfoTip>
           </span>
         </span>
       </label>
@@ -208,7 +209,10 @@ export default function EntryPlanFields({
 
           <p className={`text-xs ${total > 100.0001 ? "font-medium text-brand-sell" : "text-brand-navy/50"}`}>The entries together buy {Math.round(total * 100) / 100}% of the planned size{total < 100 ? ` (the other ${Math.round((100 - total) * 100) / 100}% is never bought)` : ""}.</p>
           {problem ? <p className="text-xs font-medium text-brand-sell">{problem}</p> : parsed.plan && <ul className="space-y-0.5 text-xs text-brand-navy/50">{describeEntryPlan(parsed.plan, direction).map((line) => <li key={line}>{line}</li>)}</ul>}
-          <p className="text-xs text-brand-navy/40">Stops and targets are measured from your average entry. Buying more as price falls puts more money into a position that is losing; if it keeps falling, the loss is larger than with a single entry.</p>
+          <p className="flex items-center gap-1.5 text-xs text-brand-navy/50">
+            Stops and targets are measured from your average entry.
+            <InfoTip label="About the risk of averaging down">Buying more as price falls puts more money into a position that is losing; if it keeps falling, the loss is larger than with a single entry.</InfoTip>
+          </p>
         </div>
       )}
     </div>

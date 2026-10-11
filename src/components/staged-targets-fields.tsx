@@ -1,5 +1,6 @@
 "use client";
 
+import InfoTip from "@/components/ui/info-tip";
 import { Plus, Trash2 } from "lucide-react";
 import { MAX_TARGETS, validateTargets, type RiskUnit, type TargetLevel, type TargetLock } from "@/lib/trading-engine/step";
 import { describeTargets } from "@/lib/describe-targets";
@@ -99,9 +100,9 @@ export default function StagedTargetsFields({
     <div className="mt-3 rounded-xl border border-brand-navy/10 p-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-brand-navy">Take profit in stages (Target 1–3)</p>
-          <p className="mt-0.5 text-xs text-brand-navy/40">
-            Each target sells a share of the position when price reaches it, then <strong className="font-semibold">locks</strong> the profit on what is left. Replaces the single Target above.
+          <p className="flex items-center gap-1.5 text-sm font-medium text-brand-navy">
+            Take profit in stages (Target 1–3)
+            <InfoTip label="About staged targets">Each target sells a share of the position when price reaches it, then <strong className="font-semibold">locks</strong> the profit on what is left. Replaces the single Target above.</InfoTip>
           </p>
         </div>
         {rows.length < MAX_TARGETS && (
@@ -175,8 +176,9 @@ export default function StagedTargetsFields({
               {example(r, direction, latestPrice) && <p className="mt-2 text-xs text-brand-navy/50">{example(r, direction, latestPrice)}</p>}
             </div>
           ))}
-          <p className="text-xs text-brand-navy/50">
-            A moved stop only ever tightens, and (except &ldquo;Keep&rdquo; and &ldquo;Trail&rdquo;) is never worse than your entry price. A target in <strong className="font-semibold text-brand-navy/70">R</strong> is a multiple of the stop-loss distance (needs a stop-loss): 2R with a 2% stop is 4% away.
+          <p className="flex items-center gap-1.5 text-xs text-brand-navy/50">
+            How the stop moves after a target, and what &ldquo;R&rdquo; means
+            <InfoTip label="About locks and R">A moved stop only ever tightens, and (except &ldquo;Keep&rdquo; and &ldquo;Trail&rdquo;) is never worse than your entry price. A target in <strong className="font-semibold">R</strong> is a multiple of the stop-loss distance (needs a stop-loss): 2R with a 2% stop is 4% away.</InfoTip>
           </p>
           <p className={`text-xs ${sold > 100 ? "font-medium text-brand-sell" : "text-brand-navy/50"}`}>
             Sells {Math.round(sold * 100) / 100}% of the position across the targets{sold < 100 ? `; the other ${Math.round((100 - sold) * 100) / 100}% keeps running under your stop, trailing stop or exit rule.` : "."}
