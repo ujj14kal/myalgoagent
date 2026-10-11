@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { STRATEGY_TEMPLATES } from "@/lib/options/positions";
@@ -34,8 +34,12 @@ export const EMPTY_STRATEGY: OptionStrategyInput = {
 };
 
 /** Create or edit a multi-leg options strategy (strikes relative to ATM). */
-export default function StrategyEditor({ initial = EMPTY_STRATEGY, onDone, onCancel }: { initial?: OptionStrategyInput; onDone?: () => void; /** Cancel button; defaults to `onDone` where callers use one callback for both. */ onCancel?: () => void }) {
+export default function StrategyEditor({ initial = EMPTY_STRATEGY, onDone, onCancel, onChange }: { initial?: OptionStrategyInput; onDone?: () => void; /** Cancel button; defaults to `onDone` where callers use one callback for both. */ onCancel?: () => void; /** Told about every edit, so a full page can show a live reading of the strategy beside the form. */ onChange?: (s: OptionStrategyInput) => void }) {
   const [s, setS] = useState<OptionStrategyInput>(initial);
+  useEffect(() => {
+    onChange?.(s);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- report edits only, not a new callback each render
+  }, [s]);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const router = useRouter();

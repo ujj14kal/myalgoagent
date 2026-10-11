@@ -45,3 +45,60 @@ export function strategyFromLegs(args: { legs: OptionLeg[]; underlying: string; 
     },
   };
 }
+
+// ---------- the strategy in a link ----------
+// The Options Lab hands what it built to the full-page strategy editor through the address, so nothing is saved until the
+// user presses Save there. Legs travel as "CE.SELL.0.1" (type, side, strikes from at-the-money, lots).
+
+const RULES: ExpiryRule[] = ["WEEKLY_CURRENT", "WEEKLY_NEXT", "MONTHLY"];
+
+export function strategyToQuery(i: OptionStrategyInput): string {
+  const q = new URLSearchParams({
+    name: i.name,
+    u: i.underlying,
+    legs: i.legs.map((l) => `${l.type}.${l.side}.${l.offset}.${l.lots}`).join(","),
+    exp: i.expiryRule,
+    in: String(i.entryMinute),
+    out: String(i.exitMinute),
+    days: i.weekdays.join(""),
+  });
+  if (i.stopLossUnit && i.stopLossValue) q.set("sl", `${i.stopLossUnit}.${i.stopLossValue}`);
+  if (i.targetUnit && i.targetValue) q.set("tp", `${i.targetUnit}.${i.targetValue}`);
+  return q.toString();
+}
+
+/** Reads a strategy back from link parameters; anything missing or malformed falls back to the defaults given. */
+export function strategyFromQuery(sp: Record<string, string | string[] | undefined>, base: OptionStrategyInput): OptionStrategyInput {
+  const one = (k: string) => (Array.isArray(sp[k]) ? (sp[k] as string[])[0] : (sp[k] as string | undefined));
+  const legs = (one("legs") ?? "")
+    .split(",")
+    .map((x) => x.split("."))
+    .flatMap(([type, side, off, lots]) => {
+      const offset = Number(off);
+      const n = Number(lots);
+      return (type === "CE" || type === "PE") && (side === "BUY" || side === "SELL") && Number.isInteger(offset) && Math.abs(offset) <= 20 && Number.isInteger(n) && n >= 1 && n <= 50 ? [{ type, side, offset, lots: n } as StrategyLeg] : [];
+    })
+    .slice(0, 6);
+  const num = (k: string) => (Number.isInteger(Number(one(k))) && one(k) ? Number(one(k)) : null);
+  const risk = (k: string) => {
+    const [unit, value] = (one(k) ?? "").split(".").length > 1 ? [(one(k) ?? "").split(".")[0], Number((one(k) ?? "").split(".").slice(1).join("."))] : [null, null];
+    return (unit === "RUPEES" || unit === "PREMIUM_PCT") && value && value > 0 ? ({ unit, value } as { unit: "RUPEES" | "PREMIUM_PCT"; value: number }) : null;
+  };
+  const days = (one("days") ?? "").split("").map(Number).filter((d) => d >= 1 && d <= 5);
+  const sl = risk("sl");
+  const tp = risk("tp");
+  return {
+    ...base,
+    name: (one("name") ?? base.name).slice(0, 80),
+    underlying: /^[A-Z0-9&-]{2,20}$/.test((one("u") ?? "").toUpperCase()) ? (one("u") as string).toUpperCase() : base.underlying,
+    legs: legs.length ? legs : base.legs,
+    expiryRule: RULES.includes(one("exp") as ExpiryRule) ? (one("exp") as ExpiryRule) : base.expiryRule,
+    entryMinute: num("in") ?? base.entryMinute,
+    exitMinute: num("out") ?? base.exitMinute,
+    weekdays: days.length ? [...new Set(days)] : base.weekdays,
+    stopLossUnit: sl ? sl.unit : base.stopLossUnit,
+    stopLossValue: sl ? sl.value : base.stopLossValue,
+    targetUnit: tp ? tp.unit : base.targetUnit,
+    targetValue: tp ? tp.value : base.targetValue,
+  };
+}

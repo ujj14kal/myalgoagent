@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Activity, FlaskConical, Pencil, Plus, Trash2 } from "lucide-react";
-import StrategyEditor from "./strategy-editor";
+import Link from "next/link";
 import { deleteOptionStrategy, startOptionBacktest, startOptionForwardTest, type OptionStrategyInput } from "@/lib/option-strategy-actions";
 
 const toTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
@@ -69,32 +69,18 @@ function Launcher({ id }: { id: string }) {
 }
 
 export default function StrategyList({ strategies, total, canTest = true }: { strategies: (OptionStrategyInput & { id: string })[]; /** How many the user has in all (the list may be one page). */ total?: number; /** Backtests and forward tests need the live option-price feed; without it strategies can still be saved, edited and deleted. */ canTest?: boolean }) {
-  const any = (total ?? strategies.length) > 0;
-  const [editing, setEditing] = useState<string | "new" | null>(any ? null : "new");
   const [testing, setTesting] = useState<string | null>(null);
   const [, start] = useTransition();
   const router = useRouter();
   return (
     <div className="space-y-4">
-      {editing === "new" ? (
-        <section className="surface p-5">
-          <p className="mb-3 text-sm font-semibold text-brand-navy">New options strategy</p>
-          <StrategyEditor onDone={any ? () => setEditing(null) : undefined} />
-        </section>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setEditing("new")}
-          className="inline-flex items-center gap-1.5 rounded-full bg-brand-primary px-4 py-2 text-sm font-semibold text-white"
-        >
-          <Plus size={15} /> New options strategy
-        </button>
-      )}
+      <Link href="/app/options/strategies/new" className="inline-flex items-center gap-1.5 rounded-full bg-brand-primary px-4 py-2 text-sm font-semibold text-white">
+        <Plus size={15} /> New options strategy
+      </Link>
+      {(total ?? strategies.length) === 0 && <p className="rounded-2xl border border-dashed border-black/10 px-4 py-8 text-center text-sm text-brand-navy/50">No options strategies yet. Build one from scratch, from a classic template, or from the legs you pick in the Chain &amp; payoff tab.</p>}
       {strategies.map((s) => (
         <section key={s.id} className="surface p-4">
-          {editing === s.id ? (
-            <StrategyEditor initial={s} onDone={() => setEditing(null)} />
-          ) : (
+          {(
             <>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
@@ -132,9 +118,9 @@ export default function StrategyList({ strategies, total, canTest = true }: { st
                     <Activity size={13} /> Forward test
                   </button>
                   )}
-                  <button type="button" onClick={() => setEditing(s.id)} aria-label="Edit" className="rounded-full p-2 text-brand-navy/45 hover:text-brand-primary">
+                  <Link href={`/app/options/strategies/${s.id}`} aria-label="Edit" className="rounded-full p-2 text-brand-navy/45 hover:text-brand-primary">
                     <Pencil size={14} />
-                  </button>
+                  </Link>
                   <button
                     type="button"
                     aria-label="Delete"

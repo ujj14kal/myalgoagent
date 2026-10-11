@@ -22,21 +22,54 @@ export type ChartPatternKind =
 
 // Tunable thresholds — a single spot to retune if backtesting shows a
 // pattern firing too often/rarely, without touching detector logic.
+// The percentages below are DAILY-candle sizes. A 15-minute candle moves far less than a daily one, so on shorter
+// timeframes every percentage is scaled down (see `thresholdsFor`) — otherwise a swing, a pole or a slope of "1%" could
+// never happen and most patterns would never appear on intraday charts.
 const SWING_LOOKBACK = 3; // bars on each side a swing high/low must beat, to confirm it
-const MIN_SWING_PCT = 0.01; // a reversal must move at least 1% to count as a real swing (filters noise)
-const PEAK_TOLERANCE_PCT = 0.02; // two peaks/troughs within 2% of each other count as "equal"
-const HEAD_MARGIN_PCT = 0.01; // the head must clear both shoulders by at least 1%
-const FLAT_SLOPE_PCT = 0.003; // per-bar slope below this counts as "flat" for triangle sides
-const POLE_MIN_MOVE_PCT = 0.05; // a flag/pennant's pole must move at least 5% over its window
+const BASE = {
+  swing: 0.01, // a reversal must move at least 1% to count as a real swing (filters noise)
+  peak: 0.02, // two peaks/troughs within 2% of each other count as "equal"
+  head: 0.01, // the head must clear both shoulders by at least 1%
+  flat: 0.003, // per-bar slope below this counts as "flat" for triangle sides
+  pole: 0.05, // a flag/pennant's pole must move at least 5% over its window
+  depth: 0.03, // the bowl/cup must dip at least 3% below its starting level
+  rim: 0.03, // the cup must recover to within 3% of its starting level
+};
+export type Thresholds = typeof BASE;
 const POLE_WINDOW = 10; // bars examined for a pole move
 const CONSOLIDATION_WINDOW = 8; // bars examined for the post-pole consolidation
 const PENNANT_NARROWING_RATIO = 0.7; // pennant's second-half range must be tighter than this fraction of its first-half range
 const ROUNDING_WINDOW = 30; // bars spanning a rounding bottom/top's whole bowl shape
-const ROUNDING_MIN_DEPTH_PCT = 0.03; // the bowl must dip at least 3% below its starting level
 const CUP_WINDOW = 30; // bars spanning the cup portion of a cup-and-handle
 const HANDLE_WINDOW = 8; // bars spanning the handle portion
-const CUP_RIM_TOLERANCE_PCT = 0.03; // the cup must recover to within 3% of its starting level
 const HANDLE_MAX_DEPTH_RATIO = 0.5; // the handle's pullback must be shallower than half the cup's depth
+
+/** Minutes in an Indian trading session, the yardstick for how much smaller an intraday candle's moves are than a day's. */
+const SESSION_MINUTES = 375;
+
+/** How long one candle spans, in minutes, from the spacing of the candles themselves (overnight gaps ignored). Null for daily and longer. */
+export function barMinutesOf(candles: Candle[]): number | null {
+  const gaps: number[] = [];
+  for (let i = 1; i < candles.length && gaps.length < 400; i++) {
+    const dt = candles[i].time - candles[i - 1].time;
+    if (dt > 0 && dt < 12 * 3600) gaps.push(dt);
+  }
+  if (gaps.length < 5) return null;
+  gaps.sort((a, b) => a - b);
+  const median = gaps[Math.floor(gaps.length / 2)] / 60;
+  return median >= 1 && median < SESSION_MINUTES ? median : null;
+}
+
+/** The thresholds for these candles: the daily sizes, shrunk for shorter candles (moves grow with the square root of time). Depends only on the candle spacing, never on prices, so it can't look ahead. */
+export function thresholdsFor(candles: Candle[]): Thresholds {
+  const m = barMinutesOf(candles);
+  if (m === null) return BASE;
+  const k = Math.max(0.05, Math.min(1, Math.sqrt(m / SESSION_MINUTES)));
+  return Object.fromEntries(Object.entries(BASE).map(([key, v]) => [key, v * k])) as Thresholds;
+}
+
+// The detectors read the thresholds of the series being computed (set once at the start of computeChartPatternSeries).
+let T: Thresholds = BASE;
 
 export interface SwingPoint {
   index: number;
@@ -51,7 +84,7 @@ export interface SwingPoint {
  * any reversal that doesn't move at least `minSwingPct` (noise) and merging
  * consecutive same-type candidates into the single most extreme one.
  */
-export function findSwingPoints(candles: Candle[], lookback = SWING_LOOKBACK, minSwingPct = MIN_SWING_PCT): SwingPoint[] {
+export function findSwingPoints(candles: Candle[], lookback = SWING_LOOKBACK, minSwingPct = thresholdsFor(candles).swing): SwingPoint[] {
   const candidates: SwingPoint[] = [];
   for (let i = lookback; i < candles.length - lookback; i++) {
     const window = candles.slice(i - lookback, i + lookback + 1);
@@ -114,14 +147,14 @@ function detectDoubleTop(swings: SwingPoint[], candle: Candle): boolean {
   const tail = tailTypesMatch(swings, ["high", "low", "high"]);
   if (!tail) return false;
   const [h1, trough, h2] = tail;
-  return withinTolerance(h1.price, h2.price, PEAK_TOLERANCE_PCT) && candle.close < trough.price;
+  return withinTolerance(h1.price, h2.price, T.peak) && candle.close < trough.price;
 }
 
 function detectDoubleBottom(swings: SwingPoint[], candle: Candle): boolean {
   const tail = tailTypesMatch(swings, ["low", "high", "low"]);
   if (!tail) return false;
   const [l1, peak, l2] = tail;
-  return withinTolerance(l1.price, l2.price, PEAK_TOLERANCE_PCT) && candle.close > peak.price;
+  return withinTolerance(l1.price, l2.price, T.peak) && candle.close > peak.price;
 }
 
 function detectTripleTop(swings: SwingPoint[], candle: Candle): boolean {
@@ -129,7 +162,7 @@ function detectTripleTop(swings: SwingPoint[], candle: Candle): boolean {
   if (!tail) return false;
   const [h1, l1, h2, l2, h3] = tail;
   const peaksMatch =
-    withinTolerance(h1.price, h2.price, PEAK_TOLERANCE_PCT) && withinTolerance(h2.price, h3.price, PEAK_TOLERANCE_PCT);
+    withinTolerance(h1.price, h2.price, T.peak) && withinTolerance(h2.price, h3.price, T.peak);
   return peaksMatch && candle.close < Math.min(l1.price, l2.price);
 }
 
@@ -138,7 +171,7 @@ function detectTripleBottom(swings: SwingPoint[], candle: Candle): boolean {
   if (!tail) return false;
   const [l1, h1, l2, h2, l3] = tail;
   const troughsMatch =
-    withinTolerance(l1.price, l2.price, PEAK_TOLERANCE_PCT) && withinTolerance(l2.price, l3.price, PEAK_TOLERANCE_PCT);
+    withinTolerance(l1.price, l2.price, T.peak) && withinTolerance(l2.price, l3.price, T.peak);
   return troughsMatch && candle.close > Math.max(h1.price, h2.price);
 }
 
@@ -147,8 +180,8 @@ function detectHeadAndShoulders(swings: SwingPoint[], candle: Candle, index: num
   if (!tail) return false;
   const [ls, lowL, head, lowR, rs] = tail;
   const headClearsShoulders =
-    head.price > ls.price * (1 + HEAD_MARGIN_PCT) && head.price > rs.price * (1 + HEAD_MARGIN_PCT);
-  const shouldersMatch = withinTolerance(ls.price, rs.price, PEAK_TOLERANCE_PCT);
+    head.price > ls.price * (1 + T.head) && head.price > rs.price * (1 + T.head);
+  const shouldersMatch = withinTolerance(ls.price, rs.price, T.peak);
   if (!headClearsShoulders || !shouldersMatch) return false;
   const neckline = interpolateAt(lowL, lowR, index);
   return candle.close < neckline;
@@ -159,8 +192,8 @@ function detectInverseHeadAndShoulders(swings: SwingPoint[], candle: Candle, ind
   if (!tail) return false;
   const [ls, highL, head, highR, rs] = tail;
   const headClearsShoulders =
-    head.price < ls.price * (1 - HEAD_MARGIN_PCT) && head.price < rs.price * (1 - HEAD_MARGIN_PCT);
-  const shouldersMatch = withinTolerance(ls.price, rs.price, PEAK_TOLERANCE_PCT);
+    head.price < ls.price * (1 - T.head) && head.price < rs.price * (1 - T.head);
+  const shouldersMatch = withinTolerance(ls.price, rs.price, T.peak);
   if (!headClearsShoulders || !shouldersMatch) return false;
   const neckline = interpolateAt(highL, highR, index);
   return candle.close > neckline;
@@ -183,8 +216,8 @@ function detectAscendingTriangle(swings: SwingPoint[], candle: Candle, index: nu
   if (!sides) return false;
   const highSlope = slopePctPerBar(...sides.highs);
   const lowSlope = slopePctPerBar(...sides.lows);
-  const flatTop = Math.abs(highSlope) <= FLAT_SLOPE_PCT;
-  const risingBottom = lowSlope > FLAT_SLOPE_PCT;
+  const flatTop = Math.abs(highSlope) <= T.flat;
+  const risingBottom = lowSlope > T.flat;
   if (!flatTop || !risingBottom) return false;
   const resistance = interpolateAt(sides.highs[0], sides.highs[1], index);
   return candle.close > resistance;
@@ -195,8 +228,8 @@ function detectDescendingTriangle(swings: SwingPoint[], candle: Candle, index: n
   if (!sides) return false;
   const highSlope = slopePctPerBar(...sides.highs);
   const lowSlope = slopePctPerBar(...sides.lows);
-  const flatBottom = Math.abs(lowSlope) <= FLAT_SLOPE_PCT;
-  const fallingTop = highSlope < -FLAT_SLOPE_PCT;
+  const flatBottom = Math.abs(lowSlope) <= T.flat;
+  const fallingTop = highSlope < -T.flat;
   if (!flatBottom || !fallingTop) return false;
   const support = interpolateAt(sides.lows[0], sides.lows[1], index);
   return candle.close < support;
@@ -207,7 +240,7 @@ function detectSymmetricalTriangle(swings: SwingPoint[], candle: Candle, index: 
   if (!sides) return false;
   const highSlope = slopePctPerBar(...sides.highs);
   const lowSlope = slopePctPerBar(...sides.lows);
-  const converging = highSlope < -FLAT_SLOPE_PCT && lowSlope > FLAT_SLOPE_PCT;
+  const converging = highSlope < -T.flat && lowSlope > T.flat;
   if (!converging) return false;
   const resistance = interpolateAt(sides.highs[0], sides.highs[1], index);
   const support = interpolateAt(sides.lows[0], sides.lows[1], index);
@@ -219,7 +252,7 @@ function detectWedge(swings: SwingPoint[], candle: Candle, index: number, rising
   if (!sides) return false;
   const highSlope = slopePctPerBar(...sides.highs);
   const lowSlope = slopePctPerBar(...sides.lows);
-  const sameDirection = rising ? highSlope > FLAT_SLOPE_PCT && lowSlope > FLAT_SLOPE_PCT : highSlope < -FLAT_SLOPE_PCT && lowSlope < -FLAT_SLOPE_PCT;
+  const sameDirection = rising ? highSlope > T.flat && lowSlope > T.flat : highSlope < -T.flat && lowSlope < -T.flat;
   if (!sameDirection) return false;
 
   const earliestIdx = Math.min(sides.highs[0].index, sides.lows[0].index);
@@ -247,7 +280,7 @@ function detectFlagOrPennant(candles: Candle[], index: number, bullish: boolean,
   const poleFrom = candles[poleStart].close;
   const poleTo = candles[poleStart + POLE_WINDOW].close;
   const poleMovePct = (poleTo - poleFrom) / poleFrom;
-  const hasPole = bullish ? poleMovePct >= POLE_MIN_MOVE_PCT : poleMovePct <= -POLE_MIN_MOVE_PCT;
+  const hasPole = bullish ? poleMovePct >= T.pole : poleMovePct <= -T.pole;
   if (!hasPole) return false;
 
   const consolidation = candles.slice(poleStart + POLE_WINDOW, index);
@@ -280,7 +313,7 @@ function detectRectangle(swings: SwingPoint[], candle: Candle, index: number): b
   if (!sides) return false;
   const highSlope = slopePctPerBar(...sides.highs);
   const lowSlope = slopePctPerBar(...sides.lows);
-  if (Math.abs(highSlope) > FLAT_SLOPE_PCT || Math.abs(lowSlope) > FLAT_SLOPE_PCT) return false;
+  if (Math.abs(highSlope) > T.flat || Math.abs(lowSlope) > T.flat) return false;
   const resistance = interpolateAt(...sides.highs, index);
   const support = interpolateAt(...sides.lows, index);
   return candle.close > resistance || candle.close < support;
@@ -300,7 +333,7 @@ function detectRoundingBottom(candles: Candle[], index: number): boolean {
   const isRoughlyMiddle = minIdx > window.length * 0.25 && minIdx < window.length * 0.75;
   const depthPct = (startLevel - overallMin) / startLevel;
   const breakout = closes[closes.length - 1] > startLevel;
-  return isRoughlyMiddle && depthPct >= ROUNDING_MIN_DEPTH_PCT && breakout;
+  return isRoughlyMiddle && depthPct >= T.depth && breakout;
 }
 
 /** Bearish mirror of Rounding Bottom: a wide, gradual dome-shaped top. */
@@ -314,7 +347,7 @@ function detectRoundingTop(candles: Candle[], index: number): boolean {
   const isRoughlyMiddle = maxIdx > window.length * 0.25 && maxIdx < window.length * 0.75;
   const heightPct = (overallMax - startLevel) / startLevel;
   const breakdown = closes[closes.length - 1] < startLevel;
-  return isRoughlyMiddle && heightPct >= ROUNDING_MIN_DEPTH_PCT && breakdown;
+  return isRoughlyMiddle && heightPct >= T.depth && breakdown;
 }
 
 /** A rounding-bottom-shaped "cup" followed by a short, noticeably shallower
@@ -332,8 +365,8 @@ function detectCupAndHandle(candles: Candle[], index: number): boolean {
   const cupLow = Math.min(...cupWindow.map((c) => c.low));
   const cupDepthPct = (cupStart - cupLow) / cupStart;
   const cupEnd = cupWindow[cupWindow.length - 1].close;
-  const cupRecovered = cupEnd >= cupStart * (1 - CUP_RIM_TOLERANCE_PCT);
-  if (cupDepthPct < ROUNDING_MIN_DEPTH_PCT || !cupRecovered) return false;
+  const cupRecovered = cupEnd >= cupStart * (1 - T.rim);
+  if (cupDepthPct < T.depth || !cupRecovered) return false;
 
   const handleHigh = Math.max(...handleWindow.map((c) => c.high));
   const handleLow = Math.min(...handleWindow.map((c) => c.low));
@@ -391,6 +424,11 @@ function detectAt(candles: Candle[], swings: SwingPoint[], i: number, pattern: C
 /** True on the bar a chart pattern's breakout/confirmation occurs, using
  * only swing points and candles knowable as of that bar (no look-ahead). */
 export function computeChartPatternSeries(candles: Candle[], pattern: ChartPatternKind): boolean[] {
-  const swings = findSwingPoints(candles);
-  return candles.map((_, i) => detectAt(candles, swings, i, pattern));
+  T = thresholdsFor(candles);
+  try {
+    const swings = findSwingPoints(candles);
+    return candles.map((_, i) => detectAt(candles, swings, i, pattern));
+  } finally {
+    T = BASE;
+  }
 }

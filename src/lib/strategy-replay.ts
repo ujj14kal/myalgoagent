@@ -410,7 +410,7 @@ function volumePatternShape(candles: Candle[], i: number, pattern: VolumePattern
   }
   if (pattern === "OBV_BULLISH_DIVERGENCE" || pattern === "OBV_BEARISH_DIVERGENCE") {
     const type = pattern === "OBV_BULLISH_DIVERGENCE" ? "low" : "high";
-    const sw = findSwingPoints(candles.slice(0, i + 1), 3, 0.01).filter((s) => s.type === type && s.index <= i - 3).slice(-2);
+    const sw = findSwingPoints(candles.slice(0, i + 1), 3).filter((s) => s.type === type && s.index <= i - 3).slice(-2);
     if (sw.length === 2) {
       const obvVals = alignedSeries(candles, "OBV", []);
       shape.lines.push({ pane: "price", pts: sw.map(pt), style: "shape" });
