@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Candle } from "@/lib/market-data";
-import { computeQuantity, lockFloor, stepBar, targetPrice, validateTargets, type EngineConfig, type EngineState, type EngineTrade, type ExitReason, type RiskManagementConfig, type TargetLevel } from "./step";
-import { engineRisk, parseRiskOptions, riskExample, riskOptionsProblem, DEFAULT_RISK_OPTIONS, type RiskOptions } from "./risk-options";
+import { computeQuantity, lockFloor, stepBar, targetPrice, validateTargets, weekdayOfEpochDay, type EngineConfig, type EngineState, type EngineTrade, type ExitReason, type RiskManagementConfig, type TargetLevel } from "./step";
+import { engineRisk, isDefaultRiskOptions, parseRiskOptions, parseTradingDays, riskExample, riskOptionsProblem, DEFAULT_RISK_OPTIONS, type RiskOptions } from "./risk-options";
 
 const bar = (i: number, open: number, high: number, low: number, close: number): Candle => ({ time: 1_700_000_000 + i * 86_400, open, high, low, close, volume: 1000 });
 const tgt = (unit: TargetLevel["unit"], value: number, exitPercent: number, lock: TargetLevel["lock"] = { mode: "FIXED" }): TargetLevel => ({ unit, value, exitPercent, lock });
@@ -177,5 +177,49 @@ describe("system limits", () => {
     const { steps, state } = run(candles, config, [0, 2], { cash: 10_000, position: null });
     expect(state.memo?.halted).toBe(true);
     expect(steps[2].blockedBy).toBe("drawdown");
+  });
+});
+
+describe("trading days", () => {
+  it("reads a restricted set of weekdays and ignores everything else", () => {
+    expect(parseTradingDays([3, 1, 1, 2])).toEqual([1, 2, 3]);
+    expect(parseTradingDays([1, 2, 3, 4, 5])).toBeNull();
+    expect(parseTradingDays([])).toBeNull();
+    expect(parseTradingDays([0, 6, 9])).toBeNull();
+    expect(parseTradingDays("mon")).toBeNull();
+  });
+  it("keeps them through parseRiskOptions and counts them as a non-default option", () => {
+    const o = parseRiskOptions({ tradingDays: [2, 4] });
+    expect(o.tradingDays).toEqual([2, 4]);
+    expect(isDefaultRiskOptions(o)).toBe(false);
+    expect(parseRiskOptions({}).tradingDays).toBeUndefined();
+  });
+  it("finds the weekday of an Indian calendar day", () => {
+    const epochDay = (y: number, m: number, d: number) => Date.UTC(y, m - 1, d) / 86_400_000;
+    expect(weekdayOfEpochDay(0)).toBe(4); // Thursday, 1 Jan 1970
+    expect(weekdayOfEpochDay(epochDay(2026, 1, 5))).toBe(1); // Monday
+    expect(weekdayOfEpochDay(epochDay(2026, 1, 9))).toBe(5); // Friday
+    expect(weekdayOfEpochDay(epochDay(2026, 1, 11))).toBe(7); // Sunday
+  });
+});
+
+describe("trading days in the engine", () => {
+  const bars = Array.from({ length: 8 }, (_, i) => bar(i, 100, 101, 99, 100)); // bar 0 is a Wednesday (IST), bar 5 a Monday
+  const enter = (signalAt: number, tradingDays?: number[]) => {
+    let state: EngineState = { cash: 100_000, position: null };
+    for (let i = 0; i < bars.length; i++) {
+      const r = stepBar(bars, i, i === signalAt, false, state, cfg({}, { session: tradingDays ? { tradingDays } : undefined }));
+      state = r.state;
+    }
+    return state.position;
+  };
+  it("opens on an allowed day", () => {
+    expect(enter(4, [1])).not.toBeNull(); // fills on bar 5, a Monday
+  });
+  it("does not open on a day that is not allowed", () => {
+    expect(enter(0, [1])).toBeNull(); // would fill on bar 1, a Thursday
+  });
+  it("is unchanged without a restriction", () => {
+    expect(enter(0)).not.toBeNull();
   });
 });

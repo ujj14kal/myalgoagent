@@ -130,7 +130,7 @@ export async function computeStrategyPreview(userId: string | null, input: Strat
         entryPlan: input.entryPlan,
         maxPyramidEntries: input.maxPyramidEntries,
         direction: input.direction,
-        session: engineSession(session, compiled.entryCondition),
+        session: engineSession(session, compiled.entryCondition, input.riskOptions ? parseRiskOptions(input.riskOptions).tradingDays : undefined),
         entryOrder: engineEntryOrder(session),
         ...(input.riskOptions ? { riskOptions: parseRiskOptions(input.riskOptions) } : {}),
       },

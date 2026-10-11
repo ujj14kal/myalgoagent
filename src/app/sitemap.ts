@@ -10,7 +10,6 @@ const routes = [
   "/forward-testing",
   "/live-trading",
   "/risk-management",
-  "/technology",
   "/security",
   "/about",
   "/faq",

@@ -27,6 +27,10 @@ export default function Pager({
     return s ? `${basePath}?${s}` : basePath;
   };
   if (w.total === 0) return null;
+  // A short list that fits on one page needs no controls at all: no "Showing 1–3 of 3", no page numbers, no per-page choice.
+  if (w.pages <= 1 && w.total <= Math.min(...PAGE_SIZES)) return null;
+  // One page of a longer list: just the count and the per-page choice — no Previous/1/Next.
+  const single = w.pages <= 1;
   const btn = "rounded-lg px-2.5 py-1 text-xs font-semibold ring-1 ring-black/10 hover:bg-brand-navy/[0.04]";
   const off = "pointer-events-none opacity-40";
   return (
@@ -34,6 +38,7 @@ export default function Pager({
       <p>
         Showing {w.from.toLocaleString("en-IN")}–{w.to.toLocaleString("en-IN")} of {w.total.toLocaleString("en-IN")}
       </p>
+      {!single && (
       <div className="flex flex-wrap items-center gap-1.5">
         <Link href={href({ page: w.page - 1, size: w.size })} aria-disabled={w.page <= 1} className={`${btn} ${w.page <= 1 ? off : ""}`}>
           ← Previous
@@ -53,6 +58,7 @@ export default function Pager({
           Next →
         </Link>
       </div>
+      )}
       <div className="flex items-center gap-1.5">
         <span>Per page</span>
         {PAGE_SIZES.map((s) => (

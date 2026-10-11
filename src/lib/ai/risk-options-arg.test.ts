@@ -37,3 +37,16 @@ describe("targets with stop rules and R multiples", () => {
     expect(() => targetsFrom([{ value: 3, unit: "PERCENT", exit_percent: 30, lock: "trail" }])).toThrow(/margin_value/);
   });
 });
+
+describe("risk_options.trading_days", () => {
+  it("reads weekday names", () => {
+    expect(riskOptionsFrom({ trading_days: ["Mon", "wednesday", 5] })?.tradingDays).toEqual([1, 3, 5]);
+  });
+  it("treats all five days, or null, as no restriction", () => {
+    expect(riskOptionsFrom({ trading_days: ["Mon", "Tue", "Wed", "Thu", "Fri"] })?.tradingDays).toBeUndefined();
+    expect(riskOptionsFrom({ trading_days: null }, { ...DEFAULT_RISK_OPTIONS, tradingDays: [1] })?.tradingDays).toBeUndefined();
+  });
+  it("explains a bad list", () => {
+    expect(() => riskOptionsFrom({ trading_days: ["Sat"] })).toThrow(/trading_days/);
+  });
+});

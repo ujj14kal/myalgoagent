@@ -350,6 +350,7 @@ export async function syncPaperSession(
     session: engineSession(
       { timeframe, noEntryAfterMinute: session.noEntryAfterMinute ?? null, squareOffMinute: session.squareOffMinute ?? null, productType: session.productType },
       session.entryCondition,
+      session.riskOptions?.tradingDays,
     ),
     entryOrder: engineEntryOrder({ orderType: session.orderType ?? "MARKET", limitMode: session.limitMode ?? null, limitValue: session.limitValue ?? null }),
   };

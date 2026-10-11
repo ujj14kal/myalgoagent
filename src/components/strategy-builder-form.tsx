@@ -262,6 +262,8 @@ function SessionTimeField({
   );
 }
 
+const TRADING_DAYS: [number, string][] = [[1, "Mon"], [2, "Tue"], [3, "Wed"], [4, "Thu"], [5, "Fri"]];
+
 export default function StrategyBuilderForm({
   instruments,
   strategyId,
@@ -710,6 +712,35 @@ export default function StrategyBuilderForm({
                 <p className="mt-1 text-xs text-brand-navy/40">
                   Algo strategies are positions the engine opens, watches and closes by your rules. A long-term investment you plan to hold for months or years isn&apos;t one — hold it in your broker account instead.
                 </p>
+                {!swingish && (
+                  <div className="mt-4">
+                    <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Trading days</span>
+                    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Days of the week this strategy may open new positions">
+                      {TRADING_DAYS.map(([n, label]) => {
+                        const on = !riskOptions.tradingDays || riskOptions.tradingDays.includes(n);
+                        return (
+                          <button
+                            key={n}
+                            type="button"
+                            aria-pressed={on}
+                            onClick={() => {
+                              const current = riskOptions.tradingDays ?? [1, 2, 3, 4, 5];
+                              const next = on ? current.filter((d) => d !== n) : [...current, n].sort((a, b) => a - b);
+                              if (next.length === 0) return; // at least one day stays on
+                              setRiskOptions({ ...riskOptions, tradingDays: next.length === 5 ? undefined : next });
+                            }}
+                            className={`min-w-[44px] rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${on ? "border-brand-primary bg-brand-primary text-white" : "border-brand-navy/15 text-brand-navy/50 hover:border-brand-primary"}`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="mt-1.5 text-xs text-brand-navy/40">
+                      {riskOptions.tradingDays ? `New positions open only on ${riskOptions.tradingDays.map((d) => TRADING_DAYS[d - 1][1]).join(", ")}.` : "New positions can open on any trading day."} A position that is already open is still watched and closed every day — by its stop, target or exit rule.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
             {mode !== "WEBHOOK" && (
@@ -949,7 +980,7 @@ export default function StrategyBuilderForm({
               }}
             />
           )}
-          {mode !== "WEBHOOK" && intraday && (
+          {mode !== "WEBHOOK" && intraday && !swingish && (
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <SessionTimeField
                 label="No new entries after"

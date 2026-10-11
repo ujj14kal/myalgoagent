@@ -101,14 +101,17 @@ function entryTargetsOpen(node: ConditionNode | undefined): boolean {
 export function engineSession(
   s: { timeframe: string; noEntryAfterMinute: number | null; squareOffMinute: number | null; productType?: string | null },
   entryCondition?: ConditionNode,
+  /** Weekdays (1–5) new positions may open on; applies to daily strategies too. */
+  tradingDays?: number[] | null,
 ): IntradaySession | undefined {
-  if (!isIntraday(s.timeframe as CandleInterval)) return undefined;
+  if (!isIntraday(s.timeframe as CandleInterval)) return tradingDays?.length ? { tradingDays } : undefined;
   const intradayProduct = (s.productType ?? defaultProduct(s.timeframe)) === "INTRADAY";
   return {
     noEntryAfterMinute: s.noEntryAfterMinute,
     squareOffMinute: intradayProduct ? s.squareOffMinute : null,
     allowOpeningEntry: entryTargetsOpen(entryCondition),
     flatOvernight: intradayProduct,
+    ...(tradingDays?.length ? { tradingDays } : {}),
   };
 }
 

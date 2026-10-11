@@ -103,7 +103,7 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
         riskManagement,
         maxPyramidEntries: strategy.maxPyramidEntries,
         direction: strategy.direction,
-        session: engineSession(strategy, entryCondition),
+        session: engineSession(strategy, entryCondition, parseRiskOptions(strategy.riskOptions).tradingDays),
         entryOrder: engineEntryOrder(strategy),
         entryPlan,
         riskOptions: parseRiskOptions(strategy.riskOptions),

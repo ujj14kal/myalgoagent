@@ -253,6 +253,13 @@ export interface IntradaySession {
    * timeframe leaves this off (positions may be held overnight).
    */
   flatOvernight?: boolean;
+  /** Weekdays (1 = Monday … 5 = Friday) a new position may fill on; unset = every day. Exits are never held back. */
+  tradingDays?: number[] | null;
+}
+
+/** Weekday (1 = Monday … 7 = Sunday) of a day counted from 1 Jan 1970, which was a Thursday. */
+export function weekdayOfEpochDay(day: number): number {
+  return (((day % 7) + 7 + 4) % 7) || 7;
 }
 
 function sameIstDay(a: Candle, b: Candle | undefined): boolean {
@@ -271,7 +278,8 @@ function entryAllowed(session: IntradaySession | undefined, bar: Candle, nextBar
 /** May an entry fill on this candle under the session's time rules? */
 function fillTimeAllowed(session: IntradaySession | undefined, fillBar: Candle): boolean {
   if (!session) return true;
-  const fillMinute = istDayAndMinute(fillBar.time).minute;
+  const { day, minute: fillMinute } = istDayAndMinute(fillBar.time);
+  if (session.tradingDays && session.tradingDays.length && !session.tradingDays.includes(weekdayOfEpochDay(day))) return false;
   if (session.noEntryAfterMinute != null && fillMinute >= session.noEntryAfterMinute) return false;
   if (session.squareOffMinute != null && fillMinute >= session.squareOffMinute) return false;
   return true;

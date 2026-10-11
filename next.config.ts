@@ -50,6 +50,8 @@ const nextConfig: NextConfig = {
       { source: "/app/paper-trading", destination: "/app/forward-testing", permanent: true },
       { source: "/app/paper-trading/:id", destination: "/app/forward-testing/:id", permanent: true },
       { source: "/paper-trading", destination: "/forward-testing", permanent: true },
+      // The Technology & AWS page was internal detail, not for users: its old address goes to Security.
+      { source: "/technology", destination: "/security", permanent: true },
     ];
   },
   async headers() {

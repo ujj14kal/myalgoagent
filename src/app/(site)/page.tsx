@@ -386,7 +386,7 @@ export default function Home() {
                 Your data is encrypted, your broker keys are locked to your
                 account, and your safety limits are enforced by our servers.
               </p>
-              <Link href="/technology" className="mt-6 inline-flex items-center gap-2 rounded-full bg-brand-primary px-6 py-3 text-sm font-semibold text-white hover:bg-brand-primary-light">
+              <Link href="/security" className="mt-6 inline-flex items-center gap-2 rounded-full bg-brand-primary px-6 py-3 text-sm font-semibold text-white hover:bg-brand-primary-light">
                 How we keep you safe <Icon name="arrow" size={15} />
               </Link>
             </div>
@@ -462,8 +462,8 @@ export default function Home() {
               Start with the product overview
             </h2>
             <p className="mx-auto mt-3 max-w-xl text-brand-navy/70">
-              Read a plain-language walkthrough of the whole platform, or dig
-              into the technology and AWS infrastructure behind it.
+              Read a plain-language walkthrough of the whole platform, or see
+              how your data and your trades are kept safe.
             </p>
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <Link

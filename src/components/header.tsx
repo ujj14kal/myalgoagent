@@ -8,7 +8,6 @@ const links = [
   { href: "/backtesting", label: "Backtesting" },
   { href: "/live-trading", label: "Live Trading" },
   { href: "/risk-management", label: "Risk" },
-  { href: "/technology", label: "Technology" },
   { href: "/faq", label: "FAQ" },
 ];
 

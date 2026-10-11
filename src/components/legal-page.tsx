@@ -1,4 +1,3 @@
-import Link from "next/link";
 import Reveal from "@/components/reveal";
 import { Breadcrumbs } from "@/components/section";
 import ComingSoonTag, { ComingSoonList } from "@/components/coming-soon-tag";
@@ -58,7 +57,7 @@ export default function LegalPage({
       </div>
 
       <Reveal>
-        <div className="mx-auto grid max-w-6xl gap-16 px-4 py-16 lg:grid-cols-[1fr_320px]">
+        <div className="mx-auto max-w-4xl px-4 py-16">
           <article className="min-w-0">
             {sections.map((section, i) => (
               <section
@@ -98,34 +97,6 @@ export default function LegalPage({
             ))}
           </article>
 
-          <aside className="h-fit lg:sticky lg:top-24">
-            <div className="overflow-hidden rounded-xl border border-black/5 border-t-4 border-t-brand-primary bg-white">
-              <div className="border-b border-black/5 px-5 py-4 text-sm font-bold text-brand-navy">On this page</div>
-              <ul className="p-2">
-                {sections.map((section, i) => (
-                  <li key={section.id}>
-                    <a
-                      href={`#${section.id}`}
-                      className="grid grid-cols-[24px_1fr] items-center gap-2 rounded-lg px-3 py-2 text-xs text-brand-navy/65 hover:bg-brand-primary/5 hover:text-brand-primary"
-                    >
-                      <span className="font-mono text-[10px] font-bold text-brand-gold">{String(i + 1).padStart(2, "0")}</span>
-                      {section.title}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="mt-4 rounded-xl bg-brand-primary p-5 text-white">
-              <p className="text-sm font-bold text-white">Need clarification?</p>
-              <p className="mt-1.5 text-xs leading-relaxed text-white/70">
-                Contact our team about this document or your account.
-              </p>
-              <Link href="/contact" className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold hover:text-brand-gold">
-                Contact us
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-              </Link>
-            </div>
-          </aside>
         </div>
       </Reveal>
     </div>

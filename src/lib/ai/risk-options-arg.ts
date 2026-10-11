@@ -1,4 +1,4 @@
-import { DEFAULT_RISK_OPTIONS, MAX_LEVERAGE, type RiskOptions } from "@/lib/trading-engine/risk-options";
+import { DEFAULT_RISK_OPTIONS, MAX_LEVERAGE, parseTradingDays, type RiskOptions } from "@/lib/trading-engine/risk-options";
 import type { RiskUnit } from "@/lib/trading-engine/step";
 
 // The agent's `risk_options` argument → RiskOptions. Fields left out keep `base` (the saved ones, or the defaults);
@@ -42,18 +42,30 @@ export function riskOptionsFrom(v: unknown, base: RiskOptions = DEFAULT_RISK_OPT
       out[field] = n;
     }
   }
+  if ("trading_days" in o) {
+    if (o.trading_days === null) delete out.tradingDays;
+    else {
+      const NAMES: Record<string, number> = { mon: 1, monday: 1, tue: 2, tuesday: 2, wed: 3, wednesday: 3, thu: 4, thursday: 4, fri: 5, friday: 5 };
+      const list = Array.isArray(o.trading_days) ? o.trading_days.map((d) => (typeof d === "number" ? d : NAMES[String(d).trim().toLowerCase()])) : [];
+      if (!list.length || list.some((d) => !Number.isInteger(d) || d < 1 || d > 5)) throw new Error('risk_options.trading_days: a list of weekdays such as ["Mon","Wed","Thu"] (Monday to Friday), or null for every day.');
+      const days = parseTradingDays(list);
+      if (days) out.tradingDays = days;
+      else delete out.tradingDays; // all five = no restriction
+    }
+  }
   return out;
 }
 
 export const riskOptionsSchema = {
   type: "object",
   description:
-    "Trading-system risk options. leverage: intraday buying power as a multiple of capital (1–20; INTRADAY product only — the price is never multiplied, only how many shares the capital buys). tp_sl_reference: \"price\" (default: a % stop-loss/target is a move in the share's price, points are ₹ per share) or \"capital\" (a % is that % of the user's capital won or lost on the trade, points are a ₹ amount of P&L: e.g. a 1% capital stop on ₹1,00,000 loses ₹1,000 whatever the share price; cannot be combined with risk-based position sizing). Use \"capital\" when the user says their stop/target is a % of capital or a rupee amount of loss/profit. break_even: {value, unit} moves the stop to the entry once price moves that far in favour (unit PERCENT/POINTS/ATR_MULTIPLE/R_MULTIPLE). max_daily_loss_pct: no new positions for the rest of the day once the day's loss reaches this % of capital. max_drawdown_pct: no new positions at all once capital falls this % below its peak. Use only when the user asks for them.",
+    "Trading-system risk options. leverage: intraday buying power as a multiple of capital (1–20; INTRADAY product only — the price is never multiplied, only how many shares the capital buys). tp_sl_reference: \"price\" (default: a % stop-loss/target is a move in the share's price, points are ₹ per share) or \"capital\" (a % is that % of the user's capital won or lost on the trade, points are a ₹ amount of P&L: e.g. a 1% capital stop on ₹1,00,000 loses ₹1,000 whatever the share price; cannot be combined with risk-based position sizing). Use \"capital\" when the user says their stop/target is a % of capital or a rupee amount of loss/profit. break_even: {value, unit} moves the stop to the entry once price moves that far in favour (unit PERCENT/POINTS/ATR_MULTIPLE/R_MULTIPLE). max_daily_loss_pct: no new positions for the rest of the day once the day's loss reaches this % of capital. max_drawdown_pct: no new positions at all once capital falls this % below its peak. trading_days: weekdays new positions may open on, e.g. [\"Mon\",\"Tue\"] (exits run every day; null = every day). Use only when the user asks for them.",
   properties: {
     leverage: { type: "number" },
     tp_sl_reference: { type: "string", enum: ["price", "capital"] },
     break_even: { anyOf: [{ type: "object", properties: { value: { type: "number" }, unit: { type: "string", enum: UNITS } }, required: ["value"] }, { type: "null" }] },
     max_daily_loss_pct: { anyOf: [{ type: "number" }, { type: "null" }] },
     max_drawdown_pct: { anyOf: [{ type: "number" }, { type: "null" }] },
+    trading_days: { anyOf: [{ type: "array", items: { type: "string", enum: ["Mon", "Tue", "Wed", "Thu", "Fri"] } }, { type: "null" }] },
   },
 };

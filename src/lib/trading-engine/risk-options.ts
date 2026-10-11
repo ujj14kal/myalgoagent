@@ -19,6 +19,8 @@ export interface RiskOptions {
   maxDrawdownPercent: number | null;
   /** The most of the capital (× leverage) one position may use, in %; null = all of it. */
   maxCapitalUsePercent?: number | null;
+  /** Days of the week new positions may be opened (1 = Monday … 5 = Friday); left out = every trading day. Exits always run. */
+  tradingDays?: number[];
 }
 
 export const DEFAULT_RISK_OPTIONS: RiskOptions = { reference: "PRICE", leverage: 1, breakEven: null, maxDailyLossPercent: null, maxDrawdownPercent: null };
@@ -41,11 +43,19 @@ export function parseRiskOptions(json: unknown): RiskOptions {
     maxDailyLossPercent: num(o.maxDailyLossPercent) && (o.maxDailyLossPercent as number) > 0 ? (o.maxDailyLossPercent as number) : null,
     maxDrawdownPercent: num(o.maxDrawdownPercent) && (o.maxDrawdownPercent as number) > 0 ? (o.maxDrawdownPercent as number) : null,
     ...(num(o.maxCapitalUsePercent) && (o.maxCapitalUsePercent as number) > 0 && (o.maxCapitalUsePercent as number) < 100 ? { maxCapitalUsePercent: o.maxCapitalUsePercent as number } : {}),
+    ...(parseTradingDays(o.tradingDays) ? { tradingDays: parseTradingDays(o.tradingDays)! } : {}),
   };
 }
 
+/** A restricted set of weekdays (1–5), sorted; null when it is missing, malformed or already every day. */
+export function parseTradingDays(v: unknown): number[] | null {
+  if (!Array.isArray(v)) return null;
+  const days = [...new Set(v.filter((d): d is number => Number.isInteger(d) && d >= 1 && d <= 5))].sort((a, b) => a - b);
+  return days.length >= 1 && days.length < 5 ? days : null;
+}
+
 /** True when nothing differs from the defaults (stored as null). */
-export const isDefaultRiskOptions = (o: RiskOptions) => o.reference === "PRICE" && o.leverage === 1 && !o.breakEven && o.maxDailyLossPercent == null && o.maxDrawdownPercent == null && o.maxCapitalUsePercent == null;
+export const isDefaultRiskOptions = (o: RiskOptions) => o.reference === "PRICE" && o.leverage === 1 && !o.breakEven && o.maxDailyLossPercent == null && o.maxDrawdownPercent == null && o.maxCapitalUsePercent == null && !o.tradingDays;
 
 /** Why these options can't be used with this strategy, or null when they're fine. */
 export function riskOptionsProblem(o: RiskOptions, ctx: { productType: string; stopLossOn: boolean; sizingMode?: string }): string | null {
@@ -57,6 +67,7 @@ export function riskOptionsProblem(o: RiskOptions, ctx: { productType: string; s
   if (o.maxDailyLossPercent != null && (o.maxDailyLossPercent <= 0 || o.maxDailyLossPercent > 100)) return "The daily loss limit must be between 0% and 100%.";
   if (o.maxDrawdownPercent != null && (o.maxDrawdownPercent <= 0 || o.maxDrawdownPercent > 100)) return "The drawdown limit must be between 0% and 100%.";
   if (o.maxCapitalUsePercent != null && (o.maxCapitalUsePercent <= 0 || o.maxCapitalUsePercent > 100)) return "The most capital one position may use must be between 1% and 100%.";
+  if (o.tradingDays && o.tradingDays.length === 0) return "Pick at least one trading day, or leave every day on.";
   return null;
 }
 
