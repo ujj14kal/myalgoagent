@@ -9,11 +9,16 @@ import { prisma } from "@/lib/prisma";
 import EmptyState from "@/components/empty-state";
 import PageHeader from "@/components/ui/page-header";
 import { brokerById } from "@/lib/brokers/catalog";
+import StatusBadge from "@/components/ui/status-badge";
+import { istDay, orderLedgerInfo } from "@/lib/live/order-ledger";
 
 export const metadata = { title: "Orders", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
-const when = (d: Date) => d.toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
+const time = (d: Date) => d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "Asia/Kolkata" });
+const dayLabel = (key: string) => new Date(`${key}T00:00:00+05:30`).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+const inr = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+const STATUS_TONE: Record<string, string> = { FILLED: "text-[#0b6b30]", REJECTED: "text-brand-sell", FAILED: "text-brand-sell", CANCELLED: "text-brand-navy/50" };
 
 /** Real orders placed through MyAlgoAgent on the user's own broker accounts. Forward-test trades live inside each forward test. */
 const STATUS_FILTERS: Record<string, { label: string; statuses: string[] }> = {
@@ -41,6 +46,19 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const win = pageWindow(total, page, size);
   const orders = await prisma.liveOrder.findMany({ where, orderBy: { createdAt: "desc" }, skip: win.skip, take: win.take });
   const filtered = !!(status || q);
+  // A ledger: grouped by (Indian) day, newest first, with what was bought and sold each day.
+  const days: { day: string; rows: typeof orders; bought: number; sold: number }[] = [];
+  for (const o of orders) {
+    const key = istDay(o.createdAt);
+    let g = days[days.length - 1];
+    if (!g || g.day !== key) days.push((g = { day: key, rows: [], bought: 0, sold: 0 }));
+    g.rows.push(o);
+    const px = o.averagePrice ?? o.price;
+    if (px && o.filledQuantity > 0) {
+      if (o.side === "BUY") g.bought += px * o.filledQuantity;
+      else g.sold += px * o.filledQuantity;
+    }
+  }
 
   return (
     <div>
@@ -99,37 +117,65 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           <table className="data-table">
             <thead>
               <tr>
-                <th>Placed</th>
-                <th>Broker</th>
-                <th>Instrument</th>
-                <th>Side</th>
-                <th>Type</th>
+                <th>Time</th>
+                <th>Stock</th>
+                <th>Action</th>
                 <th className="num-cell">Qty (filled)</th>
                 <th className="num-cell">Price</th>
+                <th className="num-cell">Value</th>
                 <th>Status</th>
+                <th>Why</th>
               </tr>
             </thead>
-            <tbody>
-              {orders.map((o) => (
-                <tr key={o.id}>
-                  <td className="whitespace-nowrap text-brand-navy/70">{when(o.createdAt)}</td>
-                  <td>{brokerById(o.broker)?.name ?? o.broker}</td>
-                  <td className="font-medium">{o.tradingSymbol}</td>
-                  <td className={o.side === "BUY" ? "text-[#0b6b30]" : "text-[#9b1111]"}>{o.side}</td>
-                  <td className="text-xs text-brand-navy/60">
-                    {o.orderType.replace("_", "-")} · {o.product}
-                  </td>
-                  <td className="num-cell">
-                    {o.quantity} ({o.filledQuantity})
-                  </td>
-                  <td className="num-cell">{o.averagePrice ? `₹${o.averagePrice.toFixed(2)}` : o.price ? `₹${o.price.toFixed(2)}` : "—"}</td>
-                  <td className="text-xs">
-                    {o.status.replace("_", " ").toLowerCase()}
-                    {o.rejectReason && <span className="block text-brand-sell">{o.rejectReason}</span>}
+            {days.map((g) => (
+              <tbody key={g.day}>
+                <tr className="bg-brand-bg/70">
+                  <td colSpan={8} className="!py-2 text-xs">
+                    <span className="font-semibold text-brand-navy">{dayLabel(g.day)}</span>
+                    <span className="ml-3 text-brand-navy/55">
+                      {g.rows.length} order{g.rows.length === 1 ? "" : "s"}
+                      {g.bought > 0 && <> · bought {inr(g.bought)}</>}
+                      {g.sold > 0 && <> · sold {inr(g.sold)}</>}
+                    </span>
                   </td>
                 </tr>
-              ))}
-            </tbody>
+                {g.rows.map((o) => {
+                  const info = orderLedgerInfo({ purpose: o.purpose, reason: o.reason, side: o.side });
+                  const px = o.averagePrice ?? o.price;
+                  const value = px ? px * (o.filledQuantity || o.quantity) : null;
+                  return (
+                    <tr key={o.id}>
+                      <td className="whitespace-nowrap text-brand-navy/70" title={brokerById(o.broker)?.name ?? o.broker}>
+                        {time(o.createdAt)}
+                      </td>
+                      <td className="font-medium">
+                        {o.tradingSymbol}
+                        <span className="block text-[11px] font-normal text-brand-navy/45">
+                          {o.orderType.replace("_", "-")} · {o.product === "MIS" ? "intraday" : o.product === "CNC" ? "delivery" : o.product}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="inline-flex items-center gap-1.5">
+                          <StatusBadge status={o.side} label={o.side === "BUY" ? "buy" : "sell"} />
+                          <span className="text-xs font-semibold text-brand-navy/70">{info.kind}</span>
+                        </span>
+                        {info.strategy && <span className="block max-w-[11rem] truncate text-[11px] text-brand-navy/45">{info.strategy}</span>}
+                      </td>
+                      <td className="num-cell">
+                        {o.quantity} ({o.filledQuantity})
+                      </td>
+                      <td className="num-cell">{px ? inr(px) : "—"}</td>
+                      <td className="num-cell">{value ? inr(value) : "—"}</td>
+                      <td className={`text-xs ${STATUS_TONE[o.status] ?? ""}`}>
+                        {o.status.replace("_", " ").toLowerCase()}
+                        {o.rejectReason && <span className="block text-brand-sell">{o.rejectReason}</span>}
+                      </td>
+                      <td className="max-w-[16rem] text-xs text-brand-navy/70">{info.why || "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            ))}
           </table>
         </div>
       )}

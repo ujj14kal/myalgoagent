@@ -37,7 +37,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
       <PageHeader
         title="Custom Indicators"
         icon={PencilRuler}
-        description="Describe an indicator in your own words and your assistant builds it — with a strategy that uses it — for you to preview, replay and save. Saved indicators appear under “Custom” in every indicator picker: on charts, in strategy rules, backtests, forward tests and the replay, always with their formula shown."
+        description="Describe an indicator in your own words and your assistant builds it for you to review and save. Saved indicators appear under “Custom” in every indicator picker: on charts, in strategy rules, backtests, forward tests and the replay, always with their formula shown."
       />
       <div className="mt-6">
         <CustomIndicatorList

@@ -36,7 +36,7 @@ export default function CustomIndicatorList({
     <div className="space-y-4">
       <section className="surface p-5">
         <p className="text-sm font-semibold text-brand-navy">Create a custom indicator</p>
-        <p className="mt-1 text-xs text-brand-navy/50">Describe it in your own words. Your assistant writes the formula you can read, builds a strategy that uses it, and opens it for you to preview before anything is saved.</p>
+        <p className="mt-1 text-xs text-brand-navy/50">Describe it in your own words. Your assistant writes the formula you can read and shows it to you to review before anything is saved.</p>
         <div className="mt-4">
           <DescribeIndicator />
         </div>

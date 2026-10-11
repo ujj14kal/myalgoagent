@@ -29,6 +29,7 @@ import {
   RefreshCw,
   ShieldCheck,
   X,
+  PencilRuler,
 } from "lucide-react";
 import BodyPortal from "@/components/ui/body-portal";
 import Agent2D from "@/components/robot/agent-2d";
@@ -64,6 +65,7 @@ const ICONS: Record<AgentProposal["kind"], React.ReactNode> = {
   paper_control: <RefreshCw size={16} />,
   strategy_archive: <Archive size={16} />,
   strategy_update: <PencilLine size={16} />,
+  indicator: <PencilRuler size={16} />,
   block: <Blocks size={16} />,
   concept: <Boxes size={16} />,
   workspace: <Network size={16} />,
@@ -98,6 +100,8 @@ export function proposalSummary(p: AgentProposal): string {
       return p.draft.strategyName;
     case "strategy_update":
       return `${p.draft.name}${p.draft.instrumentSymbol ? ` · ${p.draft.instrumentSymbol}` : ""}`;
+    case "indicator":
+      return `${p.draft.name} · ${classifyCustom(p.draft.def)}`;
     case "block":
       return `${p.draft.name} · block`;
     case "concept":
@@ -131,6 +135,8 @@ function confirmLabel(p: AgentProposal): string {
       return "Archive";
     case "strategy_update":
       return "Save changes";
+    case "indicator":
+      return "Save indicator";
     case "block":
       return p.draft.blockId ? "Save block" : "Create block";
     case "concept":
@@ -234,6 +240,12 @@ async function execute(p: AgentProposal, instrumentId: string | null, go: (path:
     case "strategy_archive": {
       await archiveStrategyAction(p.draft.strategyId);
       go("/app/strategies");
+      return null;
+    }
+    case "indicator": {
+      const r = await saveCustomIndicator({ name: p.draft.name, description: p.draft.description, def: p.draft.def });
+      if (!r.ok) return r.error;
+      go("/app/indicators");
       return null;
     }
     case "block": {
@@ -759,6 +771,19 @@ function ProposalFields({
     case "strategy":
     case "strategy_update":
       return <StrategyFields draft={p.draft} onChange={(draft) => onChange({ ...p, draft })} instrumentId={instrumentId} onInstrument={onInstrument} />;
+    case "indicator":
+      return (
+        <div className="space-y-4">
+          <Field label="Indicator name">
+            <input value={p.draft.name} maxLength={60} onChange={(e) => onChange({ ...p, draft: { ...p.draft, name: e.target.value } })} className={inputCls} />
+          </Field>
+          <Statement>
+            <strong>{classifyCustom(p.draft.def)}:</strong> <span className="break-words font-mono text-[12px] [overflow-wrap:anywhere]">{describeCustom(p.draft.def)}</span>
+          </Statement>
+          {p.draft.description && <p className="text-xs text-brand-navy/55">{p.draft.description}</p>}
+          <p className="text-xs text-brand-navy/40">Saved to your Custom Indicators. It then appears under “Custom” in every indicator picker — charts, strategy rules, backtests and forward tests — always with its formula shown.</p>
+        </div>
+      );
     case "block":
       return (
         <div className="space-y-4">

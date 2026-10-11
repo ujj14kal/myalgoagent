@@ -232,6 +232,32 @@ export const AGENT_TOOLS: MantleTool[] = [
   {
     type: "function",
     function: {
+      name: "propose_custom_indicator",
+      description:
+        "Prepare ONE custom indicator on its own — no strategy — for the user to review and save to their Custom Indicators. Use this when the user asks for an indicator, level, zone, channel, band or signal marker (e.g. from the Custom Indicators page's Describe-it box). Never wrap it in a strategy unless they ask for one. Pick the kind that matches their words and write a formula they can read. Formula language: prices open/high/low/close/volume/hl2/hlc3/ohlc4; + - * / ^; comparisons and/or (true = 1); fn(source, length) for sma, ema, wma, rma, rsi, stdev, highest, lowest, sum, change, ref, roc; abs, sqrt, log, min, max, if(cond, a, b), crossover(a, b), crossunder(a, b); built-in indicators by name with numbers, e.g. atr(14).",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          kind: { type: "string", enum: [...DRAFT_KINDS] },
+          formula: { type: "string" },
+          upper: { type: "string" },
+          lower: { type: "string" },
+          middle: { type: "string" },
+          width: { type: "string" },
+          price: { type: "number" },
+          from: { type: "string" },
+          to: { type: "string" },
+          pane: { type: "string", enum: ["price", "separate"] },
+          description: { type: "string", description: "One sentence: what it measures." },
+        },
+        required: ["name", "kind"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "list_instruments",
       description: "Search the platform's instruments (every NSE-listed stock plus the main indices). Pass what the user said — a symbol, company name or part of one — and use an exact symbol from the results.",
       parameters: {
@@ -1159,6 +1185,17 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
       const u = q.toUpperCase();
       const score = (r: { symbol: string; name: string }) => (r.symbol.replace(/\.NS$/, "") === u ? 0 : r.symbol.startsWith(u) ? 1 : r.name.toUpperCase().startsWith(u) ? 2 : 3);
       return { result: rows.sort((x, y) => score(x) - score(y)).slice(0, 25) };
+    }
+    case "propose_custom_indicator": {
+      try {
+        const [ci] = await newCustomIndicators(userId, { custom_indicators: [a] });
+        return {
+          result: { ok: true, indicator: ci.name, kind: classifyCustom(ci.def), definition: describeCustom(ci.def), note: "The user now sees a review window with the formula and a Save button. Tell them in one or two sentences what it measures and how to read it; do NOT build a strategy unless they ask." },
+          proposal: { kind: "indicator", status: "pending", draft: { name: ci.name, description: ci.description, def: ci.def } },
+        };
+      } catch (err) {
+        return { result: { error: `${err instanceof Error ? err.message : "That indicator can't be used."} Fix it and call propose_custom_indicator again.` } };
+      }
     }
     case "get_my_workspace":
       return getMyWorkspace(userId);

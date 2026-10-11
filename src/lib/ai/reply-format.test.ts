@@ -94,6 +94,7 @@ describe("the Describe-it message", () => {
   it("is recognised by its opening, and the instruction for the model says not to ask first", () => {
     expect(isDescribe(`${DESCRIBE_PREFIX}volume surge`)).toBe(true);
     expect(isDescribe("hello")).toBe(false);
-    expect(DESCRIBE_INSTRUCTION).toMatch(/Do not ask which stock/);
+    expect(DESCRIBE_INSTRUCTION).toMatch(/propose_custom_indicator/);
+    expect(DESCRIBE_INSTRUCTION).toMatch(/no strategy/);
   });
 });

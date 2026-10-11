@@ -123,6 +123,13 @@ export type AgentProposal =
       draft: Extract<AgentProposal, { kind: "strategy" }>["draft"];
     }
   | {
+      // A custom indicator on its own (no strategy around it): saved to the user's Custom Indicators.
+      kind: "indicator";
+      status: ProposalStatus;
+      resultId?: string;
+      draft: { name: string; description?: string; def: CustomIndicatorDef };
+    }
+  | {
       // Workspace layer 1: a block — one reusable market component as a rule (created or updated).
       kind: "block";
       status: ProposalStatus;
@@ -199,6 +206,7 @@ export const PROPOSAL_TITLES: Record<AgentProposal["kind"], string> = {
   paper_control: "Forward test",
   strategy_archive: "Archive strategy",
   strategy_update: "Update strategy",
+  indicator: "Custom indicator",
   block: "Workspace block",
   concept: "Workspace concept",
   workspace: "Trading system",

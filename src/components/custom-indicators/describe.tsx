@@ -6,13 +6,15 @@ import { useAgentChat } from "@/components/agent-chat/agent-chat-provider";
 import { DESCRIBE_PREFIX } from "@/lib/ai/describe-indicator";
 
 const IDEAS = [
-  "How far price is from its 50-day average, measured in ATRs — buy when it is stretched below, exit when it comes back",
-  "Today's volume compared with the last 20 days — enter on a volume surge above a rising 20-day average",
-  "Where the close sits in the last 20 days' high–low range, 0 to 100 — buy near the low end, exit near the high end",
-  "A flag that's 1 when the 20 EMA is above the 50 EMA and price is above VWAP — buy when it turns on",
+  "How far price is from its 50-day average, measured in ATRs",
+  "Today's volume compared with its 20-day average",
+  "Where the close sits in the last 20 days' high–low range, 0 to 100",
+  "A flag that's 1 when the 20 EMA is above the 50 EMA and price is above VWAP",
+  "A channel from the highest high to the lowest low of the last 20 days",
+  "Bollinger-style band: 20-day average plus and minus 2 standard deviations",
 ];
 
-/** Say what you want in plain words; the agent writes the indicator and a strategy that uses it, and opens it for you to preview. */
+/** Say what you want in plain words; the agent writes the indicator and shows you its formula to review and save. */
 export default function DescribeIndicator() {
   const { agentName, openChat } = useAgentChat();
   const [text, setText] = useState("");
@@ -23,7 +25,7 @@ export default function DescribeIndicator() {
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={3}
-        placeholder="e.g. how strong the trend is — price above its 50-day average by how many ATRs — and buy when it is strong"
+        placeholder="e.g. how strong the trend is — how many ATRs price sits above its 50-day average"
         className="w-full rounded-lg border border-brand-navy/15 px-3 py-2 text-sm outline-none focus:border-brand-primary"
       />
       <button type="button" disabled={!text.trim()} onClick={() => ask(text.trim())} className="inline-flex items-center gap-1.5 rounded-full bg-brand-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
@@ -37,7 +39,7 @@ export default function DescribeIndicator() {
         ))}
       </div>
       <p className="text-xs text-brand-navy/50">
-        {agentName} turns your words into a formula you can read and a strategy that uses it. Press Preview to open that exact strategy in the builder — chart preview, replay animation and every option — or Review to create it. Nothing is saved until you confirm.
+        {agentName} turns your words into an indicator with a formula you can read. Review it, change the name if you like, and press Save indicator. Nothing is saved until you confirm. To trade it, use it by name in any strategy rule.
       </p>
     </div>
   );

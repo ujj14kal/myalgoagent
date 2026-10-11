@@ -1,27 +1,21 @@
 import MarketRefresh from "@/components/markets/auto-refresh";
 import Link from "next/link";
 import FillList from "@/components/ui/fill-list";
-import { Activity, Braces, FlaskConical, Landmark, Layers, LineChart, Radio, ShieldCheck, Sparkles, Star, Zap } from "lucide-react";
+import { Braces, FlaskConical, Landmark, Radio, ShieldCheck, Sparkles, Star, TrendingUp, Zap } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import {
-  getPaperSessionRows,
-  getPnlByPeriod,
-  getRecentActivity,
-  getStrategyPerformance,
-  getRecentBacktests,
-} from "@/lib/portfolio";
+import { getRecentBacktests } from "@/lib/portfolio";
+import { liveDashboardPnl } from "@/lib/live/pnl-server";
+import { istToday } from "@/lib/live/order-ledger";
 import { DEFAULT_AGENT_NAME } from "@/lib/agent-constants";
 import AskAgentButton from "@/components/agent-chat/ask-agent-button";
 import { getHealthAlerts } from "@/lib/health";
-import { formatPct, toneOf, TONE_TEXT } from "@/lib/format";
 import type { AgentPose } from "@/components/robot/agent-2d";
 import HealthPanel from "@/components/health-panel";
 import AgentBriefing, { type BriefingLine } from "@/components/dashboard/agent-briefing";
 import { brokerById } from "@/lib/brokers/catalog";
 import RiskGauge from "@/components/dashboard/risk-gauge";
-import StrategyPerformanceList from "@/components/dashboard/strategy-performance-list";
-import ActivityFeed from "@/components/dashboard/activity-feed";
+import LivePnlCard from "@/components/dashboard/live-pnl";
 import WatchlistSnippet from "@/components/dashboard/watchlist-snippet";
 import DashboardEmptyState from "@/components/dashboard/dashboard-empty-state";
 import RecentBacktests from "@/components/dashboard/recent-backtests";
@@ -29,12 +23,6 @@ import QuickActions from "@/components/dashboard/quick-actions";
 import { Card, CardHeader } from "@/components/ui/card";
 
 export const metadata = { title: "Dashboard", robots: { index: false } };
-
-/** Midnight IST today. */
-function istToday() {
-  const ist = new Date(Date.now() + 5.5 * 3_600_000);
-  return new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate()) - 5.5 * 3_600_000);
-}
 
 /** Logged in at the broker for today (its session hasn't expired). */
 function loggedInToday(b: { status: string; tokenExpiresAt: Date | null }) {
@@ -51,14 +39,11 @@ export default async function DashboardPage() {
   if (!session?.user?.id) return null;
   const userId = session.user.id;
 
-  const [user, rows, riskSettings, pnl, activity, strategies, watchlistItems, strategyCount, recentBacktests, healthAlerts] =
+  const [user, riskSettings, livePnl, watchlistItems, strategyCount, recentBacktests, healthAlerts] =
     await Promise.all([
       prisma.user.findUnique({ where: { id: userId }, select: { agentName: true } }),
-      getPaperSessionRows(userId),
       prisma.riskSettings.findUnique({ where: { userId } }),
-      getPnlByPeriod(userId),
-      getRecentActivity(userId),
-      getStrategyPerformance(userId, 10),
+      liveDashboardPnl(userId).catch(() => null),
       prisma.watchlistItem.findMany({
         where: { userId },
         include: { instrument: { select: { symbol: true, name: true } } },
@@ -71,11 +56,9 @@ export default async function DashboardPage() {
     ]);
 
   const agentName = user?.agentName ?? DEFAULT_AGENT_NAME;
-  // Forward tests are shown one by one (each strategy's hypothetical result) — never pooled into an account.
-  const totalStarting = rows.reduce((s, r) => s + r.session.startingCapital, 0);
-  const todayPnlPct = totalStarting > 0 ? (pnl.today / totalStarting) * 100 : 0;
-  const tests = [...rows].sort((a, b) => Number(b.session.status === "ACTIVE") - Number(a.session.status === "ACTIVE") || b.pnlPct - a.pnlPct).slice(0, 10);
-  const best = rows.filter((r) => r.session.status === "ACTIVE").sort((a, b) => b.pnlPct - a.pnlPct)[0];
+  // Real (live) results only: forward tests are hypothetical and live on their own page.
+  const liveCapital = (await prisma.liveDeployment.aggregate({ where: { userId, status: { in: ["ACTIVE", "PAUSED"] } }, _sum: { capital: true } }))._sum.capital ?? 0;
+  const todayPnlPct = liveCapital > 0 && livePnl ? (livePnl.total / liveCapital) * 100 : 0;
   const [brokerRows, liveDeployments, liveOrdersToday] = await Promise.all([
     prisma.brokerConnection.findMany({ where: { userId }, select: { broker: true, status: true, tokenExpiresAt: true } }),
     prisma.liveDeployment.findMany({ where: { userId, status: { in: ["ACTIVE", "PAUSED"] } }, orderBy: { startedAt: "desc" }, take: 8 }),
@@ -83,8 +66,8 @@ export default async function DashboardPage() {
   ]);
 
   const isNewAccount = strategyCount === 0;
-  const liveCount = rows.filter((r) => r.session.status === "ACTIVE").length;
-  const openPositions = rows.filter((r) => r.session.positionQuantity !== null).length;
+  const liveCount = liveDeployments.filter((d) => d.status === "ACTIVE").length;
+  const openPositions = liveDeployments.filter((d) => d.positionQty !== 0).length;
   const critical = healthAlerts.filter((a) => a.severity === "CRITICAL").length;
   const warnings = healthAlerts.length - critical;
 
@@ -98,24 +81,18 @@ export default async function DashboardPage() {
     : "idle";
 
   const firstName = (session.user.name ?? "").split(/\s+/)[0] || "there";
+  const attention = critical + warnings;
   const lines: BriefingLine[] = isNewAccount
-    ? [
-        { text: "Your workspace is ready — no strategies yet." },
-        { text: "Build one, backtest it on real history, then forward test it before any real money is involved." },
-      ]
+    ? [{ text: "Your workspace is ready — no strategies yet. Build one, backtest it on real history, then forward test it before any real money is involved." }]
     : [
         riskSettings?.killSwitchEnabled
-          ? { text: "The kill switch is ON — no session can open a new position.", tone: "bad" }
-          : { text: `${liveCount} live forward test${liveCount === 1 ? "" : "s"}, ${openPositions} open position${openPositions === 1 ? "" : "s"}.`, tone: liveCount > 0 ? "good" : "neutral" },
-        best
-          ? { text: `Best running forward test: ${best.session.strategyName} ${formatPct(best.pnlPct)} (hypothetical).`, tone: toneOf(best.pnlPct) === "down" ? "bad" : "neutral" }
-          : { text: "No forward test is running — start one from a strategy you've backtested.", tone: "neutral" },
-        critical + warnings > 0
-          ? { text: `${critical + warnings} item${critical + warnings === 1 ? "" : "s"} need${critical + warnings === 1 ? "s" : ""} your attention in Health below.`, tone: critical > 0 ? "bad" : "warn" }
-          : { text: "No risk, redundancy or sync issues found.", tone: "good" },
-        ...(riskSettings?.maxLossPercent == null
-          ? [{ text: "No max-loss limit is set yet — you can add one in Risk Controls.", tone: "warn" as const }]
-          : []),
+          ? { text: "The kill switch is ON — no strategy can open a new position.", tone: "bad" }
+          : { text: `${liveCount} live strateg${liveCount === 1 ? "y" : "ies"} running, ${openPositions} open position${openPositions === 1 ? "" : "s"}.`, tone: liveCount > 0 ? "good" : "neutral" },
+        attention > 0
+          ? { text: `${attention} item${attention === 1 ? "" : "s"} need${attention === 1 ? "s" : ""} your attention in Health below.`, tone: critical > 0 ? "bad" : "warn" }
+          : riskSettings?.maxLossPercent == null
+            ? { text: "No max-loss limit is set yet — add one in Risk Controls.", tone: "warn" }
+            : { text: "No risk, redundancy or sync issues found.", tone: "good" },
       ];
 
   return (
@@ -126,7 +103,7 @@ export default async function DashboardPage() {
         greeting={`${greetingFor(new Date())}, ${firstName}`}
         pose={pose}
         lines={lines}
-        primaryAction={isNewAccount ? { href: "/app/strategies/new", label: "Create your first strategy" } : { href: "/app/forward-testing", label: "Open forward testing" }}
+        primaryAction={isNewAccount ? { href: "/app/strategies/new", label: "Create your first strategy" } : { href: "/app/live-trading", label: "Live trading" }}
         secondaryAction={isNewAccount ? { href: "/app/instruments", label: "Browse market data" } : { href: "/app/strategies/new", label: "New strategy" }}
       />
 
@@ -195,34 +172,14 @@ export default async function DashboardPage() {
         <Card className="flex flex-col p-5 lg:col-span-2">
           <div data-tour="portfolio-chart" className="flex flex-1 flex-col">
             <CardHeader
-              title="Forward tests"
-              subtitle="Each strategy's own hypothetical result — no real money"
-              icon={LineChart}
-              action={<Link href="/app/forward-testing" className="text-xs font-semibold text-brand-primary hover:underline">View all →</Link>}
+              title="Live P&L"
+              subtitle="Your real strategies, moving with the market"
+              icon={TrendingUp}
+              action={<Link href="/app/live-trading" className="text-xs font-semibold text-brand-primary hover:underline">Live Trading →</Link>}
             />
-            {tests.length === 0 ? (
-              <p className="mt-6 text-sm text-brand-navy/50">No forward tests yet. Backtest a strategy, then forward test it on new prices.</p>
-            ) : (
-              <FillList className="mt-3">
-              <ul className="divide-y divide-black/[0.04]">
-                {tests.map((r) => (
-                  <li key={r.session.id}>
-                    <Link href={`/app/forward-testing/${r.session.id}`} className="flex items-center gap-3 py-2.5 text-sm hover:bg-brand-bg/50">
-                      <span className={`h-2 w-2 shrink-0 rounded-full ${r.session.status === "ACTIVE" ? "bg-brand-buy" : "bg-brand-navy/20"}`} />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate font-semibold text-brand-navy">{r.session.strategyName}</span>
-                        <span className="block text-xs text-brand-navy/50">
-                          {r.session.instrumentSymbol.replace(/\.NS$/, "")} · {r.session.status.toLowerCase()}
-                          {r.session.positionQuantity != null ? " · in a position" : ""}
-                        </span>
-                      </span>
-                      <span className={`num text-sm font-semibold ${TONE_TEXT[toneOf(r.pnlPct)]}`}>{formatPct(r.pnlPct)}</span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-              </FillList>
-            )}
+            <div className="mt-4">
+              <LivePnlCard initial={livePnl} />
+            </div>
           </div>
         </Card>
 
@@ -241,32 +198,12 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="flex flex-col p-5 lg:col-span-2">
-          <CardHeader
-            title="Strategy performance"
-            subtitle="Today's realised P&L per strategy"
-            icon={Layers}
-            action={<Link href="/app/strategies" className="text-xs font-semibold text-brand-primary hover:underline">View all →</Link>}
-          />
-          <FillList className="mt-3">
-            <StrategyPerformanceList strategies={strategies} />
-          </FillList>
-        </Card>
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         <Card className="p-5">
           <CardHeader title="Quick actions" icon={Zap} />
           <div className="mt-4">
             <QuickActions />
           </div>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        <Card className="flex flex-col p-5">
-          <CardHeader title="Recent activity" icon={Activity} />
-          <FillList from="md" className="mt-4">
-            <ActivityFeed items={activity} />
-          </FillList>
         </Card>
         <Card className="flex flex-col p-5">
           <CardHeader
