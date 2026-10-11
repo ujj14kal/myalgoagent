@@ -1,0 +1,208 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: MyAlgoAgent production VPC - 2 AZs, public / private / isolated subnets, NAT, gateway endpoints, flow logs, SSM-only bastion.
+
+Parameters:
+  NatEipAllocationId:
+    Type: String
+    Default: ""
+    Description: Existing Elastic IP allocation for the NAT Gateway (the broker-whitelisted address). Empty = allocate a new one.
+  LogsKeyArn:
+    Type: String
+    Default: arn:aws:kms:ap-south-1:327076610444:key/c36edd8b-7137-4eb3-ab01-ea96b867baf3
+
+Conditions:
+  NewEip: !Equals [!Ref NatEipAllocationId, ""]
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.20.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{ Key: Name, Value: myalgoagent }]
+  Igw:
+    Type: AWS::EC2::InternetGateway
+    Properties: { Tags: [{ Key: Name, Value: myalgoagent }] }
+  IgwAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: { VpcId: !Ref Vpc, InternetGatewayId: !Ref Igw }
+
+  PublicA:
+    Type: AWS::EC2::Subnet
+    Properties: { VpcId: !Ref Vpc, CidrBlock: 10.20.0.0/24, AvailabilityZone: !Select [0, !GetAZs ""], MapPublicIpOnLaunch: false, Tags: [{ Key: Name, Value: myalgoagent-public-a }] }
+  PublicB:
+    Type: AWS::EC2::Subnet
+    Properties: { VpcId: !Ref Vpc, CidrBlock: 10.20.1.0/24, AvailabilityZone: !Select [1, !GetAZs ""], MapPublicIpOnLaunch: false, Tags: [{ Key: Name, Value: myalgoagent-public-b }] }
+  PrivateA:
+    Type: AWS::EC2::Subnet
+    Properties: { VpcId: !Ref Vpc, CidrBlock: 10.20.16.0/22, AvailabilityZone: !Select [0, !GetAZs ""], Tags: [{ Key: Name, Value: myalgoagent-private-a }] }
+  PrivateB:
+    Type: AWS::EC2::Subnet
+    Properties: { VpcId: !Ref Vpc, CidrBlock: 10.20.20.0/22, AvailabilityZone: !Select [1, !GetAZs ""], Tags: [{ Key: Name, Value: myalgoagent-private-b }] }
+  IsolatedA:
+    Type: AWS::EC2::Subnet
+    Properties: { VpcId: !Ref Vpc, CidrBlock: 10.20.32.0/24, AvailabilityZone: !Select [0, !GetAZs ""], Tags: [{ Key: Name, Value: myalgoagent-isolated-a }] }
+  IsolatedB:
+    Type: AWS::EC2::Subnet
+    Properties: { VpcId: !Ref Vpc, CidrBlock: 10.20.33.0/24, AvailabilityZone: !Select [1, !GetAZs ""], Tags: [{ Key: Name, Value: myalgoagent-isolated-b }] }
+
+  NatEip:
+    Type: AWS::EC2::EIP
+    Condition: NewEip
+    Properties: { Domain: vpc, Tags: [{ Key: Name, Value: myalgoagent-nat }] }
+  Nat:
+    Type: AWS::EC2::NatGateway
+    DependsOn: IgwAttach
+    Properties:
+      SubnetId: !Ref PublicA
+      AllocationId: !If [NewEip, !GetAtt NatEip.AllocationId, !Ref NatEipAllocationId]
+      Tags: [{ Key: Name, Value: myalgoagent }]
+
+  PublicRt:
+    Type: AWS::EC2::RouteTable
+    Properties: { VpcId: !Ref Vpc, Tags: [{ Key: Name, Value: myalgoagent-public }] }
+  PublicDefault:
+    Type: AWS::EC2::Route
+    DependsOn: IgwAttach
+    Properties: { RouteTableId: !Ref PublicRt, DestinationCidrBlock: 0.0.0.0/0, GatewayId: !Ref Igw }
+  PublicRtA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref PublicA, RouteTableId: !Ref PublicRt }
+  PublicRtB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref PublicB, RouteTableId: !Ref PublicRt }
+
+  PrivateRt:
+    Type: AWS::EC2::RouteTable
+    Properties: { VpcId: !Ref Vpc, Tags: [{ Key: Name, Value: myalgoagent-private }] }
+  PrivateDefault:
+    Type: AWS::EC2::Route
+    Properties: { RouteTableId: !Ref PrivateRt, DestinationCidrBlock: 0.0.0.0/0, NatGatewayId: !Ref Nat }
+  PrivateRtA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref PrivateA, RouteTableId: !Ref PrivateRt }
+  PrivateRtB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref PrivateB, RouteTableId: !Ref PrivateRt }
+
+  IsolatedRt:
+    Type: AWS::EC2::RouteTable
+    Properties: { VpcId: !Ref Vpc, Tags: [{ Key: Name, Value: myalgoagent-isolated }] }
+  IsolatedRtA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref IsolatedA, RouteTableId: !Ref IsolatedRt }
+  IsolatedRtB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref IsolatedB, RouteTableId: !Ref IsolatedRt }
+
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      VpcEndpointType: Gateway
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      RouteTableIds: [!Ref PrivateRt, !Ref IsolatedRt]
+  DynamoEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      VpcEndpointType: Gateway
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.dynamodb"
+      RouteTableIds: [!Ref PrivateRt]
+
+  FlowLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties: { LogGroupName: /myalgoagent/vpc-flow, RetentionInDays: 400, KmsKeyId: !Ref LogsKeyArn }
+  FlowLogRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: [{ Effect: Allow, Principal: { Service: vpc-flow-logs.amazonaws.com }, Action: "sts:AssumeRole" }]
+      Policies:
+        - PolicyName: write
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement: [{ Effect: Allow, Action: [logs:CreateLogStream, logs:PutLogEvents, logs:DescribeLogStreams], Resource: !Sub "${FlowLogGroup.Arn}:*" }]
+  FlowLog:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      ResourceId: !Ref Vpc
+      ResourceType: VPC
+      TrafficType: ALL
+      LogDestinationType: cloud-watch-logs
+      LogGroupName: !Ref FlowLogGroup
+      DeliverLogsPermissionArn: !GetAtt FlowLogRole.Arn
+      MaxAggregationInterval: 600
+
+  # Security groups: each tier only talks to the one next to it.
+  AlbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Load balancer - HTTPS from CloudFront only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, SourcePrefixListId: pl-9aa247f3, Description: CloudFront origin-facing }
+      Tags: [{ Key: Name, Value: myalgoagent-alb }]
+  WebSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Website tasks - from the load balancer only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress: [{ IpProtocol: tcp, FromPort: 3000, ToPort: 3000, SourceSecurityGroupId: !Ref AlbSg }]
+      Tags: [{ Key: Name, Value: myalgoagent-web }]
+  EngineSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties: { GroupDescription: Trading engine - no inbound, VpcId: !Ref Vpc, Tags: [{ Key: Name, Value: myalgoagent-engine }] }
+  BastionSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties: { GroupDescription: Bastion - no inbound (Session Manager only), VpcId: !Ref Vpc, Tags: [{ Key: Name, Value: myalgoagent-bastion }] }
+  DbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Database - PostgreSQL from website, engine and bastion only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 5432, ToPort: 5432, SourceSecurityGroupId: !Ref WebSg }
+        - { IpProtocol: tcp, FromPort: 5432, ToPort: 5432, SourceSecurityGroupId: !Ref EngineSg }
+        - { IpProtocol: tcp, FromPort: 5432, ToPort: 5432, SourceSecurityGroupId: !Ref BastionSg }
+      Tags: [{ Key: Name, Value: myalgoagent-db }]
+
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties: { DBSubnetGroupName: myalgoagent-isolated, DBSubnetGroupDescription: Isolated subnets, SubnetIds: [!Ref IsolatedA, !Ref IsolatedB] }
+
+  BastionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: [{ Effect: Allow, Principal: { Service: ec2.amazonaws.com }, Action: "sts:AssumeRole" }]
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore]
+  BastionProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties: { Roles: [!Ref BastionRole] }
+  Bastion:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t4g.nano
+      ImageId: "{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64}}"
+      IamInstanceProfile: !Ref BastionProfile
+      SubnetId: !Ref PrivateA
+      SecurityGroupIds: [!Ref BastionSg]
+      MetadataOptions: { HttpTokens: required }
+      BlockDeviceMappings: [{ DeviceName: /dev/xvda, Ebs: { VolumeSize: 8, Encrypted: true } }]
+      Tags: [{ Key: Name, Value: myalgoagent-bastion }]
+
+Outputs:
+  VpcId: { Value: !Ref Vpc, Export: { Name: myalgoagent-vpc } }
+  PublicSubnets: { Value: !Join [",", [!Ref PublicA, !Ref PublicB]], Export: { Name: myalgoagent-public-subnets } }
+  PrivateSubnets: { Value: !Join [",", [!Ref PrivateA, !Ref PrivateB]], Export: { Name: myalgoagent-private-subnets } }
+  IsolatedSubnets: { Value: !Join [",", [!Ref IsolatedA, !Ref IsolatedB]], Export: { Name: myalgoagent-isolated-subnets } }
+  AlbSg: { Value: !Ref AlbSg, Export: { Name: myalgoagent-alb-sg } }
+  WebSg: { Value: !Ref WebSg, Export: { Name: myalgoagent-web-sg } }
+  EngineSg: { Value: !Ref EngineSg, Export: { Name: myalgoagent-engine-sg } }
+  DbSg: { Value: !Ref DbSg, Export: { Name: myalgoagent-db-sg } }
+  DbSubnetGroup: { Value: !Ref DbSubnetGroup, Export: { Name: myalgoagent-db-subnet-group } }
+  BastionId: { Value: !Ref Bastion }

@@ -1,0 +1,192 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: MyAlgoAgent account security baseline (Phase A) - customer-managed keys, CloudTrail alarms, budgets.
+
+Parameters:
+  AlertsTopicArn:
+    Type: String
+    Default: arn:aws:sns:ap-south-1:327076610444:myalgoagent-alerts
+  MonthlyBudgetUsd:
+    Type: Number
+    Default: 100
+    Description: Raise when the production-grade stack is live.
+
+Resources:
+  # ---- customer-managed keys (rotation on) ----
+  LogsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: MyAlgoAgent - CloudWatch Logs and CloudTrail
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AccountAdmin
+            Effect: Allow
+            Principal: { AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root" }
+            Action: "kms:*"
+            Resource: "*"
+          - Sid: CloudWatchLogs
+            Effect: Allow
+            Principal: { Service: !Sub "logs.${AWS::Region}.amazonaws.com" }
+            Action: [kms:Encrypt*, kms:Decrypt*, kms:ReEncrypt*, kms:GenerateDataKey*, kms:Describe*]
+            Resource: "*"
+            Condition:
+              ArnLike:
+                kms:EncryptionContext:aws:logs:arn: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*"
+          - Sid: CloudTrail
+            Effect: Allow
+            Principal: { Service: cloudtrail.amazonaws.com }
+            Action: [kms:GenerateDataKey*, kms:DescribeKey]
+            Resource: "*"
+            Condition:
+              StringLike:
+                kms:EncryptionContext:aws:cloudtrail:arn: !Sub "arn:aws:cloudtrail:*:${AWS::AccountId}:trail/*"
+  LogsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties: { AliasName: alias/myalgoagent-logs, TargetKeyId: !Ref LogsKey }
+
+  DataKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: MyAlgoAgent - S3, database, secrets
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AccountAdmin
+            Effect: Allow
+            Principal: { AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root" }
+            Action: "kms:*"
+            Resource: "*"
+  DataKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties: { AliasName: alias/myalgoagent-data, TargetKeyId: !Ref DataKey }
+
+  # ---- CloudTrail -> CloudWatch Logs, so account activity can raise alarms ----
+  TrailLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /myalgoagent/cloudtrail
+      RetentionInDays: 1827
+      KmsKeyId: !GetAtt LogsKey.Arn
+  TrailLogRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - { Effect: Allow, Principal: { Service: cloudtrail.amazonaws.com }, Action: "sts:AssumeRole" }
+      Policies:
+        - PolicyName: write-logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub "${TrailLogGroup.Arn}:*"
+
+  # ---- alarms on account activity ----
+  RootUseFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref TrailLogGroup
+      FilterPattern: '{ $.userIdentity.type = "Root" && $.userIdentity.invokedBy NOT EXISTS && $.eventType != "AwsServiceEvent" }'
+      MetricTransformations: [{ MetricNamespace: MyAlgoAgentSecurity, MetricName: RootAccountUse, MetricValue: "1" }]
+  RootUseAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: "MyAlgoAgent security: root account used"
+      Namespace: MyAlgoAgentSecurity
+      MetricName: RootAccountUse
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertsTopicArn]
+
+  IamChangeFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref TrailLogGroup
+      FilterPattern: '{ ($.eventName = DeleteGroupPolicy) || ($.eventName = DeleteRolePolicy) || ($.eventName = DeleteUserPolicy) || ($.eventName = PutGroupPolicy) || ($.eventName = PutRolePolicy) || ($.eventName = PutUserPolicy) || ($.eventName = CreatePolicy) || ($.eventName = DeletePolicy) || ($.eventName = CreatePolicyVersion) || ($.eventName = AttachRolePolicy) || ($.eventName = DetachRolePolicy) || ($.eventName = AttachUserPolicy) || ($.eventName = DetachUserPolicy) || ($.eventName = AttachGroupPolicy) || ($.eventName = DetachGroupPolicy) || ($.eventName = CreateUser) || ($.eventName = DeleteUser) || ($.eventName = CreateAccessKey) || ($.eventName = DeleteAccessKey) }'
+      MetricTransformations: [{ MetricNamespace: MyAlgoAgentSecurity, MetricName: IamChanges, MetricValue: "1" }]
+  IamChangeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: "MyAlgoAgent security: IAM users, keys or policies changed"
+      Namespace: MyAlgoAgentSecurity
+      MetricName: IamChanges
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertsTopicArn]
+
+  ConsoleFailFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref TrailLogGroup
+      FilterPattern: '{ ($.eventName = ConsoleLogin) && ($.errorMessage = "Failed authentication") }'
+      MetricTransformations: [{ MetricNamespace: MyAlgoAgentSecurity, MetricName: ConsoleLoginFailures, MetricValue: "1" }]
+  ConsoleFailAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: "MyAlgoAgent security: repeated console sign-in failures"
+      Namespace: MyAlgoAgentSecurity
+      MetricName: ConsoleLoginFailures
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 3
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertsTopicArn]
+
+  UnauthorizedFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref TrailLogGroup
+      FilterPattern: '{ ($.errorCode = "*UnauthorizedOperation") || ($.errorCode = "AccessDenied*") }'
+      MetricTransformations: [{ MetricNamespace: MyAlgoAgentSecurity, MetricName: UnauthorizedCalls, MetricValue: "1" }]
+  UnauthorizedAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: "MyAlgoAgent security: burst of denied AWS calls"
+      Namespace: MyAlgoAgentSecurity
+      MetricName: UnauthorizedCalls
+      Statistic: Sum
+      Period: 900
+      EvaluationPeriods: 1
+      Threshold: 25
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertsTopicArn]
+
+  # ---- budget with 50 / 80 / 100 % notices (and a forecast notice) ----
+  Budget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: myalgoagent-monthly-total
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit: { Amount: !Ref MonthlyBudgetUsd, Unit: USD }
+      NotificationsWithSubscribers:
+        - Notification: { NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 50, ThresholdType: PERCENTAGE }
+          Subscribers: [{ SubscriptionType: SNS, Address: !Ref AlertsTopicArn }]
+        - Notification: { NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 80, ThresholdType: PERCENTAGE }
+          Subscribers: [{ SubscriptionType: SNS, Address: !Ref AlertsTopicArn }]
+        - Notification: { NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 100, ThresholdType: PERCENTAGE }
+          Subscribers: [{ SubscriptionType: SNS, Address: !Ref AlertsTopicArn }]
+        - Notification: { NotificationType: FORECASTED, ComparisonOperator: GREATER_THAN, Threshold: 100, ThresholdType: PERCENTAGE }
+          Subscribers: [{ SubscriptionType: SNS, Address: !Ref AlertsTopicArn }]
+
+Outputs:
+  LogsKeyArn: { Value: !GetAtt LogsKey.Arn }
+  DataKeyArn: { Value: !GetAtt DataKey.Arn }
+  TrailLogGroupArn: { Value: !GetAtt TrailLogGroup.Arn }
+  TrailLogRoleArn: { Value: !GetAtt TrailLogRole.Arn }

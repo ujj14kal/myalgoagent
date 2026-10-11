@@ -1,0 +1,70 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: MyAlgoAgent AWS Config recorder, delivery bucket and baseline rules.
+Resources:
+  ConfigBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Sub "myalgoagent-config-${AWS::AccountId}"
+      PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }
+      BucketEncryption:
+        ServerSideEncryptionConfiguration: [{ ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 } }]
+      VersioningConfiguration: { Status: Enabled }
+      LifecycleConfiguration:
+        Rules: [{ Id: archive, Status: Enabled, Transitions: [{ StorageClass: GLACIER_IR, TransitionInDays: 90 }] }]
+  ConfigBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ConfigBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - { Sid: Acl, Effect: Allow, Principal: { Service: config.amazonaws.com }, Action: "s3:GetBucketAcl", Resource: !GetAtt ConfigBucket.Arn }
+          - { Sid: Write, Effect: Allow, Principal: { Service: config.amazonaws.com }, Action: "s3:PutObject", Resource: !Sub "${ConfigBucket.Arn}/AWSLogs/${AWS::AccountId}/Config/*", Condition: { StringEquals: { "s3:x-amz-acl": bucket-owner-full-control } } }
+          - { Sid: TlsOnly, Effect: Deny, Principal: "*", Action: "s3:*", Resource: [!GetAtt ConfigBucket.Arn, !Sub "${ConfigBucket.Arn}/*"], Condition: { Bool: { "aws:SecureTransport": "false" } } }
+  Recorder:
+    Type: AWS::Config::ConfigurationRecorder
+    Properties:
+      Name: default
+      RoleARN: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig"
+      RecordingGroup: { AllSupported: true, IncludeGlobalResourceTypes: true }
+  Delivery:
+    Type: AWS::Config::DeliveryChannel
+    Properties: { Name: default, S3BucketName: !Ref ConfigBucket }
+  RdsNotPublic:
+    Type: AWS::Config::ConfigRule
+    DependsOn: Recorder
+    Properties:
+      ConfigRuleName: myalgoagent-rds-not-public
+      Source: { Owner: AWS, SourceIdentifier: RDS_INSTANCE_PUBLIC_ACCESS_CHECK }
+  RdsEncrypted:
+    Type: AWS::Config::ConfigRule
+    DependsOn: Recorder
+    Properties:
+      ConfigRuleName: myalgoagent-rds-encrypted
+      Source: { Owner: AWS, SourceIdentifier: RDS_STORAGE_ENCRYPTED }
+  SgSsh:
+    Type: AWS::Config::ConfigRule
+    DependsOn: Recorder
+    Properties:
+      ConfigRuleName: myalgoagent-no-open-ssh
+      Source: { Owner: AWS, SourceIdentifier: INCOMING_SSH_DISABLED }
+  S3Public:
+    Type: AWS::Config::ConfigRule
+    DependsOn: Recorder
+    Properties:
+      ConfigRuleName: myalgoagent-s3-no-public-read
+      Source: { Owner: AWS, SourceIdentifier: S3_BUCKET_PUBLIC_READ_PROHIBITED }
+  RootMfa:
+    Type: AWS::Config::ConfigRule
+    DependsOn: Recorder
+    Properties:
+      ConfigRuleName: myalgoagent-root-mfa
+      Source: { Owner: AWS, SourceIdentifier: ROOT_ACCOUNT_MFA_ENABLED }
+  AccessKeyRotation:
+    Type: AWS::Config::ConfigRule
+    DependsOn: Recorder
+    Properties:
+      ConfigRuleName: myalgoagent-access-key-rotated
+      InputParameters: { maxAccessKeyAge: "90" }
+      Source: { Owner: AWS, SourceIdentifier: ACCESS_KEYS_ROTATED }
