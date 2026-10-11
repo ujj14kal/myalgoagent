@@ -915,7 +915,7 @@ export default function StrategyBuilderForm({
                   <ConditionGroupEditor node={entryCondition} onChange={setEntryCondition} instruments={instruments} />
                 )
               ) : (
-                <StrategyCodeEditor label="Entry" value={entrySource} onChange={setEntrySource} />
+                <StrategyCodeEditor label="Entry" part="entry" value={entrySource} onChange={setEntrySource} />
               )}
             </BuilderSection>
 
@@ -947,7 +947,7 @@ export default function StrategyBuilderForm({
                   </button>
                 </>
               ) : (
-                <StrategyCodeEditor label="Exit" value={exitSource} onChange={setExitSource} />
+                <StrategyCodeEditor label="Exit" part="exit" value={exitSource} onChange={setExitSource} />
               )}
             </BuilderSection>
           </>
