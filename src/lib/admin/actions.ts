@@ -360,3 +360,43 @@ export async function setLiveTrading(userId: string, enabled: boolean): Promise<
     return { ok: true, message: enabled ? `Live trading is on for ${u.email}.` : `Live trading is off for ${u.email}. Open orders aren't cancelled automatically — check Groww.` };
   });
 }
+
+
+// ---------------- customer notes (CRM) ----------------
+
+const MAX_NOTE = 1500;
+
+/** A note about a customer, with an optional follow-up date (the day it is due, in IST). */
+export async function addCustomerNote(userId: string, rawBody: string, followUpOn: string | null): Promise<AdminResult> {
+  return run("inbox", async (staff) => {
+    const body = text(rawBody);
+    if (!body) return { ok: false, error: "Write the note first." };
+    if (body.length > MAX_NOTE) return { ok: false, error: `Keep notes under ${MAX_NOTE.toLocaleString("en-IN")} characters.` };
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true } });
+    if (!user) return { ok: false, error: "That customer no longer exists." };
+    let followUpAt: Date | null = null;
+    if (followUpOn) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(followUpOn)) return { ok: false, error: "Pick the follow-up date again." };
+      followUpAt = new Date(`${followUpOn}T09:00:00+05:30`);
+      if (Number.isNaN(followUpAt.getTime())) return { ok: false, error: "Pick the follow-up date again." };
+    }
+    await prisma.customerNote.create({ data: { userId, authorId: staff.id, authorEmail: staff.email, body, followUpAt } });
+    await audit(staff, "customer.note", { type: "user", id: userId }, `Added a note on ${user.email}${followUpAt ? ` with a follow-up on ${followUpOn}` : ""}`);
+    revalidatePath(`/admin/users/${userId}`);
+    revalidatePath("/admin");
+    return { ok: true, message: followUpAt ? "Note saved with a follow-up." : "Note saved." };
+  });
+}
+
+/** Marks a follow-up done (or open again). */
+export async function setNoteDone(noteId: string, done: boolean): Promise<AdminResult> {
+  return run("inbox", async (staff) => {
+    const note = await prisma.customerNote.findUnique({ where: { id: noteId }, select: { id: true, userId: true } });
+    if (!note) return { ok: false, error: "That note no longer exists." };
+    await prisma.customerNote.update({ where: { id: noteId }, data: { doneAt: done ? new Date() : null } });
+    await audit(staff, "customer.note.done", { type: "user", id: note.userId }, done ? "Marked a follow-up done" : "Reopened a follow-up");
+    revalidatePath(`/admin/users/${note.userId}`);
+    revalidatePath("/admin");
+    return { ok: true };
+  });
+}

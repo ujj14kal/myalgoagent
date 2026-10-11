@@ -6,7 +6,7 @@ import { overviewStats } from "@/lib/admin/stats";
 import { getAlarms, getCost, getDeploys, getEmailStatus, load } from "@/lib/admin/aws";
 import { AdminPageHeader, Bars, Card, Kpi, Pill, ago, ist } from "@/components/admin/ui";
 import { BROKERS } from "@/lib/brokers/catalog";
-import { dueWithin } from "@/lib/admin/time";
+import { dueWithin, inMs, nowMs } from "@/lib/admin/time";
 
 
 type Attention = { tone: "red" | "gold" | "purple"; text: React.ReactNode; href: string };
@@ -32,6 +32,11 @@ export default async function AdminOverview() {
   if (s.brokers.errors) attention.push({ tone: "gold", text: <>{s.brokers.errors} broker connection{s.brokers.errors === 1 ? " is" : "s are"} failing</>, href: "/admin/trading#brokers" });
   if (lastSync && lastSync.ok === false) attention.push({ tone: "red", text: <>The last forward-test sync failed ({ago(lastSync.startedAt)})</>, href: "/admin/trading#jobs" });
   if (s.users.nextDeletion && dueWithin(s.users.nextDeletion, 2 * 86_400_000)) attention.push({ tone: "purple", text: <>An account is due for permanent deletion {ago(s.users.nextDeletion).replace(" ago", "")} ({ist(s.users.nextDeletion)})</>, href: "/admin/users?status=PENDING_DELETION" });
+  // Customer follow-ups that are due (or overdue). Quietly skipped until the notes table exists.
+  const dueFollowUps = await prisma.customerNote
+    .findMany({ where: { doneAt: null, followUpAt: { lte: inMs(86_400_000) } }, orderBy: { followUpAt: "asc" }, take: 5, select: { userId: true, body: true, followUpAt: true, user: { select: { email: true } } } })
+    .catch(() => []);
+  for (const f of dueFollowUps) attention.push({ tone: f.followUpAt && f.followUpAt.getTime() < nowMs() ? "red" : "gold", text: <>Follow up with {f.user.email}: {f.body.length > 80 ? `${f.body.slice(0, 80)}…` : f.body}</>, href: `/admin/users/${f.userId}` });
   const deploy = deploys?.ok ? deploys.data[0] : null;
   if (deploy?.status === "FAILED") attention.push({ tone: "red", text: <>The latest deploy failed: “{deploy.message}”</>, href: "/admin/system#deploys" });
 

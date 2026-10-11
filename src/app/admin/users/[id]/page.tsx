@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Activity, ArrowLeft, Bot, KeyRound, LifeBuoy, Link2, Layers, ScrollText } from "lucide-react";
+import { Activity, ArrowLeft, Bot, KeyRound, LifeBuoy, Link2, Layers, NotebookPen, ScrollText } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { can, isBuiltInOwner, requireStaff, ROLE_LABEL } from "@/lib/admin/access";
 import { audit } from "@/lib/admin/audit";
@@ -8,6 +8,8 @@ import { caseRef, feedbackRef } from "@/lib/support/tickets";
 import { BROKERS } from "@/lib/brokers/catalog";
 import { avatarInitials } from "@/lib/avatar";
 import UserActions from "@/components/admin/user-actions";
+import CustomerNotes from "@/components/admin/customer-notes";
+import { nowMs } from "@/lib/admin/time";
 import BrokerDisconnect from "@/components/admin/broker-disconnect";
 import LiveToggle from "@/components/admin/live-toggle";
 import StaticIpControl from "@/components/admin/static-ip-control";
@@ -59,6 +61,15 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
     prisma.agentMessage.aggregate({ where: { conversation: { userId: u.id }, role: "ASSISTANT" }, _count: true, _sum: { inputTokens: true, outputTokens: true } }),
     prisma.adminAuditLog.findMany({ where: { targetType: "user", targetId: u.id, action: { not: "user.view" } }, orderBy: { createdAt: "desc" }, take: 10 }),
   ]);
+
+  // Notes need their own table; until that database update is applied the rest of the page still works.
+  let notes: Awaited<ReturnType<typeof prisma.customerNote.findMany>> = [];
+  let notesReady = true;
+  try {
+    notes = await prisma.customerNote.findMany({ where: { userId: u.id }, orderBy: [{ doneAt: { sort: "asc", nulls: "first" } }, { createdAt: "desc" }], take: 50 });
+  } catch {
+    notesReady = false;
+  }
 
   const role = isBuiltInOwner(u.email) ? "OWNER" : u.adminRole;
   const logins = [u.passwordHash ? "Password" : null, ...u.accounts.map((a) => (a.provider === "google" ? "Google" : a.provider)), "Email link"].filter(Boolean);
@@ -222,6 +233,14 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
           )}
         </Card>
       </div>
+
+      <Card title="Team notes & follow-ups" icon={NotebookPen} pad={false}>
+        {notesReady ? (
+          <CustomerNotes userId={u.id} now={nowMs()} notes={notes.map((n) => ({ id: n.id, body: n.body, authorEmail: n.authorEmail, createdAt: n.createdAt.toISOString(), followUpAt: n.followUpAt?.toISOString() ?? null, doneAt: n.doneAt?.toISOString() ?? null }))} />
+        ) : (
+          <p className="px-5 py-4 text-sm text-brand-navy/55">Notes aren&apos;t switched on yet: the database update for them hasn&apos;t been applied. Nothing else is affected.</p>
+        )}
+      </Card>
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title="Support history" icon={LifeBuoy} pad={false}>

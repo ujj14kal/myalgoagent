@@ -20,6 +20,7 @@ enum AdminRole {
 }
 
 model User {
+  customerNotes CustomerNote[]
   id            String    @id @default(cuid())
   name          String?
   email         String    @unique
@@ -215,6 +216,24 @@ model AdminAuditLog {
   @@index([createdAt])
   @@index([targetType, targetId])
   @@index([actorId, createdAt])
+}
+
+// What the team writes down about a customer (support context, a promised follow-up). Staff-only; removed with the account.
+model CustomerNote {
+  id          String    @id @default(cuid())
+  userId      String
+  authorId    String?
+  authorEmail String
+  body        String
+  // When someone should get back to the customer (optional), and when that was done.
+  followUpAt  DateTime?
+  doneAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([followUpAt, doneAt])
 }
 
 enum AnnouncementLevel {
