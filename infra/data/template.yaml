@@ -1,0 +1,75 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::SecretsManager-2020-07-23
+Description: MyAlgoAgent data protection - 90-day database credential rotation and AWS Backup (daily, 35 days, Mumbai).
+
+Parameters:
+  DbSecretArn: { Type: String, Default: "arn:aws:secretsmanager:ap-south-1:327076610444:secret:myalgoagent/prod/database-PA4s0V" }
+  DataKeyArn: { Type: String, Default: "arn:aws:kms:ap-south-1:327076610444:key/d1919b9d-3db7-4d0f-8bfd-5226770a8e6e" }
+  DbInstanceArn: { Type: String, Default: "arn:aws:rds:ap-south-1:327076610444:db:myalgoagent-db-prod" }
+
+Resources:
+  RotationSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Secrets Manager rotation function
+      VpcId: !ImportValue myalgoagent-vpc
+  RotationToDb:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !ImportValue myalgoagent-db-sg
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref RotationSg
+  Rotation:
+    Type: AWS::SecretsManager::RotationSchedule
+    DependsOn: RotationToDb
+    Properties:
+      SecretId: !Ref DbSecretArn
+      RotateImmediatelyOnUpdate: false
+      RotationRules:
+        Duration: 2h
+        ScheduleExpression: "cron(30 20 1 1,4,7,10 ? *)"   # quarterly, 02:00 IST on the 1st (outside market hours)
+      HostedRotationLambda:
+        RotationType: PostgreSQLSingleUser
+        RotationLambdaName: myalgoagent-db-rotation
+        VpcSecurityGroupIds: !Ref RotationSg
+        VpcSubnetIds: !Join [",", [!Select [0, !Split [",", !ImportValue myalgoagent-private-subnets]], !Select [1, !Split [",", !ImportValue myalgoagent-private-subnets]]]]
+        KmsKeyArn: !Ref DataKeyArn
+
+  Vault:
+    Type: AWS::Backup::BackupVault
+    Properties:
+      BackupVaultName: myalgoagent
+      EncryptionKeyArn: !Ref DataKeyArn
+  BackupRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: [{ Effect: Allow, Principal: { Service: backup.amazonaws.com }, Action: "sts:AssumeRole" }]
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup
+        - arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForRestores
+  Plan:
+    Type: AWS::Backup::BackupPlan
+    Properties:
+      BackupPlan:
+        BackupPlanName: myalgoagent-daily
+        BackupPlanRule:
+          - RuleName: daily-35d
+            TargetBackupVault: !Ref Vault
+            ScheduleExpression: "cron(30 21 * * ? *)"   # 03:00 IST
+            StartWindowMinutes: 60
+            CompletionWindowMinutes: 360
+            Lifecycle: { DeleteAfterDays: 35 }
+  Selection:
+    Type: AWS::Backup::BackupSelection
+    Properties:
+      BackupPlanId: !Ref Plan
+      BackupSelection:
+        SelectionName: database-and-tables
+        IamRoleArn: !GetAtt BackupRole.Arn
+        Resources:
+          - !Ref DbInstanceArn
+          - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/myalgoagent-rate-limits"

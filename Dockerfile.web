@@ -1,0 +1,24 @@
+# The website on AWS Fargate (non-root, read-only root filesystem). Built in GitHub Actions — see infra/web.
+FROM node:22-slim AS build
+WORKDIR /app
+ENV BUILD_STANDALONE=1 NEXT_TELEMETRY_DISABLED=1
+COPY package.json package-lock.json prisma.config.ts ./
+COPY prisma ./prisma
+RUN npm ci
+COPY . .
+ARG NEXT_PUBLIC_GA_MEASUREMENT_ID
+ENV NEXT_PUBLIC_GA_MEASUREMENT_ID=$NEXT_PUBLIC_GA_MEASUREMENT_ID
+RUN npx prisma generate && npm run build
+
+FROM node:22-slim
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
+WORKDIR /app
+COPY --from=build --chown=node:node /app/.next/standalone ./
+COPY --from=build --chown=node:node /app/.next/static ./.next/static
+COPY --from=build --chown=node:node /app/public ./public
+COPY --from=build --chown=node:node /app/certs ./certs
+# Next writes its image/data cache here; the rest of the filesystem is read-only.
+RUN mkdir -p /app/.next/cache && chown node:node /app/.next/cache
+USER node
+EXPOSE 3000
+CMD ["node", "server.js"]

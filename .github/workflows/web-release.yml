@@ -1,0 +1,75 @@
+# Releases the website (AWS Fargate behind the load balancer) on every push to main, after the same checks as CI pass.
+# The image tag is the commit; a bad release rolls back by itself (ECS deployment circuit breaker).
+# Needs the repository variable WEB_DEPLOY_ROLE_ARN (from infra/web/github-deploy-role.yaml); without it the release job is skipped.
+name: Web release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: web-release
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npx next typegen && npx tsc --noEmit
+      - run: npm run lint
+      - run: npx vitest run
+
+  release:
+    needs: checks
+    if: vars.WEB_DEPLOY_ROLE_ARN != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      AWS_REGION: ap-south-1
+    steps:
+      - uses: actions/checkout@v5
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.WEB_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-1
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and push the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.web
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/myalgoagent-web:${{ github.sha }}
+          build-args: NEXT_PUBLIC_GA_MEASUREMENT_ID=G-0KY6NS3RYC
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Roll out to Fargate and wait until it is healthy
+        run: |
+          IMAGE="${{ steps.ecr.outputs.registry }}/myalgoagent-web:${{ github.sha }}"
+          TD=$(aws ecs describe-services --cluster myalgoagent --services myalgoagent-web --query 'services[0].taskDefinition' --output text)
+          aws ecs describe-task-definition --task-definition "$TD" --query taskDefinition > td.json
+          python3 - "$IMAGE" <<'PY'
+          import json, sys
+          td = json.load(open("td.json"))
+          td["containerDefinitions"][0]["image"] = sys.argv[1]
+          keep = ["family","taskRoleArn","executionRoleArn","networkMode","containerDefinitions","volumes","requiresCompatibilities","cpu","memory","runtimePlatform"]
+          json.dump({k: td[k] for k in keep if k in td}, open("new-td.json", "w"))
+          PY
+          NEW=$(aws ecs register-task-definition --cli-input-json file://new-td.json --query taskDefinition.taskDefinitionArn --output text)
+          aws ecs update-service --cluster myalgoagent --service myalgoagent-web --task-definition "$NEW" >/dev/null
+          aws ecs wait services-stable --cluster myalgoagent --services myalgoagent-web
+          aws ecs describe-services --cluster myalgoagent --services myalgoagent-web --query 'services[0].deployments[].[status,rolloutState,runningCount]' --output text

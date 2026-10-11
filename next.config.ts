@@ -42,6 +42,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // The container build (Dockerfile.web) sets BUILD_STANDALONE=1 to get a self-contained server; Amplify builds are unchanged.
+  output: process.env.BUILD_STANDALONE ? "standalone" : undefined,
   // Don't advertise the framework in every response.
   poweredByHeader: false,
   // Paper trading became forward testing (2026-09-29); old links and bookmarks keep working.

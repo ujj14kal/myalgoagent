@@ -10,6 +10,13 @@ Parameters:
     Type: String
     Default: arn:aws:kms:ap-south-1:327076610444:key/c36edd8b-7137-4eb3-ab01-ea96b867baf3
 
+  DbSecretArn:
+    Type: String
+    Default: arn:aws:secretsmanager:ap-south-1:327076610444:secret:myalgoagent/prod/database-PA4s0V
+  DataKeyArn:
+    Type: String
+    Default: arn:aws:kms:ap-south-1:327076610444:key/d1919b9d-3db7-4d0f-8bfd-5226770a8e6e
+
 Conditions:
   NewEip: !Equals [!Ref NatEipAllocationId, ""]
 
@@ -180,6 +187,13 @@ Resources:
         Version: "2012-10-17"
         Statement: [{ Effect: Allow, Principal: { Service: ec2.amazonaws.com }, Action: "sts:AssumeRole" }]
       ManagedPolicyArns: [arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore]
+      Policies:
+        - PolicyName: read-database-secret
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - { Effect: Allow, Action: secretsmanager:GetSecretValue, Resource: !Ref DbSecretArn }
+              - { Effect: Allow, Action: kms:Decrypt, Resource: !Ref DataKeyArn }
   BastionProfile:
     Type: AWS::IAM::InstanceProfile
     Properties: { Roles: [!Ref BastionRole] }

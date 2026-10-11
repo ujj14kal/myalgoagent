@@ -1,0 +1,293 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: MyAlgoAgent website on ECS Fargate - ECR, task roles, ALB (CloudFront-only), service with autoscaling, alarms.
+
+Parameters:
+  ImageTag: { Type: String, Default: bootstrap, Description: Immutable image tag (git sha) to run }
+  DesiredCount: { Type: Number, Default: 0, Description: 0 until the first image is pushed }
+  OriginSecret: { Type: String, NoEcho: true, Description: Value CloudFront sends in X-Origin-Verify; the load balancer rejects requests without it }
+  DatabaseUrlSecretArn: { Type: String, Description: "Secrets Manager secret (JSON: username, password, host, port, dbname) for the database" }
+  OriginHostName: { Type: String, Default: origin.myalgoagent.com }
+  HostedZoneId: { Type: String, Default: Z01955502T07S2HGRRUW4 }
+  DataKeyArn: { Type: String, Default: "arn:aws:kms:ap-south-1:327076610444:key/d1919b9d-3db7-4d0f-8bfd-5226770a8e6e" }
+  LogsKeyArn: { Type: String, Default: "arn:aws:kms:ap-south-1:327076610444:key/c36edd8b-7137-4eb3-ab01-ea96b867baf3" }
+  AlertsTopicArn: { Type: String, Default: "arn:aws:sns:ap-south-1:327076610444:myalgoagent-alerts" }
+
+Resources:
+  Repo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: myalgoagent-web
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration: { ScanOnPush: true }
+      EncryptionConfiguration: { EncryptionType: KMS, KmsKey: !Ref DataKeyArn }
+      LifecyclePolicy:
+        LifecyclePolicyText: '{"rules":[{"rulePriority":1,"description":"keep the last 30 images","selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":30},"action":{"type":"expire"}}]}'
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties: { LogGroupName: /myalgoagent/web, RetentionInDays: 1827, KmsKeyId: !Ref LogsKeyArn }
+
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: [{ Effect: Allow, Principal: { Service: ecs-tasks.amazonaws.com }, Action: "sts:AssumeRole" }]
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy]
+      Policies:
+        - PolicyName: read-database-url
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - { Effect: Allow, Action: secretsmanager:GetSecretValue, Resource: !Ref DatabaseUrlSecretArn }
+              - { Effect: Allow, Action: kms:Decrypt, Resource: !Ref DataKeyArn }
+
+  # Same permissions the Amplify server role has today, pointed at the new places (least privilege).
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: [{ Effect: Allow, Principal: { Service: ecs-tasks.amazonaws.com }, Action: "sts:AssumeRole" }]
+      Policies:
+        - PolicyName: app
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - { Sid: ReadAppSecrets, Effect: Allow, Action: [ssm:GetParametersByPath, ssm:GetParameter, ssm:GetParameters], Resource: [!Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/myalgoagent/app", !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/myalgoagent/app/*"] }
+              - { Sid: DatabaseSecret, Effect: Allow, Action: secretsmanager:GetSecretValue, Resource: !Ref DatabaseUrlSecretArn }
+              - { Sid: DecryptDatabaseSecret, Effect: Allow, Action: kms:Decrypt, Resource: !Ref DataKeyArn }
+              - { Sid: DecryptViaSsm, Effect: Allow, Action: kms:Decrypt, Resource: "*", Condition: { StringEquals: { "kms:ViaService": !Sub "ssm.${AWS::Region}.amazonaws.com" } } }
+              - { Sid: Voice, Effect: Allow, Action: polly:SynthesizeSpeech, Resource: "*", Condition: { StringEquals: { "aws:RequestedRegion": [ap-southeast-1, ap-south-1] } } }
+              - { Sid: Transcribe, Effect: Allow, Action: transcribe:StartStreamTranscriptionWebSocket, Resource: "*", Condition: { StringEquals: { "aws:RequestedRegion": ap-south-1 } } }
+              - { Sid: BedrockProfile, Effect: Allow, Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream], Resource: !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/global.amazon.nova-2-lite-v1:0" }
+              - { Sid: BedrockModels, Effect: Allow, Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream], Resource: ["arn:aws:bedrock:*::foundation-model/amazon.nova-2-lite-v1:0", "arn:aws:bedrock:::foundation-model/amazon.nova-2-lite-v1:0"], Condition: { StringLike: { "bedrock:InferenceProfileArn": !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/global.amazon.nova-2-lite-v1:0" } } }
+              - { Sid: Guardrail, Effect: Allow, Action: bedrock:ApplyGuardrail, Resource: !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:guardrail/p717f2wfyw7e" }
+              - { Sid: Mantle, Effect: Allow, Action: bedrock-mantle:CreateInference, Resource: !Sub "arn:aws:bedrock-mantle:${AWS::Region}:${AWS::AccountId}:project/*", Condition: { StringEquals: { "bedrock-mantle:Model": [openai.gpt-oss-120b, openai.gpt-oss-20b] } } }
+              - { Sid: RateLimits, Effect: Allow, Action: [dynamodb:UpdateItem, dynamodb:GetItem], Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/myalgoagent-rate-limits" }
+              - { Sid: Avatars, Effect: Allow, Action: [s3:PutObject, s3:GetObject], Resource: "arn:aws:s3:::myalgoagent-user-uploads/avatars/*" }
+              - { Sid: Email, Effect: Allow, Action: [ses:SendEmail, ses:SendRawEmail], Resource: "*", Condition: { StringEquals: { "ses:FromAddress": noreply@myalgoagent.com } } }
+              - { Sid: AdminRead, Effect: Allow, Action: [cloudwatch:DescribeAlarms, cloudwatch:GetMetricData, ce:GetCostAndUsage, ce:GetCostForecast, ses:GetAccount, guardduty:ListFindings, guardduty:GetFindings, rds:DescribeDBInstances, ecs:DescribeServices], Resource: "*" }
+              - { Sid: AdminLogs, Effect: Allow, Action: logs:FilterLogEvents, Resource: !Sub "${LogGroup.Arn}:*" }
+              - { Sid: Schedules, Effect: Allow, Action: [events:DescribeRule, events:EnableRule, events:DisableRule], Resource: [!Sub "arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/myalgoagent-paper-sync", !Sub "arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/myalgoagent-purge-deleted-accounts"] }
+
+  # ---- certificate for the origin hostname (CloudFront talks to the load balancer over HTTPS) ----
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref OriginHostName
+      ValidationMethod: DNS
+      DomainValidationOptions: [{ DomainName: !Ref OriginHostName, HostedZoneId: !Ref HostedZoneId }]
+
+  Alb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: myalgoagent-web
+      Type: application
+      Scheme: internet-facing
+      Subnets: !Split [",", !ImportValue myalgoagent-public-subnets]
+      SecurityGroups: [!ImportValue myalgoagent-alb-sg]
+      LoadBalancerAttributes:
+        - { Key: deletion_protection.enabled, Value: "true" }
+        - { Key: routing.http.drop_invalid_header_fields.enabled, Value: "true" }
+        - { Key: idle_timeout.timeout_seconds, Value: "120" }
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: myalgoagent-web
+      VpcId: !ImportValue myalgoagent-vpc
+      TargetType: ip
+      Protocol: HTTP
+      Port: 3000
+      HealthCheckPath: /api/health
+      HealthCheckIntervalSeconds: 15
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      TargetGroupAttributes:
+        - { Key: deregistration_delay.timeout_seconds, Value: "30" }
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Alb
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      Certificates: [{ CertificateArn: !Ref Certificate }]
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig: { StatusCode: "403", ContentType: text/plain, MessageBody: Forbidden }
+  ForwardRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref Listener
+      Priority: 10
+      Conditions: [{ Field: http-header, HttpHeaderConfig: { HttpHeaderName: X-Origin-Verify, Values: [!Ref OriginSecret] } }]
+      Actions: [{ Type: forward, TargetGroupArn: !Ref TargetGroup }]
+  OriginDns:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub "${OriginHostName}."
+      Type: A
+      AliasTarget: { DNSName: !GetAtt Alb.DNSName, HostedZoneId: !GetAtt Alb.CanonicalHostedZoneID, EvaluateTargetHealth: true }
+
+  TaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: myalgoagent-web
+      RequiresCompatibilities: [FARGATE]
+      NetworkMode: awsvpc
+      Cpu: "512"
+      Memory: "1024"
+      RuntimePlatform: { CpuArchitecture: X86_64, OperatingSystemFamily: LINUX }
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      Volumes: [{ Name: tmp }, { Name: nextcache }]
+      ContainerDefinitions:
+        - Name: web
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/myalgoagent-web:${ImageTag}"
+          Essential: true
+          User: node
+          ReadonlyRootFilesystem: true
+          PortMappings: [{ ContainerPort: 3000 }]
+          MountPoints:
+            - { SourceVolume: tmp, ContainerPath: /tmp }
+            - { SourceVolume: nextcache, ContainerPath: /app/.next/cache }
+          Environment:
+            - { Name: NODE_ENV, Value: production }
+            - { Name: TZ, Value: UTC }
+            - { Name: AUTH_URL, Value: "https://myalgoagent.com" }
+            - { Name: AUTH_TRUST_HOST, Value: "true" }
+            - { Name: AUTH_GOOGLE_ID, Value: "48546689421-7mcct18pb5qu07pefna0tq71fb5sj244.apps.googleusercontent.com" }
+            - { Name: APP_SECRETS_PATH, Value: /myalgoagent/app }
+            - { Name: MARKET_DATA_LICENSED_USER_IDS, Value: "cmtr7u5x400001fl66tnavjf9,cmtlkuh3r0000o4uw0b30e43m,cmtojjip100001fl9gk43el0f" }
+            - { Name: BROKER_EGRESS_URL, Value: "https://13.204.125.24:8443" }
+            - { Name: DB_SECRET_ID, Value: !Ref DatabaseUrlSecretArn }
+          Secrets:
+            - { Name: DB_HOST, ValueFrom: !Sub "${DatabaseUrlSecretArn}:host::" }
+            - { Name: DB_PORT, ValueFrom: !Sub "${DatabaseUrlSecretArn}:port::" }
+            - { Name: DB_NAME, ValueFrom: !Sub "${DatabaseUrlSecretArn}:dbname::" }
+            - { Name: DB_USER, ValueFrom: !Sub "${DatabaseUrlSecretArn}:username::" }
+          LogConfiguration:
+            LogDriver: awslogs
+            Options: { awslogs-group: !Ref LogGroup, awslogs-region: !Ref "AWS::Region", awslogs-stream-prefix: web }
+          StopTimeout: 30
+
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn: ForwardRule
+    Properties:
+      ServiceName: myalgoagent-web
+      Cluster: myalgoagent
+      LaunchType: FARGATE
+      DesiredCount: !Ref DesiredCount
+      HealthCheckGracePeriodSeconds: 60
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+        DeploymentCircuitBreaker: { Enable: true, Rollback: true }
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets: !Split [",", !ImportValue myalgoagent-private-subnets]
+          SecurityGroups: [!ImportValue myalgoagent-web-sg]
+      LoadBalancers: [{ ContainerName: web, ContainerPort: 3000, TargetGroupArn: !Ref TargetGroup }]
+      TaskDefinition: !Ref TaskDef
+      PropagateTags: SERVICE
+
+  ScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      ServiceNamespace: ecs
+      ScalableDimension: ecs:service:DesiredCount
+      ResourceId: service/myalgoagent/myalgoagent-web
+      MinCapacity: 1
+      MaxCapacity: 4
+      RoleARN: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService"
+    DependsOn: Service
+  CpuScaling:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: cpu-60
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref ScalingTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 60
+        PredefinedMetricSpecification: { PredefinedMetricType: ECSServiceAverageCPUUtilization }
+        ScaleInCooldown: 300
+        ScaleOutCooldown: 60
+  RequestScaling:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: requests-per-task
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref ScalingTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 400
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ALBRequestCountPerTarget
+          ResourceLabel: !Sub "${Alb.LoadBalancerFullName}/${TargetGroup.TargetGroupFullName}"
+        ScaleInCooldown: 300
+        ScaleOutCooldown: 60
+
+  Alarm5xx:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: "MyAlgoAgent web: load balancer 5xx"
+      Namespace: AWS/ApplicationELB
+      MetricName: HTTPCode_Target_5XX_Count
+      Dimensions: [{ Name: LoadBalancer, Value: !GetAtt Alb.LoadBalancerFullName }]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertsTopicArn]
+  AlarmUnhealthy:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: "MyAlgoAgent web: unhealthy tasks"
+      Namespace: AWS/ApplicationELB
+      MetricName: UnHealthyHostCount
+      Dimensions: [{ Name: LoadBalancer, Value: !GetAtt Alb.LoadBalancerFullName }, { Name: TargetGroup, Value: !GetAtt TargetGroup.TargetGroupFullName }]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertsTopicArn]
+  AlarmCpu:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: "MyAlgoAgent web: CPU high"
+      Namespace: AWS/ECS
+      MetricName: CPUUtilization
+      Dimensions: [{ Name: ClusterName, Value: myalgoagent }, { Name: ServiceName, Value: myalgoagent-web }]
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 85
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertsTopicArn]
+  AlarmTasks:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: "MyAlgoAgent web: no running task"
+      Namespace: ECS/ContainerInsights
+      MetricName: RunningTaskCount
+      Dimensions: [{ Name: ClusterName, Value: myalgoagent }, { Name: ServiceName, Value: myalgoagent-web }]
+      Statistic: Minimum
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+      AlarmActions: [!Ref AlertsTopicArn]
+
+Outputs:
+  AlbDnsName: { Value: !GetAtt Alb.DNSName }
+  RepoUri: { Value: !GetAtt Repo.RepositoryUri }
+  TaskRoleArn: { Value: !GetAtt TaskRole.Arn }
