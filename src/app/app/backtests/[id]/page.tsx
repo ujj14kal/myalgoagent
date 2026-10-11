@@ -7,6 +7,7 @@ import { type CandleInterval, marketDataFor } from "@/lib/market-data";
 import type { CandleRange } from "@/lib/market-data";
 import CandlestickChart from "@/components/candlestick-chart";
 import EquityCurveChart from "@/components/equity-curve-chart";
+import BacktestAnalytics from "@/components/backtest/analytics-panel";
 import { describePositionSizing } from "@/lib/position-sizing";
 import type { Signal } from "@/lib/strategy";
 import { CandlestickChart as CandleIcon, FlaskConical, LineChart, ListOrdered } from "lucide-react";
@@ -106,6 +107,11 @@ export default async function BacktestDetailPage({ params }: { params: Promise<{
           />
         ))}
       </div>
+      {equityCurve.length > 1 && (
+        <p className="mt-3 text-xs text-brand-navy/55">
+          Period tested: {new Date(equityCurve[0].time * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })} to {new Date(equityCurve[equityCurve.length - 1].time * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })} ({run.timeframe} candles)
+        </p>
+      )}
       <p className="mt-3 text-xs text-brand-navy/45">
         Data: {market.name}
         {!market.isOfficial && " (interim feed, not an official NSE/BSE source)"} · Backtested against historical data — past
@@ -118,6 +124,8 @@ export default async function BacktestDetailPage({ params }: { params: Promise<{
           <EquityCurveChart points={equityCurve} />
         </div>
       </Card>
+
+      <BacktestAnalytics trades={run.trades} equity={equityCurve} />
 
       <Card className="mt-6 p-5">
         <CardHeader title="Price chart with executed trades" icon={CandleIcon} />

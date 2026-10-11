@@ -192,6 +192,32 @@ export async function runBacktestAction(input: RunBacktestInput): Promise<Backte
   redirect(`/app/backtests/${result.id}`);
 }
 
+export interface RunBacktestsInput extends Omit<RunBacktestInput, "strategyId"> {
+  strategyIds: string[];
+}
+
+const MAX_TOGETHER = 8;
+
+/** Backtests several strategies at once (each on its own capital) and opens their combined result. */
+export async function runBacktestsAction(input: RunBacktestsInput): Promise<BacktestActionResult> {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Unauthorized" };
+  const ids = [...new Set(input.strategyIds)];
+  if (ids.length === 0) return { error: "Pick at least one strategy." };
+  if (ids.length > MAX_TOGETHER) return { error: `Pick up to ${MAX_TOGETHER} strategies at a time.` };
+  const done: string[] = [];
+  const failed: string[] = [];
+  for (const strategyId of ids) {
+    const r = await runBacktestCore(session.user.id, { ...input, strategyId });
+    if ("id" in r) done.push(r.id);
+    else failed.push(r.error);
+  }
+  revalidatePath("/app/backtests");
+  if (done.length === 0) return { error: failed[0] ?? "None of the backtests could run." };
+  if (done.length === 1) redirect(`/app/backtests/${done[0]}`);
+  redirect(`/app/backtests/combined?ids=${done.join(",")}${failed.length ? `&skipped=${failed.length}` : ""}`);
+}
+
 /** Same as runBacktestAction but returns the new run's id instead of redirecting — for the agent's multi-step plans. */
 export async function runBacktestForAgent(input: RunBacktestInput): Promise<{ id: string } | { error: string }> {
   const session = await auth();

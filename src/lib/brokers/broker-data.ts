@@ -21,7 +21,8 @@ export class BrokerDataUnavailable extends Error {
 }
 
 const TIMEOUT_MS = 12_000;
-const MAX_REQUESTS = 24; // per call: a long backtest is capped rather than hammering the broker
+const MAX_REQUESTS = 80; // per call: a long backtest is capped rather than hammering the broker
+const PARALLEL = 6; // requests in flight at once
 
 function headers(broker: BrokerId, ctx: LiveCtx): Record<string, string> {
   switch (broker) {
@@ -151,13 +152,19 @@ export async function brokerCandles(broker: BrokerId, ctx: LiveCtx, symbol: stri
   let reqs = source.request(eq, spec, p.base, from, nowSec);
   if (reqs.length > MAX_REQUESTS) reqs = reqs.slice(-MAX_REQUESTS); // keep the most recent windows
   const all: Candle[] = [];
-  for (const r of reqs) {
-    try {
-      all.push(...source.parse(await send(broker, ctx, r)));
-    } catch (err) {
-      if (err instanceof BrokerError && err.failure.code === "session_rejected") throw new BrokerDataUnavailable(`${name} refused market data for this account${err.failure.detail ? ` (“${err.failure.detail}”)` : ""} — usually because its API plan doesn't include data.`, "no_access");
-      throw err;
-    }
+  // A few windows at a time (a 5-year history is dozens of them), kept in order.
+  for (let i = 0; i < reqs.length; i += PARALLEL) {
+    const batch = await Promise.all(
+      reqs.slice(i, i + PARALLEL).map(async (r) => {
+        try {
+          return source.parse(await send(broker, ctx, r));
+        } catch (err) {
+          if (err instanceof BrokerError && err.failure.code === "session_rejected") throw new BrokerDataUnavailable(`${name} refused market data for this account${err.failure.detail ? ` (“${err.failure.detail}”)` : ""} — usually because its API plan doesn't include data.`, "no_access");
+          throw err;
+        }
+      })
+    );
+    for (const c of batch) all.push(...c);
   }
   const candles = trimToTradingDays(p.build(dedupe(all)), range);
   if (!candles.length) throw new BrokerDataUnavailable(`${name} returned no prices for ${m[1]}.`, "empty");

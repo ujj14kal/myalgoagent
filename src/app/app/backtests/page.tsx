@@ -6,7 +6,8 @@ import { pageWindow, readPageQuery } from "@/lib/pagination";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { marketDataFor } from "@/lib/market-data";
+import { userMarketDataReady } from "@/lib/market-data/for-user";
+import { backtestDataNotice } from "@/lib/brokers/data-notice";
 import BacktestRunForm from "@/components/backtest-run-form";
 import EmptyState from "@/components/empty-state";
 import { FlaskConical, History } from "lucide-react";
@@ -45,6 +46,7 @@ export default async function BacktestsPage({ searchParams }: { searchParams: Pr
   const { page, size } = readPageQuery(sp);
   const win = pageWindow(totalRuns, page, size);
   const params = keepParams({ q, result: result === "all" ? undefined : result, sort: sort === "new" ? undefined : sort, size: size === 25 ? undefined : String(size) });
+  const [market, notice] = await Promise.all([userMarketDataReady(session.user.id, "backtest"), backtestDataNotice(session.user.id).catch(() => null)]);
   const [strategies, runs] = await Promise.all([
     prisma.strategy.findMany({
       // Deleted strategies never belong in a "pick one to run" list — that
@@ -67,7 +69,8 @@ export default async function BacktestsPage({ searchParams }: { searchParams: Pr
 
       <div className="mt-6">
         <BacktestRunForm
-          depth={marketDataFor(session.user.id, "backtest").depth}
+          depth={market.depth}
+          notice={notice}
           strategies={strategies.map((s) => ({
             id: s.id,
             name: s.name,

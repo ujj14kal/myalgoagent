@@ -50,8 +50,8 @@ export function isIntraday(interval: CandleInterval): boolean {
 
 /**
  * How much history a source keeps: "standard" is Yahoo's window (above);
- * "extended" is the licensed feed (TrueData), which keeps years of intraday
- * candles — capped here only so a single chart/backtest stays quick to load.
+ * "extended" is the licensed feed or the user's own broker, which keep years of intraday
+ * candles (up to 5 years for 2m–4h) — capped here only so a single chart/backtest stays quick to load.
  */
 export type HistoryDepth = "standard" | "extended";
 
@@ -60,8 +60,8 @@ const RANGE_ORDER: CandleRange[] = ["1d", "5d", "1mo", "3mo", "6mo", "ytd", "1y"
 /** The widest range each interval can be served for at this depth. */
 export function maxRangeForInterval(interval: CandleInterval, depth: HistoryDepth = "standard"): CandleRange {
   if (depth === "extended") {
-    if (INTRADAY_1M.includes(interval)) return "3mo";
-    if (INTRADAY_SHORT.includes(interval)) return "1y";
+    if (INTRADAY_1M.includes(interval)) return "6mo";
+    if (INTRADAY_SHORT.includes(interval)) return "5y";
     if (INTRADAY_HOUR.includes(interval)) return "5y";
     return "max";
   }
