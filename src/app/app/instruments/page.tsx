@@ -1,6 +1,6 @@
 import Pager from "@/components/ui/pager";
 import { readPageQuery } from "@/lib/pagination";
-import { keepParams, pageRows, qText } from "@/lib/list-query";
+import { keepParams, pageRows, qEnum, qText } from "@/lib/list-query";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import InstrumentSearch from "@/components/instrument-search";
@@ -39,13 +39,14 @@ export default async function InstrumentsPage({ searchParams }: { searchParams: 
   const sp = await searchParams;
   const q = qText(sp.q, 40);
   const sector = qText(sp.sector, 60) ?? null;
+  const exch = qEnum(sp.exch, ["all", "NSE", "BSE"] as const, "all");
   const like = q ? { contains: q, mode: "insensitive" as const } : undefined;
   const extras = marketExtrasFor(session?.user?.id);
   const market = marketDataFor(session?.user?.id, "view");
 
   // Search and the sector filter run in the database; ranking and paging here; one page is sent.
   const [matches, total, sectorCounts, overview] = await Promise.all([
-    prisma.instrument.findMany({ where: { ...(sector ? { sector } : {}), ...(like ? { OR: [{ symbol: like }, { name: like }] } : {}) }, orderBy: { symbol: "asc" }, select: { symbol: true, name: true, exchange: true, sector: true } }),
+    prisma.instrument.findMany({ where: { ...(sector ? { sector } : {}), ...(exch !== "all" ? { exchange: exch } : {}), ...(like ? { OR: [{ symbol: like }, { name: like }] } : {}) }, orderBy: { symbol: "asc" }, select: { symbol: true, name: true, exchange: true, sector: true } }),
     prisma.instrument.count(),
     prisma.instrument.groupBy({ by: ["sector"], where: { sector: { not: null } }, _count: true }),
     extras
@@ -86,7 +87,7 @@ export default async function InstrumentsPage({ searchParams }: { searchParams: 
     .map((m) => m.i);
   const { page, size } = readPageQuery(sp, 25);
   const shown = pageRows(ranked, page, size);
-  const params = keepParams({ q, sector: sector ?? undefined, size: size === 25 ? undefined : String(size) });
+  const params = keepParams({ q, sector: sector ?? undefined, exch: exch === "all" ? undefined : exch, size: size === 25 ? undefined : String(size) });
   const sectors = sectorCounts.flatMap((c) => (c.sector ? [{ sector: c.sector, count: c._count }] : [])).sort((a, b) => b.count - a.count);
   const asOf = new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" });
 
@@ -95,7 +96,7 @@ export default async function InstrumentsPage({ searchParams }: { searchParams: 
       <PageHeader
         title="Market Data"
         icon={CandlestickChart}
-        description={<>{total.toLocaleString("en-IN")} instruments — every NSE-listed stock plus the main indices. Search by symbol or company name.</>}
+        description={<>{total.toLocaleString("en-IN")} instruments — every NSE-listed stock, the main BSE stocks (groups A and B) and the main indices. Search by symbol or company name.</>}
       />
       {overview && (
         <div className="mt-6">

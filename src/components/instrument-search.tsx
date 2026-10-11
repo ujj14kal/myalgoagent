@@ -38,7 +38,7 @@ export default function InstrumentSearch({
 }) {
   return (
     <div className="space-y-4">
-      <ListToolbar basePath="/app/instruments" params={params} search={{ placeholder: "Search by symbol or company name…" }} />
+      <ListToolbar basePath="/app/instruments" params={params} search={{ placeholder: "Search by symbol or company name…" }} selects={[{ name: "exch", label: "Exchange", options: [{ value: "all", label: "NSE + BSE" }, { value: "NSE", label: "NSE" }, { value: "BSE", label: "BSE" }] }]} />
       {sectors.length > 1 && (
         <ListTabs
           basePath="/app/instruments"
@@ -55,7 +55,10 @@ export default function InstrumentSearch({
               {i.symbol.replace(/\.NS$|\.BO$/, "").slice(0, 3)}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-brand-navy group-hover:text-brand-primary">{i.symbol}</span>
+              <span className="block text-sm font-semibold text-brand-navy group-hover:text-brand-primary">
+                {i.symbol}
+                {i.exchange === "BSE" && !i.symbol.startsWith("^") && <span className="ml-1.5 rounded bg-brand-navy/[0.07] px-1 py-0.5 align-middle text-[9px] font-bold text-brand-navy/55">BSE</span>}
+              </span>
               <span className="block truncate text-xs text-brand-navy/55">{i.name}</span>
               {i.sector && <span className="mt-1 block text-[10px] font-semibold uppercase tracking-wide text-brand-navy/35">{i.sector}</span>}
             </span>

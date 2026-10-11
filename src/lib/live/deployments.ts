@@ -77,6 +77,7 @@ export async function startDeployment(userId: string, input: { strategyId: strin
   const s = await prisma.strategy.findFirst({ where: { id: input.strategyId, userId, status: { not: "DELETED" } }, include: { instrument: true } });
   if (!s) throw new LiveCheckError("Strategy not found.");
   if (s.mode === "WEBHOOK") throw new LiveCheckError("Webhook strategies run as forward tests only.");
+  if (s.instrument.symbol.endsWith(".BO")) throw new LiveCheckError(`${s.instrument.symbol} is a BSE stock. BSE stocks can be charted, backtested and forward tested here; live orders go to NSE stocks for now, so use this stock's NSE listing to go live.`);
   if (!s.instrument.symbol.endsWith(".NS")) throw new LiveCheckError(`${s.instrument.symbol} can't be traded — live strategies trade NSE stocks.`);
   if (s.direction === "SHORT" && s.productType !== "INTRADAY") throw new LiveCheckError("A short strategy must be intraday.");
   // Trading systems go live long-only for now: live orders, reconciling and "Exit now" follow one side per deployment.

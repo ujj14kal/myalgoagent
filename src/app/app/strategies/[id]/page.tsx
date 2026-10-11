@@ -174,7 +174,7 @@ export default async function StrategyDetailPage({ params, searchParams }: { par
                 enabled={!!liveUser?.liveTradingEnabledAt}
                 liveOn={liveDeployments.map((d) => d.broker)}
                 intraday={strategy.productType === "INTRADAY"}
-                blocker={!strategy.instrument.symbol.endsWith(".NS") ? "Indices can't be traded directly — live strategies trade NSE stocks." : strategy.status === "DELETED" ? "This strategy has been deleted." : null}
+                blocker={strategy.instrument.symbol.endsWith(".BO") ? "BSE stocks can be charted, backtested and forward tested here. Live orders go to NSE stocks for now — use this stock's NSE listing to go live." : !strategy.instrument.symbol.endsWith(".NS") ? "Indices can't be traded directly — live strategies trade NSE stocks." : strategy.status === "DELETED" ? "This strategy has been deleted." : null}
               />
             )}
             <StrategyStatusControls strategyId={strategy.id} status={strategy.status} />
