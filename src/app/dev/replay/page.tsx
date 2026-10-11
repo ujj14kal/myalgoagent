@@ -10,7 +10,8 @@ import type { ConditionNode } from "@/lib/strategy";
 export const dynamic = "force-dynamic";
 
 const off = { enabled: false, unit: "PERCENT" as const, value: 0 };
-const SCENARIOS: Record<string, { symbol: string; timeframe: string; entry: ConditionNode; label: string }> = {
+const SCENARIOS: Record<string, { symbol: string; timeframe: string; entry: ConditionNode; label: string; plan?: boolean }> = {
+  plan: { label: "Entry levels + staged targets", symbol: "RELIANCE.NS", timeframe: "1d", plan: true, entry: { kind: "group", op: "OR", children: ["DOUBLE_BOTTOM", "ASCENDING_TRIANGLE", "BULL_FLAG", "FALLING_WEDGE", "INVERSE_HEAD_AND_SHOULDERS"].map((p) => ({ kind: "signal", signal: { family: "CHART_PATTERN", pattern: p } }) as ConditionNode) } },
   chart: { label: "Chart pattern (double bottom, any)", symbol: "RELIANCE.NS", timeframe: "1d", entry: { kind: "group", op: "OR", children: ["DOUBLE_BOTTOM", "ASCENDING_TRIANGLE", "BULL_FLAG", "FALLING_WEDGE", "INVERSE_HEAD_AND_SHOULDERS"].map((p) => ({ kind: "signal", signal: { family: "CHART_PATTERN", pattern: p } }) as ConditionNode) } },
   volume: { label: "Volume pattern (spike / breakout)", symbol: "TCS.NS", timeframe: "1d", entry: { kind: "group", op: "OR", children: [{ kind: "signal", signal: { family: "VOLUME_PATTERN", pattern: "VOLUME_SPIKE" } }, { kind: "signal", signal: { family: "VOLUME_PATTERN", pattern: "BULLISH_VOLUME_BREAKOUT" } }] } },
   candle: { label: "Candle pattern (bullish engulfing / hammer)", symbol: "INFY.NS", timeframe: "1d", entry: { kind: "group", op: "OR", children: [{ kind: "signal", signal: { family: "CANDLE_PATTERN", pattern: "BULLISH_ENGULFING" } }, { kind: "signal", signal: { family: "CANDLE_PATTERN", pattern: "HAMMER" } }] } },
@@ -46,7 +47,17 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ s
     stopLoss: { enabled: true, unit: "PERCENT", value: 3 },
     target: { enabled: true, unit: "PERCENT", value: 6 },
     trailingSl: off,
-    maxPyramidEntries: 1,
+    ...(sc.plan
+      ? {
+          target: off,
+          entryPlan: { firstPercent: 40, levels: [{ trigger: "PULLBACK" as const, unit: "PERCENT" as const, value: 2, allocationPercent: 30 }, { trigger: "BREAKOUT" as const, unit: "PERCENT" as const, value: 3, allocationPercent: 30 }] },
+          targets: [
+            { unit: "PERCENT" as const, value: 3, exitPercent: 50, lock: { mode: "FIXED" as const } },
+            { unit: "PERCENT" as const, value: 6, exitPercent: 50, lock: { mode: "MARGIN" as const, unit: "PERCENT" as const, value: 1 } },
+          ],
+        }
+      : {}),
+    maxPyramidEntries: sc.plan ? 4 : 1,
     timeframe: sc.timeframe,
   });
   return (

@@ -28,7 +28,7 @@ const C = {
 };
 const LINE_COLORS = ["#2563eb", "#0d9488", "#db2777", "#7c3aed", "#ea580c", "#0891b2"];
 const MARKER_COLOR = { CANDLE_PATTERN: "#7c3aed", CHART_PATTERN: "#0891b2", VOLUME_PATTERN: "#ea580c", SMC: "#be185d" } as const;
-const KIND_COLOR: Record<ScenarioKind, string> = { target: C.tp, stop_loss: C.sl, trailing_stop: C.trail, exit_rule: C.entry, square_off: "#64748b", end_of_data: "#64748b" };
+const KIND_COLOR: Record<ScenarioKind, string> = { target: C.tp, stop_loss: C.sl, trailing_stop: C.trail, exit_rule: C.entry, square_off: "#64748b", end_of_data: "#64748b", plan: C.entry };
 
 const W = 760;
 const ML = 8;
@@ -56,6 +56,7 @@ const EXIT_TEXT: Record<ScenarioKind, string> = {
   exit_rule: "Exit rule met",
   square_off: "Squared off (intraday)",
   end_of_data: "End of data",
+  plan: "Plan played out",
 };
 
 type Timeline = { pre: number; signal: number; entry: number; trade: number; exit: number; post: number; total: number };
@@ -344,7 +345,18 @@ function ReplayPlayer({ preview, s }: { preview: StrategyPreview; s: Scenario })
       <div className="space-y-1.5 border-t border-black/5 px-3 py-2.5 text-[11.5px] text-brand-navy/60">
         <Legend preview={preview} s={s} />
         <p>
-          {s.illustration ? (
+          {s.plan ? (
+            <>
+              <strong className="text-brand-navy">Demo:</strong> the chart up to the first entry is real — your entry condition matched on {when(s.candles[s.signalIdx].time, preview.intraday)}. After that the price path is made up, so you can watch each of your entry levels fill and each target be taken in turn.
+              <span className="mt-1.5 block space-y-0.5 text-brand-navy/70">
+                {s.plan.summary.map((line) => (
+                  <span key={line} className="block">
+                    • {line}
+                  </span>
+                ))}
+              </span>
+            </>
+          ) : s.illustration ? (
             <>
               <strong className="text-brand-navy">Demo:</strong> the chart up to the entry is real — your entry condition matched on {when(s.candles[s.signalIdx].time, preview.intraday)}. After that the price path is made up, as a clean reference for how your{" "}
               {SCENARIO_TITLE[s.shows].toLowerCase().replace(" hit", "")} works with your settings
@@ -528,7 +540,8 @@ function ReplayChart({ preview, s, f }: { preview: StrategyPreview; s: Scenario;
   const near = (v: number | null): v is number => v !== null && Number.isFinite(v) && v > lo0 - span * 0.6 && v < hi0 + span * 0.6;
   const inTrade = f.entryProgress > 0;
   const trailNow = s.trailing ? s.trailing[Math.min(s.trailing.length - 1, Math.max(0, Math.min(visible, s.exitIdx) - 1 - s.entryIdx))] : null;
-  for (const v of inTrade ? [s.entryPrice, s.stopLoss, s.target, trailNow, f.exited ? s.exitPrice : null] : []) if (near(v)) [lo, hi] = [Math.min(lo, v), Math.max(hi, v)];
+  const planPrices = s.plan ? [...s.plan.lines.filter((l) => l.fromIdx < visible).map((l) => l.price), ...s.plan.fills.filter((m) => m.idx < visible).map((m) => m.price)] : [];
+  for (const v of inTrade ? [s.entryPrice, s.stopLoss, s.target, trailNow, f.exited ? s.exitPrice : null, ...planPrices] : []) if (near(v)) [lo, hi] = [Math.min(lo, v), Math.max(hi, v)];
   for (const o of st.overlays) for (let i = first; i <= last; i++) {
     const v = at(o.values, i);
     if (near(v)) [lo, hi] = [Math.min(lo, v), Math.max(hi, v)];
@@ -1208,6 +1221,50 @@ function ReplayChart({ preview, s, f }: { preview: StrategyPreview; s: Scenario;
             <text x={entryX} y={py(s.entryPrice) + (preview.direction === "SHORT" ? -11 : 19)} textAnchor="middle" fontSize={10} fontWeight={800} fill={C.entry} stroke="white" strokeWidth={3} paintOrder="stroke" opacity={easeOut(entryP)}>
               {preview.direction === "SHORT" ? "SELL" : "BUY"}
             </text>
+          </g>
+        )}
+
+        {/* entries & targets: level lines, then each fill as the price reaches it */}
+        {inTrade && s.plan && (
+          <g>
+            {s.plan.lines
+              .filter((l) => l.fromIdx < visible)
+              .map((l, k) => {
+                const toIdx = l.toIdx === null ? Math.min(visible, n - 1) : Math.min(l.toIdx, visible);
+                const color = l.tone === "tp" ? C.tp : l.tone === "sl" ? C.sl : l.tone === "avg" ? "#0284c7" : C.entry;
+                const x1 = x(l.fromIdx);
+                const x2 = x(toIdx) + slot / 2;
+                const y = py(l.price);
+                if (!(y > pricePane.top - 4 && y < pricePane.top + pricePane.h + 4)) return null;
+                return (
+                  <g key={`${l.label}-${k}`}>
+                    <line x1={x1} x2={Math.max(x1, x2)} y1={y} y2={y} stroke={color} strokeWidth={l.tone === "avg" ? 1.8 : 1.3} strokeDasharray={l.tone === "avg" ? undefined : "5 4"} opacity={0.85} />
+                    {l.tone !== "entry" && (
+                      <text x={x1 + 3} y={y - 3} textAnchor="start" fontSize={9.5} fontWeight={700} fill={color} stroke="white" strokeWidth={3} paintOrder="stroke">
+                        {l.label} {l.tone === "avg" ? "" : inr(l.price)}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+            {s.plan.fills
+              .filter((m) => m.idx < visible)
+              .map((m, k) => {
+                const age = f.ms - f.barShownAt(m.idx);
+                const pop = clamp01(age / 500);
+                const color = m.kind === "entry" ? C.entry : C.tp;
+                const cx = x(m.idx);
+                const cy = py(m.price);
+                return (
+                  <g key={`${m.label}-${k}`}>
+                    {pop < 1 && <circle cx={cx} cy={cy} r={6 + 18 * pop} fill="none" stroke={color} strokeWidth={2} opacity={0.8 * (1 - pop)} />}
+                    <circle cx={cx} cy={cy} r={5 * easeOutBack(pop)} fill={color} stroke="white" strokeWidth={1.6} />
+                    <text x={cx} y={cy + ((m.kind === "entry") === (preview.direction !== "SHORT") ? 16 : -9) + (k % 2 ? 11 : 0) * (m.kind === "entry" ? 1 : -1)} textAnchor="middle" fontSize={9.5} fontWeight={800} fill={color} stroke="white" strokeWidth={3} paintOrder="stroke" opacity={easeOut(pop)}>
+                      {m.label}
+                    </text>
+                  </g>
+                );
+              })}
           </g>
         )}
 

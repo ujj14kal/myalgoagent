@@ -1,4 +1,4 @@
-import { capitalLegs } from "@/lib/trading-engine/step";
+import { capitalLegs, type EntryPlan, type TargetLevel } from "@/lib/trading-engine/step";
 import { engineRisk, parseRiskOptions } from "@/lib/trading-engine/risk-options";
 import { withLevelConditions } from "@/lib/strategy/plan-conditions";
 import { prisma } from "@/lib/prisma";
@@ -51,6 +51,8 @@ export type StrategyPreview = {
   entryJoin: "AND" | "OR" | "SINGLE";
   studies: ReplayStudies;
   risk: ReplayRisk;
+  /** Multi-level entries and staged targets, for the replay's "Entries & targets" demo. */
+  plan: { entryPlan: EntryPlan | null; targets: TargetLevel[] };
 };
 
 const PERIOD_LABEL: Partial<Record<string, string>> = { "1d": "1 day", "5d": "5 days", "1mo": "1 month", "3mo": "3 months", "6mo": "6 months", "1y": "1 year" };
@@ -203,6 +205,7 @@ export async function computeStrategyPreview(userId: string | null, input: Strat
           target: rm.target ? { unit: rm.target.unit, value: rm.target.value } : null,
           trailing: rm.trailingSl ? { unit: rm.trailingSl.unit, value: rm.trailingSl.value } : null,
         },
+        plan: { entryPlan: input.entryPlan ?? null, targets: input.targets ?? [] },
       },
     };
   } catch (err) {

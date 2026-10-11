@@ -33,6 +33,7 @@ function preview(over: Partial<StrategyPreview>): StrategyPreview {
     dataSource: "test", timeframeLabel: "1D", periodLabel: "6 months", intraday: false, entryOrderLabel: "market orders", direction: "LONG", entryJoin: "SINGLE",
     studies: { overlays: [], priceLevels: [], oscillators: [], volume: { show: false, lines: [] }, markers: [], timeWindows: [], notes: [] },
     risk: { stopLoss: { unit: "PERCENT", value: 3 }, target: { unit: "PERCENT", value: 6 }, trailing: null },
+    plan: { entryPlan: null, targets: [] },
     ...over,
   };
 }
@@ -90,5 +91,48 @@ describe("buildScenarios", () => {
 
   it("shows nothing when the rule never triggered", () => {
     expect(buildScenarios(preview({}))).toEqual([]);
+  });
+});
+
+describe("the entries & targets demo", () => {
+  const withPlan = (over: Partial<StrategyPreview>) =>
+    preview({
+      trades: [trade("exit_rule")],
+      risk: { stopLoss: { unit: "PERCENT", value: 6 }, target: null, trailing: null },
+      plan: {
+        entryPlan: { firstPercent: 40, levels: [{ trigger: "PULLBACK", unit: "PERCENT", value: 2, allocationPercent: 30 }, { trigger: "BREAKOUT", unit: "PERCENT", value: 4, allocationPercent: 30 }] },
+        targets: [
+          { unit: "PERCENT", value: 3, exitPercent: 50, lock: { mode: "FIXED" } },
+          { unit: "PERCENT", value: 6, exitPercent: 50, lock: { mode: "FIXED" } },
+        ],
+      },
+      ...over,
+    });
+
+  it("is built first when the strategy has entry levels or staged targets, and not otherwise", () => {
+    expect(buildScenarios(withPlan({}))[0].kind).toBe("plan");
+    expect(buildScenarios(preview({ trades: [trade("exit_rule")] })).some((s) => s.kind === "plan")).toBe(false);
+  });
+  it("fills every level at its price and takes each target at its price, measured from the average", () => {
+    const s = buildScenarios(withPlan({}))[0];
+    const fills = s.plan!.fills;
+    expect(fills.map((f) => f.label)).toEqual(["Entry 1 · 40%", "Entry 2 · 30%", "Entry 3 · 30%", "TP1 · sells 50%", "TP2 · sells 50%"]);
+    expect(fills[1].price).toBeCloseTo(98, 1); // 2% pullback from 100
+    expect(fills[2].price).toBeCloseTo(104, 1); // 4% breakout from 100
+    const avg = (100 * 40 + 98 * 30 + 104 * 30) / 100;
+    expect(fills[3].price).toBeCloseTo(avg * 1.03, 1);
+    expect(fills[4].price).toBeCloseTo(avg * 1.06, 1);
+    // The candles really reach each price, in order.
+    for (const f of fills) {
+      const c = s.candles[f.idx];
+      expect(c.low <= f.price + 0.01 && c.high >= f.price - 0.01).toBe(true);
+    }
+    expect(fills.map((f) => f.idx)).toEqual([...fills.map((f) => f.idx)].sort((a, b) => a - b));
+    expect(s.pnlPct).toBeGreaterThan(0);
+  });
+  it("says so when a pullback sits beyond the stop, and never fills it", () => {
+    const s = buildScenarios(withPlan({ risk: { stopLoss: { unit: "PERCENT", value: 1 }, target: null, trailing: null } }))[0];
+    expect(s.plan!.summary.join(" ")).toMatch(/would never fill/);
+    expect(s.plan!.fills.some((f) => f.label.startsWith("Entry 2"))).toBe(false);
   });
 });
