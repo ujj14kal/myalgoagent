@@ -21,6 +21,8 @@ import {
 import { fetchAuxCandles } from "@/lib/strategy-aux-data";
 import CandlestickChart, { type Overlay } from "@/components/candlestick-chart";
 import StrategyBuilderForm from "@/components/strategy-builder-form";
+import { loadSavedBlocks } from "@/lib/system/saved-blocks-server";
+import { SavedBlocksProvider } from "@/components/system/saved-blocks";
 import StrategyStatusControls from "@/components/strategy-status-controls";
 import WebhookPanel from "@/components/webhook-panel";
 import { Layers } from "lucide-react";
@@ -46,11 +48,13 @@ export const metadata = { title: "Strategy", robots: { index: false } };
 
 const OVERLAY_COLORS = ["#bda360", "#466fff", "#6a35c2", "#0e1b2d"];
 
-export default async function StrategyDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function StrategyDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ deploy?: string }> }) {
+  const { deploy } = await searchParams;
   const { id } = await params;
   const session = await auth();
   const market = await userMarketDataReady(session?.user?.id, "view");
   if (!session?.user?.id) return null;
+  const savedBlocks = await loadSavedBlocks(session.user.id).catch(() => []);
 
   const [strategy, instruments] = await Promise.all([
     prisma.strategy.findFirst({
@@ -163,6 +167,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
             {!isWebhook && (
               <GoLive
                 strategyId={strategy.id}
+                autoOpen={deploy === "1"}
                 strategyName={strategy.name}
                 symbol={strategy.instrument.symbol}
                 brokers={goLiveBrokers}
@@ -290,6 +295,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
       <div className="mt-10">
         <h2 className="text-lg font-semibold text-brand-navy">Edit strategy</h2>
         <div className="mt-4">
+          <SavedBlocksProvider value={savedBlocks}>
           <StrategyBuilderForm
             instruments={instruments}
             strategyId={strategy.id}
@@ -327,6 +333,7 @@ export default async function StrategyDetailPage({ params }: { params: Promise<{
               entryPlan: parseEntryPlan(strategy.entryPlan) ?? null,
             }}
           />
+          </SavedBlocksProvider>
         </div>
       </div>
       )}

@@ -21,6 +21,7 @@ export default function GoLive({
   liveOn,
   blocker,
   intraday = false,
+  autoOpen = false,
 }: {
   strategyId: string;
   strategyName: string;
@@ -30,8 +31,10 @@ export default function GoLive({
   liveOn: string[];
   blocker: string | null;
   intraday?: boolean;
+  /** Opens the deploy dialog straight away (the strategy list's Deploy button). */
+  autoOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(autoOpen && !liveOn.length);
   const usable = brokers.filter((b) => b.ready && !liveOn.includes(b.id));
   const [broker, setBroker] = useState(usable[0]?.id ?? "");
   const [capital, setCapital] = useState(100000);

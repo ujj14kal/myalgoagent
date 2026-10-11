@@ -165,10 +165,17 @@ export async function getLivePaperSessionCount(strategyId: string) {
   });
 }
 
-/** "Delete" is a soft delete — it moves the strategy to DELETED (its own
- * section, same as Draft/Active/Archived) rather than removing it, with a
- * Restore / Delete forever choice from there. Only
- * permanentlyDeleteStrategyAction ever actually removes the row. */
+/** Live (real-money) deployments of this strategy that are still running — a strategy can't be deleted while any are. */
+export async function getLiveDeploymentCount(strategyId: string) {
+  const session = await auth();
+  if (!session?.user?.id) return 0;
+  return prisma.liveDeployment.count({ where: { strategyId, userId: session.user.id, status: { in: ["ACTIVE", "PAUSED"] } } });
+}
+
+/** "Delete" removes the strategy for good. (Archive is the way to put one aside and bring it back.) Strategies
+ * that an earlier version only moved to DELETED can still be restored or removed from the Deleted tab. A
+ * strategy that is trading live must be stopped first. Past backtests and forward-test history are kept —
+ * their link back to the strategy is simply dropped (onDelete: SetNull). */
 export async function deleteStrategy(id: string) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
@@ -180,19 +187,18 @@ export async function deleteStrategy(id: string) {
   // Trade history (orders, P&L) is untouched — STOPPED only takes it out
   // of live syncing, matching the pause/stop it already means for an
   // ordinary session.
+  const live = await prisma.liveDeployment.count({ where: { strategyId: id, userId: session.user.id, status: { in: ["ACTIVE", "PAUSED"] } } });
+  if (live > 0) throw new Error("This strategy is trading live. Stop it on the Live Trading page first, then delete it.");
+
   await prisma.$transaction([
     prisma.paperSession.updateMany({
       where: { strategyId: id, userId: session.user.id, status: { in: ["ACTIVE", "PAUSED"] } },
       data: { status: "STOPPED" },
     }),
-    prisma.strategy.updateMany({
-      where: { id, userId: session.user.id },
-      data: { status: "DELETED" },
-    }),
+    prisma.strategy.deleteMany({ where: { id, userId: session.user.id } }),
   ]);
 
   revalidatePath("/app/strategies");
-  revalidatePath(`/app/strategies/${id}`);
   revalidatePath("/app/dashboard");
   revalidatePath("/app/forward-testing");
   redirect("/app/strategies");

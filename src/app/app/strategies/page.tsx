@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Layers, Plus } from "lucide-react";
+import { Layers, Plus, Rocket } from "lucide-react";
 import type { Prisma } from "@prisma/client";
 import PageHeader from "@/components/ui/page-header";
 import { auth } from "@/lib/auth";
@@ -116,7 +116,8 @@ export default async function StrategiesPage({ searchParams }: { searchParams: P
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {strategies.map((s) => (
-                <Link key={s.id} href={`/app/strategies/${s.id}`} className="surface surface-interactive block p-4">
+                <div key={s.id} className="surface surface-interactive relative p-4">
+                  <Link href={`/app/strategies/${s.id}`} className="block after:absolute after:inset-0 after:content-['']" aria-label={s.name}>
                   <div className="flex items-start gap-2">
                     <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[s.status]}`} />
                     <p className="min-w-0 break-words text-sm font-semibold leading-tight text-brand-navy">{s.name}</p>
@@ -129,7 +130,18 @@ export default async function StrategiesPage({ searchParams }: { searchParams: P
                     <span>{MODE_LABEL[s.mode] ?? s.mode}</span>
                     <span>{s.updatedAt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "2-digit", timeZone: "Asia/Kolkata" })}</span>
                   </p>
-                </Link>
+                  </Link>
+                  {s.status !== "DELETED" && s.status !== "ARCHIVED" && s.mode !== "WEBHOOK" && (
+                    <div className="relative z-10 mt-3 flex items-center justify-between gap-2 border-t border-black/[0.05] pt-3">
+                      <Link href={`/app/strategies/${s.id}/`} className="text-xs font-semibold text-brand-navy/60 hover:text-brand-primary">
+                        Open
+                      </Link>
+                      <Link href={`/app/strategies/${s.id}?deploy=1`} className="inline-flex items-center gap-1 rounded-full bg-brand-navy px-3 py-1 text-xs font-semibold text-white hover:bg-brand-primary" title="Take this strategy live on your broker">
+                        <Rocket size={12} /> Deploy
+                      </Link>
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           )}

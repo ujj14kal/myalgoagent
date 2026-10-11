@@ -1,7 +1,7 @@
 "use server";
 
 import { forModel, redactSecrets } from "@/lib/ai/redact";
-import { DESCRIBE_INSTRUCTION, isDescribe } from "@/lib/ai/describe-indicator";
+import { describeInstructionFor } from "@/lib/ai/describe-indicator";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -185,7 +185,7 @@ export async function sendAgentMessage(input: {
       tools: AGENT_TOOLS,
       runTool: (name: string, args: string) => runAgentTool(userId, name, args),
       // The Describe-it box asks for an indicator plus a strategy; its standing instruction travels in the system prompt (not the user text).
-      system: buildSystemPrompt(agentName, userContext, { voice: input?.voice === true }) + (isDescribe(raw) ? DESCRIBE_INSTRUCTION : ""),
+      system: buildSystemPrompt(agentName, userContext, { voice: input?.voice === true }) + describeInstructionFor(raw),
       fast: input?.voice === true,
       turns: [
         ...history.reverse().map((m) => {

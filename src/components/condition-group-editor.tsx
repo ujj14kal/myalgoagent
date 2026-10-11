@@ -1,6 +1,8 @@
 "use client";
 import InstrumentCombobox from "@/components/instrument-combobox";
 import { useCustomIndicators } from "@/components/custom-indicators/context";
+import { useSavedBlocks } from "@/components/system/saved-blocks";
+import { onTimeframe } from "@/lib/system/compile";
 import { customParts, defaultPart, describeCustom, PART_LABEL, type CustomPart } from "@/lib/custom-indicator";
 
 import { createContext, useContext, useState } from "react";
@@ -750,6 +752,7 @@ export default function ConditionGroupEditor({
   depth?: number;
   instruments?: InstrumentOption[];
 }) {
+  const savedBlocks = useSavedBlocks();
   if (node.kind === "comparison") {
     return (
       <ComparisonEditor node={node} onChange={onChange} onRemove={() => onChange(defaultComparison())} instruments={instruments} />
@@ -826,6 +829,14 @@ export default function ConditionGroupEditor({
 
   function addSmc() {
     onChange({ ...group, children: [...group.children, defaultSmc()] });
+  }
+
+  /** A saved block's rule goes in as a group of ordinary rules (read on the block's own chart when it names one) — fully visible and editable. */
+  function addBlock(id: string) {
+    const b = savedBlocks.find((x) => x.id === id);
+    if (!b) return;
+    const rule = onTimeframe(b.condition, b.timeframe);
+    onChange({ ...group, children: [...group.children, rule.kind === "group" ? rule : { kind: "group", op: "AND", children: [rule] }] });
   }
 
   function addGroup() {
@@ -908,6 +919,22 @@ export default function ConditionGroupEditor({
           <button type="button" onClick={addGroup} className={pillButtonClass}>
             + Group
           </button>
+        )}
+        {savedBlocks.length > 0 && (
+          <select
+            value=""
+            aria-label="Add a saved block"
+            onChange={(e) => e.target.value && addBlock(e.target.value)}
+            className={`${pillButtonClass} cursor-pointer bg-white`}
+            title="Add one of your saved workspace blocks as a ready-made rule"
+          >
+            <option value="">+ Saved block…</option>
+            {savedBlocks.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
         )}
       </div>
     </div>

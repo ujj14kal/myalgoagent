@@ -8,7 +8,7 @@ import ConditionGroupEditor, { ConditionOverridesContext } from "@/components/co
 import { conditionToText } from "@/lib/strategy/format";
 import type { ConditionNode } from "@/lib/strategy/types";
 import { deleteBlock, duplicateBlock, saveBlock } from "@/lib/system-actions";
-import { BLANK_BLOCK_CONDITION, BLOCK_TEMPLATES } from "@/lib/system/templates";
+import { BLANK_BLOCK_CONDITION } from "@/lib/system/templates";
 import { TIMEFRAMES } from "@/lib/system/definition";
 import type { SystemIssue } from "@/lib/system/types";
 import { friendlyError } from "@/lib/friendly-error";
@@ -57,13 +57,6 @@ export default function BlockEditor({
     setIssues([]);
   };
 
-  function applyTemplate(key: string) {
-    const t = BLOCK_TEMPLATES.find((x) => x.key === key);
-    if (!t) return;
-    edit(asGroup(t.condition));
-    if (!name.trim()) setName(t.name);
-  }
-
   function save() {
     start(async () => {
       const r = await saveBlock({ id, name, description, definition: { schema: 1, condition, ...(timeframe ? { timeframe } : {}) } });
@@ -111,21 +104,6 @@ export default function BlockEditor({
           A block answers one question: <span className="font-semibold text-brand-navy">“is this market component present on this candle?”</span> It has no instrument, side, size, stop or target. Concepts combine blocks into setups; trading systems decide what to trade.
         </p>
       </section>
-
-      {!id && (
-        <section className="surface p-4 sm:p-5">
-          <p className="text-sm font-semibold text-brand-navy">Start from a component</p>
-          <p className="text-xs text-brand-navy/50">Pick one, then tune it below (swing size, levels, times). Or start blank.</p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {BLOCK_TEMPLATES.map((t) => (
-              <button key={t.key} type="button" onClick={() => applyTemplate(t.key)} className="rounded-xl border border-brand-navy/10 p-3 text-left hover:border-brand-primary">
-                <span className="block text-sm font-semibold text-brand-navy">{t.name}</span>
-                <span className="block text-xs text-brand-navy/50">{t.about}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
 
       <section className="surface p-4 sm:p-5">
         <p className="mb-3 text-sm font-semibold text-brand-navy">The component&rsquo;s rule</p>

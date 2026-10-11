@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import {
   archiveStrategyAction,
   restoreStrategyAction,
   deleteStrategy,
+  getLiveDeploymentCount,
   permanentlyDeleteStrategyAction,
   getLivePaperSessionCount,
 } from "@/lib/strategy-actions";
@@ -47,9 +49,15 @@ export default function StrategyStatusControls({
   const [confirmState, setConfirmState] = useState<"loading" | number | null>(null);
   const [confirmForever, setConfirmForever] = useState(false);
 
+  const [liveBlock, setLiveBlock] = useState(false);
+
   async function handleDeleteClick() {
     setConfirmState("loading");
-    const count = await getLivePaperSessionCount(strategyId);
+    const [count, live] = await Promise.all([getLivePaperSessionCount(strategyId), getLiveDeploymentCount(strategyId)]);
+    if (live > 0) {
+      setConfirmState(null);
+      return setLiveBlock(true);
+    }
     setConfirmState(count);
   }
 
@@ -120,6 +128,23 @@ export default function StrategyStatusControls({
         </>
       )}
 
+      {liveBlock && (
+        <div className="fixed inset-0 z-50 flex items-end justify-end bg-black/20 p-6 sm:items-center sm:justify-center">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <p className="text-sm font-semibold text-brand-navy">This strategy is trading live</p>
+            <p className="mt-2 text-xs text-brand-navy/60">Stop it on the Live Trading page first, close any open position, then delete it. Nothing was deleted.</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setLiveBlock(false)} className="rounded-full border border-brand-navy/15 px-4 py-1.5 text-xs font-semibold text-brand-navy">
+                Close
+              </button>
+              <Link href="/app/live-trading" className="rounded-full bg-brand-primary px-4 py-1.5 text-xs font-semibold text-white">
+                Live Trading
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
       {confirmState !== null && (
         <div className="fixed inset-0 z-50 flex items-end justify-end bg-black/20 p-6 sm:items-center sm:justify-center">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
@@ -131,10 +156,9 @@ export default function StrategyStatusControls({
                   {confirmState} live forward testing session{confirmState === 1 ? "" : "s"} on this strategy
                 </p>
                 <p className="mt-2 text-xs text-brand-navy/60">
-                  Deleting this strategy will move {confirmState === 1 ? "that session" : "those sessions"} to
-                  history — {confirmState === 1 ? "it" : "they"} will stop syncing live and no longer appear as
-                  active, but all its trade history and P&L stay exactly as they are. The strategy itself moves to
-                  Deleted, where you can restore it or delete it forever later.
+                  Deleting this strategy removes it for good. {confirmState === 1 ? "That session" : "Those sessions"} will stop syncing
+                  and move to history — all {confirmState === 1 ? "its" : "their"} trade history and P&L stay exactly as they are, and
+                  your backtests are kept. This can&apos;t be undone.
                 </p>
                 <div className="mt-4 flex justify-end gap-2">
                   <button
@@ -149,15 +173,15 @@ export default function StrategyStatusControls({
                     onClick={confirmDelete}
                     className="rounded-full bg-brand-sell px-4 py-1.5 text-xs font-semibold text-white"
                   >
-                    Delete &amp; move to history
+                    Delete forever
                   </button>
                 </div>
               </>
             ) : (
               <>
-                <p className="text-sm font-semibold text-brand-navy">Delete this strategy?</p>
+                <p className="text-sm font-semibold text-brand-navy">Delete this strategy forever?</p>
                 <p className="mt-2 text-xs text-brand-navy/60">
-                  It moves to Deleted — you can restore it or delete it forever from there later.
+                  It is removed for good and can&apos;t be restored. Your past backtests and forward test history are kept. To keep it but out of the way, archive it instead.
                 </p>
                 <div className="mt-4 flex justify-end gap-2">
                   <button
@@ -172,7 +196,7 @@ export default function StrategyStatusControls({
                     onClick={confirmDelete}
                     className="rounded-full bg-brand-sell px-4 py-1.5 text-xs font-semibold text-white"
                   >
-                    Delete
+                    Delete forever
                   </button>
                 </div>
               </>
