@@ -128,6 +128,13 @@ export async function alreadyPaidFor(userId: string, messageId: string): Promise
   return !!row;
 }
 
+/** One page of the history (newest first) and how many lines there are in all. */
+export async function eventsPage(userId: string, skip: number, take: number): Promise<{ rows: CreditEventRow[]; total: number }> {
+  const where = { userId, kind: { notIn: ["VOID", "REFUND"] } };
+  const [rows, total] = await Promise.all([prisma.creditEvent.findMany({ where, orderBy: { createdAt: "desc" }, skip, take }), prisma.creditEvent.count({ where })]);
+  return { rows: rows.map((r) => ({ id: r.id, kind: r.kind, action: r.action, credits: r.credits, monthlyAfter: r.monthlyAfter, topupAfter: r.topupAfter, createdAt: r.createdAt.toISOString() })), total };
+}
+
 export async function recentEvents(userId: string, take = 60): Promise<CreditEventRow[]> {
   const rows = await prisma.creditEvent.findMany({ where: { userId, kind: { notIn: ["VOID", "REFUND"] } }, orderBy: { createdAt: "desc" }, take });
   return rows.map((r) => ({ id: r.id, kind: r.kind, action: r.action, credits: r.credits, monthlyAfter: r.monthlyAfter, topupAfter: r.topupAfter, createdAt: r.createdAt.toISOString() }));

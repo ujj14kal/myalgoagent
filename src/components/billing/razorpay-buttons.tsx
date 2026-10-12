@@ -77,7 +77,7 @@ function useCheckout() {
   return { busy, setBusy, error, setError, overlay, setOverlay, close };
 }
 
-export function UpgradeButton({ plan, label, primary = true }: { plan: "TRADE" | "PRO"; label: string; primary?: boolean }) {
+export function UpgradeButton({ plan, label, primary = true, wide = false }: { plan: "TRADE" | "PRO"; label: string; primary?: boolean; wide?: boolean }) {
   const c = useCheckout();
   async function go() {
     c.setBusy(true);
@@ -109,7 +109,7 @@ export function UpgradeButton({ plan, label, primary = true }: { plan: "TRADE" |
   }
   return (
     <div>
-      <button type="button" onClick={go} disabled={c.busy} className={`${baseBtn} ${primary ? "bg-brand-primary text-white hover:bg-brand-primary-light" : "bg-white text-brand-primary ring-1 ring-brand-primary/30 hover:bg-brand-primary/5"}`}>
+      <button type="button" onClick={go} disabled={c.busy} className={`${baseBtn} ${wide ? "w-full py-3 text-base" : ""} ${primary ? "bg-brand-primary text-white hover:bg-brand-primary-light" : "bg-white text-brand-primary ring-1 ring-brand-primary/30 hover:bg-brand-primary/5"}`}>
         {c.busy && <Loader2 size={14} className="animate-spin" />} {label}
       </button>
       {c.error && <p role="alert" className="mt-2 text-xs text-[#9b1111]">{c.error}</p>}
@@ -118,7 +118,7 @@ export function UpgradeButton({ plan, label, primary = true }: { plan: "TRADE" |
   );
 }
 
-export function TopupButton({ credits: pack, price }: { credits: number; price: number }) {
+export function TopupButton({ credits: pack, price, variant = "row", label }: { credits: number; price: number; variant?: "row" | "pay"; label?: string }) {
   const c = useCheckout();
   async function go() {
     c.setBusy(true);
@@ -152,10 +152,16 @@ export function TopupButton({ credits: pack, price }: { credits: number; price: 
   }
   return (
     <div>
-      <button type="button" onClick={go} disabled={c.busy} className="flex w-full items-center justify-between gap-2 rounded-lg bg-brand-bg px-3 py-2 text-left text-sm transition hover:bg-brand-primary/[0.07] disabled:opacity-50">
+      {variant === "pay" ? (
+        <button type="button" onClick={go} disabled={c.busy} className={`${baseBtn} w-full bg-brand-primary py-3 text-base text-white hover:bg-brand-primary-light`}>
+          {c.busy && <Loader2 size={14} className="animate-spin" />} {label ?? `Pay ₹${fmt(price)}`}
+        </button>
+      ) : (
+        <button type="button" onClick={go} disabled={c.busy} className="flex w-full items-center justify-between gap-2 rounded-lg bg-brand-bg px-3 py-2 text-left text-sm transition hover:bg-brand-primary/[0.07] disabled:opacity-50">
         <span><span className="num font-semibold tabular-nums">{fmt(pack)}</span> credits</span>
         <span className="num font-semibold tabular-nums text-brand-primary">{c.busy ? <Loader2 size={14} className="animate-spin" /> : `₹${fmt(price)}`}</span>
       </button>
+      )}
       {c.error && <p role="alert" className="mt-1 text-xs text-[#9b1111]">{c.error}</p>}
       <PaymentOverlay state={c.overlay} onClose={c.close} />
     </div>

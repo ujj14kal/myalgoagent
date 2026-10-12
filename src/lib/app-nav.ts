@@ -1,6 +1,9 @@
 import {
   Activity,
   Bell,
+  Coins,
+  CreditCard,
+  Receipt,
   Bot,
   BriefcaseBusiness,
   CandlestickChart,
@@ -60,6 +63,14 @@ export const navGroups: NavGroup[] = [
     ],
   },
   {
+    label: "Plan & billing",
+    items: [
+      { href: "/app/account/usage", label: "Credits & usage", icon: Coins },
+      { href: "/app/checkout", label: "Plans & top-ups", icon: CreditCard },
+      { href: "/app/account/payments", label: "Payments & invoices", icon: Receipt },
+    ],
+  },
+  {
     label: "Account",
     items: [
       { href: "/app/broker-connections", label: "Broker Connections", icon: Link2 },
@@ -71,8 +82,13 @@ export const navGroups: NavGroup[] = [
   },
 ];
 
+const allHrefs = navGroups.flatMap((g) => g.items.map((i) => i.href));
+
+/** Whether this link is the page you are on. When two links match (Account → Account / Settings and its sub-pages), only the longest one counts. */
 export function isActive(pathname: string | null, href: string) {
-  return pathname === href || !!pathname?.startsWith(href + "/");
+  const matches = (h: string) => pathname === h || !!pathname?.startsWith(h + "/");
+  if (!matches(href)) return false;
+  return !allHrefs.some((other) => other.length > href.length && matches(other));
 }
 
 export function currentNavItem(pathname: string | null): NavItem | undefined {
