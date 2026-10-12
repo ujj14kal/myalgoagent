@@ -27,6 +27,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     { key: "inbox", href: "/admin/inbox", label: "Inbox", badge: openCases + openFeedback },
     { key: "users", href: "/admin/users", label: "Users" },
     ...(can(staff.role, "announcements") ? [{ key: "announcements" as const, href: "/admin/announcements", label: "Announcements" }] : []),
+    ...(can(staff.role, "outreach") ? [{ key: "outreach" as const, href: "/admin/outreach", label: "Outreach" }] : []),
     { key: "trading", href: "/admin/trading", label: "Trading ops", alert: failedJobs > 0 },
     ...(can(staff.role, "ai") ? [{ key: "ai" as const, href: "/admin/ai", label: "AI agent" }] : []),
     ...(can(staff.role, "system") ? [{ key: "system" as const, href: "/admin/system", label: "System & AWS" }] : []),

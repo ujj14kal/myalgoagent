@@ -27,6 +27,8 @@ export type OutgoingEmail = {
   from?: string;
   /** Extra mail headers, e.g. Auto-Submitted on automatic replies so other systems don't answer them. */
   headers?: Record<string, string>;
+  /** Force these routes (e.g. outreach goes only through Google Workspace, never SES, which is for transactional mail). */
+  routes?: ("ses" | "google")[];
 };
 
 async function sendViaSes(m: OutgoingEmail): Promise<void> {
@@ -103,7 +105,7 @@ export async function deliver(m: OutgoingEmail, routes: Route[], senders: Record
 }
 
 export async function sendEmail(m: OutgoingEmail): Promise<void> {
-  const routes = routesFor(process.env.EMAIL_TRANSPORT, googleConfigured());
+  const routes = m.routes ?? routesFor(process.env.EMAIL_TRANSPORT, googleConfigured());
   const used = await deliver(m, routes, { ses: sendViaSes, google: sendViaGoogle }, (route, err) => {
     logWarn("email.fallback", `${route} refused, trying the next route`, { reason: err instanceof Error ? err.message.slice(0, 160) : "unknown" });
   });
@@ -129,7 +131,7 @@ export function emailCode(code: string): string {
  * Table-based with inline styles because mail apps ignore most modern CSS. `preheader` is the grey preview line
  * shown next to the subject in the inbox.
  */
-function wrap(body: string, preheader = ""): string {
+function wrap(body: string, preheader = "", footer: "service" | { personal: string } = "service"): string {
   const pre = preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#f7f9fc">${e(preheader)}</div>` : "";
   return `<!doctype html><html><body style="margin:0;padding:0;background:#f7f9fc">${pre}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f9fc;padding:24px 12px"><tr><td align="center">
@@ -140,8 +142,9 @@ function wrap(body: string, preheader = ""): string {
 <tr><td style="background:#ffffff;padding:32px 28px;font-size:15px;line-height:1.6;border-left:1px solid #e6eaf0;border-right:1px solid #e6eaf0">${body}</td></tr>
 <tr><td style="background:#ffffff;border:1px solid #e6eaf0;border-top:0;border-radius:0 0 16px 16px;padding:0 28px 24px">
 <div style="border-top:1px solid #e6eaf0;padding-top:16px;font-size:12px;line-height:1.6;color:#6b7788">
-Questions? Write to <a href="mailto:support@myalgoagent.com" style="color:${PURPLE}">support@myalgoagent.com</a> or visit <a href="${SITE}" style="color:${PURPLE}">myalgoagent.com</a>.<br>
-MyAlgoAgent is a product of <a href="https://shagoonsoftech.com" style="color:#6b7788">Shagoon Softech Pvt. Ltd.</a> It is a tool for building and testing your own strategies; it gives no investment advice, and trading involves risk of loss.
+${footer === "service" ? `Questions? Write to <a href="mailto:support@myalgoagent.com" style="color:${PURPLE}">support@myalgoagent.com</a> or visit <a href="${SITE}" style="color:${PURPLE}">myalgoagent.com</a>.<br>
+MyAlgoAgent is a product of <a href="https://shagoonsoftech.com" style="color:#6b7788">Shagoon Softech Pvt. Ltd.</a> It is a tool for building and testing your own strategies; it gives no investment advice, and trading involves risk of loss.` : `${e(footer.personal)}<br>
+MyAlgoAgent is a product of <a href="https://shagoonsoftech.com" style="color:#6b7788">Shagoon Softech Pvt. Ltd.</a> · <a href="${SITE}" style="color:#6b7788">myalgoagent.com</a>`}
 </div></td></tr>
 </table></td></tr></table></body></html>`;
 }
@@ -289,5 +292,44 @@ export async function sendEventEmail(to: string, o: { subject: string; headline:
     text: `${o.headline}\n\n${o.body}\n\n${o.linkLabel}: ${o.link}\n\n${o.live ? LIVE_NOTE : "This is an automatic message about your account."} Choose which of these emails you get: ${SITE}/app/agent-settings`,
     replyTo: "support@myalgoagent.com",
     headers: { "List-Unsubscribe": `<${SITE}/app/agent-settings>, <mailto:support@myalgoagent.com?subject=Stop%20alert%20emails>`, "X-Auto-Response-Suppress": "OOF, AutoReply" },
+  });
+}
+
+// ---------- Personal outreach (partners, creators): written by a person, sent one at a time from a chosen address ----------
+
+/** Plain text → email paragraphs: blank line = new paragraph, line break kept, web links made clickable. All text is escaped first. */
+export function outreachParagraphs(text: string): string {
+  const link = (t: string) => t.replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)"'])/g, (u) => `<a href="${u}" style="color:${PURPLE}">${u}</a>`);
+  return text
+    .replace(/\r\n/g, "\n")
+    .trim()
+    .split(/\n{2,}/)
+    .map((para) => `<p style="margin:0 0 16px">${link(e(para)).replace(/\n/g, "<br>")}</p>`)
+    .join("");
+}
+
+export type OutreachEmail = { subject: string; body: string; senderName: string; senderRole?: string; fromAddress: string };
+
+/** The finished HTML for an outreach message: the brand header, the person's own text, their sign-off, and an honest footer. */
+export function outreachHtml(o: Pick<OutreachEmail, "body" | "senderName" | "senderRole" | "fromAddress">): string {
+  const sign = `<p style="margin:24px 0 0"><strong>${e(o.senderName)}</strong>${o.senderRole ? `<br><span style="color:#6b7788">${e(o.senderRole)}</span>` : ""}<br><span style="color:#6b7788">MyAlgoAgent</span></p>`;
+  return wrap(`${outreachParagraphs(o.body)}${sign}`, "", { personal: `This is a personal one-to-one message from ${o.senderName} at MyAlgoAgent. If you would rather not hear from us, just reply "no thanks" and we won't write again.` });
+}
+
+export function outreachText(o: Pick<OutreachEmail, "body" | "senderName" | "senderRole">): string {
+  return `${o.body.trim()}\n\n${o.senderName}${o.senderRole ? `\n${o.senderRole}` : ""}\nMyAlgoAgent — ${SITE}\n\nThis is a personal one-to-one message. If you would rather not hear from us, just reply "no thanks" and we won't write again.`;
+}
+
+/** Sends one outreach message through Google Workspace only (SES is kept for transactional mail). Replies go to the chosen address. */
+export async function sendOutreachEmail(to: string, o: OutreachEmail) {
+  if (!googleConfigured()) throw new Error("The Google Workspace sending route isn't set up on the server.");
+  await sendEmail({
+    to,
+    subject: oneLine(o.subject, 200),
+    html: outreachHtml(o),
+    text: outreachText(o),
+    from: `${/myalgoagent/i.test(o.senderName) ? o.senderName.replace(/[<>"]/g, "") : `${o.senderName.replace(/[<>"]/g, "")} (MyAlgoAgent)`} <${o.fromAddress}>`,
+    replyTo: o.fromAddress,
+    routes: ["google"],
   });
 }

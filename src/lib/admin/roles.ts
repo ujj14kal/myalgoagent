@@ -9,6 +9,7 @@ export type Capability =
   | "users.view"
   | "users.manage" // suspend, sign out, deletion, broker disconnect, data export
   | "announcements"
+  | "outreach" // personal emails to partners and creators
   | "trading"
   | "ai"
   | "system" // AWS health, cost, logs, schedules
@@ -20,6 +21,7 @@ const NEEDS: Record<Capability, AdminRole> = {
   "users.view": "SUPPORT",
   "users.manage": "ADMIN",
   announcements: "ADMIN",
+  outreach: "ADMIN",
   trading: "SUPPORT",
   ai: "ADMIN",
   system: "ADMIN",
