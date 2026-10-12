@@ -312,11 +312,23 @@ model Payment {
   method            String?
   description       String?
   creditsGranted    Int?
+  /// The billing period a plan payment covers.
+  periodStart       DateTime?
+  periodEnd         DateTime?
+  /// Numbered in sequence for each Indian financial year, e.g. MAA/2026-27/000128; emailed once (invoiceSentAt).
+  invoiceNumber     String?  @unique
+  invoiceSentAt     DateTime?
   createdAt         DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+}
+
+/// The last invoice number used in each financial year: one row per year, bumped atomically so numbers never repeat or skip.
+model InvoiceCounter {
+  fy   String @id
+  last Int    @default(0)
 }
 
 /// Razorpay webhook events already handled (their event id), so a repeated delivery changes nothing.
