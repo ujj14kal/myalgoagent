@@ -13,6 +13,8 @@ import { DEFAULT_AGENT_NAME } from "@/lib/agent-constants";
 import AnnouncementBanner from "@/components/announcement-banner";
 import { isBuiltInOwner } from "@/lib/admin/access";
 import CompanyLink from "@/components/company-link";
+import CreditsProvider from "@/components/credits/credits-provider";
+import { snapshot as creditSnapshot } from "@/lib/credits/service";
 
 export const metadata = {
   robots: { index: false, follow: false },
@@ -37,7 +39,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   const now = new Date();
-  const [unreadCount, liveSessions, announcement, brokerRows, customRows] = await Promise.all([
+  const [unreadCount, liveSessions, announcement, brokerRows, customRows, credits] = await Promise.all([
     prisma.notification.count({ where: { userId: session.user.id, read: false } }),
     prisma.paperSession.count({ where: { userId: session.user.id, status: "ACTIVE" } }),
     prisma.announcement.findFirst({
@@ -47,6 +49,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     }),
     prisma.brokerConnection.findMany({ where: { userId: session.user.id }, select: { broker: true, status: true, tokenExpiresAt: true }, orderBy: { createdAt: "asc" } }),
     prisma.customIndicator.findMany({ where: { userId: session.user.id }, select: { name: true, def: true }, orderBy: { name: "asc" } }),
+    creditSnapshot(session.user.id),
   ]);
   const customIndicators = customRows.map((c) => ({ name: c.name, def: c.def as unknown as CustomIndicatorDef }));
   // Linked brokers for the top bar: live today, or needing today's login.
@@ -60,6 +63,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <CustomIndicatorsRoot items={customIndicators}>
+    <CreditsProvider initial={credits}>
     <AgentChatProvider agentName={agentName}>
     <TutorialProvider initialAgentName={dbUser.agentName} tutorialCompleted={!!dbUser.tutorialCompletedAt}>
       <AgentToastProvider agentName={agentName}>
@@ -84,6 +88,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </AgentToastProvider>
     </TutorialProvider>
     </AgentChatProvider>
+    </CreditsProvider>
     </CustomIndicatorsRoot>
   );
 }

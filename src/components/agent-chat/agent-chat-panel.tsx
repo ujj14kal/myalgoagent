@@ -44,6 +44,8 @@ import { groupReply } from "@/lib/ai/reply-format";
 import type { AgentProposal, ProposalStatus } from "@/lib/ai/proposals";
 import { ProposalCard, ProposalReviewModal } from "./proposal-review";
 import VoiceMode from "./voice-mode";
+import { creditsChanged, useCredits } from "@/components/credits/credits-provider";
+import { ACTION_COST } from "@/lib/credits/config";
 import { speakMessage, startListening, stopSpeaking, unlockAudio, voiceSupported, type Listener } from "./voice-client";
 
 const STARTERS = [
@@ -414,6 +416,7 @@ export default function AgentChatPanel({
   pendingQuestion?: string | null;
   onQuestionTaken?: () => void;
 }) {
+  const { apply: applyCredits } = useCredits();
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<AgentChatMessage[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -620,6 +623,8 @@ export default function AgentChatPanel({
     startTransition(async () => {
       try {
         const res = await sendAgentMessage({ conversationId: convoId, text: trimmed, voice });
+        if (res.ok) applyCredits(res.credits);
+        else creditsChanged();
         if (!res.ok) {
           setMessages((m) => m.filter((x) => x.id !== optimistic.id));
           if (!voice) setDraft(trimmed);
@@ -999,6 +1004,9 @@ export default function AgentChatPanel({
                     <ArrowUp size={17} />
                   </motion.button>
                 </form>
+                <p className="mt-1.5 text-center text-[10.5px] text-brand-navy/45">
+                  Each reply takes credits: {ACTION_COST.ai_reply} for an answer, {ACTION_COST.ai_build} when it prepares something, {ACTION_COST.ai_voice} for a spoken exchange.
+                </p>
                 <p className="mt-2 text-center text-[10.5px] leading-snug text-brand-navy/55">
                   Responses are AI-generated and may contain errors. They are not investment advice, and past performance does not
                   guarantee future results.

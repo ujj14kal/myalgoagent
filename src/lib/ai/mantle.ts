@@ -52,6 +52,8 @@ export type MantleResult = {
   toolCalls: MantleToolCall[];
   inputTokens: number | null;
   outputTokens: number | null;
+  /** Input tokens the endpoint reused from an earlier identical start of the prompt (billed at a discount), when it reports them. */
+  cachedTokens: number | null;
 };
 
 /** One chat completion. Retries once on throttling or a 5xx. */
@@ -99,13 +101,14 @@ export async function mantleChat({
     if (res.ok) {
       const data = (await res.json()) as {
         choices?: { message?: { content?: string | null; tool_calls?: MantleToolCall[] } }[];
-        usage?: { prompt_tokens?: number; completion_tokens?: number };
+        usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } | null; cache_read_input_tokens?: number };
       };
       return {
         text: (data.choices?.[0]?.message?.content ?? "").trim(),
         toolCalls: data.choices?.[0]?.message?.tool_calls ?? [],
         inputTokens: data.usage?.prompt_tokens ?? null,
         outputTokens: data.usage?.completion_tokens ?? null,
+        cachedTokens: data.usage?.prompt_tokens_details?.cached_tokens ?? data.usage?.cache_read_input_tokens ?? null,
       };
     }
     const errText = await res.text();

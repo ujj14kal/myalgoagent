@@ -5,6 +5,7 @@ import MobileNavDrawer from "@/components/mobile-nav-drawer";
 import ConnectedBrokers, { type ConnectedBroker } from "@/components/connected-brokers";
 import TopbarTitle from "@/components/topbar-title";
 import { avatarInitials } from "@/lib/avatar";
+import CreditMeter from "@/components/credits/credit-meter";
 
 export default function AppTopbar({
   user,
@@ -30,6 +31,7 @@ export default function AppTopbar({
       <TopbarTitle />
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
         <ConnectedBrokers brokers={brokers} />
+        <CreditMeter />
         {isStaff && (
           <Link
             href="/admin"

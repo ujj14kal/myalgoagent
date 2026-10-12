@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { friendlyError } from "@/lib/friendly-error";
 import Link from "next/link";
 import { runBacktestAction, runBacktestsAction } from "@/lib/backtest-actions";
+import { backtestCost } from "@/lib/credits/config";
 import { describeExecutionConfig, type StrategyExecutionConfig } from "@/lib/describe-strategy-config";
 import { isIntraday, isValidCombo, type CandleInterval, type CandleRange, type HistoryDepth } from "@/lib/market-data";
 
@@ -47,6 +48,9 @@ export default function BacktestRunForm({ strategies, depth = "standard", notice
   const toggle = (id: string) => setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : cur.length >= 8 ? cur : [...cur, id]));
   // Keep the chosen period valid for the selected strategy's timeframe.
   const effectiveRange = periods.length ? (periods.some((p) => p.value === range) ? range : periods[periods.length - 1].value) : range;
+
+  // What this run will take: by timeframe and period, added up across the strategies ticked.
+  const cost = chosen.length ? chosen.reduce((sum, st) => sum + backtestCost({ timeframe: st.timeframe ?? "1d", range: effectiveRange }), 0) : 1;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -170,7 +174,7 @@ export default function BacktestRunForm({ strategies, depth = "standard", notice
           disabled={isPending}
           className="rounded-full bg-brand-primary px-6 py-2 text-sm font-medium text-white hover:bg-brand-primary-light disabled:opacity-50"
         >
-          {isPending ? "Running…" : "Run Backtest"}
+          {isPending ? "Running…" : `Run Backtest · ${cost} credit${cost === 1 ? "" : "s"}`}
         </button>
       </div>
 

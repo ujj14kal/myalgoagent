@@ -400,3 +400,36 @@ export async function setNoteDone(noteId: string, done: boolean): Promise<AdminR
     return { ok: true };
   });
 }
+
+
+// ---------------- plan and credits ----------------
+
+/** Moves a customer to a plan (until online payment is on, this is how a plan starts): a fresh monthly allowance, top-ups kept. */
+export async function setUserPlan(userId: string, plan: string): Promise<AdminResult> {
+  return run("users.manage", async (staff) => {
+    if (plan !== "FREE" && plan !== "TRADE" && plan !== "PRO") return { ok: false, error: "Pick a plan." };
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+    if (!user) return { ok: false, error: "That customer no longer exists." };
+    const { setPlan } = await import("@/lib/credits/service");
+    await setPlan(userId, plan, { by: staff.email });
+    await audit(staff, "customer.plan", { type: "user", id: userId }, `Set ${user.email} to the ${plan} plan`);
+    revalidatePath(`/admin/users/${userId}`);
+    return { ok: true, message: `Now on the ${plan} plan with a fresh monthly allowance.` };
+  });
+}
+
+/** Adds credits to a customer (a purchased top-up, or a goodwill grant). They are kept like top-ups. */
+export async function grantUserCredits(userId: string, credits: number, kind: "TOPUP" | "GRANT", reason: string): Promise<AdminResult> {
+  return run("users.manage", async (staff) => {
+    if (!Number.isInteger(credits) || credits < 1 || credits > 20_000) return { ok: false, error: "Give a whole number of credits from 1 to 20,000." };
+    if (kind !== "TOPUP" && kind !== "GRANT") return { ok: false, error: "Invalid request." };
+    const note = oneLine(reason, 200);
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+    if (!user) return { ok: false, error: "That customer no longer exists." };
+    const { grant } = await import("@/lib/credits/service");
+    const snap = await grant(userId, credits, kind, { by: staff.email, ...(note ? { reason: note } : {}) });
+    await audit(staff, "customer.credits", { type: "user", id: userId }, `Added ${credits} credits (${kind.toLowerCase()}) to ${user.email}${note ? `: ${note}` : ""}`);
+    revalidatePath(`/admin/users/${userId}`);
+    return { ok: true, message: `Added ${credits} credits. They now have ${snap.total}.` };
+  });
+}

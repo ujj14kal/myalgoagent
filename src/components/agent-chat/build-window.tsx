@@ -9,7 +9,9 @@ import { sendAgentMessage } from "@/lib/agent-chat-actions";
 import { DESCRIBE_BLOCK_PREFIX, DESCRIBE_CONCEPT_PREFIX, DESCRIBE_PREFIX, TALK_STRATEGY_PREFIX } from "@/lib/ai/describe-indicator";
 import type { AgentProposal, ProposalStatus } from "@/lib/ai/proposals";
 import { splitChoices } from "@/lib/ai/choices";
+import { ACTION_COST } from "@/lib/credits/config";
 import { ProposalCard, ProposalReviewModal } from "./proposal-review";
+import { creditsChanged, useCredits } from "@/components/credits/credits-provider";
 
 export type BuildKind = "indicator" | "block" | "concept" | "strategy";
 
@@ -64,6 +66,7 @@ function Rich({ text }: { text: string }) {
  */
 export default function BuildWindow({ kind, seed, agentName, onClose }: { kind: BuildKind; seed: string | null; agentName: string; onClose: () => void }) {
   const cfg = KINDS[kind];
+  const { apply } = useCredits();
   const [turns, setTurns] = useState<Turn[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [text, setText] = useState("");
@@ -82,7 +85,8 @@ export default function BuildWindow({ kind, seed, agentName, onClose }: { kind: 
     setTurns((t) => [...t, mine]);
     start(async () => {
       const r = await sendAgentMessage({ conversationId, text: `${cfg.prefix}${clean}` });
-      if (!r.ok) return setError(r.error);
+      if (!r.ok) return (setError(r.error), creditsChanged());
+      apply(r.credits);
       setConversationId(r.conversationId);
       setTurns((t) => [...t, { id: r.reply.id, role: "assistant", text: r.reply.content, proposal: r.reply.proposal }]);
       if (r.reply.proposal && r.reply.proposal.status === "pending") setReviewing({ messageId: r.reply.id, proposal: r.reply.proposal });
@@ -205,7 +209,7 @@ export default function BuildWindow({ kind, seed, agentName, onClose }: { kind: 
               <ArrowUp size={18} />
             </button>
           </form>
-          <p className="px-5 pb-3 pt-1 text-center text-[11px] text-brand-navy/40">Nothing is created until you have seen the demo and confirmed.</p>
+          <p className="px-5 pb-3 pt-1 text-center text-[11px] text-brand-navy/40">Nothing is created until you have seen the demo and confirmed. Replies take {ACTION_COST.ai_reply} credits, or {ACTION_COST.ai_build} when something is prepared.</p>
         </motion.div>
       </div>
 

@@ -4,6 +4,8 @@ import { useMemo, useState, useTransition } from "react";
 import { Sparkles, Undo2, Wand2 } from "lucide-react";
 import { useAgentChat } from "@/components/agent-chat/agent-chat-provider";
 import { writeRuleCodeAction } from "@/lib/rule-code-actions";
+import { creditsChanged, useCredits } from "@/components/credits/credits-provider";
+import { ACTION_COST } from "@/lib/credits/config";
 import CodeMirror from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
 import { parseDsl, DslSyntaxError, INDICATOR_CATALOG } from "@/lib/strategy";
@@ -35,6 +37,7 @@ export default function StrategyCodeEditor({
 }) {
   const [showHelp, setShowHelp] = useState(false);
   const { agentName } = useAgentChat();
+  const { apply: applyCredits } = useCredits();
   const [ask, setAsk] = useState("");
   const [busy, startAi] = useTransition();
   const [note, setNote] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
@@ -44,7 +47,8 @@ export default function StrategyCodeEditor({
     setNote(null);
     startAi(async () => {
       const r = await writeRuleCodeAction({ description: ask, part, current: value, problem: fix });
-      if (!r.ok) return setNote({ tone: "error", text: r.error });
+      if (!r.ok) return (setNote({ tone: "error", text: r.error }), creditsChanged());
+      applyCredits(r.credits);
       setBefore(value);
       onChange(r.code);
       setNote({ tone: "ok", text: `${agentName} wrote this${r.retried ? " (after correcting a first try)" : ""}. Read it, then change anything you like — it is checked the same way as code you type.` });
@@ -126,7 +130,7 @@ export default function StrategyCodeEditor({
           className="min-w-[14rem] flex-1 rounded-lg border border-brand-navy/15 px-3 py-1.5 text-xs outline-none focus:border-brand-primary"
         />
         <button type="button" disabled={busy || !ask.trim()} onClick={() => writeWithAi()} className="inline-flex items-center gap-1.5 rounded-full bg-brand-primary px-3.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
-          <Sparkles size={12} /> {busy ? "Writing…" : `Write it with ${agentName}`}
+          <Sparkles size={12} /> {busy ? "Writing…" : `Write it with ${agentName} · ${ACTION_COST.rule_code} credits`}
         </button>
         {before !== null && !busy && (
           <button type="button" onClick={() => { onChange(before); setBefore(null); setNote(null); }} className="inline-flex items-center gap-1 text-xs font-semibold text-brand-navy/55 hover:text-brand-navy">

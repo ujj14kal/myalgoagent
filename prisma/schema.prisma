@@ -20,6 +20,8 @@ enum AdminRole {
 }
 
 model User {
+  creditAccount CreditAccount?
+  creditEvents  CreditEvent[]
   customerNotes CustomerNote[]
   id            String    @id @default(cuid())
   name          String?
@@ -234,6 +236,50 @@ model CustomerNote {
 
   @@index([userId, createdAt])
   @@index([followUpAt, doneAt])
+}
+
+enum CreditPlan {
+  FREE
+  TRADE
+  PRO
+}
+
+/// What a user may use of the metered features (the AI, voice and backtests) this month. Two buckets: the plan's monthly
+/// credits (reset each period) and top-up credits (kept for a year). Free accounts also have a lifetime cap on AI replies.
+model CreditAccount {
+  userId         String     @id
+  plan           CreditPlan @default(FREE)
+  monthlyBalance Int
+  topupBalance   Int        @default(0)
+  periodStart    DateTime
+  periodEnd      DateTime
+  /// AI replies ever used — the free plan allows only a couple.
+  aiRepliesUsed  Int        @default(0)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Every change to a balance: a spend, a monthly reset, a plan change, a grant or a top-up.
+model CreditEvent {
+  id           String   @id @default(cuid())
+  userId       String
+  /// SPEND, RESET, PLAN, GRANT or TOPUP.
+  kind         String
+  /// For a spend: ai_reply, ai_build, ai_voice, ai_speak, rule_code, backtest.
+  action       String?
+  /// Signed: negative for a spend.
+  credits      Int
+  monthlyAfter Int
+  topupAfter   Int
+  meta         Json?
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, action, createdAt])
 }
 
 enum AnnouncementLevel {

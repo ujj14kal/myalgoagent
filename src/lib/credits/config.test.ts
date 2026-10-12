@@ -1,0 +1,79 @@
+import { describe, expect, it } from "vitest";
+import { ACTION_COST, PLANS, TOPUP_PACKS, backtestCost, priceOf, refusalFor, splitSpend, type Usage } from "./config";
+
+const none: Usage = { aiToday: 0, buildsToday: 0, voiceToday: 0, aiRepliesEver: 0 };
+
+describe("backtestCost", () => {
+  it("is 1 for daily candles up to a year, 2 for intraday or a long history, 3 for both", () => {
+    expect(backtestCost({ timeframe: "1d", range: "1y" })).toBe(1);
+    expect(backtestCost({ timeframe: "1wk", range: "6mo" })).toBe(1);
+    expect(backtestCost({ timeframe: "15m", range: "1mo" })).toBe(2);
+    expect(backtestCost({ timeframe: "1d", range: "5y" })).toBe(2);
+    expect(backtestCost({ timeframe: "15m", range: "1y" })).toBe(3);
+    expect(backtestCost({ timeframe: "30m", range: "5y" })).toBe(3);
+  });
+});
+
+describe("splitSpend", () => {
+  it("uses monthly credits first, then top-ups, and refuses to overdraw", () => {
+    expect(splitSpend({ monthly: 10, topup: 100 }, 4)).toEqual({ monthly: 6, topup: 100 });
+    expect(splitSpend({ monthly: 3, topup: 100 }, 5)).toEqual({ monthly: 0, topup: 98 });
+    expect(splitSpend({ monthly: 1, topup: 1 }, 3)).toBeNull();
+  });
+});
+
+describe("refusalFor — free plan", () => {
+  const bal = { monthly: 20, topup: 0 };
+  it("allows exactly two AI replies for the life of the account, free of credits", () => {
+    expect(refusalFor("FREE", bal, { ...none, aiRepliesEver: 1 }, "ai_reply", 2)).toBeNull();
+    const r = refusalFor("FREE", bal, { ...none, aiRepliesEver: 2 }, "ai_build", 5);
+    expect(r?.code).toBe("FREE_AI_USED");
+  });
+  it("has no voice and no big backtests", () => {
+    expect(refusalFor("FREE", bal, none, "ai_voice", 6)?.code).toBe("NOT_ON_PLAN");
+    expect(refusalFor("FREE", bal, none, "backtest", 2)?.code).toBe("NOT_ON_PLAN");
+    expect(refusalFor("FREE", bal, none, "backtest", 1)).toBeNull();
+  });
+  it("runs out of backtests when the 20 credits are spent", () => {
+    expect(refusalFor("FREE", { monthly: 0, topup: 0 }, none, "backtest", 1)?.code).toBe("NO_CREDITS");
+  });
+});
+
+describe("refusalFor — paid plans", () => {
+  const bal = { monthly: 500, topup: 0 };
+  it("stops at the daily ceilings whatever the balance", () => {
+    expect(refusalFor("TRADE", bal, { ...none, aiToday: 40 }, "ai_reply", 2)?.code).toBe("DAILY_CAP");
+    expect(refusalFor("TRADE", bal, { ...none, aiToday: 10, buildsToday: 15 }, "ai_build", 5)?.code).toBe("DAILY_CAP");
+    expect(refusalFor("TRADE", bal, { ...none, voiceToday: 40 }, "ai_voice", 6)?.code).toBe("DAILY_CAP");
+    expect(refusalFor("PRO", bal, { ...none, aiToday: 40 }, "ai_reply", 2)).toBeNull();
+  });
+  it("stops when the credits are gone and says how many are needed", () => {
+    const r = refusalFor("TRADE", { monthly: 1, topup: 0 }, none, "ai_build", 5);
+    expect(r?.code).toBe("NO_CREDITS");
+    expect(r?.message).toMatch(/needs 5 credits and you have 1/);
+  });
+  it("lets top-up credits pay when the monthly ones are gone", () => {
+    expect(refusalFor("TRADE", { monthly: 0, topup: 300 }, none, "ai_reply", 2)).toBeNull();
+  });
+  it("voice and big backtests are on", () => {
+    expect(refusalFor("TRADE", bal, none, "ai_voice", 6)).toBeNull();
+    expect(refusalFor("TRADE", bal, none, "backtest", 3)).toBeNull();
+  });
+});
+
+describe("the price list", () => {
+  it("quotes prices from one table", () => {
+    expect(priceOf("ai_voice")).toBe(ACTION_COST.ai_voice);
+    expect(priceOf("backtest", { timeframe: "5m", range: "1mo" })).toBe(2);
+  });
+  it("keeps the plans and top-ups as agreed", () => {
+    expect(PLANS.TRADE.price).toBe(1999);
+    expect(PLANS.PRO.price).toBe(3499);
+    expect(PLANS.FREE.aiLifetimeReplies).toBe(2);
+    // Every top-up pack keeps at least a 54% margin at the worst-case ₹0.30 of cost per credit, after 18% GST and 2.36% payment fees.
+    for (const p of TOPUP_PACKS) {
+      const kept = p.price / 1.18 - p.price * 0.0236;
+      expect((kept - p.credits * 0.3) / kept).toBeGreaterThan(0.54);
+    }
+  });
+});

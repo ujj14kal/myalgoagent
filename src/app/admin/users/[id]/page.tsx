@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Activity, ArrowLeft, Bot, KeyRound, LifeBuoy, Link2, Layers, NotebookPen, ScrollText } from "lucide-react";
+import { Activity, ArrowLeft, Bot, Coins, KeyRound, LifeBuoy, Link2, Layers, NotebookPen, ScrollText } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { can, isBuiltInOwner, requireStaff, ROLE_LABEL } from "@/lib/admin/access";
 import { audit } from "@/lib/admin/audit";
@@ -9,6 +9,8 @@ import { BROKERS } from "@/lib/brokers/catalog";
 import { avatarInitials } from "@/lib/avatar";
 import UserActions from "@/components/admin/user-actions";
 import CustomerNotes from "@/components/admin/customer-notes";
+import CreditControls from "@/components/admin/credit-controls";
+import { snapshot as creditSnapshot } from "@/lib/credits/service";
 import { nowMs } from "@/lib/admin/time";
 import BrokerDisconnect from "@/components/admin/broker-disconnect";
 import LiveToggle from "@/components/admin/live-toggle";
@@ -62,6 +64,7 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
     prisma.adminAuditLog.findMany({ where: { targetType: "user", targetId: u.id, action: { not: "user.view" } }, orderBy: { createdAt: "desc" }, take: 10 }),
   ]);
 
+  const credits = await creditSnapshot(u.id).catch(() => null);
   // Notes need their own table; until that database update is applied the rest of the page still works.
   let notes: Awaited<ReturnType<typeof prisma.customerNote.findMany>> = [];
   let notesReady = true;
@@ -233,6 +236,16 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
           )}
         </Card>
       </div>
+
+      {credits && (
+        <Card title={`Plan & credits · ${credits.planLabel}`} icon={Coins} pad={false}>
+          <p className="px-5 pt-4 text-sm text-brand-navy/70">
+            <strong className="tabular-nums text-brand-navy">{credits.total.toLocaleString("en-IN")}</strong> credits left ({credits.monthly.toLocaleString("en-IN")} of {credits.monthlyOf.toLocaleString("en-IN")} monthly{credits.topup ? `, ${credits.topup.toLocaleString("en-IN")} top-up` : ""}) · renews {ist(new Date(credits.periodEnd))}
+            {credits.aiRepliesLeft !== null && <> · {credits.aiRepliesLeft} free AI repl{credits.aiRepliesLeft === 1 ? "y" : "ies"} left</>}
+          </p>
+          {can(staff.role, "users.manage") ? <CreditControls userId={u.id} plan={credits.plan} /> : <p className="px-5 py-3 text-xs text-brand-navy/45">Changing plans or adding credits needs an Admin.</p>}
+        </Card>
+      )}
 
       <Card title="Team notes & follow-ups" icon={NotebookPen} pad={false}>
         {notesReady ? (

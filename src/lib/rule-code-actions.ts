@@ -6,10 +6,13 @@ import { logError } from "@/lib/logger";
 import { converse } from "@/lib/ai/bedrock";
 import { AI_MODELS } from "@/lib/ai/config";
 import { writeRule, type RuleCodePart } from "@/lib/ai/rule-code";
+import { charge, precheck } from "@/lib/credits/service";
+import { ACTION_COST } from "@/lib/credits/config";
+import type { CreditSnapshot } from "@/lib/credits/types";
 
 // The code editor's "write it with the assistant": returns data, never throws (a thrown message is hidden in production).
 
-export type RuleCodeResult = { ok: true; code: string; retried: boolean } | { ok: false; error: string };
+export type RuleCodeResult = { ok: true; code: string; retried: boolean; credits?: CreditSnapshot } | { ok: false; error: string };
 
 export async function writeRuleCodeAction(input: { description: string; part: RuleCodePart; current?: string; problem?: string }): Promise<RuleCodeResult> {
   const session = await auth();
@@ -20,6 +23,8 @@ export async function writeRuleCodeAction(input: { description: string; part: Ru
   if (!description && !(input.problem && current)) return { ok: false, error: "Say in a few words what the rule should do." };
   if (input.part !== "entry" && input.part !== "exit") return { ok: false, error: "Something went wrong — reload the page." };
   if (await checkRateLimit(`rule-code:${userId}`, 20, 60 * 60_000)) return { ok: false, error: "That's a lot of rules in an hour — wait a little, or write this one by hand." };
+  const refused = await precheck(userId, "rule_code", ACTION_COST.rule_code);
+  if (refused) return { ok: false, error: refused.message };
   const ask = async (system: string, user: string) => {
     const run = (model: string) => converse({ model, system, turns: [{ role: "user", text: user }] });
     let reply;
@@ -32,7 +37,10 @@ export async function writeRuleCodeAction(input: { description: string; part: Ru
     return reply.text;
   };
   try {
-    return await writeRule(ask, { description, part: input.part, current, problem: input.problem });
+    const out = await writeRule(ask, { description, part: input.part, current, problem: input.problem });
+    if (!out.ok) return out; // nothing usable came back: nothing is charged
+    const credits = await charge(userId, "rule_code", ACTION_COST.rule_code).catch(() => undefined);
+    return { ...out, ...(credits ? { credits } : {}) };
   } catch (err) {
     logError("rule-code", err, { userId });
     return { ok: false, error: "The assistant couldn't answer just now. Try again in a moment, or write the rule by hand." };

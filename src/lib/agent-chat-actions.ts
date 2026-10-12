@@ -15,6 +15,9 @@ import { converse } from "@/lib/ai/bedrock";
 import { AGENT_TOOLS, runAgentTool } from "@/lib/ai/tools";
 import { PROPOSAL_TITLES, honestProposalReply, type AgentProposal, type ProposalStatus } from "@/lib/ai/proposals";
 import type { Prisma } from "@prisma/client";
+import { charge, precheck } from "@/lib/credits/service";
+import { ACTION_COST } from "@/lib/credits/config";
+import type { CreditSnapshot } from "@/lib/credits/types";
 
 export type AgentChatMessage = {
   id: string;
@@ -109,6 +112,8 @@ export async function sendAgentMessage(input: {
       reply: AgentChatMessage;
       /** Voice mode: the first sentence of the reply as MP3, so it can start playing without another request. */
       speech?: { text: string; mp3: string };
+      /** The user's credits after this reply — what the live meter shows. */
+      credits?: CreditSnapshot;
     }
   | Fail
 > {
@@ -123,6 +128,10 @@ export async function sendAgentMessage(input: {
   if (text.length > AI_LIMITS.maxUserChars) {
     return { ok: false, error: `Your message is too long. Please keep it under ${AI_LIMITS.maxUserChars.toLocaleString("en-IN")} characters.` };
   }
+
+  // The plan's allowance first: credits, daily ceilings and (free plan) the two lifetime replies. Nothing is spent until the reply works.
+  const refused = await precheck(userId, input?.voice ? "ai_voice" : "ai_reply", input?.voice ? ACTION_COST.ai_voice : ACTION_COST.ai_reply);
+  if (refused) return { ok: false, error: refused.message };
 
   const perMinute = await checkRateLimit(`agent-chat:${userId}`, AI_LIMITS.perMinute, 60_000);
   if (perMinute) return { ok: false, error: perMinute };
@@ -262,7 +271,14 @@ export async function sendAgentMessage(input: {
       }
     }
 
-    return { ok: true, conversationId, userMessage: toMessage(userMessage), reply: toMessage(saved), ...(speech ? { speech } : {}) };
+    // A reply the safety net replaced isn't charged. Otherwise: a spoken exchange, a turn that prepared something, or a plain answer.
+    let credits: CreditSnapshot | undefined;
+    if (!reply.guardrailHit) {
+      const action = input?.voice ? "ai_voice" : reply.proposal ? "ai_build" : "ai_reply";
+      credits = await charge(userId, action, ACTION_COST[action], { messageId: saved.id, in: reply.inputTokens ?? null, out: reply.outputTokens ?? null }).catch((err) => (logError("credits:charge", err, { userId, action }), undefined));
+    }
+
+    return { ok: true, conversationId, userMessage: toMessage(userMessage), reply: toMessage(saved), ...(speech ? { speech } : {}), ...(credits ? { credits } : {}) };
   } catch (err) {
     logError("agent-chat:send", err, { userId });
     return { ok: false, error: "Something went wrong. Please refresh the page and try again." };

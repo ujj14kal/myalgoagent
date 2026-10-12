@@ -17,6 +17,8 @@ import { parseRiskOptions } from "@/lib/trading-engine/risk-options";
 import { parseSystemRuntime, systemConditions } from "@/lib/system/signals";
 import { parseEntryPlan } from "@/lib/trading-engine/entry-plan-config";
 import { userMarketDataReady } from "@/lib/market-data/for-user";
+import { backtestCost } from "@/lib/credits/config";
+import { charge, precheck } from "@/lib/credits/service";
 
 export interface RunBacktestInput {
   strategyId: string;
@@ -57,6 +59,11 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
     // Defense in depth against the dropdown filter — a deleted strategy
     // shouldn't be runnable even via a stale/direct request.
     if (strategy.status === "DELETED") throw new Error("This strategy has been deleted");
+
+    // The plan's allowance: a backtest costs credits by its size (1 daily up to a year, 2 intraday or long, 3 both).
+    const price = backtestCost({ timeframe: strategy.timeframe, range: input.range });
+    const refused = await precheck(userId, "backtest", price);
+    if (refused) throw new Error(refused.message);
 
     // Execution/risk config is fixed on the strategy itself (see the
     // "bulletproof strategy creation" change) — a backtest always runs with
@@ -175,6 +182,8 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
         },
       },
     });
+    // Charged on what was actually run: a long range on a short timeframe is clamped to what the data source keeps.
+    await charge(userId, "backtest", backtestCost({ timeframe: strategy.timeframe, range }), { runId: run.id, timeframe: strategy.timeframe, range }).catch(() => undefined);
     return { id: run.id };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Something went wrong" };

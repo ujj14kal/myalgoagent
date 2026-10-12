@@ -6,6 +6,8 @@ import { AI_VOICE } from "@/lib/ai/config";
 import { synthesizeStream } from "@/lib/ai/speech-synth";
 import { speechChunks, toSpeech } from "@/lib/ai/speech-text";
 import { logError, logWarn } from "@/lib/logger";
+import { alreadyPaidFor, charge, precheck } from "@/lib/credits/service";
+import { ACTION_COST } from "@/lib/credits/config";
 
 // Reads one of the agent's replies aloud. Takes a message id, not free text, so
 // it can only ever voice the user's own agent replies. With `c` it returns just
@@ -30,6 +32,16 @@ export async function GET(request: NextRequest) {
     if (limited) return NextResponse.json({ error: limited }, { status: 429 });
   }
 
+  // Reading a reply aloud costs 3 credits unless it is part of a spoken exchange already paid for (or was read before).
+  let toCharge = false;
+  if (piece === null || piece === 0) {
+    if (!(await alreadyPaidFor(userId, messageId))) {
+      const refused = await precheck(userId, "ai_speak", ACTION_COST.ai_speak);
+      if (refused) return NextResponse.json({ error: refused.message }, { status: 402 });
+      toCharge = true;
+    }
+  }
+
   const started = Date.now();
   const message = await prisma.agentMessage.findFirst({
     where: { id: messageId, role: "ASSISTANT", conversation: { userId } },
@@ -52,6 +64,7 @@ export async function GET(request: NextRequest) {
     logError("agent-voice:speech-route", err, { userId, piece });
     return NextResponse.json({ error: "Voice isn't available right now." }, { status: 502 });
   }
+  if (toCharge) await charge(userId, "ai_speak", ACTION_COST.ai_speak, { messageId }).catch((err) => logError("credits:charge", err, { userId, action: "ai_speak" }));
   logWarn("agent-voice:speech-served", `piece ${piece ?? "all"} ready`, { userId, piece, ms: Date.now() - started });
   // Streamed, so playback starts before the whole reply is synthesised.
   return new Response(audio, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "private, max-age=3600" } });
