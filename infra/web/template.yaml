@@ -173,6 +173,7 @@ Resources:
       Volumes: [{ Name: tmp }, { Name: nextcache }]
       ContainerDefinitions:
         - Name: web
+          DependsOn: [{ ContainerName: init-perms, Condition: SUCCESS }]
           Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/myalgoagent-web:${ImageTag}"
           Essential: true
           User: node
@@ -205,6 +206,19 @@ Resources:
             LogDriver: awslogs
             Options: { awslogs-group: !Ref LogGroup, awslogs-region: !Ref "AWS::Region", awslogs-stream-prefix: web }
           StopTimeout: 30
+        # Fargate's scratch volumes start owned by root, so the website (user node) couldn't write its image cache. This
+        # one-shot container (it exits when done) hands the two volumes to the website's user before the website starts.
+        - Name: init-perms
+          Image: public.ecr.aws/docker/library/busybox:stable
+          Essential: false
+          User: "0"
+          Command: ["sh", "-c", "chown 1000:1000 /scratch/cache /scratch/tmp && chmod 1777 /scratch/tmp"]
+          MountPoints:
+            - { SourceVolume: nextcache, ContainerPath: /scratch/cache }
+            - { SourceVolume: tmp, ContainerPath: /scratch/tmp }
+          LogConfiguration:
+            LogDriver: awslogs
+            Options: { awslogs-group: !Ref LogGroup, awslogs-region: !Ref "AWS::Region", awslogs-stream-prefix: init }
 
   Service:
     Type: AWS::ECS::Service
