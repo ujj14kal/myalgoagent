@@ -22,7 +22,8 @@ export default async function SystemPage() {
     load(getSecurityFindings),
     load(currentEgressIp),
   ]);
-  const staticIp = process.env.BROKER_EGRESS_URL?.match(/\/\/([^:/]+)/)?.[1] ?? null;
+  // Brokers see the NAT Gateway's address (the old relay is retired); BROKER_EGRESS_URL only if a relay is configured again.
+  const staticIp = process.env.BROKER_EGRESS_URL?.match(/\/\/([^:/]+)/)?.[1] ?? process.env.SHARED_EGRESS_IP ?? "13.204.125.24";
 
   const firing = alarms.ok ? alarms.data.filter((a) => a.state === "ALARM").length : null;
   const errors = logs.ok ? logs.data.filter((l) => l.level === "error") : [];
@@ -214,21 +215,21 @@ export default async function SystemPage() {
 
       <Card title="Broker static IP" icon={Globe}>
         {!staticIp ? (
-          <p className="text-sm text-brand-navy/60">Not configured — broker calls go out directly from Amplify (no fixed IP). Live orders need the relay.</p>
+          <p className="text-sm text-brand-navy/60">Not configured.</p>
         ) : !egress.ok ? (
           <div className="space-y-2">
             <p className="text-sm text-brand-navy">
               Static IP <strong className="font-mono">{staticIp}</strong>
             </p>
-            <LoadError error={`the relay didn't answer (${egress.error}) — broker calls will fail until it's back`} />
+            <LoadError error={`couldn't check the address brokers see (${egress.error}) — broker calls may fail until it's back`} />
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <span>
               Brokers see <strong className="font-mono text-brand-navy">{egress.data.ip}</strong>
             </span>
-            {egress.data.ip === staticIp ? <Pill tone="green" dot>relay working</Pill> : <Pill tone="red" dot>not the registered IP ({staticIp})</Pill>}
-            <span className="text-xs text-brand-navy/45">Register this IP on the broker account. Relay: CloudFormation stack “myalgoagent-egress”.</span>
+            {egress.data.ip === staticIp ? <Pill tone="green" dot>shared address working</Pill> : <Pill tone="red" dot>not the registered IP ({staticIp})</Pill>}
+            <span className="text-xs text-brand-navy/45">Shared address, held by the NAT Gateway (stack “myalgoagent-network”). Paid accounts get their own IP (stack “myalgoagent-user-egress”).</span>
           </div>
         )}
       </Card>

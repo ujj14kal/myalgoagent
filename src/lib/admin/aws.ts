@@ -3,7 +3,7 @@ import { CloudWatchClient, DescribeAlarmsCommand, GetMetricDataCommand } from "@
 import { CloudWatchLogsClient, FilterLogEventsCommand } from "@aws-sdk/client-cloudwatch-logs";
 import { CostExplorerClient, GetCostAndUsageCommand, GetCostForecastCommand, type Expression } from "@aws-sdk/client-cost-explorer";
 import { SESv2Client, GetAccountCommand } from "@aws-sdk/client-sesv2";
-import { AmplifyClient, ListJobsCommand } from "@aws-sdk/client-amplify";
+import { ECSClient, DescribeServicesCommand, DescribeTaskDefinitionCommand } from "@aws-sdk/client-ecs";
 import { RDSClient, DescribeDBInstancesCommand } from "@aws-sdk/client-rds";
 import { GuardDutyClient, ListFindingsCommand, GetFindingsCommand } from "@aws-sdk/client-guardduty";
 import { EventBridgeClient, DescribeRuleCommand, EnableRuleCommand, DisableRuleCommand } from "@aws-sdk/client-eventbridge";
@@ -15,9 +15,10 @@ import { cached } from "@/lib/jobs";
 // limited to exactly these calls.
 
 const REGION = "ap-south-1";
-const APP_ID = "d5lc6qhib56hj";
-const LOG_GROUP = "/aws/amplify/d5lc6qhib56hj";
-const DB_ID = "myalgoagent-db-encrypted";
+const CLUSTER = "myalgoagent";
+// Where the app writes its structured logs: the website (Fargate) and the live engine.
+const LOG_GROUPS = ["/myalgoagent/web", "/myalgoagent/engine"];
+const DB_ID = "myalgoagent-db-prod";
 const DETECTOR_ID = "0ed07392eba86130f5aa71428c8c95e0";
 const TIMEOUT = { requestTimeout: 8_000, connectionTimeout: 4_000 };
 
@@ -30,7 +31,7 @@ const cwUs = lazy(() => new CloudWatchClient({ region: "us-east-1", requestHandl
 const logs = lazy(() => new CloudWatchLogsClient({ region: REGION, requestHandler: TIMEOUT }));
 const ce = lazy(() => new CostExplorerClient({ region: "us-east-1", requestHandler: TIMEOUT }));
 const ses = lazy(() => new SESv2Client({ region: REGION, requestHandler: TIMEOUT }));
-const amplify = lazy(() => new AmplifyClient({ region: REGION, requestHandler: TIMEOUT }));
+const ecs = lazy(() => new ECSClient({ region: REGION, requestHandler: TIMEOUT }));
 const rds = lazy(() => new RDSClient({ region: REGION, requestHandler: TIMEOUT }));
 const gd = lazy(() => new GuardDutyClient({ region: REGION, requestHandler: TIMEOUT }));
 const eb = lazy(() => new EventBridgeClient({ region: REGION, requestHandler: TIMEOUT }));
@@ -64,14 +65,15 @@ export async function getAlarms(): Promise<Alarm[]> {
 // ---------- recent errors from the app's structured logs ----------
 export type LogEntry = { at: string; level: string; context: string; message: string; meta: Record<string, unknown> };
 export async function getRecentLogs(hours = 24, limit = 60): Promise<LogEntry[]> {
-  const res = await logs().send(
-    new FilterLogEventsCommand({
-      logGroupName: LOG_GROUP,
-      startTime: Date.now() - hours * 3_600_000,
-      filterPattern: '{ $.level = "error" || $.level = "warn" }',
-      limit: 200,
-    }),
+  // Each group is read on its own: if one can't be read the other still shows (the whole lookup fails only when none can).
+  const settled = await Promise.allSettled(
+    LOG_GROUPS.map((logGroupName) =>
+      logs().send(new FilterLogEventsCommand({ logGroupName, startTime: Date.now() - hours * 3_600_000, filterPattern: '{ $.level = "error" || $.level = "warn" }', limit: 200 })),
+    ),
   );
+  const events = settled.flatMap((r) => (r.status === "fulfilled" ? (r.value.events ?? []) : []));
+  if (settled.every((r) => r.status === "rejected")) throw (settled[0] as PromiseRejectedResult).reason;
+  const res = { events };
   const out: LogEntry[] = [];
   for (const e of res.events ?? []) {
     try {
@@ -187,15 +189,32 @@ export async function getEmailStatus(): Promise<EmailStatus> {
 // ---------- deploys ----------
 export type Deploy = { id: string; status: string; message: string; commit: string; startedAt: string | null; endedAt: string | null };
 export async function getDeploys(limit = 8): Promise<Deploy[]> {
-  const res = await amplify().send(new ListJobsCommand({ appId: APP_ID, branchName: "main", maxResults: limit }));
-  return (res.jobSummaries ?? []).map((j) => ({
-    id: j.jobId ?? "",
-    status: j.status ?? "",
-    message: (j.commitMessage ?? "").split("\n")[0].slice(0, 120),
-    commit: (j.commitId ?? "").slice(0, 7),
-    startedAt: j.startTime?.toISOString() ?? null,
-    endedAt: j.endTime?.toISOString() ?? null,
-  }));
+  // The website and the engine run on ECS; each service keeps its current and recent rollouts.
+  const res = await ecs().send(new DescribeServicesCommand({ cluster: CLUSTER, services: ["myalgoagent-web", "myalgoagent-engine"] }));
+  const revisions = new Map<string, string>();
+  const imageTag = async (arn: string) => {
+    if (!revisions.has(arn)) {
+      const td = await ecs().send(new DescribeTaskDefinitionCommand({ taskDefinition: arn }));
+      revisions.set(arn, (td.taskDefinition?.containerDefinitions?.[0]?.image ?? "").split(":").pop() ?? "");
+    }
+    return revisions.get(arn) ?? "";
+  };
+  const out: Deploy[] = [];
+  for (const svc of res.services ?? []) {
+    for (const d of svc.deployments ?? []) {
+      const tag = d.taskDefinition ? await imageTag(d.taskDefinition).catch(() => "") : "";
+      const state = d.rolloutState === "COMPLETED" ? "SUCCEED" : d.rolloutState === "FAILED" ? "FAILED" : d.rolloutState === "IN_PROGRESS" ? "RUNNING" : (d.rolloutState ?? "");
+      out.push({
+        id: d.id ?? "",
+        status: state,
+        message: `${svc.serviceName?.replace("myalgoagent-", "")}: ${d.runningCount ?? 0}/${d.desiredCount ?? 0} running${d.status === "PRIMARY" ? "" : " (previous)"}`,
+        commit: /^[0-9a-f]{7,40}$/.test(tag) ? tag.slice(0, 7) : tag.slice(0, 12),
+        startedAt: d.createdAt?.toISOString() ?? null,
+        endedAt: d.rolloutState === "COMPLETED" ? (d.updatedAt?.toISOString() ?? null) : null,
+      });
+    }
+  }
+  return out.sort((a, b) => (b.startedAt ?? "").localeCompare(a.startedAt ?? "")).slice(0, limit);
 }
 
 // ---------- database ----------
