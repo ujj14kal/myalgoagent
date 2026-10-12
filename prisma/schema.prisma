@@ -63,6 +63,8 @@ model User {
   // or risk-limit alert.
   notifyOrderFilled Boolean @default(true)
   notifySignalAlert Boolean @default(true)
+  // Which event emails the user has switched off, e.g. {"live_order": false}. Missing = the event's default.
+  emailPrefs        Json?
 
   accounts            Account[]
   sessions            Session[]

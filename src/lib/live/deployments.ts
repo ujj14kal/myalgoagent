@@ -2,6 +2,7 @@ import { capitalProblem, fitToOrderLimit, INTRADAY_BUYING_POWER } from "@/lib/li
 import { parseRiskOptions } from "@/lib/trading-engine/risk-options";
 import "server-only";
 import { slotCheck } from "@/lib/credits/service";
+import { emailEvent } from "@/lib/event-email";
 import type { LiveDeployment, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logError, logWarn } from "@/lib/logger";
@@ -59,8 +60,16 @@ const REASON: Record<string, string> = {
 };
 const reasonText = (r: string) => REASON[r] ?? r.replace(/_/g, " ");
 
-async function notify(userId: string, message: string, type: "ORDER_FILLED" | "RISK_EVENT" | "SIGNAL_ALERT" | "SESSION_STOPPED" = "SIGNAL_ALERT") {
+const EVENT_COPY = {
+  live_signal: { subject: "A signal is waiting for your OK", headline: "Signal waiting for your confirmation", linkLabel: "Review on Live Trading" },
+  live_paused: { subject: "A live strategy was paused", headline: "A live strategy was paused", linkLabel: "Open Live Trading" },
+  live_order: { subject: "A live order was filled", headline: "A live order was filled", linkLabel: "Open Live Trading" },
+} as const;
+
+async function notify(userId: string, message: string, type: "ORDER_FILLED" | "RISK_EVENT" | "SIGNAL_ALERT" | "SESSION_STOPPED" = "SIGNAL_ALERT", email?: keyof typeof EVENT_COPY) {
   await prisma.notification.create({ data: { userId, type, message, link: "/app/live-trading" } }).catch(() => {});
+  // The same news by email, for the moments that matter when nobody is looking at the app (the user's settings decide which).
+  if (email) await emailEvent(userId, email, { ...EVENT_COPY[email], body: message, path: "/app/live-trading" });
 }
 
 // ---------- start / control ----------
@@ -267,7 +276,11 @@ async function reconcile(d: LiveDeployment): Promise<{ qty: number; avg: number 
 
 async function logOrderChange(d: LiveDeployment, o: { side: string; quantity: number; filledQuantity: number; averagePrice: number | null; status: string; rejectReason: string | null; brokerOrderId: string | null }) {
   const what = `${o.side} ${o.quantity} ${stock(d)}`;
-  if (o.status === "FILLED") return lg(d, "OK", `${brokerName(d)} confirms the ${what} order is filled${o.averagePrice ? ` at ${rupees(o.averagePrice)}` : ""}.`);
+  if (o.status === "FILLED") {
+    const text = `${brokerName(d)} confirms the ${what} order is filled${o.averagePrice ? ` at ${rupees(o.averagePrice)}` : ""}.`;
+    await emailEvent(d.userId, "live_order", { ...EVENT_COPY.live_order, body: `“${d.strategyName}”: ${text}`, path: "/app/live-trading" });
+    return lg(d, "OK", text);
+  }
   if (o.status === "PARTIALLY_FILLED") return lg(d, "INFO", `${brokerName(d)} has filled ${o.filledQuantity} of ${o.quantity} so far on the ${what} order.`);
   if (o.status === "REJECTED" || o.status === "FAILED") return lg(d, "ERROR", `${brokerName(d)} refused the ${what} order: ${plainReason(o.rejectReason, brokerName(d))}.`);
   if (o.status === "CANCELLED") return lg(d, "WARN", `The ${what} order was cancelled${o.filledQuantity ? ` after ${o.filledQuantity} filled` : ""}.`);
@@ -304,7 +317,7 @@ async function send(d: LiveDeployment, o: { side: "BUY" | "SELL"; quantity: numb
   if (order.status === "REJECTED" || order.status === "FAILED") {
     await prisma.liveDeployment.update({ where: { id: d.id }, data: { status: "PAUSED", lastError: `${o.side} ${o.quantity} was not accepted: ${plainReason(order.rejectReason ?? order.status, brokerName(d))}` } });
     await lg(d, "ERROR", `Paused: no more orders are sent until you resume. ${plainReason(order.rejectReason ?? order.status, brokerName(d))}.`);
-    await notify(d.userId, `“${d.strategyName}” paused — ${brokerName(d)} didn't accept a ${o.side} order: ${plainReason(order.rejectReason ?? order.status, brokerName(d))}.`, "RISK_EVENT");
+    await notify(d.userId, `“${d.strategyName}” paused — ${brokerName(d)} didn't accept a ${o.side} order: ${plainReason(order.rejectReason ?? order.status, brokerName(d))}.`, "RISK_EVENT", "live_paused");
   }
   return order;
 }
@@ -353,7 +366,7 @@ export async function runDeployment(id: string): Promise<"idle" | "acted" | "pau
       // The plan moved on but the broker can't take the order now: stop and let the user resume, which re-aligns the plan with what is really held.
       await lg(d, "WARN", `Entry ${o.entryLevel} of the plan was reached at about ${rupees(o.price)}, but ${real.working ? "an earlier order is still being settled" : "no position is open at the broker"}, so nothing was sent and the strategy is paused. Resume it to re-check what is held.`);
       await prisma.liveDeployment.update({ where: { id }, data: { status: "PAUSED", lastError: "A further entry couldn't be sent because an earlier order was still working — resume to re-check." } });
-      await notify(d.userId, `“${d.strategyName}” paused — a further entry level couldn't be sent. Resume it on Live Trading.`, "RISK_EVENT");
+      await notify(d.userId, `“${d.strategyName}” paused — a further entry level couldn't be sent. Resume it on Live Trading.`, "RISK_EVENT", "live_paused");
       return "paused";
     }
     if (opening && !level && (real.qty > 0 || real.working)) {
@@ -368,7 +381,7 @@ export async function runDeployment(id: string): Promise<"idle" | "acted" | "pau
       if (fit.quantity < 1) {
         await lg(d, "ERROR", `One share costs about ${rupees(o.price)}, above your ${rupees(maxOrderValue)} per-order limit, so nothing was sent and the strategy is paused. Raise the limit in Risk Controls and resume.`);
         await prisma.liveDeployment.update({ where: { id }, data: { status: "PAUSED", lastError: `One share costs about ₹${Math.round(o.price).toLocaleString("en-IN")}, above your ₹${maxOrderValue.toLocaleString("en-IN")} per-order limit — raise it in Risk Controls.` } });
-        await notify(d.userId, `“${d.strategyName}” paused — one share is above your per-order limit (Risk Controls).`, "RISK_EVENT");
+        await notify(d.userId, `“${d.strategyName}” paused — one share is above your per-order limit (Risk Controls).`, "RISK_EVENT", "live_paused");
         return "paused";
       }
       if (fit.reduced) await lg(d, "WARN", `Order size cut from ${quantity} to ${fit.quantity} shares to stay inside your ${rupees(maxOrderValue)} per-order limit.`);
@@ -385,13 +398,13 @@ export async function runDeployment(id: string): Promise<"idle" | "acted" | "pau
         if (!(err instanceof LiveCheckError) && !(err instanceof BrokerError)) logError("live.deployment.send", err, { id });
         await lg(d, "ERROR", `The ${sig.side} ${sig.quantity} ${stock(d)} order was not sent: ${plainReason(why, brokerName(d))}. Paused until you resume.`);
         await prisma.liveDeployment.update({ where: { id }, data: { status: "PAUSED", lastError: `${sig.side} ${sig.quantity} not sent: ${why}` } });
-        await notify(d.userId, `“${d.strategyName}” paused — a ${sig.side} order couldn't be sent: ${why}`, "RISK_EVENT");
+        await notify(d.userId, `“${d.strategyName}” paused — a ${sig.side} order couldn't be sent: ${why}`, "RISK_EVENT", "live_paused");
         break;
       }
     } else {
       pending.push(sig);
       await lg(d, "INFO", `${sig.side} ${sig.quantity} ${stock(d)} is waiting for your confirmation on Live Trading (${sig.reason}).`);
-      await notify(d.userId, `“${d.strategyName}”: ${sig.side} ${sig.quantity} ${d.instrumentSymbol.replace(/\.NS$/, "")} (${sig.reason}) — confirm on Live Trading to send it.`);
+      await notify(d.userId, `“${d.strategyName}”: ${sig.side} ${sig.quantity} ${d.instrumentSymbol.replace(/\.NS$/, "")} (${sig.reason}) — confirm on Live Trading to send it.`, "SIGNAL_ALERT", "live_signal");
       acted = true;
     }
   }

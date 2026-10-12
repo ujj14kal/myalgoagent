@@ -1,3 +1,4 @@
+import { sendWelcomeEmail } from "@/lib/email";
 import NextAuth, { customFetch } from "next-auth";
 import Google from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
@@ -38,6 +39,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
   events: {
+    // A brand-new account made through the adapter (Google sign-up, sign-in link): the same welcome email as a password sign-up.
+    async createUser({ user }) {
+      if (user.email) await sendWelcomeEmail(user.email, user.name?.trim() || "there").catch((err) => console.error("sendWelcomeEmail failed:", err));
+    },
     async signIn({ user, account, profile }) {
       if (!user.id) return;
       await reactivateIfPending(user.id);

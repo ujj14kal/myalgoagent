@@ -15,6 +15,8 @@ export async function collectUserData(userId: string) {
           username: true,
           phone: true,
           agentName: true,
+          emailVerified: true,
+          emailPrefs: true,
           createdAt: true,
         },
       }),

@@ -1,10 +1,12 @@
-import { Bell, Bot, Compass, PenLine } from "lucide-react";
+import { Bell, Bot, Compass, Mail, PenLine } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import AgentNameForm from "@/components/agent-name-form";
 import { DEFAULT_AGENT_NAME } from "@/lib/agent-constants";
 import ReplayTourButton from "@/components/tutorial/replay-tour-button";
 import NotificationPrefsForm from "@/components/notification-prefs-form";
+import EmailPrefsForm from "@/components/email-prefs-form";
+import { cleanPrefs } from "@/lib/event-email-config";
 import AgentShowcase from "@/components/agent-showcase";
 import PageHeader from "@/components/ui/page-header";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -36,6 +38,13 @@ export default async function AgentSettingsPage() {
             <CardHeader title="Notifications from your agent" subtitle="Choose which routine updates it sends you." icon={Bell} />
             <div className="mt-5">
               <NotificationPrefsForm initial={{ notifyOrderFilled: user.notifyOrderFilled, notifySignalAlert: user.notifySignalAlert }} />
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <CardHeader title="Emails about your account" subtitle="Alerts that reach you when you are not in the app." icon={Mail} />
+            <div className="mt-5">
+              <EmailPrefsForm initial={cleanPrefs(user.emailPrefs)} />
             </div>
           </Card>
 

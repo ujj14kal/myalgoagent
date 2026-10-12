@@ -155,12 +155,13 @@ export async function sendMagicLinkEmail(to: string, url: string) {
   });
 }
 
-export async function sendWelcomeEmail(to: string, name: string) {
+export async function sendWelcomeEmail(to: string, name: string, verifyUrl?: string) {
+  const verify = verifyUrl ? `<p style="margin-top:20px">Please confirm this is your email address:</p>${emailButton(verifyUrl, "Confirm my email")}<p style="font-size:13px;color:#6b7788">The link works for 24 hours.</p>` : "";
   await sendEmail({
     to,
     subject: "Welcome to MyAlgoAgent",
-    html: wrap(`<h1 style="font-size:20px;margin:0 0 12px">Welcome, ${e(name)}</h1><p>Your account is ready. Describe an idea in plain words, see the exact rules it becomes, and test it on past data before it goes anywhere near real money.</p>${emailButton(`${SITE}/app`, "Open MyAlgoAgent")}`, "Your account is ready"),
-    text: `Hi ${name},\n\nWelcome to MyAlgoAgent — your account is ready.`,
+    html: wrap(`<h1 style="font-size:20px;margin:0 0 12px">Welcome, ${e(name)}</h1><p>Your account is ready. Describe an idea in plain words, see the exact rules it becomes, and test it on past data before it goes anywhere near real money.</p>${emailButton(`${SITE}/app`, "Open MyAlgoAgent")}${verify}`, "Your account is ready"),
+    text: `Hi ${name},\n\nWelcome to MyAlgoAgent — your account is ready: ${SITE}/app${verifyUrl ? `\n\nPlease confirm this is your email address (the link works for 24 hours): ${verifyUrl}` : ""}`,
   });
 }
 
@@ -271,5 +272,22 @@ export async function sendInboundAck(to: string, ref: string, topic: string, add
     from: SUPPORT_FROM,
     replyTo: "support@myalgoagent.com",
     headers: { "Auto-Submitted": "auto-replied", Precedence: "bulk", "X-Auto-Response-Suppress": "All" },
+  });
+}
+
+const LIVE_NOTE = "This is an automatic alert about strategies you set up yourself. MyAlgoAgent gives no investment advice and does not trade on its own judgment; you are responsible for the orders in your broker account, and trading involves risk of loss.";
+
+/** An alert about something that happened on the user's account. `note` is the small print under the message. */
+export async function sendEventEmail(to: string, o: { subject: string; headline: string; body: string; link: string; linkLabel: string; live?: boolean }) {
+  await sendEmail({
+    to,
+    subject: oneLine(o.subject, 200),
+    html: wrap(
+      `<h1 style="font-size:20px;margin:0 0 12px">${e(o.headline)}</h1><div style="white-space:pre-wrap">${e(o.body)}</div>${emailButton(o.link, o.linkLabel)}<p style="margin-top:20px;font-size:12px;color:#6b7788">${e(o.live ? LIVE_NOTE : "This is an automatic message about your account.")} You can choose which of these emails you get under <a href="${SITE}/app/agent-settings" style="color:${PURPLE}">Agent settings</a>.</p>`,
+      o.headline,
+    ),
+    text: `${o.headline}\n\n${o.body}\n\n${o.linkLabel}: ${o.link}\n\n${o.live ? LIVE_NOTE : "This is an automatic message about your account."} Choose which of these emails you get: ${SITE}/app/agent-settings`,
+    replyTo: "support@myalgoagent.com",
+    headers: { "List-Unsubscribe": `<${SITE}/app/agent-settings>, <mailto:support@myalgoagent.com?subject=Stop%20alert%20emails>`, "X-Auto-Response-Suppress": "OOF, AutoReply" },
   });
 }

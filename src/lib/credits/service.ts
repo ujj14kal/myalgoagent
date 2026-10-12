@@ -3,6 +3,8 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { AI_ACTIONS, PLANS, refusalFor, slotRefusal, splitSpend, totalOf, type CreditAction, type CreditPlan, type Refusal, type Usage } from "./config";
 import type { CreditEventRow, CreditSnapshot } from "./types";
+import { creditWarning } from "@/lib/event-email-config";
+import { emailEvent } from "@/lib/event-email";
 
 // The metered features' accounts: balances, the monthly renewal, daily use, and every change written to a ledger.
 // Spending is a compare-and-set on the balances so two things happening at once can never spend the same credit twice.
@@ -113,6 +115,7 @@ export async function setPlan(userId: string, plan: CreditPlan, meta?: Prisma.In
   // A paid plan gets its own static IP (off until USER_EGRESS_ENABLED=1); a move to Free starts the grace period. Never blocks the plan change.
   const { syncEgressForPlan } = await import("@/lib/egress/service");
   await syncEgressForPlan(userId, plan !== "FREE").catch(() => undefined);
+  void emailEvent(userId, "plan_changed", { subject: `Your plan is now ${PLANS[plan].label}`, headline: `Your plan is now ${PLANS[plan].label}`, body: `${PLANS[plan].label} includes ${PLANS[plan].monthlyCredits.toLocaleString("en-IN")} credits a month${PLANS[plan].slots.live ? `, up to ${PLANS[plan].slots.live} live strategies and ${PLANS[plan].slots.forward} forward tests` : ` and up to ${PLANS[plan].slots.forward} forward tests (going live needs a paid plan)`}.`, path: "/app/account/usage", linkLabel: "See your plan" });
   return snapshot(userId);
 }
 
@@ -165,7 +168,14 @@ export async function reserve(userId: string, action: CreditAction, cost: number
       if (!updated.count) return null;
       return tx.creditEvent.create({ data: { userId, kind: "SPEND", action, credits: -(taken.monthly + taken.topup), monthlyAfter: next.monthly, topupAfter: next.topup, meta: { ...(meta as object | undefined), taken, freeAi, periodEnd: acct.periodEnd.toISOString() } } });
     });
-    if (made) return { ok: true, reservation: { id: made.id, userId, action, cost, taken, freeAi, periodEnd: acct.periodEnd.toISOString() }, snapshot: await snapshot(userId) };
+    if (made) {
+      // Running low / out: say so once as the balance crosses the line, so nobody is surprised by a refusal later.
+      const warn = creditWarning(totalOf(balance), totalOf(next), PLANS[acct.plan].monthlyCredits);
+      if (warn) void emailEvent(userId, warn, warn === "credits_out"
+        ? { subject: "You're out of credits", headline: "You're out of credits", body: "The AI assistant and backtests that use credits are paused until your credits renew or you top up. Charts, forward tests and your live strategies keep working and never use credits.", path: "/app/account/usage", linkLabel: "See credits and top-ups" }
+        : { subject: "Your credits are running low", headline: "Your credits are running low", body: `You have ${totalOf(next)} credits left. They renew on ${acct.periodEnd.toLocaleDateString("en-IN", { day: "numeric", month: "long", timeZone: "Asia/Kolkata" })}; you can also top up.`, path: "/app/account/usage", linkLabel: "See credits and top-ups" });
+      return { ok: true, reservation: { id: made.id, userId, action, cost, taken, freeAi, periodEnd: acct.periodEnd.toISOString() }, snapshot: await snapshot(userId) };
+    }
   }
   return { ok: false, refusal: { code: "NO_CREDITS", message: "Couldn't confirm your credits just now. Please try again." } };
 }

@@ -1,3 +1,4 @@
+import { emailEvent } from "@/lib/event-email";
 import "server-only";
 import type { BrokerConnection } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -24,6 +25,7 @@ async function notify(userId: string, message: string, dayStart: Date) {
   const dup = await prisma.notification.findFirst({ where: { userId, message, createdAt: { gte: dayStart } }, select: { id: true } });
   if (dup) return;
   await prisma.notification.create({ data: { userId, type: "SIGNAL_ALERT", message, link: "/app/broker-connections" } }).catch(() => {});
+  await emailEvent(userId, "broker_session", { subject: "Your broker login needs attention", headline: "Your broker login needs attention", body: message, path: "/app/broker-connections", linkLabel: "Open Broker connections" });
 }
 
 /** Sign in again for a broker that allows it without the user. True when a fresh session was saved. */

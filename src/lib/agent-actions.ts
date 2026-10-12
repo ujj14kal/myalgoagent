@@ -1,5 +1,6 @@
 "use server";
 
+import { cleanPrefs, type EmailPrefs } from "@/lib/event-email-config";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -88,5 +89,21 @@ export async function completeTutorialAction(): Promise<{ ok: true } | { ok: fal
     return { ok: false, error: "Couldn't record tutorial completion." };
   }
   revalidatePath("/app", "layout");
+  return { ok: true };
+}
+
+/** Which event emails the user wants (safety alerts are always sent, whatever is stored). */
+export async function setEmailPrefsAction(prefs: EmailPrefs): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, error: "Not signed in." };
+  const limited = await checkRateLimit(`agent-settings:${session.user.id}`, 30, 60_000);
+  if (limited) return { ok: false, error: limited };
+  try {
+    await prisma.user.update({ where: { id: session.user.id }, data: { emailPrefs: cleanPrefs(prefs) } });
+  } catch (err) {
+    logError("agent-actions:setEmailPrefs", err, { userId: session.user.id });
+    return { ok: false, error: "Couldn't save your preferences — please try again." };
+  }
+  revalidatePath("/app/agent-settings");
   return { ok: true };
 }

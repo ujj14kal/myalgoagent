@@ -12,6 +12,7 @@ import { LIMITS, oneLine, text, tooLong } from "@/lib/text";
 import { isPasswordValid } from "@/lib/password";
 import { isUsernameAvailable, isValidUsername, suggestUsernames } from "@/lib/username";
 import { sendWelcomeEmail, sendPasswordResetEmail, sendMagicLinkEmail } from "@/lib/email";
+import { newVerifyUrl } from "@/lib/email-verify";
 import { siteUrl } from "@/lib/site";
 
 const baseUrl = process.env.AUTH_URL ?? siteUrl;
@@ -77,7 +78,8 @@ export async function signupAction(input: SignupInput): Promise<{ ok: true } | {
     },
   });
 
-  await sendWelcomeEmail(email, input.fullName.trim()).catch((err) => console.error("sendWelcomeEmail failed:", err));
+  const verifyUrl = await newVerifyUrl(email).catch(() => undefined);
+  await sendWelcomeEmail(email, input.fullName.trim(), verifyUrl).catch((err) => console.error("sendWelcomeEmail failed:", err));
 
   await createSessionForUser(user.id);
 
