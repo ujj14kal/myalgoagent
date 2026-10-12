@@ -14,9 +14,9 @@ const model: InvoiceModel = {
   status: "PAID",
   buyer: { name: "Sample Customer", email: to },
   seller: { name: "Shagoon Softech Private Limited", address: "C/O Chenaram Jat Duduwala, Complex, G Block, Bhilwara - 311001, Rajasthan", gstin: "08ABUCS7513A1Z6", pan: "ABUCS7513A", email: "support@myalgoagent.com", website: "https://myalgoagent.com" },
-  lines: [{ description: "MyAlgoAgent Trade plan", detail: "Monthly · sample, not a real payment", qty: 1, totalPaise: 199_900, sac: "998314" }],
+  lines: [{ description: "MyAlgoAgent Trade plan", detail: "Monthly · sample, not a real payment", qty: 1, totalPaise: 235_882, sac: "998314" }],
 };
 void (async () => {
-await sendInvoiceEmail(to, { number: model.number, totalLabel: rupees(199_900), invoiceHtml: invoiceHtml(model), text: invoiceText(model), viewUrl: "https://myalgoagent.com/app/account/usage", billingUrl: "https://myalgoagent.com/app/account/usage" });
+await sendInvoiceEmail(to, { number: model.number, totalLabel: rupees(235_882), invoiceHtml: invoiceHtml(model), text: invoiceText(model), viewUrl: "https://myalgoagent.com/app/account/usage", billingUrl: "https://myalgoagent.com/app/account/usage" });
 console.log(`sample invoice sent to ${to}`);
 })().catch((e) => { console.error(e instanceof Error ? e.message : e); process.exit(1); });
