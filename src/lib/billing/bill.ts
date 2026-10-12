@@ -1,8 +1,7 @@
-import { PLANS, TOPUP_PACKS } from "@/lib/credits/config";
-import { GST_RATE, gstSplit } from "./invoice";
+import { GST_RATE, PLANS, TOPUP_PACKS, withGst } from "@/lib/credits/config";
 
 // What a checkout shows before anyone pays: the item, what it gives, and the bill split into value and GST.
-// Prices are GST-inclusive (the rate card says so), so the tax is carved out of the total exactly as on the invoice.
+// Prices are shown before GST: the customer pays the price plus 18% GST, and the invoice shows the same split.
 
 export type CheckoutItem = { kind: "plan"; plan: "TRADE" | "PRO" } | { kind: "topup"; credits: number };
 
@@ -37,7 +36,7 @@ export const itemKey = (i: CheckoutItem) => (i.kind === "plan" ? `plan:${i.plan}
 export function billFor(item: CheckoutItem): Bill {
   if (item.kind === "plan") {
     const spec = PLANS[item.plan];
-    const totalPaise = (spec.price ?? 0) * 100;
+    const c = withGst(spec.price ?? 0);
     return {
       item,
       title: `${spec.label} plan`,
@@ -48,21 +47,23 @@ export function billFor(item: CheckoutItem): Bill {
         `Up to ${spec.slots.live} live strategies and ${spec.slots.forward} forward tests`,
         "Cancel any time: you keep the plan until the month you paid for ends",
       ],
-      ...gstSplit(totalPaise),
-      totalPaise,
+      taxablePaise: c.basePaise,
+      gstPaise: c.gstPaise,
+      totalPaise: c.totalPaise,
       gstRate: GST_RATE,
       recurring: true,
     };
   }
   const pack = TOPUP_PACKS.find((p) => p.credits === item.credits)!;
-  const totalPaise = pack.price * 100;
+  const c = withGst(pack.price);
   return {
     item,
     title: `${fmt(pack.credits)} credit top-up`,
     subtitle: "One-off payment",
     perks: [`${fmt(pack.credits)} credits added straight away`, "Kept for 12 months and used after your monthly credits", "Needs a Trade or Pro plan"],
-    ...gstSplit(totalPaise),
-    totalPaise,
+    taxablePaise: c.basePaise,
+    gstPaise: c.gstPaise,
+    totalPaise: c.totalPaise,
     gstRate: GST_RATE,
     recurring: false,
   };

@@ -14,6 +14,7 @@ export type Capability =
   | "ai"
   | "system" // AWS health, cost, logs, schedules
   | "audit"
+  | "billing" // refund customers (money leaves the account)
   | "team";
 
 const NEEDS: Record<Capability, AdminRole> = {
@@ -26,6 +27,7 @@ const NEEDS: Record<Capability, AdminRole> = {
   ai: "ADMIN",
   system: "ADMIN",
   audit: "ADMIN",
+  billing: "ADMIN",
   team: "OWNER",
 };
 

@@ -6,7 +6,7 @@ Test mode is on today (keys `rzp_test_…`). The app code is identical in both m
 - [ ] Razorpay account is **activated for live payments** (KYC and website approval done in the Razorpay dashboard).
 - [ ] Our policies are published and approved by you: Terms (plans, billing, cancellation section), Privacy Policy (payments), and a **refund / cancellation policy** page. Razorpay's activation review and card networks expect these on the website. The text in Terms is a draft pending legal review.
 - [ ] **GST invoices:** not built. Needs your GSTIN, invoice numbering and place-of-supply rules. Decide whether Razorpay's invoices or ours.
-- [ ] Prices and plan contents are final (Free, Trade ₹1,999, Pro ₹3,499 per month GST included; top-up packs). Razorpay plans cannot be edited after creation; a price change means new plans.
+- [ ] Prices and plan contents are final (Free, Trade ₹1,999 + 18% GST, Pro ₹3,499 + 18% GST per month; top-up packs also + GST). Razorpay plans cannot be edited after creation; a price change means new plans.
 - [ ] You have tested the full flow in test mode (checkout, renewal, cancel, top-up) and the test webhook delivers.
 
 ## The switch (about 5 minutes, you run these so live keys stay with you)

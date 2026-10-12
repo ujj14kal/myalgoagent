@@ -30,6 +30,7 @@ const columns = [
       { href: "/risk-disclosure", label: "Risk Disclosure" },
       { href: "/privacy-policy", label: "Privacy Policy" },
       { href: "/terms", label: "Terms" },
+      { href: "/refund-policy", label: "Refunds" },
       { href: "/cookie-policy", label: "Cookie Policy" },
     ],
   },

@@ -6,8 +6,8 @@ import { grantUserCredits, setUserPlan } from "@/lib/admin/actions";
 
 const PLANS = [
   ["FREE", "Free"],
-  ["TRADE", "Trade ₹1,999"],
-  ["PRO", "Pro ₹3,499"],
+  ["TRADE", "Trade ₹1,999 + GST"],
+  ["PRO", "Pro ₹3,499 + GST"],
 ] as const;
 
 /** Moves a customer between plans and adds credits (a top-up they paid for, or a goodwill grant). */

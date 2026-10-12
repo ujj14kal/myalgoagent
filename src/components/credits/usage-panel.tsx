@@ -87,7 +87,7 @@ export default function UsagePanel({ events, historyWindow, billing }: { events:
         </Card>
 
         <Card className="min-w-0 p-5">
-          <CardHeader title="Plan & billing" subtitle="Prices include GST" icon={CreditCard} />
+          <CardHeader title="Plan & billing" subtitle="Prices are before 18% GST" icon={CreditCard} />
           <div className="mt-4 space-y-3 text-sm">
             {billing.subscription ? (
               <div className="rounded-xl bg-brand-bg p-3">
@@ -129,7 +129,7 @@ export default function UsagePanel({ events, historyWindow, billing }: { events:
               return (
                 <div key={p} className={`flex min-w-0 flex-col rounded-xl border p-3 text-sm ${current ? "border-brand-primary bg-brand-primary/[0.05]" : "border-brand-navy/10"}`}>
                   <p className="flex flex-wrap items-center gap-1.5 font-bold text-brand-navy">{spec.label}{current ? <span className="rounded-full bg-brand-primary px-1.5 py-0.5 text-[10px] font-semibold text-white">current</span> : null}</p>
-                  <p className="num text-lg font-bold tabular-nums">{spec.price ? `₹${fmt(spec.price)}` : "₹0"}<span className="text-xs font-normal text-brand-navy/50">{spec.price ? "/month" : ""}</span></p>
+                  <p className="num text-lg font-bold tabular-nums">{spec.price ? `₹${fmt(spec.price)}` : "₹0"}<span className="text-xs font-normal text-brand-navy/50">{spec.price ? "/month + GST" : ""}</span></p>
                   <p className="mt-1 flex-1 break-words text-xs text-brand-navy/60">{p === "FREE" ? `${spec.monthlyCredits} credits a month for daily backtests, and 2 AI replies in all` : `${fmt(spec.monthlyCredits)} credits a month, voice, ${spec.slots.live} live strategies, ${spec.slots.forward} forward tests`}</p>
                   {p !== "FREE" && !current && !(p === "TRADE" && snap.plan === "PRO") && (
                     <Link href={`/app/checkout?item=plan:${p}`} className="mt-3 rounded-full border border-brand-primary/30 px-3 py-1.5 text-center text-xs font-semibold text-brand-primary hover:bg-brand-primary/5">{snap.trial ? "Upgrade" : "Choose"} {spec.label}</Link>
@@ -148,7 +148,7 @@ export default function UsagePanel({ events, historyWindow, billing }: { events:
       {billing.payments.length > 0 && (
         <Card className="min-w-0 p-5">
           <div className="flex flex-wrap items-start justify-between gap-2">
-            <CardHeader title="Recent payments" subtitle="Your latest payments through Razorpay, GST included" icon={Receipt} />
+            <CardHeader title="Recent payments" subtitle="Your latest payments through Razorpay, with GST" icon={Receipt} />
             <Link href="/app/account/payments" className="text-xs font-semibold text-brand-primary hover:underline">All payments &amp; invoices →</Link>
           </div>
           <PaymentsTable rows={billing.payments} />

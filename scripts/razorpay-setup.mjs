@@ -22,8 +22,8 @@ const api = async (path, body) => {
 };
 
 const PLANS = [
-  { env: "RAZORPAY_PLAN_TRADE", name: "MyAlgoAgent Trade (monthly)", amount: 199900, description: "MyAlgoAgent Trade plan, billed monthly (GST included)" },
-  { env: "RAZORPAY_PLAN_PRO", name: "MyAlgoAgent Pro (monthly)", amount: 349900, description: "MyAlgoAgent Pro plan, billed monthly (GST included)" },
+  { env: "RAZORPAY_PLAN_TRADE", name: "MyAlgoAgent Trade (monthly)", amount: 235882, description: "MyAlgoAgent Trade plan: ₹1,999 + 18% GST, billed monthly" },
+  { env: "RAZORPAY_PLAN_PRO", name: "MyAlgoAgent Pro (monthly)", amount: 412882, description: "MyAlgoAgent Pro plan: ₹3,499 + 18% GST, billed monthly" },
 ];
 const existing = (await api("/plans?count=100")).items;
 const ids = {};

@@ -20,7 +20,8 @@ describe("admin roles", () => {
     expect(can("SUPPORT", "team")).toBe(false);
   });
   it("lets admins do everything except manage the team", () => {
-    for (const cap of ["inbox", "users.view", "users.manage", "announcements", "trading", "ai", "system", "audit"] as const) expect(can("ADMIN", cap)).toBe(true);
+    for (const cap of ["inbox", "users.view", "users.manage", "announcements", "trading", "ai", "system", "audit", "billing"] as const) expect(can("ADMIN", cap)).toBe(true);
+    expect(can("SUPPORT", "billing")).toBe(false); // money leaves the account: not for support staff
     expect(can("ADMIN", "team")).toBe(false);
   });
   it("lets owners do everything", () => {

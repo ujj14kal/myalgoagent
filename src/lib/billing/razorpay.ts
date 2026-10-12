@@ -54,8 +54,13 @@ export const createOrder = (p: { amountPaise: number; receipt: string; notes: Re
 export const fetchOrder = (id: string) => call<RzpOrder>("GET", `/orders/${encodeURIComponent(id)}`);
 export type RzpPayment = { id: string; order_id?: string | null; amount: number; currency: string; status: string; method?: string; captured?: boolean };
 export const fetchPayment = (id: string) => call<RzpPayment>("GET", `/payments/${encodeURIComponent(id)}`);
+export type RzpRefund = { id: string; payment_id: string; amount: number; status: string };
+/** Returns money to the customer's original payment method. `normal` speed: Razorpay settles it in 5–7 working days. */
+export const refundPayment = (paymentId: string, amountPaise: number, notes: Record<string, string>) =>
+  call<RzpRefund>("POST", `/payments/${encodeURIComponent(paymentId)}/refund`, { amount: amountPaise, speed: "normal", notes });
 export const createPlan = (p: { name: string; amountPaise: number; description: string }) =>
   call<{ id: string }>("POST", "/plans", { period: "monthly", interval: 1, item: { name: p.name, amount: p.amountPaise, currency: "INR", description: p.description } });
+export const fetchPlan = (id: string) => call<{ id: string; item: { name: string; amount: number } }>("GET", `/plans/${encodeURIComponent(id)}`);
 export const listPlans = () => call<{ items: { id: string; item: { name: string; amount: number } }[] }>("GET", "/plans?count=100");
 
 // ---------- signatures ----------

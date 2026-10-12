@@ -11,15 +11,19 @@ describe("checkout bill", () => {
     expect(parseItem(undefined)).toBeNull();
     expect(itemKey({ kind: "topup", credits: 250 })).toBe("topup:250");
   });
-  it("splits the GST-inclusive price into value and tax that add back to the total", () => {
+  it("adds 18% GST on top of the price shown", () => {
     for (const k of ["plan:TRADE", "plan:PRO", "topup:250", "topup:750", "topup:2000", "topup:5000"]) {
       const b = billFor(parseItem(k)!);
       expect(b.taxablePaise + b.gstPaise).toBe(b.totalPaise);
       expect(b.gstPaise).toBeGreaterThan(0);
     }
     const t = billFor({ kind: "plan", plan: "TRADE" });
-    expect(t.totalPaise).toBe(199_900);
-    expect(t.taxablePaise).toBe(169_407);
+    expect(t.taxablePaise).toBe(199_900); // ₹1,999 before GST
+    expect(t.gstPaise).toBe(35_982);
+    expect(t.totalPaise).toBe(235_882); // ₹2,358.82 paid
+    const p = billFor({ kind: "plan", plan: "PRO" });
+    expect([p.taxablePaise, p.gstPaise, p.totalPaise]).toEqual([349_900, 62_982, 412_882]);
+    expect(billFor({ kind: "topup", credits: 250 }).totalPaise).toBe(35_282);
     expect(t.recurring).toBe(true);
     expect(billFor({ kind: "topup", credits: 250 }).recurring).toBe(false);
   });

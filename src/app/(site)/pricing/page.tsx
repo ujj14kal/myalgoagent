@@ -9,7 +9,7 @@ import { ACTION_COST, PLANS, TOPUP_PACKS, TRIAL_DAYS, TRIAL_SPEC } from "@/lib/c
 
 export const metadata: Metadata = pageMetadata({
   title: "Pricing",
-  description: `Start free with a ${TRIAL_DAYS}-day trial of everything except live trading — no card needed. Then stay on Free, or choose Trade (₹1,999/month) or Pro (₹3,499/month). Prices include GST.`,
+  description: `Start free with a ${TRIAL_DAYS}-day trial of everything except live trading — no card needed. Then stay on Free, or choose Trade (₹1,999 + GST a month) or Pro (₹3,499 + GST a month).`,
   path: "/pricing",
 });
 
@@ -77,7 +77,7 @@ export default function PricingPage() {
       <PageHeader
         eyebrow="Pricing"
         title="Start free. Upgrade when you're ready."
-        description={`Every new account starts with a ${TRIAL_DAYS}-day free trial of the paid features — no card needed. After that you stay on Free, or pick a plan. Prices include GST.`}
+        description={`Every new account starts with a ${TRIAL_DAYS}-day free trial of the paid features — no card needed. After that you stay on Free, or pick a plan. Prices are before 18% GST, which is added at checkout.`}
       />
       <Reveal>
         <section className="mx-auto max-w-6xl px-4 py-12">
@@ -98,7 +98,7 @@ export default function PricingPage() {
                   <p className="mt-1 text-sm text-brand-navy/60">{p.tagline}</p>
                   <p className="mt-5 flex items-baseline gap-1">
                     <span className="text-4xl font-bold tracking-tight text-brand-navy">{spec.price ? `₹${fmt(spec.price)}` : "₹0"}</span>
-                    {spec.price && <span className="text-sm text-brand-navy/55">/month, GST included</span>}
+                    {spec.price && <span className="text-sm text-brand-navy/55">/month + GST</span>}
                   </p>
                   <ul className="mt-6 flex-1 space-y-3 text-sm text-brand-navy/80">
                     {p.features.map((f) => (
@@ -141,7 +141,7 @@ export default function PricingPage() {
                   {TOPUP_PACKS.map((t) => (
                     <tr key={t.credits} className="border-t border-black/5">
                       <td className="py-2.5 text-brand-navy/80">{fmt(t.credits)} credits</td>
-                      <td className="py-2.5 text-right font-semibold text-brand-navy">₹{fmt(t.price)}</td>
+                      <td className="py-2.5 text-right font-semibold text-brand-navy">₹{fmt(t.price)} <span className="text-xs font-normal text-brand-navy/50">+ GST</span></td>
                     </tr>
                   ))}
                 </tbody>

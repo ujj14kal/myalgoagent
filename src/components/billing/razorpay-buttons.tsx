@@ -88,7 +88,7 @@ export function UpgradeButton({ plan, label, primary = true, wide = false }: { p
         key: checkout.keyId,
         subscription_id: checkout.subscriptionId,
         name: checkout.brand.name,
-        description: `${checkout.planLabel} plan · billed monthly, GST included`,
+        description: `${checkout.planLabel} plan · billed monthly, price + 18% GST`,
         image: checkout.brand.logo,
         theme: { color: checkout.brand.color },
         prefill: checkout.prefill,
@@ -131,7 +131,7 @@ export function TopupButton({ credits: pack, price, variant = "row", label }: { 
         amount: checkout.amountPaise,
         currency: "INR",
         name: checkout.brand.name,
-        description: `${fmt(checkout.credits)} credits · GST included`,
+        description: `${fmt(checkout.credits)} credits · price + 18% GST`,
         image: checkout.brand.logo,
         theme: { color: checkout.brand.color },
         prefill: checkout.prefill,
@@ -159,7 +159,7 @@ export function TopupButton({ credits: pack, price, variant = "row", label }: { 
       ) : (
         <button type="button" onClick={go} disabled={c.busy} className="flex w-full items-center justify-between gap-2 rounded-lg bg-brand-bg px-3 py-2 text-left text-sm transition hover:bg-brand-primary/[0.07] disabled:opacity-50">
         <span><span className="num font-semibold tabular-nums">{fmt(pack)}</span> credits</span>
-        <span className="num font-semibold tabular-nums text-brand-primary">{c.busy ? <Loader2 size={14} className="animate-spin" /> : `₹${fmt(price)}`}</span>
+        <span className="num font-semibold tabular-nums text-brand-primary">{c.busy ? <Loader2 size={14} className="animate-spin" /> : `₹${fmt(price)} + GST`}</span>
       </button>
       )}
       {c.error && <p role="alert" className="mt-1 text-xs text-[#9b1111]">{c.error}</p>}

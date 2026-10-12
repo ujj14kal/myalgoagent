@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { enforceRateLimit } from "@/lib/rate-limit";
-import { PLANS, TOPUP_PACKS } from "@/lib/credits/config";
+import { withGst, PLANS, TOPUP_PACKS } from "@/lib/credits/config";
 import { grant, setPlan } from "@/lib/credits/service";
 import { logError } from "@/lib/logger";
 import { BRAND, PAID_PLANS, RAZORPAY_PLAN_ENV, SUBSCRIPTION_CYCLES, type PaidPlan } from "./brand";
@@ -19,7 +19,6 @@ const keysOrThrow = () => {
 };
 
 export const isPaidPlan = (v: unknown): v is PaidPlan => typeof v === "string" && (PAID_PLANS as string[]).includes(v);
-const rupeesToPaise = (r: number) => Math.round(r * 100);
 
 export type Checkout = {
   keyId: string;
@@ -43,6 +42,9 @@ export async function startSubscriptionCheckout(userId: string, plan: PaidPlan):
   const current = user.creditAccount?.plan ?? "FREE";
   if (current === plan) throw new BillingError(`You're already on ${PLANS[plan].label}.`);
   if (current === "PRO" && plan === "TRADE") throw new BillingError("To move from Pro to Trade, cancel Pro and choose Trade when it ends.");
+  // Never charge an amount different from the bill we showed: the Razorpay plan must be priced at the price plus GST.
+  const rzpPlan = await rzp.fetchPlan(planId);
+  if (rzpPlan.item.amount !== withGst(PLANS[plan].price ?? 0).totalPaise) throw new BillingError("This plan's price is being updated in our payment system. Please try again in a little while, or contact support.");
   const sub = await rzp.createSubscription({ planId, totalCount: SUBSCRIPTION_CYCLES, notes: { userId, plan } });
   await prisma.subscription.create({ data: { userId, plan, razorpaySubscriptionId: sub.id, razorpayPlanId: planId, status: sub.status } });
   return {
@@ -51,7 +53,7 @@ export async function startSubscriptionCheckout(userId: string, plan: PaidPlan):
     subscriptionId: sub.id,
     plan,
     planLabel: PLANS[plan].label,
-    amountPaise: rupeesToPaise(PLANS[plan].price ?? 0),
+    amountPaise: withGst(PLANS[plan].price ?? 0).totalPaise,
     prefill: { name: user.name ?? "", email: user.email },
     brand: { name: BRAND.name, logo: BRAND.logoUrl, color: BRAND.color },
   };
@@ -137,7 +139,7 @@ export async function startTopupCheckout(userId: string, credits: number): Promi
   const acct = await prisma.creditAccount.findUnique({ where: { userId }, select: { plan: true } });
   if (!acct || acct.plan === "FREE") throw new BillingError("Top-ups are for the Trade and Pro plans.");
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
-  const order = await rzp.createOrder({ amountPaise: rupeesToPaise(pack.price), receipt: `topup_${userId.slice(-8)}_${Date.now()}`, notes: { userId, kind: "topup", credits: String(pack.credits) } });
+  const order = await rzp.createOrder({ amountPaise: withGst(pack.price).totalPaise, receipt: `topup_${userId.slice(-8)}_${Date.now()}`, notes: { userId, kind: "topup", credits: String(pack.credits) } });
   return { keyId: keys.keyId, mode: rzp.razorpayMode(keys.keyId), orderId: order.id, credits: pack.credits, amountPaise: order.amount, prefill: { name: user?.name ?? "", email: user?.email ?? "" }, brand: { name: BRAND.name, logo: BRAND.logoUrl, color: BRAND.color } };
 }
 
@@ -161,7 +163,7 @@ export async function confirmTopupPayment(userId: string, p: { orderId: string; 
   if (order.notes?.userId !== userId || order.notes?.kind !== "topup") throw new BillingError("That payment doesn't belong to this account.");
   const credits = Number(order.notes.credits);
   const pack = TOPUP_PACKS.find((x) => x.credits === credits);
-  if (!pack || order.amount !== rupeesToPaise(pack.price)) throw new BillingError("That payment doesn't match a credit pack.");
+  if (!pack || order.amount !== withGst(pack.price).totalPaise) throw new BillingError("That payment doesn't match a credit pack.");
   const added = await creditTopup({ userId, credits, paymentId: p.paymentId, orderId: p.orderId, amountPaise: order.amount });
   return { credits, added };
 }
@@ -172,12 +174,12 @@ export async function confirmTopupPayment(userId: string, p: { orderId: string; 
  * A refund Razorpay has processed: remember it, and send the credit note (once). Plans and credits are NOT touched: what a refund
  * means for the account (stop the plan, take the credits back) is for a person to decide, so the team is alerted.
  */
-export async function recordRefund(args: { razorpayPaymentId: string; amountPaise: number; refundId: string }): Promise<void> {
+export async function recordRefund(args: { razorpayPaymentId: string; amountPaise: number; refundId: string; byStaff?: boolean }): Promise<void> {
   const p = await prisma.payment.findUnique({ where: { razorpayPaymentId: args.razorpayPaymentId } });
   if (!p || p.creditNoteNumber || p.refundedAt) return; // not ours, or already handled
   const full = args.amountPaise >= p.amount;
   await prisma.payment.update({ where: { id: p.id }, data: { refundedAmount: args.amountPaise, refundedAt: new Date(), status: full ? "refunded" : p.status } });
-  logError("billing.refund", new Error(`Refund ${args.refundId} of ₹${(args.amountPaise / 100).toFixed(2)} on ${p.kind} payment ${p.razorpayPaymentId} for user ${p.userId}: review their plan/credits`));
+  if (!args.byStaff) logError("billing.refund", new Error(`Refund ${args.refundId} of ₹${(args.amountPaise / 100).toFixed(2)} on ${p.kind} payment ${p.razorpayPaymentId} for user ${p.userId}: review their plan/credits`));
   await sendCreditNoteOnce(p.id);
 }
 

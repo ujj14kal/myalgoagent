@@ -10,7 +10,7 @@ import { rupees } from "@/lib/billing/invoice";
 import { razorpayKeys, razorpayMode } from "@/lib/billing/razorpay";
 import { RAZORPAY_PLAN_ENV } from "@/lib/billing/brand";
 import { snapshot } from "@/lib/credits/service";
-import { PLANS, TOPUP_PACKS } from "@/lib/credits/config";
+import { PLANS, TOPUP_PACKS, withGst } from "@/lib/credits/config";
 import { ShoppingCart } from "lucide-react";
 
 export const metadata = { title: "Checkout", robots: { index: false } };
@@ -38,7 +38,7 @@ function Chooser({ plan, canTopUp, enabled }: { plan: string; canTopUp: boolean;
     <div className="space-y-6">
       <Steps at={1} />
       <Card className="p-5">
-        <CardHeader title="Choose a plan" subtitle="Prices include GST. Cancel any time." icon={ShoppingCart} />
+        <CardHeader title="Choose a plan" subtitle="Prices are before 18% GST, which is added at checkout. Cancel any time." icon={ShoppingCart} />
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {(["TRADE", "PRO"] as const).map((p) => {
             const spec = PLANS[p];
@@ -50,7 +50,8 @@ function Chooser({ plan, canTopUp, enabled }: { plan: string; canTopUp: boolean;
                   {spec.label}
                   {here && <span className="rounded-full bg-brand-primary px-2 py-0.5 text-[10px] font-semibold text-white">current</span>}
                 </p>
-                <p className="num mt-1 text-2xl font-bold tabular-nums text-brand-navy">₹{fmt(spec.price ?? 0)}<span className="text-sm font-normal text-brand-navy/50"> /month</span></p>
+                <p className="num mt-1 text-2xl font-bold tabular-nums text-brand-navy">₹{fmt(spec.price ?? 0)}<span className="text-sm font-normal text-brand-navy/50"> + GST /month</span></p>
+                <p className="num text-xs text-brand-navy/50">{rupees(withGst(spec.price ?? 0).totalPaise)} with GST</p>
                 <ul className="mt-3 flex-1 space-y-1.5 text-sm text-brand-navy/70">
                   <li className="flex gap-2"><Check size={14} className="mt-1 shrink-0 text-brand-primary" /><span>{fmt(spec.monthlyCredits)} credits a month</span></li>
                   <li className="flex gap-2"><Check size={14} className="mt-1 shrink-0 text-brand-primary" /><span>Voice and intraday backtests</span></li>
@@ -75,7 +76,7 @@ function Chooser({ plan, canTopUp, enabled }: { plan: string; canTopUp: boolean;
             <li key={t.credits}>
               <Link href={`/app/checkout?item=topup:${t.credits}`} aria-disabled={!canTopUp || !enabled} className={`flex flex-col rounded-xl bg-brand-bg px-4 py-3 transition hover:bg-brand-primary/[0.07] ${canTopUp && enabled ? "" : "pointer-events-none opacity-50"}`}>
                 <span className="num text-lg font-bold tabular-nums text-brand-navy">{fmt(t.credits)} <span className="text-xs font-medium text-brand-navy/50">credits</span></span>
-                <span className="num text-sm font-semibold tabular-nums text-brand-primary">₹{fmt(t.price)}</span>
+                <span className="num text-sm font-semibold tabular-nums text-brand-primary">₹{fmt(t.price)} <span className="text-xs font-normal text-brand-navy/50">+ GST</span></span>
               </Link>
             </li>
           ))}
@@ -107,10 +108,10 @@ function BillCard({ bill, name, email, testMode }: { bill: Bill; name: string; e
           </div>
         </Card>
         <Card className="min-w-0 p-5 lg:col-span-2 lg:sticky lg:top-24 lg:self-start">
-          <CardHeader title="Your bill" subtitle="Prices include GST" icon={Receipt} />
+          <CardHeader title="Your bill" subtitle="Price plus 18% GST" icon={Receipt} />
           <dl className="mt-3 divide-y divide-brand-navy/[0.07] text-sm">
-            <div className={row}><dt className="min-w-0 text-brand-navy/70">{bill.title}<span className="block text-xs text-brand-navy/45">Value before GST</span></dt><dd className="num shrink-0 font-semibold tabular-nums text-brand-navy">{rupees(bill.taxablePaise)}</dd></div>
-            <div className={row}><dt className="min-w-0 text-brand-navy/70">GST @ {bill.gstRate}%<span className="block text-xs text-brand-navy/45">Included in the price</span></dt><dd className="num shrink-0 font-semibold tabular-nums text-brand-navy">{rupees(bill.gstPaise)}</dd></div>
+            <div className={row}><dt className="min-w-0 text-brand-navy/70">{bill.title}<span className="block text-xs text-brand-navy/45">Price, before GST</span></dt><dd className="num shrink-0 font-semibold tabular-nums text-brand-navy">{rupees(bill.taxablePaise)}</dd></div>
+            <div className={row}><dt className="min-w-0 text-brand-navy/70">GST @ {bill.gstRate}%<span className="block text-xs text-brand-navy/45">Added to the price</span></dt><dd className="num shrink-0 font-semibold tabular-nums text-brand-navy">{rupees(bill.gstPaise)}</dd></div>
             <div className="flex items-baseline justify-between gap-4 pt-3"><dt className="font-bold text-brand-navy">Total to pay{bill.recurring ? " today" : ""}</dt><dd className="num shrink-0 text-xl font-bold tabular-nums text-brand-navy">{total}</dd></div>
           </dl>
           {bill.recurring && <p className="mt-3 text-xs text-brand-navy/55">Then {total} every month on the same date, until you cancel under Plan, credits & billing. No cancellation fee.</p>}
@@ -124,7 +125,7 @@ function BillCard({ bill, name, email, testMode }: { bill: Bill; name: string; e
             {bill.item.kind === "plan" ? (
               <UpgradeButton plan={bill.item.plan} label={`Pay ${total} securely`} wide />
             ) : (
-              <TopupButton credits={bill.item.credits} price={bill.totalPaise / 100} variant="pay" label={`Pay ${total} securely`} />
+              <TopupButton credits={bill.item.credits} price={bill.taxablePaise / 100} variant="pay" label={`Pay ${total} securely`} />
             )}
           </div>
           <p className="mt-3 flex items-start gap-2 text-xs text-brand-navy/55">

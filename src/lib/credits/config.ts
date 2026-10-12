@@ -30,7 +30,7 @@ export const AI_ACTIONS: CreditAction[] = ["ai_reply", "ai_build", "ai_voice", "
 
 export type PlanSpec = {
   label: string;
-  /** Rupees a month, GST included; null = free. */
+  /** Rupees a month BEFORE GST (18% is added at checkout); null = free. */
   price: number | null;
   /** Credits added each period. */
   monthlyCredits: number;
@@ -74,7 +74,7 @@ export type PlanKey = CreditPlan | "TRIAL";
 export const specOf = (k: PlanKey): PlanSpec => (k === "TRIAL" ? TRIAL_SPEC : PLANS[k]);
 export const effectivePlan = (plan: CreditPlan, trialEndsAt: Date | null | undefined, now = new Date()): PlanKey => (plan === "FREE" && trialEndsAt && trialEndsAt > now ? "TRIAL" : plan);
 
-/** Top-up packs (paid plans): priced for at least a 54% margin even if every credit is spent at the worst-case cost. Rupees, GST included. */
+/** Top-up packs (paid plans): priced for at least a 54% margin even if every credit is spent at the worst-case cost. Rupees BEFORE GST (18% is added at checkout). */
 export const TOPUP_PACKS = [
   { credits: 250, price: 299 },
   { credits: 750, price: 799 },
@@ -145,4 +145,14 @@ export function slotRefusal(plan: PlanKey, kind: "live" | "forward", used: numbe
   const what = kind === "live" ? "live strategies" : "forward tests";
   if (cap === 0) return { code: "NOT_ON_PLAN", message: `Going live is part of the Trade and Pro plans.` };
   return { code: "SLOTS_FULL", message: `${spec.label} runs up to ${cap} ${what} at once and you have ${used}. Stop one first${plan === "PRO" ? "." : ", or move to Pro for more."}` };
+}
+
+/** GST on these services, in percent. Prices above are before GST: the customer pays the price plus this. */
+export const GST_RATE = 18;
+
+/** What a customer pays for something priced `baseRupees` before GST: the price, the tax on it, and the total, all in paise. */
+export function withGst(baseRupees: number): { basePaise: number; gstPaise: number; totalPaise: number } {
+  const basePaise = Math.round(baseRupees * 100);
+  const gstPaise = Math.round((basePaise * GST_RATE) / 100);
+  return { basePaise, gstPaise, totalPaise: basePaise + gstPaise };
 }

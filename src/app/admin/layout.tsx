@@ -16,10 +16,11 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const staff = await requireStaff("inbox");
-  const [openCases, openFeedback, failedJobs] = await Promise.all([
+  const [openCases, openFeedback, failedJobs, pendingRefunds] = await Promise.all([
     prisma.supportCase.count({ where: { status: "OPEN" } }),
     prisma.feedback.count({ where: { status: "OPEN" } }),
     prisma.jobRun.count({ where: { ok: false, job: { in: ["paper-sync", "live-deployments", "purge-deleted-accounts"] }, startedAt: { gte: daysAgo(1) } } }),
+    can(staff.role, "billing") ? prisma.refundRequest.count({ where: { status: "PENDING" } }).catch(() => 0) : Promise.resolve(0),
   ]);
 
   const items: AdminNavItem[] = [
@@ -31,6 +32,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     { key: "trading", href: "/admin/trading", label: "Trading ops", alert: failedJobs > 0 },
     ...(can(staff.role, "ai") ? [{ key: "ai" as const, href: "/admin/ai", label: "AI agent" }] : []),
     ...(can(staff.role, "system") ? [{ key: "system" as const, href: "/admin/system", label: "System & AWS" }] : []),
+    ...(can(staff.role, "billing") ? [{ key: "refunds" as const, href: "/admin/refunds", label: "Refunds", badge: pendingRefunds }] : []),
     ...(can(staff.role, "audit") ? [{ key: "audit" as const, href: "/admin/audit", label: "Audit log" }] : []),
     ...(can(staff.role, "team") ? [{ key: "team" as const, href: "/admin/team", label: "Team" }] : []),
   ];
