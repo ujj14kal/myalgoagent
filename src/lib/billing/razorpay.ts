@@ -52,6 +52,8 @@ export const cancelSubscription = (id: string, atCycleEnd: boolean) => call<RzpS
 export const createOrder = (p: { amountPaise: number; receipt: string; notes: Record<string, string> }) =>
   call<RzpOrder>("POST", "/orders", { amount: p.amountPaise, currency: "INR", receipt: p.receipt.slice(0, 40), notes: p.notes });
 export const fetchOrder = (id: string) => call<RzpOrder>("GET", `/orders/${encodeURIComponent(id)}`);
+export type RzpPayment = { id: string; order_id?: string | null; amount: number; currency: string; status: string; method?: string; captured?: boolean };
+export const fetchPayment = (id: string) => call<RzpPayment>("GET", `/payments/${encodeURIComponent(id)}`);
 export const createPlan = (p: { name: string; amountPaise: number; description: string }) =>
   call<{ id: string }>("POST", "/plans", { period: "monthly", interval: 1, item: { name: p.name, amount: p.amountPaise, currency: "INR", description: p.description } });
 export const listPlans = () => call<{ items: { id: string; item: { name: string; amount: number } }[] }>("GET", "/plans?count=100");

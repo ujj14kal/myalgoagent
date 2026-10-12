@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { setPlan } from "@/lib/credits/service";
 import { logError } from "@/lib/logger";
-import { creditTopup, syncSubscription } from "./service";
+import { creditTopup, recordSubscriptionPayment, syncSubscription } from "./service";
 import { fetchOrder, type RzpSubscription } from "./razorpay";
 
 // Razorpay tells us what happened (charged, failed, cancelled…) with a signed message. Each event has an id, recorded the
@@ -37,12 +37,8 @@ export async function handleEvent(eventId: string, e: RzpEvent): Promise<"handle
       case "subscription.charged": {
         if (!sub) return "ignored";
         const row = await prisma.subscription.findUnique({ where: { razorpaySubscriptionId: sub.id } });
-        if (row && pay) {
-          await prisma.payment
-            .create({ data: { userId: row.userId, razorpayPaymentId: pay.id, razorpayOrderId: pay.order_id ?? null, subscriptionId: row.id, kind: "subscription", amount: pay.amount, currency: pay.currency, status: "captured", method: pay.method ?? null, description: `${row.plan === "PRO" ? "Pro" : "Trade"} plan` } })
-            .catch(() => undefined); // already recorded
-        }
-        await syncSubscription(sub.id);
+        await syncSubscription(sub.id); // first, so the payment is recorded against the period it paid for
+        if (row && pay) await recordSubscriptionPayment(row.id, pay.id);
         return "handled";
       }
       case "subscription.halted": // every retry of a renewal failed

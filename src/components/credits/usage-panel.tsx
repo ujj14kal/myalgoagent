@@ -18,7 +18,7 @@ export type BillingView = {
   /** Razorpay is in test mode: no real money moves. */
   testMode: boolean;
   subscription: { plan: string; endsOn: string | null; cancelAtPeriodEnd: boolean } | null;
-  payments: { id: string; when: string; what: string; amount: number; status: string }[];
+  payments: { id: string; when: string; what: string; amount: number; status: string; invoice: string | null }[];
 };
 
 const daysLeft = (iso: string) => Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000));
@@ -156,7 +156,7 @@ export default function UsagePanel({ events, billing }: { events: CreditEventRow
           <CardHeader title="Payments" subtitle="What you've paid through Razorpay, GST included" icon={Receipt} />
           <div className="mt-3 overflow-x-auto">
             <table className="data-table text-sm">
-              <thead><tr><th>When (IST)</th><th>For</th><th className="num-cell">Amount</th><th>Status</th></tr></thead>
+              <thead><tr><th>When (IST)</th><th>For</th><th className="num-cell">Amount</th><th>Status</th><th>Invoice</th></tr></thead>
               <tbody>
                 {billing.payments.map((p) => (
                   <tr key={p.id}>
@@ -164,6 +164,7 @@ export default function UsagePanel({ events, billing }: { events: CreditEventRow
                     <td>{p.what}</td>
                     <td className="num-cell tabular-nums">₹{(p.amount / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                     <td className={p.status === "captured" ? "text-[#0b6b30]" : "text-[#9b1111]"}>{p.status === "captured" ? "paid" : p.status}</td>
+                    <td>{p.status === "captured" || p.status === "refunded" ? <Link href={`/invoice/${p.id}`} className="font-semibold text-brand-primary hover:underline">{p.invoice ?? "View"}</Link> : "—"}</td>
                   </tr>
                 ))}
               </tbody>

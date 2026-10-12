@@ -346,3 +346,26 @@ export async function sendOutreachEmail(to: string, o: OutreachEmail) {
     routes: ["google"],
   });
 }
+
+// ---------- Invoices ----------
+
+/** The invoice email: a short thank-you, the invoice itself (it carries its own brand header), and the next steps. */
+export async function sendInvoiceEmail(to: string, o: { number: string; totalLabel: string; invoiceHtml: string; text: string; viewUrl: string; billingUrl: string }) {
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f7f9fc">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#f7f9fc">Payment received — invoice ${e(o.number)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f9fc;padding:24px 12px"><tr><td align="center">
+<table role="presentation" width="640" cellpadding="0" cellspacing="0" style="width:100%;max-width:640px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:${NAVY}">
+<tr><td style="padding:0 4px 14px;font-size:15px;line-height:1.6">Thank you — we've received your payment of <strong>${e(o.totalLabel)}</strong>. Your invoice is below, and you can print it or save it as a PDF any time from your account.</td></tr>
+<tr><td style="border:1px solid #e6eaf0;border-radius:16px;overflow:hidden;background:#ffffff">${o.invoiceHtml}</td></tr>
+<tr><td align="center" style="padding:6px 0 0">${emailButton(o.viewUrl, "View, print or save as PDF")}<p style="margin:6px 0 0;font-size:12px"><a href="${e(o.billingUrl)}" style="color:${PURPLE}">Plan, credits &amp; billing</a></p></td></tr>
+<tr><td style="padding:18px 4px 0;font-size:12px;line-height:1.6;color:#6b7788;text-align:center">Questions about this payment? Write to <a href="mailto:support@myalgoagent.com" style="color:${PURPLE}">support@myalgoagent.com</a>.<br>MyAlgoAgent is a product of <a href="https://shagoonsoftech.com" style="color:#6b7788">Shagoon Softech Pvt. Ltd.</a></td></tr>
+</table></td></tr></table></body></html>`;
+  await sendEmail({
+    to,
+    subject: oneLine(`Your MyAlgoAgent invoice ${o.number} — ${o.totalLabel} received`, 200),
+    html,
+    text: `Thank you — we've received your payment of ${o.totalLabel}.\n\n${o.text}\n\nView, print or save as PDF: ${o.viewUrl}\n`,
+    replyTo: "support@myalgoagent.com",
+    headers: { "X-Auto-Response-Suppress": "OOF, AutoReply" },
+  });
+}

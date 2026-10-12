@@ -6,6 +6,7 @@ import { grant, setPlan } from "@/lib/credits/service";
 import { logError } from "@/lib/logger";
 import { BRAND, PAID_PLANS, RAZORPAY_PLAN_ENV, SUBSCRIPTION_CYCLES, type PaidPlan } from "./brand";
 import * as rzp from "./razorpay";
+import { sendInvoiceOnce } from "./invoices";
 
 // Paying for a plan or a credit top-up through Razorpay. The browser only ever sees public ids; the plan changes only after
 // a payment signature (or a signed webhook) proves it happened, and every step can safely run twice.
@@ -83,13 +84,36 @@ export async function syncSubscription(razorpaySubscriptionId: string, latest?: 
   return { plan: row.plan as PaidPlan, status: s.status };
 }
 
+/**
+ * Records what Razorpay says was paid for a plan period (once: a repeat does nothing) and sends the invoice. Used by the browser's
+ * confirmation and by the renewal webhook, so an invoice goes out even if one of them is late.
+ */
+export async function recordSubscriptionPayment(subscriptionRowId: string, razorpayPaymentId: string): Promise<void> {
+  const row = await prisma.subscription.findUnique({ where: { id: subscriptionRowId } });
+  if (!row) return;
+  const pay = await rzp.fetchPayment(razorpayPaymentId);
+  if (pay.status !== "captured") return;
+  let paymentId: string | null = null;
+  try {
+    const created = await prisma.payment.create({
+      data: { userId: row.userId, razorpayPaymentId: pay.id, razorpayOrderId: pay.order_id ?? null, subscriptionId: row.id, kind: "subscription", amount: pay.amount, currency: pay.currency, status: "captured", method: pay.method ?? null, description: `${PLANS[row.plan].label} plan`, periodStart: row.currentStart, periodEnd: row.currentEnd },
+    });
+    paymentId = created.id;
+  } catch {
+    paymentId = (await prisma.payment.findUnique({ where: { razorpayPaymentId: pay.id }, select: { id: true } }))?.id ?? null; // already recorded
+  }
+  if (paymentId) await sendInvoiceOnce(paymentId);
+}
+
 /** After the payment window closes with a success: prove it came from Razorpay, then sync. */
 export async function confirmSubscriptionPayment(userId: string, p: { paymentId: string; subscriptionId: string; signature: string }) {
   const keys = keysOrThrow();
   if (!rzp.verifySubscriptionPayment(p, keys.keySecret)) throw new BillingError("We couldn't verify that payment.");
   const row = await prisma.subscription.findUnique({ where: { razorpaySubscriptionId: p.subscriptionId } });
   if (!row || row.userId !== userId) throw new BillingError("That payment doesn't belong to this account.");
-  return syncSubscription(p.subscriptionId);
+  const result = await syncSubscription(p.subscriptionId);
+  await recordSubscriptionPayment(row.id, p.paymentId).catch((err) => logError("billing.record-payment", err));
+  return result;
 }
 
 /** Stops renewals; the plan stays until the period already paid for ends. */
@@ -125,6 +149,8 @@ export async function creditTopup(args: { userId: string; credits: number; payme
     return false; // this payment was already credited
   }
   await grant(args.userId, args.credits, "TOPUP", { source: "razorpay", paymentId: args.paymentId });
+  const created = await prisma.payment.findUnique({ where: { razorpayPaymentId: args.paymentId }, select: { id: true } });
+  if (created) await sendInvoiceOnce(created.id);
   return true;
 }
 

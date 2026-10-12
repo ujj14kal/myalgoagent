@@ -25,7 +25,7 @@ export default async function UsagePage() {
     enabled,
     testMode: keys ? razorpayMode(keys.keyId) === "test" : false,
     subscription: sub ? { plan: sub.plan, endsOn: day(sub.currentEnd), cancelAtPeriodEnd: sub.cancelAtPeriodEnd } : null,
-    payments: pays.map((p) => ({ id: p.id, when: p.createdAt.toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" }), what: p.description ?? (p.kind === "topup" ? "Credit top-up" : "Plan payment"), amount: p.amount, status: p.status })),
+    payments: pays.map((p) => ({ id: p.id, when: p.createdAt.toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" }), what: p.description ?? (p.kind === "topup" ? "Credit top-up" : "Plan payment"), amount: p.amount, status: p.status, invoice: p.invoiceNumber })),
   };
   return (
     <div>
