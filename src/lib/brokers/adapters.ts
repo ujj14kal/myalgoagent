@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { request as httpsRequest } from "node:https";
 import type { BrokerId, LoginMethodId } from "./catalog";
 import { totpCode } from "./totp";
+import { motilalHeaders } from "./motilal-headers";
 import { brokerFetch, brokerGetWithBody } from "./egress";
 import { classifyBrokerMessage, type Failure, type FailureCode } from "./failures";
 
@@ -518,4 +519,42 @@ const indstocks: BrokerAdapter = {
   },
 };
 
-export const ADAPTERS: Partial<Record<BrokerId, BrokerAdapter>> = { indstocks, dhan, zerodha, upstox, fyers, angelone, groww, icicidirect, "5paisa": fivepaisa, aliceblue };
+
+// Motilal Oswal: the user logs in on Motilal's page with our app's API key; Motilal sends the browser back with an `authtoken`.
+const MOTILAL_API = "https://openapi.motilaloswal.com";
+const motilalProfile = async (c: BrokerCreds, token: string) => {
+  const { status, body } = await call(`${MOTILAL_API}/rest/login/v5/getprofile`, { method: "POST", headers: motilalHeaders(c, token), body: "{}" });
+  return { ok: status < 400 && String(body.status ?? "").toUpperCase() === "SUCCESS", status, body };
+};
+const motilal: BrokerAdapter = {
+  async loginUrl(c) {
+    return `https://invest.motilaloswal.com/OpenAPI/Login.aspx?apikey=${encodeURIComponent(c.apiKey)}`;
+  },
+  stateFrom: () => null,
+  async exchange(c, params) {
+    const authToken = params.get("authtoken") ?? params.get("authToken");
+    if (!authToken) throw new BrokerError("no_code");
+    let token = authToken;
+    let p = await motilalProfile(c, token);
+    if (!p.ok) {
+      // The docs also describe a generated access token for the Authorization header: try it before giving up.
+      const g = await call(`${MOTILAL_API}/rest/login/v1/getaccesstoken`, { method: "POST", headers: motilalHeaders(c, authToken), body: "{}" });
+      const generated = str(g.body.accesstoken) ?? str(g.body.AccessToken);
+      if (generated) {
+        token = generated;
+        p = await motilalProfile(c, token);
+      }
+      if (!p.ok) fail(p.status, p.body, "code_expired");
+    }
+    const d = obj(p.body.data);
+    return { accessToken: token, expiresAt: nextIstClock(6, 0), accountName: str(d.clientname) ?? str(d.name), brokerClientId: str(d.clientcode) ?? c.clientId };
+  },
+  async profile(c, accessToken) {
+    const p = await motilalProfile(c, accessToken);
+    if (!p.ok) fail(p.status, p.body, "session_rejected");
+    const d = obj(p.body.data);
+    return { accountName: str(d.clientname) ?? str(d.name), brokerClientId: str(d.clientcode) };
+  },
+};
+
+export const ADAPTERS: Partial<Record<BrokerId, BrokerAdapter>> = { motilal, indstocks, dhan, zerodha, upstox, fyers, angelone, groww, icicidirect, "5paisa": fivepaisa, aliceblue };

@@ -1,6 +1,6 @@
 import "server-only";
 import type { BrokerId } from "./catalog";
-import { ANGEL, angelHeaders, arr, DHAN, dhanHeaders, INDSTOCKS, indstocksHeaders, FIVEPAISA, fpClientCode, fpHeaders, FYERS, fyersHeaders, http, KITE, kiteHeaders, num, obj, text, upstoxHeaders, type LiveCtx } from "./live-brokers";
+import { ANGEL, angelHeaders, arr, DHAN, dhanHeaders, MOTILAL, motilalHeadersFor, INDSTOCKS, indstocksHeaders, FIVEPAISA, fpClientCode, fpHeaders, FYERS, fyersHeaders, http, KITE, kiteHeaders, num, obj, text, upstoxHeaders, type LiveCtx } from "./live-brokers";
 
 // Read-only account data from a user's own broker: profile, funds, holdings,
 // positions, today's orders and trades — whatever each broker's API returns.
@@ -258,6 +258,38 @@ const indstocks: AccountReader = {
     rows(await indGet(ctx, "/trade-book?segment=EQUITY")).map((r) => ({ id: t(r, "fill_id") ?? "", orderId: t(r, "exch_order_id"), symbol: t(r, "scrip_code") ?? "?", side: "", quantity: n(r, "quantity") ?? 0, price: n(r, "price"), time: t(r, "trade_date") })),
 };
 
-export const ACCOUNT_READERS: Partial<Record<BrokerId, AccountReader>> = { indstocks, groww, zerodha, upstox, fyers, angelone, dhan, "5paisa": fivepaisa };
+
+// Motilal Oswal: POST endpoints from its docs. Motilal's field names for holdings, positions and funds aren't spelled out in
+// the public docs, so each figure is read under every name it is likely to carry; anything missing shows as blank, never as a guess.
+const moPost = async (ctx: LiveCtx, path: string) => {
+  const b = obj(await http(`${MOTILAL}${path}`, { method: "POST", headers: motilalHeadersFor(ctx), json: {} }));
+  return b.data;
+};
+const motilal: AccountReader = {
+  async profile(ctx) {
+    const d = obj(await moPost(ctx, "/rest/login/v5/getprofile"));
+    return { name: t(d, "clientname", "name"), clientId: t(d, "clientcode"), email: t(d, "email", "emailid") };
+  },
+  async funds(ctx) {
+    const raw = await moPost(ctx, "/rest/report/v3/getreportmarginsummary");
+    const list = rows(raw);
+    const lines = list.length ? list.flatMap((r) => (t(r, "particulars", "particular") && n(r, "amount") !== null ? [{ name: t(r, "particulars", "particular")!, value: n(r, "amount")! }] : numericLines(r))) : numericLines(obj(raw));
+    return { available: null, used: null, total: null, lines };
+  },
+  holdings: async (ctx) =>
+    rows(await moPost(ctx, "/rest/report/v3/getdpholding")).map((r) => ({ symbol: t(r, "scripname", "symbol", "scripshortname") ?? "?", exchange: t(r, "exchange"), quantity: n(r, "dpquantity", "quantity", "totalqty") ?? 0, avgPrice: n(r, "buyavgprice", "averageprice", "avgprice"), ltp: n(r, "ltp", "LTP", "scripltp"), pnl: null })),
+  positions: async (ctx) =>
+    rows(await moPost(ctx, "/rest/book/v4/getposition")).map((r) => {
+      const buy = n(r, "buyquantity") ?? 0;
+      const sell = n(r, "sellquantity") ?? 0;
+      return { symbol: t(r, "symbol", "scripname") ?? "?", exchange: t(r, "exchange"), product: t(r, "productname", "producttype"), quantity: n(r, "netqty", "quantity") ?? buy - sell, avgPrice: n(r, "averageprice", "buyavgprice"), ltp: n(r, "ltp", "LTP"), pnl: n(r, "unrealizedpnl", "pnl"), realised: n(r, "bookedprofitloss", "realizedpnl") };
+    }),
+  orders: async (ctx) =>
+    rows(await moPost(ctx, "/rest/book/v5/getorderbook")).map((r) => ({ id: t(r, "uniqueorderid") ?? "", symbol: t(r, "symbol") ?? "?", side: sideOf(r.buyorsell), quantity: n(r, "orderqty") ?? 0, filled: n(r, "totalqtytraded") ?? 0, orderType: t(r, "ordertype"), price: n(r, "price"), avgPrice: n(r, "averageprice"), status: t(r, "orderstatus") ?? "", time: t(r, "recordinserttime", "orderentrytime") })),
+  trades: async (ctx) =>
+    rows(await moPost(ctx, "/rest/book/v4/gettradebook")).map((r) => ({ id: t(r, "tradeno", "tradenumber", "uniquetradeid") ?? "", orderId: t(r, "uniqueorderid"), symbol: t(r, "symbol") ?? "?", side: sideOf(r.buyorsell), quantity: n(r, "tradeqty", "quantity") ?? 0, price: n(r, "tradeprice", "price"), time: t(r, "tradetime", "recordinserttime") })),
+};
+
+export const ACCOUNT_READERS: Partial<Record<BrokerId, AccountReader>> = { motilal, indstocks, groww, zerodha, upstox, fyers, angelone, dhan, "5paisa": fivepaisa };
 export const ACCOUNT_SECTIONS = ["profile", "funds", "holdings", "positions", "orders", "trades"] as const;
 export type AccountSection = (typeof ACCOUNT_SECTIONS)[number];

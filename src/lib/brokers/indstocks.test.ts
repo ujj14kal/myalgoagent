@@ -34,3 +34,22 @@ describe("INDstocks", () => {
     expect(candles).toEqual([{ time: 1_700_000_000, open: 1, high: 3, low: 0.5, close: 2, volume: 100 }]);
   });
 });
+
+import { motilalHeaders } from "./motilal-headers";
+import { LIVE_NOT_YET } from "./live-brokers";
+describe("Motilal Oswal", () => {
+  it("is connectable but has no live orders yet", () => {
+    expect(brokerById("motilal")?.availability).toBe("live");
+    expect(ADAPTERS.motilal).toBeDefined();
+    expect(LIVE_BROKERS.motilal).toBeUndefined();
+    expect(LIVE_NOT_YET.motilal).toMatch(/static IP/);
+  });
+  it("sends the headers Motilal asks for on every call", () => {
+    const h = motilalHeaders({ apiKey: "K", apiSecret: "S", clientId: "A1" }, "TOKEN");
+    expect(h).toMatchObject({ Authorization: "TOKEN", ApiKey: "K", apisecretkey: "S", vendorinfo: "A1", SourceId: "WEB" });
+  });
+  it("starts login on Motilal's own page with our API key", async () => {
+    const url = await ADAPTERS.motilal!.loginUrl({ apiKey: "KEY 1" }, { state: "x", redirectUri: "y" });
+    expect(url).toBe("https://invest.motilaloswal.com/OpenAPI/Login.aspx?apikey=KEY%201");
+  });
+});
