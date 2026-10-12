@@ -2,7 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/logger";
 import { decryptSecret, encryptSecret } from "@/lib/brokers/crypto";
 import { randomBytes } from "node:crypto";
-import { advance, onPlanChange, type Deps, type EgressRow } from "./provision";
+import { advance, onPlanChange, verifyRelay, CHECK_EVERY_MS, type Deps, type EgressRow } from "./provision";
+import { withUserEgress } from "./context";
 import { awsEgressCloud, tlsCertProbe } from "./cloud-aws";
 
 // Database side of the per-user static IP (docs/per-user-static-ip-design.md). Off unless USER_EGRESS_ENABLED=1, so the
@@ -50,8 +51,8 @@ export async function syncEgressForPlan(userId: string, paid: boolean): Promise<
 }
 
 /** One scheduled pass: moves every unfinished relay one step and keeps User.liveStaticIp in step with the relay. */
-export async function reconcileEgress(): Promise<{ checked: number; changed: number; failed: number }> {
-  if (!userEgressEnabled()) return { checked: 0, changed: 0, failed: 0 };
+export async function reconcileEgress(): Promise<{ checked: number; changed: number; failed: number; verified: number }> {
+  if (!userEgressEnabled()) return { checked: 0, changed: 0, failed: 0, verified: 0 };
   const rows = await prisma.userEgress.findMany({ where: { status: { in: ["PENDING", "RELEASING"] } }, take: 25, orderBy: { updatedAt: "asc" } });
   let changed = 0;
   let failed = 0;
@@ -71,7 +72,28 @@ export async function reconcileEgress(): Promise<{ checked: number; changed: num
     }
     if (patch.status === "RELEASED" && r.publicIp) await prisma.user.updateMany({ where: { id: r.userId, liveStaticIp: r.publicIp }, data: { liveStaticIp: null } });
   }
-  return { checked: rows.length, changed, failed };
+  const verified = await verifyActiveRelays();
+  return { checked: rows.length, changed, failed: failed + verified.mismatched, verified: verified.checked };
+}
+
+/** Once a day per active relay: what IP do brokers see through it? A mismatch raises an alert. */
+async function verifyActiveRelays(): Promise<{ checked: number; mismatched: number }> {
+  const due = new Date(Date.now() - CHECK_EVERY_MS);
+  const rows = await prisma.userEgress.findMany({ where: { status: "ACTIVE", OR: [{ lastCheckAt: null }, { lastCheckAt: { lt: due } }] }, take: 10 });
+  let mismatched = 0;
+  for (const r of rows) {
+    forgetRelay(r.userId);
+    const patch = await verifyRelay(toRow(r), async () => {
+      const { currentEgressIp } = await import("@/lib/brokers/egress");
+      return (await withUserEgress(r.userId, () => currentEgressIp(), { strict: true })).ip;
+    }, new Date());
+    await prisma.userEgress.update({ where: { userId: r.userId }, data: patch });
+    if (patch.lastError) {
+      mismatched++;
+      logError("egress.relay-check", new Error(`static IP relay check for user ${r.userId}: ${patch.lastError}`));
+    }
+  }
+  return { checked: rows.length, mismatched };
 }
 
 export type Relay = { host: string; certPem: string; token: string; publicIp: string | null };

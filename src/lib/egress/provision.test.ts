@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EgressCloud, RelayState } from "./cloud";
-import { advance, onPlanChange, MAX_ATTEMPTS, LAUNCH_TIMEOUT_MS, type Deps, type EgressRow } from "./provision";
+import { advance, onPlanChange, verifyRelay, MAX_ATTEMPTS, LAUNCH_TIMEOUT_MS, type Deps, type EgressRow } from "./provision";
 import { relayUserData } from "./relay-userdata";
 
 const T0 = new Date("2026-10-12T12:00:00Z");
@@ -121,6 +121,17 @@ describe("relayUserData", () => {
     expect(s).toContain("ALLOW_HOSTS=%s");
     expect(s).toContain("api.kite.trade");
     expect(s).not.toContain("0.0.0.0");
+  });
+});
+
+describe("verifyRelay", () => {
+  const active = row({ status: "ACTIVE", publicIp: "13.0.0.1" });
+  it("passes when brokers see the recorded address", async () => {
+    expect(await verifyRelay(active, async () => "13.0.0.1\n", T0)).toEqual({ lastCheckAt: T0, lastError: null });
+  });
+  it("flags a different address, and a relay that does not answer", async () => {
+    expect((await verifyRelay(active, async () => "65.2.155.187", T0)).lastError).toMatch(/expected 13\.0\.0\.1/);
+    expect((await verifyRelay(active, async () => { throw new Error("EGRESS down"); }, T0)).lastError).toMatch(/check failed/);
   });
 });
 

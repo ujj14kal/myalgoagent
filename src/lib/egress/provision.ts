@@ -17,6 +17,7 @@ export type EgressRow = {
   graceUntil: Date | null;
   attempts: number;
   lastError: string | null;
+  lastCheckAt?: Date | null;
   updatedAt: Date;
 };
 export type EgressPatch = Partial<Omit<EgressRow, "userId" | "updatedAt">>;
@@ -97,4 +98,17 @@ export function onPlanChange(row: EgressRow | null, paid: boolean, now: Date, gr
   }
   if (row && (row.status === "ACTIVE" || row.status === "PENDING")) return { patch: { status: "RELEASING", graceUntil: new Date(now.getTime() + graceDays * 86_400_000) } };
   return null;
+}
+
+export const CHECK_EVERY_MS = 24 * 3_600_000;
+
+/** The daily self-check: ask the relay what address brokers see and compare it with the address we recorded. */
+export async function verifyRelay(row: EgressRow, seenIp: () => Promise<string>, now: Date): Promise<EgressPatch> {
+  try {
+    const seen = (await seenIp()).trim();
+    if (seen === row.publicIp) return { lastCheckAt: now, lastError: null };
+    return { lastCheckAt: now, lastError: `brokers would see ${seen}, expected ${row.publicIp}` };
+  } catch (err) {
+    return { lastCheckAt: now, lastError: `check failed: ${err instanceof Error ? err.message : String(err)}`.slice(0, 500) };
+  }
 }
