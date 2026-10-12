@@ -1139,17 +1139,20 @@ export async function runAgentTool(userId: string, name: string, rawArgs: string
     case "get_my_broker_account":
       return { result: await getBrokerAccount(userId, str(a.broker) || undefined).catch(() => ({ error: "Couldn't read the broker account right now." })) };
     case "get_my_live_trading": {
-      const [u, conns, deps, orders] = await Promise.all([
+      const [u, conns, deps, orders, egress] = await Promise.all([
         prisma.user.findUnique({ where: { id: userId }, select: { liveTradingEnabledAt: true, liveStaticIp: true } }),
         prisma.brokerConnection.findMany({ where: { userId }, select: { broker: true, status: true, tokenExpiresAt: true, liveReadyAt: true } }),
         prisma.liveDeployment.findMany({ where: { userId, status: { in: ["ACTIVE", "PAUSED"] } }, select: { strategyName: true, instrumentSymbol: true, broker: true, mode: true, status: true, positionQty: true, positionAvgPrice: true, pendingSignals: true, lastError: true } }),
         prisma.liveOrder.findMany({ where: { userId, createdAt: { gte: new Date(Date.now() - 86_400_000) } }, orderBy: { createdAt: "desc" }, take: 10, select: { side: true, quantity: true, tradingSymbol: true, status: true, filledQuantity: true, averagePrice: true, createdAt: true } }),
+        prisma.userEgress.findUnique({ where: { userId }, select: { status: true, publicIp: true } }).catch(() => null),
       ]);
       const now = Date.now();
       return {
         result: {
           liveTradingOn: !!u?.liveTradingEnabledAt,
-          staticIpToRegister: registeredStaticIp(u?.liveStaticIp),
+          staticIpToRegister: registeredStaticIp(u?.liveStaticIp ?? egress?.publicIp),
+          // Paid accounts get their own static IP, created automatically after the upgrade (about 2 minutes). PENDING = being created, live orders paused until ACTIVE.
+          staticIpStatus: egress ? egress.status : u?.liveStaticIp ? "ACTIVE" : "NOT_ASSIGNED",
           brokers: conns.map((c) => ({
             broker: c.broker,
             loggedInToday: c.status === "CONNECTED" && !!c.tokenExpiresAt && c.tokenExpiresAt.getTime() > now,

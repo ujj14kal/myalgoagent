@@ -1,3 +1,4 @@
+import { withUserEgress } from "@/lib/egress/context";
 import "server-only";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -29,7 +30,7 @@ const msg = (err: unknown, broker: string) => {
   return err instanceof LiveCheckError ? err.message : "No answer";
 };
 
-export async function checkReadiness(userId: string, brokerId: string): Promise<Readiness> {
+async function checkReadinessInner(userId: string, brokerId: string): Promise<Readiness> {
   const name = brokerById(brokerId)?.name ?? brokerId;
   const steps: ReadinessStep[] = [];
   const add = (step: string, ok: boolean, detail?: string) => steps.push({ step, ok, detail });
@@ -100,3 +101,6 @@ export async function checkReadiness(userId: string, brokerId: string): Promise<
     .catch((err) => logWarn("live.readiness", "couldn't store result", { error: String(err) }));
   return result;
 }
+
+/** Runs from the user's own static IP when they have one, so "what IP do brokers see" is checked against the right address. */
+export const checkReadiness = (userId: string, brokerId: string): Promise<Readiness> => withUserEgress(userId, () => checkReadinessInner(userId, brokerId), { strict: true });

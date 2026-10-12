@@ -21,6 +21,7 @@ enum AdminRole {
 
 model User {
   creditAccount CreditAccount?
+  egress        UserEgress?
   creditEvents  CreditEvent[]
   customerNotes CustomerNote[]
   id            String    @id @default(cuid())
@@ -236,6 +237,40 @@ model CustomerNote {
 
   @@index([userId, createdAt])
   @@index([followUpAt, doneAt])
+}
+
+enum UserEgressStatus {
+  PENDING
+  ACTIVE
+  RELEASING
+  RELEASED
+  FAILED
+}
+
+/// A paid account's own static IP and the small relay server that holds it (one per user, never shared, never recycled
+/// while the plan runs). Broker calls for this user leave through the relay; see docs/per-user-static-ip-design.md.
+model UserEgress {
+  userId       String             @id
+  status       UserEgressStatus   @default(PENDING)
+  /// EC2 Elastic IP allocation and the public address brokers see (also copied to User.liveStaticIp when ACTIVE).
+  allocationId String?
+  publicIp     String?
+  instanceId   String?
+  /// Where our servers reach the relay (private address in the VPC) and what they trust and send.
+  relayHost    String?
+  relayCertPem String?
+  tokenEnc     String?
+  /// After a cancel the IP is kept until this day so a re-subscribe gets the same address.
+  graceUntil   DateTime?
+  attempts     Int                @default(0)
+  lastError    String?
+  lastCheckAt  DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
 }
 
 enum CreditPlan {

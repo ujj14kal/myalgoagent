@@ -110,6 +110,9 @@ export async function setPlan(userId: string, plan: CreditPlan, meta?: Prisma.In
   const monthly = PLANS[plan].monthlyCredits;
   await prisma.creditAccount.update({ where: { userId }, data: { plan, monthlyBalance: monthly, periodStart: now, periodEnd: new Date(now.getTime() + MONTH_MS) } });
   await prisma.creditEvent.create({ data: { userId, kind: "PLAN", credits: monthly - acct.monthlyBalance, monthlyAfter: monthly, topupAfter: acct.topupBalance, meta: { from: acct.plan, to: plan, ...(typeof meta === "object" && meta && !Array.isArray(meta) ? meta : {}) } } });
+  // A paid plan gets its own static IP (off until USER_EGRESS_ENABLED=1); a move to Free starts the grace period. Never blocks the plan change.
+  const { syncEgressForPlan } = await import("@/lib/egress/service");
+  await syncEgressForPlan(userId, plan !== "FREE").catch(() => undefined);
   return snapshot(userId);
 }
 

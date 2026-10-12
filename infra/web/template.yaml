@@ -7,6 +7,7 @@ Parameters:
   OriginSecret: { Type: String, NoEcho: true, Default: "", Description: "Set only when CloudFront fronts the load balancer: value it sends in X-Origin-Verify. Empty = the load balancer is public" }
   DatabaseUrlSecretArn: { Type: String, Description: "Secrets Manager secret (JSON: username, password, host, port, dbname) for the database" }
   OriginHostName: { Type: String, Default: origin.myalgoagent.com }
+  UserEgressEnabled: { Type: String, Default: "0", AllowedValues: ["0", "1"], Description: "1 = paid accounts get their own static IP (docs/per-user-static-ip-design.md)" }
   BrokerEgressUrl: { Type: String, Default: "", Description: "Relay URL, or empty when broker calls leave directly through the NAT Gateway" }
   HostedZoneId: { Type: String, Default: Z01955502T07S2HGRRUW4 }
   DataKeyArn: { Type: String, Default: "arn:aws:kms:ap-south-1:327076610444:key/d1919b9d-3db7-4d0f-8bfd-5226770a8e6e" }
@@ -71,6 +72,15 @@ Resources:
               - { Sid: RateLimits, Effect: Allow, Action: [dynamodb:UpdateItem, dynamodb:GetItem], Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/myalgoagent-rate-limits" }
               - { Sid: Avatars, Effect: Allow, Action: [s3:PutObject, s3:GetObject], Resource: "arn:aws:s3:::myalgoagent-user-uploads/avatars/*" }
               - { Sid: Email, Effect: Allow, Action: [ses:SendEmail, ses:SendRawEmail], Resource: "*", Condition: { StringEquals: { "ses:FromAddress": noreply@myalgoagent.com } } }
+              # Per-user static IP: may create and remove only what carries the user-egress tag (never the NAT, database or website).
+              - { Sid: RelayCreate, Effect: Allow, Action: ec2:RunInstances, Resource: "*", Condition: { StringEquals: { "aws:RequestTag/maa:managed": user-egress } } }
+              - { Sid: RelayCreateParts, Effect: Allow, Action: ec2:RunInstances, Resource: [!Sub "arn:aws:ec2:${AWS::Region}::image/*", !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*", !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*", !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*", !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:volume/*", !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/*"] }
+              - { Sid: RelayAllocate, Effect: Allow, Action: ec2:AllocateAddress, Resource: "*", Condition: { StringEquals: { "aws:RequestTag/maa:managed": user-egress } } }
+              - { Sid: RelayTag, Effect: Allow, Action: ec2:CreateTags, Resource: "*", Condition: { StringEquals: { "ec2:CreateAction": [RunInstances, AllocateAddress] } } }
+              - { Sid: RelayManage, Effect: Allow, Action: [ec2:AssociateAddress, ec2:ReleaseAddress, ec2:TerminateInstances], Resource: "*", Condition: { StringEquals: { "ec2:ResourceTag/maa:managed": user-egress } } }
+              - { Sid: RelayAssociateTarget, Effect: Allow, Action: ec2:AssociateAddress, Resource: !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*" }
+              - { Sid: RelayRead, Effect: Allow, Action: [ec2:DescribeInstances, ec2:DescribeAddresses], Resource: "*" }
+              - { Sid: RelayPassRole, Effect: Allow, Action: iam:PassRole, Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/myalgoagent-user-relay", Condition: { StringEquals: { "iam:PassedToService": ec2.amazonaws.com } } }
               - { Sid: AdminRead, Effect: Allow, Action: [cloudwatch:DescribeAlarms, cloudwatch:GetMetricData, ce:GetCostAndUsage, ce:GetCostForecast, ses:GetAccount, guardduty:ListFindings, guardduty:GetFindings, rds:DescribeDBInstances, ecs:DescribeServices], Resource: "*" }
               - { Sid: AdminLogs, Effect: Allow, Action: logs:FilterLogEvents, Resource: !Sub "${LogGroup.Arn}:*" }
               - { Sid: Schedules, Effect: Allow, Action: [events:DescribeRule, events:EnableRule, events:DisableRule], Resource: [!Sub "arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/myalgoagent-paper-sync", !Sub "arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/myalgoagent-purge-deleted-accounts"] }
@@ -175,6 +185,10 @@ Resources:
             - { Name: NODE_ENV, Value: production }
             - { Name: TZ, Value: UTC }
             - { Name: CLIENT_IP_FROM_LAST_XFF, Value: "1" }
+            - { Name: USER_EGRESS_ENABLED, Value: !Ref UserEgressEnabled }
+            - { Name: USER_EGRESS_SUBNETS, Value: !ImportValue myalgoagent-public-subnets }
+            - { Name: USER_EGRESS_LAUNCH_TEMPLATE, Value: myalgoagent-user-relay }
+            - { Name: USER_EGRESS_SG, Value: !ImportValue myalgoagent-user-relay-sg }
             - { Name: AUTH_URL, Value: "https://myalgoagent.com" }
             - { Name: AUTH_TRUST_HOST, Value: "true" }
             - { Name: AUTH_GOOGLE_ID, Value: "48546689421-7mcct18pb5qu07pefna0tq71fb5sj244.apps.googleusercontent.com" }

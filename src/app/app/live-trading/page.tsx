@@ -11,7 +11,7 @@ import EngineFeed from "@/components/live/engine-feed";
 import AutoRefresh from "@/components/live/auto-refresh";
 import { DeploymentControls, PendingSignalActions } from "@/components/live/deployment-controls";
 import { CancelOrder, RefreshOrders } from "@/components/live/order-actions";
-import { egressEnabled, registeredStaticIp } from "@/lib/brokers/egress";
+import { registeredStaticIp } from "@/lib/brokers/egress";
 import { LIVE_DEFAULTS, marketOpen } from "@/lib/live/orders";
 import { LIVE_BROKERS, LIVE_NOT_YET } from "@/lib/brokers/live-brokers";
 import { brokerById } from "@/lib/brokers/catalog";
@@ -61,8 +61,12 @@ export default async function Page() {
     prisma.liveOrder.count({ where: { userId } }),
   ]);
   const nowMs = new Date().getTime();
-  const staticIp = registeredStaticIp(user?.liveStaticIp);
-  const relay = egressEnabled();
+  const egress = await prisma.userEgress.findUnique({ where: { userId }, select: { status: true, publicIp: true, lastError: true } }).catch(() => null);
+  const staticIp = registeredStaticIp(user?.liveStaticIp ?? egress?.publicIp);
+  // Own relay (paid accounts): active once built. Without one the account uses the shared address, which works when the app can reach brokers directly or through the shared relay.
+  const relay = egress ? egress.status === "ACTIVE" || egress.status === "RELEASING" : true;
+  const building = egress?.status === "PENDING";
+  const buildFailed = egress?.status === "FAILED";
   const open = marketOpen();
   const risk = user?.riskSettings;
   const enabled = !!user?.liveTradingEnabledAt;
@@ -128,14 +132,18 @@ export default async function Page() {
               <p className="mt-3 flex flex-wrap items-center gap-2">
                 <span className="font-mono text-2xl font-bold text-brand-navy">{staticIp}</span>
                 <CopyIp ip={staticIp} />
-                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${relay ? "bg-brand-buy/10 text-[#0b6b30]" : "bg-brand-sell/10 text-[#9b1111]"}`}>{relay ? "active" : "not set up"}</span>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${relay ? "bg-brand-buy/10 text-[#0b6b30]" : building ? "bg-brand-gold/15 text-[#7a5a00]" : "bg-brand-sell/10 text-[#9b1111]"}`}>{relay ? "active" : building ? "being set up" : "not set up"}</span>
               </p>
               <p className="mt-2 text-xs leading-relaxed text-brand-navy/60">
                 This IP is assigned to your account only. Register it as the static IP in each broker&apos;s API / developer settings: brokers only accept orders from the IP registered on your account.
               </p>
             </>
+          ) : building ? (
+            <p className="mt-3 text-sm text-brand-navy/60">Your own static IP is being created — it takes a couple of minutes and appears here when it&apos;s ready. Live orders stay paused until then.</p>
+          ) : buildFailed ? (
+            <p className="mt-3 text-sm text-brand-navy/60">We couldn&apos;t create your static IP automatically. Our team has been alerted; you can also <Link href="/app/support" className="font-semibold text-brand-primary">contact support</Link>. Live orders stay paused until it&apos;s ready.</p>
           ) : (
-            <p className="mt-3 text-sm text-brand-navy/60">No static IP is assigned to your account yet. It comes with the live trading plan — we&apos;ll email it to you, and it will show here. Brokers reject live orders without one.</p>
+            <p className="mt-3 text-sm text-brand-navy/60">Your own static IP comes with a paid plan — it&apos;s created automatically a couple of minutes after you upgrade, and it shows here. Brokers reject live orders without one.</p>
           )}
           <ul className="mt-4 space-y-2 border-t border-black/[0.05] pt-3 text-sm">
             {[

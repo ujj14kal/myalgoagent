@@ -1,3 +1,4 @@
+import { withUserEgress } from "@/lib/egress/context";
 import { killSwitchBlocks } from "@/lib/live/capital";
 import "server-only";
 import { randomBytes } from "node:crypto";
@@ -154,7 +155,7 @@ export async function placeWithRetry<T>(attempt: () => Promise<T>, orderId: stri
   }
 }
 
-export async function placeLiveOrder(input: PlaceInput): Promise<LiveOrder> {
+async function placeLiveOrderInner(input: PlaceInput): Promise<LiveOrder> {
   const { email, broker, eq } = await preflight(input);
   const ctx = await session(input.userId, input.broker);
 
@@ -224,7 +225,7 @@ const FINAL = new Set(["FILLED", "CANCELLED", "REJECTED", "FAILED"]);
 export const segmentOf = (o: { exchange: string }): Segment => (o.exchange === "NFO" ? "FO" : "EQ");
 
 /** Ask the broker for an order's latest state, check it's the stock we sent, and store any change. */
-export async function refreshLiveOrder(orderId: string, userId: string): Promise<LiveOrder> {
+async function refreshLiveOrderInner(orderId: string, userId: string): Promise<LiveOrder> {
   const order = await prisma.liveOrder.findFirst({ where: { id: orderId, userId } });
   if (!order) throw new LiveCheckError("Order not found.");
   if (FINAL.has(order.status)) return order;
@@ -260,7 +261,7 @@ export async function refreshLiveOrder(orderId: string, userId: string): Promise
   });
 }
 
-export async function cancelLiveOrder(orderId: string, userId: string): Promise<LiveOrder> {
+async function cancelLiveOrderInner(orderId: string, userId: string): Promise<LiveOrder> {
   const order = await prisma.liveOrder.findFirst({ where: { id: orderId, userId } });
   if (!order) throw new LiveCheckError("Order not found.");
   if (FINAL.has(order.status)) throw new LiveCheckError("That order is already finished.");
@@ -271,3 +272,9 @@ export async function cancelLiveOrder(orderId: string, userId: string): Promise<
   await event(order.id, "cancel_requested", { brokerStatus });
   return refreshLiveOrder(order.id, userId);
 }
+
+// Order-grade calls leave from the user's own static IP when they have one (a paid account); if that relay isn't ready the
+// call is refused rather than sent from a shared address.
+export const placeLiveOrder = (input: PlaceInput): Promise<LiveOrder> => withUserEgress(input.userId, () => placeLiveOrderInner(input), { strict: true });
+export const refreshLiveOrder = (orderId: string, userId: string): Promise<LiveOrder> => withUserEgress(userId, () => refreshLiveOrderInner(orderId, userId), { strict: true });
+export const cancelLiveOrder = (orderId: string, userId: string): Promise<LiveOrder> => withUserEgress(userId, () => cancelLiveOrderInner(orderId, userId), { strict: true });

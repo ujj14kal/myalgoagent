@@ -1,0 +1,82 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  MyAlgoAgent per-user static IP (paid accounts): the launch template and security group every user's relay is made from,
+  and the schedule that finishes building them. The relays themselves are created by the app (src/lib/egress), tagged
+  maa:managed=user-egress. Nothing here costs anything until a relay exists.
+
+Parameters:
+  ReconcileUrl: { Type: String, Default: "https://myalgoagent.com/api/internal/reconcile-egress" }
+  ConnectionArn: { Type: String, Default: "arn:aws:events:ap-south-1:327076610444:connection/myalgoagent-purge-connection/8caa9725-f7dc-4b5a-8972-790d92f41581" }
+  ScheduleState: { Type: String, Default: DISABLED, AllowedValues: [ENABLED, DISABLED], Description: "ENABLED once USER_EGRESS_ENABLED=1 on the website" }
+
+Resources:
+  RelaySg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Per-user static-IP relay - reachable only from the website and the engine
+      VpcId: !ImportValue myalgoagent-vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 8443, ToPort: 8443, SourceSecurityGroupId: !ImportValue myalgoagent-web-sg, Description: website }
+        - { IpProtocol: tcp, FromPort: 8443, ToPort: 8443, SourceSecurityGroupId: !ImportValue myalgoagent-engine-sg, Description: engine }
+      SecurityGroupEgress:
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0, Description: broker APIs and package downloads }
+      Tags: [{ Key: Name, Value: myalgoagent-user-relay }]
+
+  RelayRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: myalgoagent-user-relay
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: [{ Effect: Allow, Principal: { Service: ec2.amazonaws.com }, Action: "sts:AssumeRole" }]
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore]
+      Policies:
+        - PolicyName: read-relay-code
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - { Effect: Allow, Action: ssm:GetParameter, Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/myalgoagent/user-egress/server.mjs" }
+  RelayProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties: { Roles: [!Ref RelayRole] }
+
+  RelayTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: myalgoagent-user-relay
+      LaunchTemplateData:
+        ImageId: "{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64}}"
+        InstanceType: t4g.nano
+        IamInstanceProfile: { Arn: !GetAtt RelayProfile.Arn }
+        MetadataOptions: { HttpTokens: required, HttpEndpoint: enabled, HttpPutResponseHopLimit: 1 }
+        CreditSpecification: { CpuCredits: standard }
+        BlockDeviceMappings: [{ DeviceName: /dev/xvda, Ebs: { VolumeSize: 8, VolumeType: gp3, Encrypted: true } }]
+
+  # Finishes the relays in the background: allocate, launch, attach the IP, check, and release after a cancel's grace period.
+  ReconcileDestination:
+    Type: AWS::Events::ApiDestination
+    Properties: { Name: myalgoagent-user-egress-destination, ConnectionArn: !Ref ConnectionArn, InvocationEndpoint: !Ref ReconcileUrl, HttpMethod: POST, InvocationRateLimitPerSecond: 1 }
+  RuleRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: [{ Effect: Allow, Principal: { Service: events.amazonaws.com }, Action: "sts:AssumeRole" }]
+      Policies:
+        - PolicyName: invoke
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement: [{ Effect: Allow, Action: "events:InvokeApiDestination", Resource: !GetAtt ReconcileDestination.Arn }]
+  Rule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: myalgoagent-user-egress
+      ScheduleExpression: rate(5 minutes)
+      State: !Ref ScheduleState
+      Targets:
+        - { Id: reconcile, Arn: !GetAtt ReconcileDestination.Arn, RoleArn: !GetAtt RuleRole.Arn, RetryPolicy: { MaximumRetryAttempts: 0, MaximumEventAgeInSeconds: 60 } }
+
+Outputs:
+  LaunchTemplate: { Value: !Ref RelayTemplate, Export: { Name: myalgoagent-user-relay-template } }
+  RelaySg: { Value: !Ref RelaySg, Export: { Name: myalgoagent-user-relay-sg } }
+  RelayRoleArn: { Value: !GetAtt RelayRole.Arn, Export: { Name: myalgoagent-user-relay-role } }
