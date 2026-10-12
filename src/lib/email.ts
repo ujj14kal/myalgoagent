@@ -4,6 +4,8 @@ import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
 const REGION = "ap-south-1";
 const FROM_ADDRESS = "MyAlgoAgent <noreply@myalgoagent.com>";
 /** Anything a person may answer (support replies, case confirmations) comes from here, so a reply reaches a real inbox. */
+/** SES configuration set: reports bounces and complaints (to an alert topic) and feeds the reputation alarms. */
+const CONFIGURATION_SET = "myalgoagent-transactional";
 export const SUPPORT_FROM = "MyAlgoAgent Support <support@myalgoagent.com>";
 
 let client: SESv2Client | null = null;
@@ -36,6 +38,7 @@ export async function sendEmail({
   await getClient().send(
     new SendEmailCommand({
       FromEmailAddress: from ?? FROM_ADDRESS,
+      ConfigurationSetName: CONFIGURATION_SET,
       Destination: { ToAddresses: [to] },
       ReplyToAddresses: replyTo ? [replyTo] : undefined,
       Content: {
