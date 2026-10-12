@@ -3,7 +3,7 @@
 
 export type InvoiceModel = {
   /** "TAX INVOICE" only when the company has a GSTIN to print; otherwise an honest "PAYMENT RECEIPT". */
-  title: "TAX INVOICE" | "PAYMENT RECEIPT";
+  title: "TAX INVOICE" | "PAYMENT RECEIPT" | "CREDIT NOTE";
   number: string;
   date: Date;
   paymentId: string;
@@ -11,6 +11,8 @@ export type InvoiceModel = {
   status: "PAID" | "REFUNDED";
   buyer: { name: string; email: string; gstin?: string | null; address?: string | null };
   seller: { name: string; address?: string | null; gstin?: string | null; pan?: string | null; email: string; website: string };
+  /** Set on a credit note: the invoice it is issued against. */
+  creditNote?: { against: string; againstDate: Date };
   lines: { description: string; detail?: string | null; qty: number; totalPaise: number; sac?: string | null }[];
 };
 
@@ -57,6 +59,7 @@ export function financialYear(d: Date): string {
   return `${start}-${String((start + 1) % 100).padStart(2, "0")}`;
 }
 export const invoiceNumber = (fy: string, seq: number) => `MAA/${fy}/${String(seq).padStart(6, "0")}`;
+export const creditNoteNumber = (fy: string, seq: number) => `MAA/CN/${fy}/${String(seq).padStart(6, "0")}`;
 
 const e = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const day = (d: Date) => d.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" });
@@ -105,7 +108,7 @@ ${m.buyer.address ? `<p style="margin:2px 0 0;color:${MUTED};font-size:13px">${e
 ${m.buyer.gstin ? `<p style="margin:2px 0 0;font-size:12px;color:${MUTED}">GSTIN: <strong style="color:${NAVY}">${e(m.buyer.gstin)}</strong></p>` : ""}
 </td>
 <td style="vertical-align:top"><table role="presentation" align="right" cellpadding="0" cellspacing="0">
-${meta("Invoice date", e(day(m.date)))}${meta("Payment ID", `<span style="font-family:Menlo,Consolas,monospace;font-size:12px">${e(m.paymentId)}</span>`)}${meta("Paid by", e(methodLabel(m.method)))}${meta("Currency", "INR (₹)")}
+${meta(m.creditNote ? "Credit note date" : "Invoice date", e(day(m.date)))}${m.creditNote ? meta("Against invoice", `<span style="font-family:Menlo,Consolas,monospace;font-size:12px">${e(m.creditNote.against)}</span>`) + meta("Invoice dated", e(day(m.creditNote.againstDate))) : ""}${meta("Payment ID", `<span style="font-family:Menlo,Consolas,monospace;font-size:12px">${e(m.paymentId)}</span>`)}${meta("Paid by", e(methodLabel(m.method)))}${meta("Currency", "INR (₹)")}
 </table></td></tr></table></td></tr>
 <tr><td style="padding:14px 28px 4px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${LINE};border-radius:12px;border-collapse:separate;overflow:hidden">
@@ -114,7 +117,7 @@ ${rows}
 </table></td></tr>
 <tr><td style="padding:10px 28px 6px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-<td style="vertical-align:middle;width:46%;padding-right:16px">${badge}<p style="margin:14px 0 0;color:${MUTED};font-size:12px;line-height:1.5">${paid ? "Paid in full. Thank you for choosing MyAlgoAgent." : "This payment has been refunded."}</p></td>
+<td style="vertical-align:middle;width:46%;padding-right:16px">${badge}<p style="margin:14px 0 0;color:${MUTED};font-size:12px;line-height:1.5">${paid ? "Paid in full. Thank you for choosing MyAlgoAgent." : m.creditNote ? "This credit note records the refund of the payment above. The amount returns to the original payment method; your bank may take a few days to show it." : "This payment has been refunded."}</p></td>
 <td style="vertical-align:top"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">
 <tr><td style="padding:5px 0;color:${MUTED};font-size:13px">Value before GST</td><td style="padding:5px 0;text-align:right;font-size:13px">${rupees(taxablePaise)}</td></tr>
 <tr><td style="padding:5px 0;color:${MUTED};font-size:13px">GST @ ${GST_RATE}% (included)</td><td style="padding:5px 0;text-align:right;font-size:13px">${rupees(gstPaise)}</td></tr>
@@ -129,7 +132,7 @@ ${rows}
 ${seller.address ? `${e(seller.address)}<br>` : ""}${seller.gstin ? `GSTIN: ${e(seller.gstin)}` : ""}${seller.gstin && seller.pan ? " · " : ""}${seller.pan ? `PAN: ${e(seller.pan)}` : ""}${seller.gstin || seller.pan ? "<br>" : ""}
 <a href="mailto:${e(seller.email)}" style="color:${PURPLE};text-decoration:none">${e(seller.email)}</a> · <a href="${e(seller.website)}" style="color:${PURPLE};text-decoration:none">${e(seller.website.replace(/^https?:\/\//, ""))}</a>
 </td></tr></table>
-<p style="margin:12px 0 0;font-size:11px;line-height:1.6;color:${MUTED}">Prices include GST. This is a computer-generated ${m.title === "TAX INVOICE" ? "invoice" : "receipt"} and needs no signature. MyAlgoAgent is software for building and testing your own strategies; it gives no investment advice, and trading involves risk of loss.</p>
+<p style="margin:12px 0 0;font-size:11px;line-height:1.6;color:${MUTED}">Prices include GST. This is a computer-generated ${m.title === "TAX INVOICE" ? "invoice" : m.title === "CREDIT NOTE" ? "credit note" : "receipt"} and needs no signature. MyAlgoAgent is software for building and testing your own strategies; it gives no investment advice, and trading involves risk of loss.</p>
 </td></tr></table>`;
 }
 
@@ -138,7 +141,7 @@ export function invoiceText(m: InvoiceModel): string {
   const total = m.lines.reduce((s, l) => s + l.totalPaise, 0);
   const { taxablePaise, gstPaise } = gstSplit(total);
   return [
-    `${m.title} ${m.number}`,
+    `${m.title} ${m.number}${m.creditNote ? ` (against invoice ${m.creditNote.against})` : ""}`,
     `Date: ${day(m.date)}   Payment ID: ${m.paymentId}   Paid by: ${methodLabel(m.method)}`,
     `Billed to: ${m.buyer.name || m.buyer.email} <${m.buyer.email}>${m.buyer.gstin ? `  GSTIN ${m.buyer.gstin}` : ""}`,
     "",

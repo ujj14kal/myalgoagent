@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { sendInvoiceEmail } from "@/lib/email";
 import { logError } from "@/lib/logger";
 import { PLANS } from "@/lib/credits/config";
-import { financialYear, invoiceHtml, invoiceNumber, invoiceText, rupees, type InvoiceModel } from "./invoice";
+import { creditNoteNumber, financialYear, invoiceHtml, invoiceNumber, invoiceText, rupees, type InvoiceModel } from "./invoice";
 
 // Giving each payment its invoice number (in sequence, per financial year) and sending the invoice once.
 
@@ -80,3 +80,61 @@ export async function sendInvoiceOnce(paymentId: string): Promise<void> {
     logError("billing.invoice-email", err, { paymentId });
   }
 }
+
+// ---------- credit notes (refunds) ----------
+
+/** The refund's credit note number, in its own sequence per financial year; made once. */
+export async function ensureCreditNoteNumber(paymentId: string): Promise<string> {
+  return prisma.$transaction(async (tx) => {
+    const p = await tx.payment.findUniqueOrThrow({ where: { id: paymentId }, select: { creditNoteNumber: true, refundedAt: true } });
+    if (p.creditNoteNumber) return p.creditNoteNumber;
+    const fy = financialYear(p.refundedAt ?? new Date());
+    const counter = await tx.invoiceCounter.upsert({ where: { fy: `CN-${fy}` }, create: { fy: `CN-${fy}`, last: 1 }, update: { last: { increment: 1 } } });
+    const number = creditNoteNumber(fy, counter.last);
+    await tx.payment.update({ where: { id: paymentId }, data: { creditNoteNumber: number } });
+    return number;
+  });
+}
+
+/** The credit note: the same layout as the invoice, for the amount refunded, pointing at the invoice it corrects. */
+export async function creditNoteModelFor(p: PaymentRow): Promise<InvoiceModel> {
+  const base = await invoiceModelFor(p);
+  const refunded = p.refundedAmount ?? p.amount;
+  return {
+    ...base,
+    title: "CREDIT NOTE",
+    number: p.creditNoteNumber ?? (await ensureCreditNoteNumber(p.id)),
+    date: p.refundedAt ?? new Date(),
+    status: "REFUNDED",
+    creditNote: { against: base.number, againstDate: p.createdAt },
+    lines: base.lines.map((l) => ({ ...l, detail: `Refund · ${l.description}${l.detail ? ` (${l.detail})` : ""}`, description: "Refund", totalPaise: refunded })),
+  };
+}
+
+/** Numbers the credit note and emails it, once. Never throws. */
+export async function sendCreditNoteOnce(paymentId: string): Promise<void> {
+  try {
+    const claimed = await prisma.payment.updateMany({ where: { id: paymentId, creditNoteSentAt: null, refundedAt: { not: null } }, data: { creditNoteSentAt: new Date() } });
+    if (!claimed.count) return;
+    try {
+      const p = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } });
+      const model = await creditNoteModelFor(p);
+      if (!model.buyer.email) throw new Error("no email address");
+      await sendInvoiceEmail(model.buyer.email, {
+        kind: "credit-note",
+        number: model.number,
+        totalLabel: rupees(p.refundedAmount ?? p.amount),
+        invoiceHtml: invoiceHtml(model),
+        text: invoiceText(model),
+        viewUrl: `${SITE}/invoice/${p.id}?credit-note=1`,
+        billingUrl: `${SITE}/app/account/usage`,
+      });
+    } catch (err) {
+      await prisma.payment.updateMany({ where: { id: paymentId }, data: { creditNoteSentAt: null } });
+      throw err;
+    }
+  } catch (err) {
+    logError("billing.credit-note-email", err, { paymentId });
+  }
+}
+

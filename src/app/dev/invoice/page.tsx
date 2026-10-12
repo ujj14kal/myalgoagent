@@ -8,12 +8,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
   if (process.env.NODE_ENV === "production") notFound();
   const { kind } = await searchParams;
   const base: InvoiceModel = {
-    title: kind === "receipt" ? "PAYMENT RECEIPT" : "TAX INVOICE",
+    title: kind === "receipt" ? "PAYMENT RECEIPT" : kind === "credit" ? "CREDIT NOTE" : "TAX INVOICE",
     number: "MAA/2026-27/000128",
     date: new Date(),
     paymentId: "pay_Tn6M2xK9QaLb7R",
     method: "upi",
-    status: kind === "refund" ? "REFUNDED" : "PAID",
+    status: kind === "refund" || kind === "credit" ? "REFUNDED" : "PAID",
+    ...(kind === "credit" ? { creditNote: { against: "MAA/2026-27/000128", againstDate: new Date(Date.now() - 86_400_000) } } : {}),
     buyer: { name: "Asha Rao", email: "asha.rao@example.com", ...(kind === "business" ? { gstin: "29ABCDE1234F1Z5", address: "12 MG Road, Bengaluru 560001" } : {}) },
     seller: kind === "receipt" ? { name: "Shagoon Softech Pvt. Ltd.", email: "support@myalgoagent.com", website: "https://myalgoagent.com" } : { name: "Shagoon Softech Pvt. Ltd.", address: "Registered office address, City, State PIN", gstin: "27ABCDE1234F1Z5", pan: "ABCDE1234F", email: "support@myalgoagent.com", website: "https://myalgoagent.com" },
     lines: kind === "topup" ? [{ description: "Credit top-up", detail: "750 credits · valid for a year", qty: 1, totalPaise: 79_900, sac: "998439" }] : [{ description: "MyAlgoAgent Trade plan", detail: "Monthly · 13 Oct 2026 – 12 Nov 2026", qty: 1, totalPaise: 199_900, sac: kind === "receipt" ? null : "998439" }],

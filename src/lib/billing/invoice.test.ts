@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { amountInWords, financialYear, gstSplit, invoiceHtml, invoiceNumber, invoiceText, methodLabel, rupees, type InvoiceModel } from "./invoice";
+import { amountInWords, creditNoteNumber, financialYear, gstSplit, invoiceHtml, invoiceNumber, invoiceText, methodLabel, rupees, type InvoiceModel } from "./invoice";
 
 const model = (o: Partial<InvoiceModel> = {}): InvoiceModel => ({
   title: "TAX INVOICE",
@@ -85,3 +85,31 @@ describe("invoiceHtml", () => {
     expect(t).toContain("MAA/2026-27/000001");
   });
 });
+
+describe("credit notes", () => {
+  const cn = model({
+    title: "CREDIT NOTE",
+    number: "MAA/CN/2026-27/000001",
+    status: "REFUNDED",
+    creditNote: { against: "MAA/2026-27/000001", againstDate: new Date("2026-10-13T06:00:00Z") },
+    lines: [{ description: "Refund", detail: "Refund · Trade plan", qty: 1, totalPaise: 99_950, sac: "998314" }],
+  });
+  it("numbers them in their own sequence", () => expect(creditNoteNumber("2026-27", 7)).toBe("MAA/CN/2026-27/000007"));
+  it("points at the invoice it corrects and shows the refunded amount with its GST", () => {
+    const h = invoiceHtml(cn);
+    expect(h).toContain("CREDIT NOTE");
+    expect(h).toContain("MAA/CN/2026-27/000001");
+    expect(h).toContain("Against invoice");
+    expect(h).toContain("MAA/2026-27/000001");
+    expect(h).toContain("Total refunded");
+    expect(h).toContain("₹999.50");
+    expect(h).toContain("REFUNDED");
+    expect(h).toContain("credit note and needs no signature");
+  });
+  it("is clear in plain text too", () => {
+    const t = invoiceText(cn);
+    expect(t).toContain("CREDIT NOTE MAA/CN/2026-27/000001 (against invoice MAA/2026-27/000001)");
+    expect(t).toContain("Total refunded: ₹999.50");
+  });
+});
+

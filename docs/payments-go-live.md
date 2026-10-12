@@ -13,7 +13,7 @@ Test mode is on today (keys `rzp_test_…`). The app code is identical in both m
 1. Razorpay dashboard → switch to **Live Mode** → Settings → API Keys → generate keys.
 2. Put the live keys in `.env.local` (replace the test ones): `RAZORPAY_KEY_ID=rzp_live_…` and `RAZORPAY_KEY_SECRET=…`.
 3. Run `node scripts/razorpay-setup.mjs --live` (needs the MFA session). It creates the two LIVE plans, stores the keys and plan ids in Parameter Store and writes a **new** webhook secret.
-4. Razorpay dashboard (Live Mode) → Settings → Webhooks → add `https://myalgoagent.com/api/webhooks/razorpay`, events: `subscription.*`, `payment.failed`, `payment.captured`, `order.paid`, secret = the new value:
+4. Razorpay dashboard (Live Mode) → Settings → Webhooks → add `https://myalgoagent.com/api/webhooks/razorpay`, events: `subscription.*`, `payment.failed`, `payment.captured`, `order.paid`, `refund.processed`, secret = the new value:
    `aws ssm get-parameter --profile myalgoagent --region ap-south-1 --name /myalgoagent/app/RAZORPAY_WEBHOOK_SECRET --with-decryption --query Parameter.Value --output text`
 5. Restart the website so it picks up the keys (any release does, or force a new ECS deployment).
 6. Make **one real purchase yourself** (Trade, ₹1,999) and check: plan switches, payment shows in history, the webhook shows delivered in Razorpay, then cancel renewal. Refund it from the Razorpay dashboard if you like.

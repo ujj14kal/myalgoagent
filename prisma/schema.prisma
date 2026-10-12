@@ -318,6 +318,11 @@ model Payment {
   /// Numbered in sequence for each Indian financial year, e.g. MAA/2026-27/000128; emailed once (invoiceSentAt).
   invoiceNumber     String?  @unique
   invoiceSentAt     DateTime?
+  /// A refund: how much (paise), when, and the credit note issued for it (MAA/CN/2026-27/000001), emailed once.
+  refundedAmount    Int?
+  refundedAt        DateTime?
+  creditNoteNumber  String?  @unique
+  creditNoteSentAt  DateTime?
   createdAt         DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

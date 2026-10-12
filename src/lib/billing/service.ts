@@ -6,7 +6,7 @@ import { grant, setPlan } from "@/lib/credits/service";
 import { logError } from "@/lib/logger";
 import { BRAND, PAID_PLANS, RAZORPAY_PLAN_ENV, SUBSCRIPTION_CYCLES, type PaidPlan } from "./brand";
 import * as rzp from "./razorpay";
-import { sendInvoiceOnce } from "./invoices";
+import { sendCreditNoteOnce, sendInvoiceOnce } from "./invoices";
 
 // Paying for a plan or a credit top-up through Razorpay. The browser only ever sees public ids; the plan changes only after
 // a payment signature (or a signed webhook) proves it happened, and every step can safely run twice.
@@ -165,3 +165,19 @@ export async function confirmTopupPayment(userId: string, p: { orderId: string; 
   const added = await creditTopup({ userId, credits, paymentId: p.paymentId, orderId: p.orderId, amountPaise: order.amount });
   return { credits, added };
 }
+
+// ---------- refunds ----------
+
+/**
+ * A refund Razorpay has processed: remember it, and send the credit note (once). Plans and credits are NOT touched: what a refund
+ * means for the account (stop the plan, take the credits back) is for a person to decide, so the team is alerted.
+ */
+export async function recordRefund(args: { razorpayPaymentId: string; amountPaise: number; refundId: string }): Promise<void> {
+  const p = await prisma.payment.findUnique({ where: { razorpayPaymentId: args.razorpayPaymentId } });
+  if (!p || p.creditNoteNumber || p.refundedAt) return; // not ours, or already handled
+  const full = args.amountPaise >= p.amount;
+  await prisma.payment.update({ where: { id: p.id }, data: { refundedAmount: args.amountPaise, refundedAt: new Date(), status: full ? "refunded" : p.status } });
+  logError("billing.refund", new Error(`Refund ${args.refundId} of ₹${(args.amountPaise / 100).toFixed(2)} on ${p.kind} payment ${p.razorpayPaymentId} for user ${p.userId}: review their plan/credits`));
+  await sendCreditNoteOnce(p.id);
+}
+

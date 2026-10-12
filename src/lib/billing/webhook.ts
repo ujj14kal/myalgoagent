@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { setPlan } from "@/lib/credits/service";
 import { logError } from "@/lib/logger";
-import { creditTopup, recordSubscriptionPayment, syncSubscription } from "./service";
+import { creditTopup, recordRefund, recordSubscriptionPayment, syncSubscription } from "./service";
 import { fetchOrder, type RzpSubscription } from "./razorpay";
 
 // Razorpay tells us what happened (charged, failed, cancelled…) with a signed message. Each event has an id, recorded the
@@ -14,6 +14,7 @@ export type RzpEvent = {
   event: string;
   payload: {
     subscription?: Entity<RzpSubscription>;
+    refund?: Entity<{ id: string; payment_id: string; amount: number; status?: string }>;
     payment?: Entity<{ id: string; order_id?: string; amount: number; currency: string; status: string; method?: string; description?: string; notes?: Record<string, string> }>;
   };
 };
@@ -51,6 +52,12 @@ export async function handleEvent(eventId: string, e: RzpEvent): Promise<"handle
         // Back to Free only if no other subscription of theirs is still running (an upgrade cancels the old one).
         const running = await prisma.subscription.count({ where: { userId: row.userId, id: { not: row.id }, status: { in: ["active", "authenticated"] } } });
         if (!running) await setPlan(row.userId, "FREE", { source: "razorpay", reason: e.event });
+        return "handled";
+      }
+      case "refund.processed": {
+        const refund = e.payload.refund?.entity;
+        if (!refund?.payment_id) return "ignored";
+        await recordRefund({ razorpayPaymentId: refund.payment_id, amountPaise: refund.amount, refundId: refund.id });
         return "handled";
       }
       case "payment.failed": {
