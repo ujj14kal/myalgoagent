@@ -21,12 +21,12 @@ const fmt = (n: number) => n.toLocaleString("en-IN");
 function Steps({ at }: { at: 1 | 2 }) {
   const steps = ["Choose", "Review and pay", "Done"];
   return (
-    <ol className="mb-6 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-semibold text-brand-navy/45" aria-label="Checkout steps">
+    <ol className="mb-8 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-base font-semibold text-brand-navy/45 sm:gap-x-4" aria-label="Checkout steps">
       {steps.map((s, i) => (
-        <li key={s} className={`flex items-center gap-2 ${i + 1 === at ? "text-brand-primary" : i + 1 < at ? "text-brand-navy/70" : ""}`}>
-          <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${i + 1 <= at ? "bg-brand-primary text-white" : "bg-brand-navy/10"}`}>{i + 1 < at ? <Check size={11} /> : i + 1}</span>
+        <li key={s} className={`flex items-center gap-2.5 sm:gap-3 ${i + 1 === at ? "text-brand-primary" : i + 1 < at ? "text-brand-navy/70" : ""}`}>
+          <span className={`flex h-8 w-8 items-center justify-center rounded-full text-sm ${i + 1 <= at ? "bg-brand-primary text-white" : "bg-brand-navy/10"}`}>{i + 1 < at ? <Check size={15} /> : i + 1}</span>
           {s}
-          {i < steps.length - 1 && <span className="text-brand-navy/25">—</span>}
+          {i < steps.length - 1 && <span className="ml-1 text-brand-navy/25 sm:ml-2">—</span>}
         </li>
       ))}
     </ol>
