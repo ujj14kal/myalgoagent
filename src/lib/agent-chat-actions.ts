@@ -15,7 +15,7 @@ import { converse } from "@/lib/ai/bedrock";
 import { AGENT_TOOLS, runAgentTool } from "@/lib/ai/tools";
 import { PROPOSAL_TITLES, honestProposalReply, type AgentProposal, type ProposalStatus } from "@/lib/ai/proposals";
 import type { Prisma } from "@prisma/client";
-import { charge, precheck } from "@/lib/credits/service";
+import { annotate, refund, reserve, upgrade, snapshot as creditSnapshot, type Reservation } from "@/lib/credits/service";
 import { ACTION_COST } from "@/lib/credits/config";
 import type { CreditSnapshot } from "@/lib/credits/types";
 
@@ -129,14 +129,17 @@ export async function sendAgentMessage(input: {
     return { ok: false, error: `Your message is too long. Please keep it under ${AI_LIMITS.maxUserChars.toLocaleString("en-IN")} characters.` };
   }
 
-  // The plan's allowance first: credits, daily ceilings and (free plan) the two lifetime replies. Nothing is spent until the reply works.
-  const refused = await precheck(userId, input?.voice ? "ai_voice" : "ai_reply", input?.voice ? ACTION_COST.ai_voice : ACTION_COST.ai_reply);
-  if (refused) return { ok: false, error: refused.message };
-
   const perMinute = await checkRateLimit(`agent-chat:${userId}`, AI_LIMITS.perMinute, 60_000);
   if (perMinute) return { ok: false, error: perMinute };
   const perDay = await checkRateLimit(`agent-chat-day:${userId}`, AI_LIMITS.perDay, 24 * 60 * 60_000);
   if (perDay) return { ok: false, error: "You have reached today's message limit. It resets within 24 hours." };
+
+  // The plan's allowance: credits, daily ceilings and (free plan) the two lifetime replies. The price is taken now, in one step,
+  // so two messages at once can't both use the last credits; it goes back if the reply doesn't happen or the safety net replaces it.
+  const taken = await reserve(userId, input?.voice ? "ai_voice" : "ai_reply", input?.voice ? ACTION_COST.ai_voice : ACTION_COST.ai_reply);
+  if (!taken.ok) return { ok: false, error: taken.refusal.message };
+  let held: Reservation = taken.reservation;
+  const giveBack = () => refund(held).catch((e) => logError("credits:refund", e, { userId }));
 
   try {
     const [user, strategies, sessions] = await Promise.all([
@@ -236,14 +239,25 @@ export async function sendAgentMessage(input: {
         ? prisma.agentConversation.delete({ where: { id: conversationId } })
         : prisma.agentMessage.delete({ where: { id: userMessage.id } })
       ).catch((cleanupErr) => logError("agent-chat:cleanup", cleanupErr, { userId, conversationId }));
+      await giveBack();
       return { ok: false, error: `${agentName} is unavailable at the moment. Please try again shortly.` };
     }
 
+    // A reply the safety net replaced isn't charged. A turn that prepares something costs more than a plain answer: take the
+    // difference now, and if it can't be afforded the answer is kept but what it prepared is not handed over.
+    let proposal = reply.guardrailHit ? undefined : reply.proposal;
+    let upsellNote = "";
+    if (reply.guardrailHit || !(reply.text || reply.proposal)) await giveBack();
+    else if (proposal && !input?.voice) {
+      const up = await upgrade(held, "ai_build", ACTION_COST.ai_build);
+      if (up.ok) held = up.reservation;
+      else { proposal = undefined; upsellNote = `\n\nI had something ready to build for you, but ${up.refusal.message.charAt(0).toLowerCase()}${up.refusal.message.slice(1)}`; }
+    }
     const content = reply.guardrailHit
       ? BLOCKED_REPLY
-      : reply.proposal
-        ? honestProposalReply(reply.text, reply.proposal)
-        : reply.text || BLOCKED_REPLY;
+      : proposal
+        ? honestProposalReply(reply.text, proposal)
+        : (reply.text ? reply.text + upsellNote : BLOCKED_REPLY);
     const [saved] = await Promise.all([
       prisma.agentMessage.create({
         data: {
@@ -255,7 +269,7 @@ export async function sendAgentMessage(input: {
           outputTokens: reply.outputTokens,
           latencyMs: reply.latencyMs,
           guardrailHit: reply.guardrailHit,
-          ...(reply.proposal && !reply.guardrailHit ? { proposal: reply.proposal as unknown as Prisma.InputJsonValue } : {}),
+          ...(proposal ? { proposal: proposal as unknown as Prisma.InputJsonValue } : {}),
         },
       }),
       prisma.agentConversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } }),
@@ -271,16 +285,14 @@ export async function sendAgentMessage(input: {
       }
     }
 
-    // A reply the safety net replaced isn't charged. Otherwise: a spoken exchange, a turn that prepared something, or a plain answer.
-    let credits: CreditSnapshot | undefined;
-    if (!reply.guardrailHit) {
-      const action = input?.voice ? "ai_voice" : reply.proposal ? "ai_build" : "ai_reply";
-      credits = await charge(userId, action, ACTION_COST[action], { messageId: saved.id, in: reply.inputTokens ?? null, out: reply.outputTokens ?? null }).catch((err) => (logError("credits:charge", err, { userId, action }), undefined));
-    }
+    // The ledger line says which message it paid for (a spoken reply is then not charged again for reading it aloud).
+    if (!reply.guardrailHit && reply.text) await annotate(held, { messageId: saved.id, in: reply.inputTokens ?? null, out: reply.outputTokens ?? null }).catch(() => undefined);
+    const credits: CreditSnapshot | undefined = await creditSnapshot(userId).catch(() => undefined);
 
     return { ok: true, conversationId, userMessage: toMessage(userMessage), reply: toMessage(saved), ...(speech ? { speech } : {}), ...(credits ? { credits } : {}) };
   } catch (err) {
     logError("agent-chat:send", err, { userId });
+    await giveBack();
     return { ok: false, error: "Something went wrong. Please refresh the page and try again." };
   }
 }

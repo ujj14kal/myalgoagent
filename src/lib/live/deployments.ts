@@ -1,6 +1,7 @@
 import { capitalProblem, fitToOrderLimit, INTRADAY_BUYING_POWER } from "@/lib/live/capital";
 import { parseRiskOptions } from "@/lib/trading-engine/risk-options";
 import "server-only";
+import { slotCheck } from "@/lib/credits/service";
 import type { LiveDeployment, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logError, logWarn } from "@/lib/logger";
@@ -68,6 +69,8 @@ export async function startDeployment(userId: string, input: { strategyId: strin
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { liveTradingEnabledAt: true, status: true } });
   if (!user?.liveTradingEnabledAt || user.status !== "ACTIVE") throw new LiveCheckError("Live trading isn't switched on for your account.");
   if (!LIVE_BROKERS[input.broker as keyof typeof LIVE_BROKERS]) throw new LiveCheckError("Live orders aren't available for this broker yet.");
+  const full = await slotCheck(userId, "live");
+  if (full) throw new LiveCheckError(full.message);
   const conn = await prisma.brokerConnection.findUnique({ where: { userId_broker: { userId, broker: input.broker } }, select: { liveReadyAt: true, status: true, tokenExpiresAt: true } });
   const name = brokerById(input.broker)?.name ?? input.broker;
   if (!conn || conn.status !== "CONNECTED" || !conn.tokenExpiresAt || conn.tokenExpiresAt < new Date()) throw new LiveCheckError(`Log in to ${name} for today first.`);

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { slotCheck } from "@/lib/credits/service";
 import { marketDataFor } from "@/lib/market-data";
 import { activateStrategyIfDraft } from "@/lib/strategy-status";
 import type { Strategy, PaperSession } from "@prisma/client";
@@ -32,6 +33,9 @@ export async function getOrCreateActivePaperSession(
     await activateStrategyIfDraft(strategy.id, strategy.userId);
     return existing;
   }
+
+  const full = await slotCheck(strategy.userId, "forward");
+  if (full) throw new Error(full.message);
 
   const candles = await marketDataFor(strategy.userId, "trading").getHistoricalCandles(strategy.instrument.symbol, "1mo", "1d");
   const latestTime = candles.at(-1)?.time ?? Math.floor(Date.now() / 1000);

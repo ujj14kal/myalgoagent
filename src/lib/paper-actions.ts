@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { slotCheck } from "@/lib/credits/service";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -36,6 +37,8 @@ export interface PaperActionResult {
 async function startPaperSessionCore(userId: string, input: StartPaperSessionInput): Promise<{ id: string } | { error: string }> {
   try {
     await enforceRateLimit(`paper-start:${userId}`, 10, 60_000);
+    const full = await slotCheck(userId, "forward");
+    if (full) throw new Error(full.message);
 
     if (input.startingCapital <= 0) throw new Error("Starting capital must be positive");
     if (input.brokeragePercent < 0 || input.slippagePercent < 0) {

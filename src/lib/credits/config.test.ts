@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ACTION_COST, PLANS, TOPUP_PACKS, backtestCost, priceOf, refusalFor, splitSpend, type Usage } from "./config";
+import { ACTION_COST, PLANS, TOPUP_PACKS, backtestCost, priceOf, refusalFor, slotRefusal, splitSpend, type Usage } from "./config";
 
 const none: Usage = { aiToday: 0, buildsToday: 0, voiceToday: 0, aiRepliesEver: 0 };
 
@@ -75,5 +75,15 @@ describe("the price list", () => {
       const kept = p.price / 1.18 - p.price * 0.0236;
       expect((kept - p.credits * 0.3) / kept).toBeGreaterThan(0.54);
     }
+  });
+});
+
+describe("slot limits", () => {
+  it("free cannot go live, paid plans stop at their cap", () => {
+    expect(slotRefusal("FREE", "live", 0)?.code).toBe("NOT_ON_PLAN");
+    expect(slotRefusal("TRADE", "live", 2)).toBeNull();
+    expect(slotRefusal("TRADE", "live", 3)?.code).toBe("SLOTS_FULL");
+    expect(slotRefusal("PRO", "forward", 39)).toBeNull();
+    expect(slotRefusal("PRO", "forward", 40)?.code).toBe("SLOTS_FULL");
   });
 });

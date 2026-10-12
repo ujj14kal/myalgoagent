@@ -1,7 +1,7 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { AI_ACTIONS, PLANS, refusalFor, splitSpend, totalOf, type CreditAction, type CreditPlan, type Refusal, type Usage } from "./config";
+import { AI_ACTIONS, PLANS, refusalFor, slotRefusal, splitSpend, totalOf, type CreditAction, type CreditPlan, type Refusal, type Usage } from "./config";
 import type { CreditEventRow, CreditSnapshot } from "./types";
 
 // The metered features' accounts: balances, the monthly renewal, daily use, and every change written to a ledger.
@@ -120,6 +120,120 @@ export async function alreadyPaidFor(userId: string, messageId: string): Promise
 }
 
 export async function recentEvents(userId: string, take = 60): Promise<CreditEventRow[]> {
-  const rows = await prisma.creditEvent.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take });
+  const rows = await prisma.creditEvent.findMany({ where: { userId, kind: { notIn: ["VOID", "REFUND"] } }, orderBy: { createdAt: "desc" }, take });
   return rows.map((r) => ({ id: r.id, kind: r.kind, action: r.action, credits: r.credits, monthlyAfter: r.monthlyAfter, topupAfter: r.topupAfter, createdAt: r.createdAt.toISOString() }));
+}
+
+/** Whether the user may start one more live strategy or forward test. Null = yes; otherwise the plain-English reason. */
+export async function slotCheck(userId: string, kind: "live" | "forward"): Promise<Refusal | null> {
+  const acct = await getAccount(userId);
+  const used = kind === "live"
+    ? await prisma.liveDeployment.count({ where: { userId, status: { in: ["ACTIVE", "PAUSED"] } } })
+    : await prisma.paperSession.count({ where: { userId, status: { in: ["ACTIVE", "PAUSED"] } } });
+  return slotRefusal(acct.plan, kind, used);
+}
+
+// ---------- reserve → settle: credits are taken BEFORE the work, atomically, and handed back if the work doesn't happen ----------
+
+export type Reservation = { id: string; userId: string; action: CreditAction; cost: number; taken: { monthly: number; topup: number }; freeAi: boolean; periodEnd: string };
+export type Reserved = { ok: true; reservation: Reservation; snapshot: CreditSnapshot } | { ok: false; refusal: Refusal };
+
+/**
+ * Checks the plan's rules and takes the price in ONE step (compare-and-set on the balances plus the ledger line). Two calls at
+ * the same moment cannot both get through on one credit: the loser re-reads and is checked again. The caller must `refund` if the work fails.
+ */
+export async function reserve(userId: string, action: CreditAction, cost: number, meta?: Prisma.InputJsonValue): Promise<Reserved> {
+  const isAi = AI_ACTIONS.includes(action);
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const acct = await getAccount(userId);
+    const usage = await usageOf(userId, acct.aiRepliesUsed);
+    const balance = { monthly: acct.monthlyBalance, topup: acct.topupBalance };
+    const refusal = refusalFor(acct.plan, balance, usage, action, cost);
+    if (refusal) return { ok: false, refusal };
+    const freeAi = isAi && PLANS[acct.plan].aiLifetimeReplies !== null;
+    const next = freeAi ? balance : splitSpend(balance, cost);
+    if (!next) return { ok: false, refusal: { code: "NO_CREDITS", message: `This needs ${cost} credits.` } };
+    const taken = { monthly: balance.monthly - next.monthly, topup: balance.topup - next.topup };
+    const made = await prisma.$transaction(async (tx) => {
+      const updated = await tx.creditAccount.updateMany({
+        where: { userId, monthlyBalance: acct.monthlyBalance, topupBalance: acct.topupBalance, aiRepliesUsed: acct.aiRepliesUsed },
+        data: { monthlyBalance: next.monthly, topupBalance: next.topup, ...(freeAi ? { aiRepliesUsed: acct.aiRepliesUsed + 1 } : {}) },
+      });
+      if (!updated.count) return null;
+      return tx.creditEvent.create({ data: { userId, kind: "SPEND", action, credits: -(taken.monthly + taken.topup), monthlyAfter: next.monthly, topupAfter: next.topup, meta: { ...(meta as object | undefined), taken, freeAi, periodEnd: acct.periodEnd.toISOString() } } });
+    });
+    if (made) return { ok: true, reservation: { id: made.id, userId, action, cost, taken, freeAi, periodEnd: acct.periodEnd.toISOString() }, snapshot: await snapshot(userId) };
+  }
+  return { ok: false, refusal: { code: "NO_CREDITS", message: "Couldn't confirm your credits just now. Please try again." } };
+}
+
+/** The work didn't happen (it failed, or the safety net replaced the reply): the credits go back and the line stops counting toward daily caps. */
+export async function refund(r: Reservation): Promise<CreditSnapshot> {
+  await prisma.$transaction(async (tx) => {
+    const voided = await tx.creditEvent.updateMany({ where: { id: r.id, kind: "SPEND" }, data: { kind: "VOID" } });
+    if (!voided.count) return; // already refunded
+    // Monthly credits go back only into the same month they came from (a renewal in between already refilled it); top-up credits always go back.
+    const acct = await tx.creditAccount.findUniqueOrThrow({ where: { userId: r.userId } });
+    const sameMonth = acct.periodEnd.toISOString() === r.periodEnd;
+    const monthly = sameMonth ? r.taken.monthly : 0;
+    const updated = await tx.creditAccount.update({
+      where: { userId: r.userId },
+      data: { monthlyBalance: { increment: monthly }, topupBalance: { increment: r.taken.topup }, ...(r.freeAi ? { aiRepliesUsed: { decrement: 1 } } : {}) },
+    });
+    if (monthly + r.taken.topup > 0) await tx.creditEvent.create({ data: { userId: r.userId, kind: "REFUND", action: r.action, credits: monthly + r.taken.topup, monthlyAfter: updated.monthlyBalance, topupAfter: updated.topupBalance, meta: { reservation: r.id } } });
+  });
+  return snapshot(r.userId);
+}
+
+/**
+ * The work turned out to be bigger than first thought (an AI turn that prepares something): take the difference, atomically.
+ * Returns the new reservation, or why it can't be afforded (the first reservation stays as it was).
+ */
+export async function upgrade(r: Reservation, action: CreditAction, cost: number): Promise<{ ok: true; reservation: Reservation } | { ok: false; refusal: Refusal }> {
+  const extra = cost - r.cost;
+  if (extra <= 0) return { ok: true, reservation: r };
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const acct = await getAccount(r.userId);
+    const usage = await usageOf(r.userId, acct.aiRepliesUsed);
+    const balance = { monthly: acct.monthlyBalance, topup: acct.topupBalance };
+    // Judge the new kind of work as if this reservation were not yet counted (it is already one AI reply today).
+    const refusal = refusalFor(acct.plan, balance, { ...usage, aiToday: Math.max(0, usage.aiToday - 1), buildsToday: usage.buildsToday, aiRepliesEver: Math.max(0, usage.aiRepliesEver - (r.freeAi ? 1 : 0)) }, action, r.freeAi ? 0 : extra);
+    if (refusal) return { ok: false, refusal };
+    const next = r.freeAi ? balance : splitSpend(balance, extra);
+    if (!next) return { ok: false, refusal: { code: "NO_CREDITS", message: `This needs ${extra} more credits.` } };
+    const more = { monthly: balance.monthly - next.monthly, topup: balance.topup - next.topup };
+    const done = await prisma.$transaction(async (tx) => {
+      const updated = await tx.creditAccount.updateMany({ where: { userId: r.userId, monthlyBalance: acct.monthlyBalance, topupBalance: acct.topupBalance }, data: { monthlyBalance: next.monthly, topupBalance: next.topup } });
+      if (!updated.count) return false;
+      const taken = { monthly: r.taken.monthly + more.monthly, topup: r.taken.topup + more.topup };
+      const res = await tx.creditEvent.updateMany({ where: { id: r.id, kind: "SPEND" }, data: { action, credits: -(taken.monthly + taken.topup), monthlyAfter: next.monthly, topupAfter: next.topup } });
+      return res.count ? taken : false;
+    });
+    if (done) return { ok: true, reservation: { ...r, action, cost, taken: done } };
+  }
+  return { ok: false, refusal: { code: "NO_CREDITS", message: "Couldn't confirm your credits just now." } };
+}
+
+/** The work cost less than was held (e.g. a backtest range the data source clamped): the difference goes back and the line shows the real price. */
+export async function settleDown(r: Reservation, action: CreditAction, cost: number): Promise<Reservation> {
+  const back = r.cost - cost;
+  if (back <= 0 || r.freeAi) return r;
+  const backTopup = Math.min(r.taken.topup, back);
+  const backMonthly = back - backTopup;
+  const kept = await prisma.$transaction(async (tx) => {
+    const acct = await tx.creditAccount.findUniqueOrThrow({ where: { userId: r.userId } });
+    const monthly = acct.periodEnd.toISOString() === r.periodEnd ? Math.min(backMonthly, r.taken.monthly) : 0;
+    const updated = await tx.creditAccount.update({ where: { userId: r.userId }, data: { monthlyBalance: { increment: monthly }, topupBalance: { increment: backTopup } } });
+    const taken = { monthly: r.taken.monthly - monthly, topup: r.taken.topup - backTopup };
+    await tx.creditEvent.updateMany({ where: { id: r.id, kind: "SPEND" }, data: { action, credits: -(taken.monthly + taken.topup), monthlyAfter: updated.monthlyBalance, topupAfter: updated.topupBalance } });
+    return taken;
+  });
+  return { ...r, action, cost, taken: kept };
+}
+
+/** Adds facts to the reservation's ledger line (e.g. the message it paid for, known only after the reply is saved). */
+export async function annotate(r: Reservation, extra: Record<string, string | number | null>): Promise<void> {
+  const row = await prisma.creditEvent.findUnique({ where: { id: r.id }, select: { meta: true } });
+  const meta = typeof row?.meta === "object" && row.meta && !Array.isArray(row.meta) ? row.meta : {};
+  await prisma.creditEvent.update({ where: { id: r.id }, data: { meta: { ...meta, ...extra } } });
 }

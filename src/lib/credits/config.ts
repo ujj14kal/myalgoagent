@@ -42,12 +42,14 @@ export type PlanSpec = {
   bigBacktests: boolean;
   /** Per-day ceilings, whatever the balance: AI replies (all kinds), builds, voice exchanges. */
   daily: { ai: number; build: number; voice: number };
+  /** How many strategies can be running at once: live with a broker, and forward tests (active or paused). */
+  slots: { live: number; forward: number };
 };
 
 export const PLANS: Record<CreditPlan, PlanSpec> = {
-  FREE: { label: "Free", price: null, monthlyCredits: 20, aiLifetimeReplies: 2, voice: false, bigBacktests: false, daily: { ai: 2, build: 2, voice: 0 } },
-  TRADE: { label: "Trade", price: 1999, monthlyCredits: 1500, aiLifetimeReplies: null, voice: true, bigBacktests: true, daily: { ai: 40, build: 15, voice: 40 } },
-  PRO: { label: "Pro", price: 3499, monthlyCredits: 4000, aiLifetimeReplies: null, voice: true, bigBacktests: true, daily: { ai: 100, build: 40, voice: 120 } },
+  FREE: { label: "Free", price: null, monthlyCredits: 20, aiLifetimeReplies: 2, voice: false, bigBacktests: false, daily: { ai: 2, build: 2, voice: 0 }, slots: { live: 0, forward: 2 } },
+  TRADE: { label: "Trade", price: 1999, monthlyCredits: 1500, aiLifetimeReplies: null, voice: true, bigBacktests: true, daily: { ai: 40, build: 15, voice: 40 }, slots: { live: 3, forward: 15 } },
+  PRO: { label: "Pro", price: 3499, monthlyCredits: 4000, aiLifetimeReplies: null, voice: true, bigBacktests: true, daily: { ai: 100, build: 40, voice: 120 }, slots: { live: 10, forward: 40 } },
 };
 
 /** Top-up packs (paid plans): priced for at least a 54% margin even if every credit is spent at the worst-case cost. Rupees, GST included. */
@@ -81,7 +83,7 @@ export function splitSpend(b: Balance, cost: number): Balance | null {
 
 export type Usage = { aiToday: number; buildsToday: number; voiceToday: number; aiRepliesEver: number };
 
-export type Refusal = { code: "NO_CREDITS" | "DAILY_CAP" | "FREE_AI_USED" | "NOT_ON_PLAN"; message: string };
+export type Refusal = { code: "NO_CREDITS" | "DAILY_CAP" | "FREE_AI_USED" | "NOT_ON_PLAN" | "SLOTS_FULL"; message: string };
 
 /**
  * May this account do this now? `cost` is the price (for a backtest, from backtestCost). Returns why not, in plain words, or null.
@@ -111,4 +113,14 @@ export function refusalFor(plan: CreditPlan, balance: Balance, usage: Usage, act
 /** The credits an action will take, for showing before it is done. */
 export function priceOf(action: CreditAction, opts?: { timeframe?: string; range?: string }): number {
   return action === "backtest" ? backtestCost({ timeframe: opts?.timeframe ?? "1d", range: opts?.range ?? "1y" }) : ACTION_COST[action];
+}
+
+/** Whether one more live strategy / forward test fits the plan. `used` counts those running or paused now. Null = it fits. */
+export function slotRefusal(plan: CreditPlan, kind: "live" | "forward", used: number): Refusal | null {
+  const spec = PLANS[plan];
+  const cap = spec.slots[kind];
+  if (used < cap) return null;
+  const what = kind === "live" ? "live strategies" : "forward tests";
+  if (cap === 0) return { code: "NOT_ON_PLAN", message: `Going live is part of the Trade and Pro plans.` };
+  return { code: "SLOTS_FULL", message: `${spec.label} runs up to ${cap} ${what} at once and you have ${used}. Stop one first${plan === "PRO" ? "." : ", or move to Pro for more."}` };
 }

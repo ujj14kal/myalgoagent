@@ -18,7 +18,7 @@ import { parseSystemRuntime, systemConditions } from "@/lib/system/signals";
 import { parseEntryPlan } from "@/lib/trading-engine/entry-plan-config";
 import { userMarketDataReady } from "@/lib/market-data/for-user";
 import { backtestCost } from "@/lib/credits/config";
-import { charge, precheck } from "@/lib/credits/service";
+import { refund, reserve, settleDown, type Reservation } from "@/lib/credits/service";
 
 export interface RunBacktestInput {
   strategyId: string;
@@ -43,6 +43,7 @@ export interface BacktestActionResult {
  */
 /** Validates, runs and saves a backtest; shared by the form (which redirects) and the agent (which chains). */
 async function runBacktestCore(userId: string, input: RunBacktestInput): Promise<{ id: string } | { error: string }> {
+  let held: Reservation | undefined;
   try {
     await enforceRateLimit(`backtest:${userId}`, 10, 60_000);
 
@@ -62,8 +63,9 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
 
     // The plan's allowance: a backtest costs credits by its size (1 daily up to a year, 2 intraday or long, 3 both).
     const price = backtestCost({ timeframe: strategy.timeframe, range: input.range });
-    const refused = await precheck(userId, "backtest", price);
-    if (refused) throw new Error(refused.message);
+    const taken = await reserve(userId, "backtest", price);
+    if (!taken.ok) throw new Error(taken.refusal.message);
+    held = taken.reservation;
 
     // Execution/risk config is fixed on the strategy itself (see the
     // "bulletproof strategy creation" change) — a backtest always runs with
@@ -183,9 +185,10 @@ async function runBacktestCore(userId: string, input: RunBacktestInput): Promise
       },
     });
     // Charged on what was actually run: a long range on a short timeframe is clamped to what the data source keeps.
-    await charge(userId, "backtest", backtestCost({ timeframe: strategy.timeframe, range }), { runId: run.id, timeframe: strategy.timeframe, range }).catch(() => undefined);
+    if (held) await settleDown(held, "backtest", backtestCost({ timeframe: strategy.timeframe, range })).catch(() => undefined);
     return { id: run.id };
   } catch (err) {
+    if (held) await refund(held).catch(() => undefined);
     return { error: err instanceof Error ? err.message : "Something went wrong" };
   }
 }
