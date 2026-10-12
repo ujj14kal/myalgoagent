@@ -207,7 +207,35 @@ export default function ConceptEditor({
             You have no blocks yet. <Link href="/app/workspaces/blocks/new" className="font-semibold text-brand-primary hover:underline">Create a block</Link> first — a concept is built from them.
           </p>
         ) : (
-          <LogicTree node={logic} blocks={blocks} onChange={edit} />
+          <>
+            {logic.type === "group" && (
+              <div className="mb-3 grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="How the blocks are applied">
+                {(
+                  [
+                    { key: "SEQUENCE", title: "Sequence the blocks", text: "One after another, in the order listed, each within a number of candles of the next." },
+                    { key: "AND", title: "Apply all at one time", text: "Every block must be present on the same candle." },
+                  ] as const
+                ).map((o) => {
+                  const on = logic.connection === o.key;
+                  return (
+                    <button
+                      key={o.key}
+                      type="button"
+                      role="radio"
+                      aria-checked={on}
+                      onClick={() => !on && edit(o.key === "SEQUENCE" ? { ...logic, connection: "SEQUENCE", bars: logic.bars ?? DEFAULT_BARS.SEQUENCE ?? 10 } : { ...logic, connection: "AND", bars: undefined })}
+                      className={`rounded-xl border p-3 text-left transition-colors ${on ? "border-brand-primary bg-brand-primary/[0.06]" : "border-brand-navy/15 hover:border-brand-primary/50"}`}
+                    >
+                      <span className={`block text-sm font-semibold ${on ? "text-brand-primary" : "text-brand-navy"}`}>{o.title}</span>
+                      <span className="mt-0.5 block text-xs text-brand-navy/55">{o.text}</span>
+                    </button>
+                  );
+                })}
+                {logic.connection !== "SEQUENCE" && logic.connection !== "AND" && <p className="text-xs text-brand-navy/50 sm:col-span-2">This concept combines its blocks as “{CONNECTION_LABEL[logic.connection]}”. Pick one of the two above to switch, or keep it and adjust below.</p>}
+              </div>
+            )}
+            <LogicTree node={logic} blocks={blocks} onChange={edit} />
+          </>
         )}
         <p className="mt-2 text-xs text-brand-navy/45">Each block is read on the chart it was built for (a block can name its own, e.g. an hourly trend); otherwise on the chart the trading system trades on.</p>
       </section>

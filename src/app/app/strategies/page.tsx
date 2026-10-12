@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Layers, Plus, Rocket } from "lucide-react";
+import TalkToAgentButton from "@/components/agent-chat/talk-to-agent-button";
 import type { Prisma } from "@prisma/client";
 import PageHeader from "@/components/ui/page-header";
 import { auth } from "@/lib/auth";
@@ -76,12 +77,15 @@ export default async function StrategiesPage({ searchParams }: { searchParams: P
         icon={Layers}
         description="Build rule-based strategies visually or with code. Draft and Active are set automatically — a strategy becomes Active the moment you put it to work in forward testing."
         actions={
-          <Link
-            href="/app/strategies/new"
-            className="inline-flex items-center gap-1.5 rounded-full bg-brand-primary px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_20px_-10px_rgba(71,24,152,0.8)] hover:bg-brand-primary-light"
-          >
-            <Plus size={16} /> New strategy
-          </Link>
+          <>
+            <TalkToAgentButton />
+            <Link
+              href="/app/strategies/new"
+              className="inline-flex items-center gap-1.5 rounded-full bg-brand-primary px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_20px_-10px_rgba(71,24,152,0.8)] hover:bg-brand-primary-light"
+            >
+              <Plus size={16} /> New strategy
+            </Link>
+          </>
         }
       />
 

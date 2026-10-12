@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { useAgentChat } from "@/components/agent-chat/agent-chat-provider";
-import { DESCRIBE_PREFIX } from "@/lib/ai/describe-indicator";
 
 const IDEAS = [
   "How far price is from its 50-day average, measured in ATRs",
@@ -16,9 +15,9 @@ const IDEAS = [
 
 /** Say what you want in plain words; the agent writes the indicator and shows you its formula to review and save. */
 export default function DescribeIndicator() {
-  const { agentName, openChat } = useAgentChat();
+  const { agentName, openBuild } = useAgentChat();
   const [text, setText] = useState("");
-  const ask = (idea: string) => openChat(`${DESCRIBE_PREFIX}${idea}`);
+  const ask = (idea: string) => openBuild("indicator", idea);
   return (
     <div className="space-y-3">
       <textarea

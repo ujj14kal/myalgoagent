@@ -9,6 +9,7 @@ import { liveDashboardPnl } from "@/lib/live/pnl-server";
 import { istToday } from "@/lib/live/order-ledger";
 import { DEFAULT_AGENT_NAME } from "@/lib/agent-constants";
 import AskAgentButton from "@/components/agent-chat/ask-agent-button";
+import TalkToAgentButton from "@/components/agent-chat/talk-to-agent-button";
 import { getHealthAlerts } from "@/lib/health";
 import type { AgentPose } from "@/components/robot/agent-2d";
 import HealthPanel from "@/components/health-panel";
@@ -105,6 +106,7 @@ export default async function DashboardPage() {
         lines={lines}
         primaryAction={isNewAccount ? { href: "/app/strategies/new", label: "Create your first strategy" } : { href: "/app/live-trading", label: "Live trading" }}
         secondaryAction={isNewAccount ? { href: "/app/instruments", label: "Browse market data" } : { href: "/app/strategies/new", label: "New strategy" }}
+        tertiary={<TalkToAgentButton variant="onDark" />}
       />
 
       {isNewAccount && <DashboardEmptyState agentName={agentName} />}

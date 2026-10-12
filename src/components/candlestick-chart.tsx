@@ -115,8 +115,11 @@ export default function CandlestickChart({
   showVisibleRangeVolumeProfile = false,
   onDrawingsReplace,
   liveCandle = null,
+  height = 420,
 }: {
   candles: Candle[];
+  /** Chart height in pixels. */
+  height?: number;
   /** The candle forming right now from live trades — drawn on top of `candles` without refitting the view. */
   liveCandle?: Candle | null;
   overlays?: Overlay[];
@@ -294,7 +297,7 @@ export default function CandlestickChart({
       layout: { background: { color: "#ffffff" }, textColor: "#0e1b2d" },
       grid: { vertLines: { color: "#f0f1f5" }, horzLines: { color: "#f0f1f5" } },
       width: container.clientWidth,
-      height: 420,
+      height,
       localization: istChartOptions.localization,
       timeScale: { timeVisible: false, borderColor: "#e2e5ee", ...istChartOptions.timeScale },
       rightPriceScale: { borderColor: "#e2e5ee" },
@@ -547,6 +550,7 @@ export default function CandlestickChart({
       volumeSeriesRef.current = null;
       drawingsPrimitiveRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the chart is made once; its height is fixed for its lifetime
   }, []);
 
   // Price series — recreated whenever chartType changes.

@@ -25,6 +25,7 @@ export default function AgentBriefing({
   lines,
   primaryAction,
   secondaryAction,
+  tertiary,
 }: {
   agentName: string;
   greeting: string;
@@ -32,6 +33,8 @@ export default function AgentBriefing({
   lines: BriefingLine[];
   primaryAction: { href: string; label: string };
   secondaryAction?: { href: string; label: string };
+  /** One more button beside the others (e.g. "Talk to the agent"). */
+  tertiary?: React.ReactNode;
 }) {
   const reduce = useReducedMotion();
   return (
@@ -74,6 +77,7 @@ export default function AgentBriefing({
                 {secondaryAction.label}
               </Link>
             )}
+            {tertiary}
           </div>
         </div>
         <div className="hidden shrink-0 justify-center md:-my-2 md:mr-2 md:flex">

@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { useAgentChat } from "@/components/agent-chat/agent-chat-provider";
-import { DESCRIBE_BLOCK_PREFIX } from "@/lib/ai/describe-indicator";
 
 const IDEAS = [
   "A break of structure to the upside on the 15-minute chart",
@@ -16,9 +15,9 @@ const IDEAS = [
 
 /** Blocks are made by describing them: Mr. Agent writes the rule, you review it and create the block. */
 export default function DescribeBlock() {
-  const { agentName, openChat } = useAgentChat();
+  const { agentName, openBuild } = useAgentChat();
   const [text, setText] = useState("");
-  const ask = (idea: string) => openChat(`${DESCRIBE_BLOCK_PREFIX}${idea}`);
+  const ask = (idea: string) => openBuild("block", idea);
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <section className="surface space-y-3 p-5">

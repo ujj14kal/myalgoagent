@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calendarMonths, dayResults, drawdownSeries, monthlyReturns, pnlDistribution, summarize } from "./analytics";
+import { calendarMonths, dayResults, drawdownSeries, monthlyReturns, pnlDistribution, profitSplit, summarize, weekColumns } from "./analytics";
 
 const DAY = 86400;
 // 2026-01-05 00:00 IST is a Monday.
@@ -66,5 +66,28 @@ describe("pnlDistribution", () => {
   });
   it("handles identical results", () => {
     expect(pnlDistribution([trade(0, 5), trade(1, 5)])).toEqual([{ from: 5, to: 5, count: 2 }]);
+  });
+});
+
+describe("weekColumns", () => {
+  it("lays the trading days out by week, Monday to Friday", () => {
+    const cols = weekColumns(dayResults([trade(0, 100), trade(2, -20), trade(9, 50)])); // Mon 5 Jan, Wed 7 Jan, Wed 14 Jan 2026
+    expect(cols).toHaveLength(2);
+    expect(cols[0].monday).toBe("2026-01-05");
+    expect(cols[0].days).toEqual([100, null, -20, null, null]);
+    expect(cols[1].days).toEqual([null, null, 50, null, null]);
+    expect(cols[0].month).toMatch(/Jan/);
+    expect(cols[1].month).toBeNull();
+  });
+  it("keeps quiet weeks so gaps show", () => {
+    expect(weekColumns(dayResults([trade(0, 1), trade(21, 1)]))).toHaveLength(4);
+    expect(weekColumns([])).toEqual([]);
+  });
+});
+
+describe("profitSplit", () => {
+  it("separates gross profit and gross loss", () => {
+    expect(profitSplit([trade(0, 300), trade(1, -100), trade(2, 100)])).toEqual({ profit: 400, loss: 100, share: 0.8 });
+    expect(profitSplit([])).toEqual({ profit: 0, loss: 0, share: 0 });
   });
 });

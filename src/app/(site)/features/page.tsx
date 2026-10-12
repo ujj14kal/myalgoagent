@@ -137,6 +137,8 @@ const groups: Group[] = [
       "Describe a strategy and it builds and checks it for you, then opens a review — confirm and it's created",
       "Builds anything the strategy builder can: every indicator, time-of-day windows, candlestick, chart and volume patterns, other timeframes and other stocks — and edits your existing strategies",
       "Prepares backtests, forward tests, loss limits, the kill switch and watchlist changes the same way — you just review and confirm, and it takes you to the result",
+      "Builds blocks, indicators, concepts and strategies in a window right where you are: it explains the idea, asks how you define it, and shows a demo on a made-up stock before anything is created",
+      "Concepts can apply their blocks in sequence or all at one time",
       "Answers from your own data: your strategies, backtest results, forward tests and risk settings",
       "Explains why each forward test happened and flags risk events as they occur",
       "Chat in a side panel or full screen, with all your past conversations",

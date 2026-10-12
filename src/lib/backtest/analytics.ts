@@ -164,4 +164,39 @@ export function pnlDistribution(trades: TradeLite[], bins = 12): Bucket[] {
   return out;
 }
 
+export type WeekColumn = { /** Monday of the week (YYYY-MM-DD). */ monday: string; /** Mon–Fri results: ₹ for a trading day, null for no trade. */ days: (number | null)[]; /** Month label when a new month starts in this column. */ month: string | null };
+
+/** The trading week by week, Monday to Friday down the page — one column per week, in time order. Weeks with no trade at all in a quiet stretch are kept, so gaps show as gaps. */
+export function weekColumns(days: DayResult[]): WeekColumn[] {
+  if (!days.length) return [];
+  const mondayOf = (day: string) => {
+    const t = Date.parse(`${day}T00:00:00Z`);
+    const dow = (new Date(t).getUTCDay() + 6) % 7; // Monday = 0
+    return t - dow * 86_400_000;
+  };
+  const byDay = new Map(days.map((d) => [d.day, d.pnl]));
+  const first = mondayOf(days[0].day);
+  const last = mondayOf(days[days.length - 1].day);
+  const out: WeekColumn[] = [];
+  let prevMonth = "";
+  for (let m = first; m <= last; m += 7 * 86_400_000) {
+    const ds = Array.from({ length: 5 }, (_, i) => new Date(m + i * 86_400_000).toISOString().slice(0, 10));
+    const month = ds[0].slice(0, 7);
+    out.push({
+      monday: ds[0],
+      days: ds.map((d) => byDay.get(d) ?? null),
+      month: month !== prevMonth ? new Date(m).toLocaleDateString("en-IN", { month: "short", year: month.slice(0, 4) !== prevMonth.slice(0, 4) ? "2-digit" : undefined, timeZone: "UTC" }) : null,
+    });
+    prevMonth = month;
+  }
+  return out;
+}
+
+/** Gross profit and gross loss of the trades, and the profit share of the two. */
+export function profitSplit(trades: TradeLite[]): { profit: number; loss: number; share: number } {
+  const profit = trades.filter((t) => t.netPnl > 0).reduce((s, t) => s + t.netPnl, 0);
+  const loss = Math.abs(trades.filter((t) => t.netPnl < 0).reduce((s, t) => s + t.netPnl, 0));
+  return { profit: round(profit), loss: round(loss), share: profit + loss > 0 ? profit / (profit + loss) : 0 };
+}
+
 const round = (n: number) => Math.round(n * 100) / 100;

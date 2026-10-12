@@ -32,6 +32,7 @@ import {
   PencilRuler,
 } from "lucide-react";
 import BodyPortal from "@/components/ui/body-portal";
+import ProposalDemo from "./proposal-demo";
 import Agent2D from "@/components/robot/agent-2d";
 import { NEW_STRATEGY_ID, PROPOSAL_TITLES, toStrategyInput, type AgentProposal, type PlanStep, type ProposalStatus } from "@/lib/ai/proposals";
 import { listInstrumentsForReview, setProposalStatus } from "@/lib/agent-chat-actions";
@@ -802,6 +803,22 @@ function ProposalFields({
           <Field label="Concept name">
             <input value={p.draft.name} maxLength={80} onChange={(e) => onChange({ ...p, draft: { ...p.draft, name: e.target.value } })} className={inputCls} />
           </Field>
+          {p.draft.definition.logic?.type === "group" && (() => {
+            const root = p.draft.definition.logic;
+            const setRoot = (connection: "SEQUENCE" | "AND") =>
+              onChange({ ...p, draft: { ...p.draft, definition: { ...p.draft.definition, logic: connection === "SEQUENCE" ? { ...root, connection, bars: root.bars ?? 10 } : { ...root, connection, bars: undefined } } } });
+            return (
+              <div role="radiogroup" aria-label="How the blocks are applied" className="grid grid-cols-2 gap-2">
+                {([["SEQUENCE", "Sequence the blocks", "one after another, in order"], ["AND", "Apply all at one time", "all on the same candle"]] as const).map(([key, title, sub]) => (
+                  <button key={key} type="button" role="radio" aria-checked={root.connection === key} onClick={() => root.connection !== key && setRoot(key)} className={`rounded-xl border p-2.5 text-left text-xs ${root.connection === key ? "border-brand-primary bg-brand-primary/[0.06]" : "border-brand-navy/15 hover:border-brand-primary/50"}`}>
+                    <span className={`block text-sm font-semibold ${root.connection === key ? "text-brand-primary" : "text-brand-navy"}`}>{title}</span>
+                    <span className="text-brand-navy/55">{sub}</span>
+                  </button>
+                ))}
+                <p className="col-span-2 text-[11px] text-brand-navy/45">The demo above follows your choice; the wording below is as first written.</p>
+              </div>
+            );
+          })()}
           <div className="space-y-2 rounded-xl bg-brand-bg p-3 text-sm text-brand-navy/80">
             <p>
               <strong className="text-brand-navy">{p.draft.classification === "BULLISH" ? "Bullish" : "Bearish"} setup valid when:</strong> {p.draft.text}
@@ -1141,7 +1158,10 @@ export function ProposalReviewModal({
                 ))}
               </ol>
             ) : (
-              <ProposalFields p={draft} onChange={setDraft} instrumentId={instrumentId} onInstrument={setInstrumentId} />
+              <>
+                {(draft.kind === "block" || draft.kind === "indicator" || draft.kind === "concept") && <ProposalDemo proposal={draft} />}
+                <ProposalFields p={draft} onChange={setDraft} instrumentId={instrumentId} onInstrument={setInstrumentId} />
+              </>
             )}
             <AnimatePresence>
               {error && (

@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import BodyPortal from "@/components/ui/body-portal";
 import Agent2D from "@/components/robot/agent-2d";
 import AgentChatPanel from "./agent-chat-panel";
+import BuildWindow, { type BuildKind } from "./build-window";
 
 type Rect = { left: number; top: number; width: number; height: number };
 
@@ -13,6 +14,8 @@ type AgentChatContextValue = {
   isOpen: boolean;
   /** Opens the chat; with a question, the panel starts a new conversation and asks it. */
   openChat: (question?: string) => void;
+  /** Opens a focused window right here to build one thing with the assistant (no trip to the chat page); `seed` is the first message. */
+  openBuild: (kind: BuildKind, seed?: string) => void;
   closeChat: () => void;
   /** Increments each time the agent "arrives home" — the chat button plays its welcome bounce. */
   homeSignal: number;
@@ -69,6 +72,8 @@ export default function AgentChatProvider({ agentName, children }: { agentName: 
     setIsOpen(true);
   }, []);
   const closeChat = useCallback(() => setIsOpen(false), []);
+  const [build, setBuild] = useState<{ kind: BuildKind; seed: string | null; n: number } | null>(null);
+  const openBuild = useCallback((kind: BuildKind, seed?: string) => setBuild((b) => ({ kind, seed: seed?.trim() || null, n: (b?.n ?? 0) + 1 })), []);
 
   const flyHome = useCallback(
     (from: Rect | null) => {
@@ -92,7 +97,7 @@ export default function AgentChatProvider({ agentName, children }: { agentName: 
   };
 
   return (
-    <AgentChatContext.Provider value={{ agentName, isOpen, openChat, closeChat, homeSignal, flyHome }}>
+    <AgentChatContext.Provider value={{ agentName, isOpen, openChat, openBuild, closeChat, homeSignal, flyHome }}>
       {children}
       <AgentChatPanel
         open={isOpen}
@@ -101,6 +106,7 @@ export default function AgentChatProvider({ agentName, children }: { agentName: 
         pendingQuestion={pendingQuestion}
         onQuestionTaken={() => setPendingQuestion(null)}
       />
+      {build && <BuildWindow key={build.n} kind={build.kind} seed={build.seed} agentName={agentName} onClose={() => setBuild(null)} />}
       <BodyPortal>
         <AnimatePresence>
           {flight && path && (

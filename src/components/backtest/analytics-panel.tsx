@@ -1,79 +1,81 @@
-import { BarChart3, CalendarDays, Gauge, TrendingDown } from "lucide-react";
+import { BarChart3, CalendarDays, Gauge, Scale, TrendingDown } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/card";
-import { calendarMonths, dayResults, drawdownSeries, monthlyReturns, pnlDistribution, summarize, type EquityLite, type TradeLite } from "@/lib/backtest/analytics";
+import { dayResults, drawdownSeries, monthlyReturns, pnlDistribution, profitSplit, summarize, weekColumns, type EquityLite, type TradeLite } from "@/lib/backtest/analytics";
 
 const inr = (n: number, signed = false) => `${n < 0 ? "−" : signed && n > 0 ? "+" : ""}₹${Math.abs(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 const pct = (n: number) => `${n.toFixed(2)}%`;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const GREEN = "#1fa955";
+const RED = "#e5484d";
 
-function Pill({ tone, children }: { tone: "up" | "down"; children: React.ReactNode }) {
-  return <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${tone === "up" ? "bg-brand-buy/10 text-[#0b6b30]" : "bg-brand-sell/10 text-brand-sell"}`}>{children}</span>;
-}
-
-function Tile({ title, big, children }: { title: string; big: React.ReactNode; children: React.ReactNode }) {
+/** A two-colour bar: the share that is good against the share that is bad. */
+function SplitBar({ good, bad, goodLabel, badLabel }: { good: number; bad: number; goodLabel: string; badLabel: string }) {
+  const total = good + bad;
+  const g = total > 0 ? (good / total) * 100 : 0;
   return (
-    <div className="surface p-4">
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/45">{title}</p>
-        <p className="num text-2xl font-bold tabular-nums text-brand-navy">{big}</p>
+    <div>
+      <div className="flex h-2.5 overflow-hidden rounded-full bg-brand-navy/[0.07]" role="img" aria-label={`${goodLabel}, ${badLabel}`}>
+        <span style={{ width: `${g}%`, background: GREEN }} />
+        <span style={{ width: `${total > 0 ? 100 - g : 0}%`, background: RED }} />
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-3 text-xs">{children}</div>
+      <div className="mt-1 flex justify-between text-[11px]">
+        <span className="font-semibold text-[#0b6b30]">{goodLabel}</span>
+        <span className="font-semibold text-brand-sell">{badLabel}</span>
+      </div>
     </div>
   );
 }
 
-const Part = ({ label, value, sub, tone }: { label: string; value: React.ReactNode; sub?: React.ReactNode; tone?: "up" | "down" }) => (
-  <div>
-    <p className="text-brand-navy/50">{label}</p>
-    <p className={`num mt-0.5 text-sm font-semibold tabular-nums ${tone === "up" ? "text-[#0b6b30]" : tone === "down" ? "text-brand-sell" : "text-brand-navy"}`}>{value}</p>
-    {sub && <div className="mt-1">{sub}</div>}
-  </div>
-);
-
-function DrawdownRing({ pctValue, amount }: { pctValue: number; amount: number }) {
-  const r = 26;
-  const c = 2 * Math.PI * r;
-  const filled = Math.min(1, pctValue / 100) * c;
+/** The last trades as dots in order — a run of wins or losses shows as a run of colour. A bigger dot is a bigger result. */
+function TradeStrip({ trades }: { trades: TradeLite[] }) {
+  const last = [...trades].sort((a, b) => a.exitTime - b.exitTime).slice(-48);
+  if (!last.length) return <p className="text-xs text-brand-navy/45">No trades yet.</p>;
+  const biggest = Math.max(...last.map((t) => Math.abs(t.netPnl)), 1);
   return (
-    <div className="relative flex h-20 w-20 items-center justify-center" aria-label={`Max drawdown ${pct(pctValue)}`}>
-      <svg viewBox="0 0 64 64" className="absolute inset-0 -rotate-90">
-        <circle cx={32} cy={32} r={r} fill="none" stroke="#f0f1f5" strokeWidth={6} />
-        <circle cx={32} cy={32} r={r} fill="none" stroke="#d93a3a" strokeWidth={6} strokeLinecap="round" strokeDasharray={`${filled} ${c}`} />
-      </svg>
-      <span className="num text-sm font-bold text-brand-sell">{amount >= 1000 ? `${(amount / 1000).toFixed(2)}K` : amount.toFixed(0)}</span>
+    <div className="flex flex-wrap items-center gap-[5px]" role="img" aria-label="The most recent trades in order, green for a win and red for a loss">
+      {last.map((t, i) => {
+        const size = 7 + (Math.abs(t.netPnl) / biggest) * 9;
+        return <span key={i} title={inr(t.netPnl, true)} className="rounded-full" style={{ width: size, height: size, background: t.netPnl >= 0 ? GREEN : RED, opacity: 0.85 }} />;
+      })}
     </div>
   );
 }
 
-function CalendarHeatmap({ trades }: { trades: TradeLite[] }) {
-  const months = calendarMonths(dayResults(trades));
-  if (!months.length) return <p className="py-6 text-sm text-brand-navy/50">No closed trades to show.</p>;
+/** Every trading week as a column, Monday at the top to Friday at the bottom: a quick read of when it earned and when it gave back. */
+function WeekGrid({ trades }: { trades: TradeLite[] }) {
+  const weeks = weekColumns(dayResults(trades));
+  if (!weeks.length) return <p className="py-6 text-sm text-brand-navy/50">No closed trades to show.</p>;
+  const biggest = Math.max(...weeks.flatMap((w) => w.days.map((d) => Math.abs(d ?? 0))), 1);
+  const shade = (v: number) => 0.28 + 0.72 * Math.min(1, Math.abs(v) / biggest);
   return (
-    <div className="flex gap-3 overflow-x-auto pb-2">
-      {months.map((m) => (
-        <div key={m.key} className="shrink-0 rounded-xl border border-brand-navy/10 p-2.5">
-          <div className="mb-1 grid grid-cols-7 gap-[3px] text-center text-[9px] text-brand-navy/40">
-            {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-              <span key={i}>{d}</span>
-            ))}
-          </div>
-          <div className="grid grid-cols-7 gap-[3px]">
-            {m.cells.map((c, i) =>
-              c === null ? (
-                <span key={i} className="h-3.5 w-3.5" />
-              ) : (
+    <div className="overflow-x-auto pb-2">
+      <div className="inline-flex gap-2">
+        <div className="flex flex-col justify-end gap-[3px] pb-[2px] pt-[18px] text-[9px] text-brand-navy/40">
+          {["Mon", "Tue", "Wed", "Thu", "Fri"].map((d) => (
+            <span key={d} className="flex h-4 items-center">{d}</span>
+          ))}
+        </div>
+        <div className="flex gap-[3px]">
+          {weeks.map((w) => (
+            <div key={w.monday} className="flex flex-col gap-[3px]">
+              <span className="h-[15px] whitespace-nowrap text-[9px] font-medium leading-[15px] text-brand-navy/50">{w.month ?? ""}</span>
+              {w.days.map((v, i) => (
                 <span
                   key={i}
-                  title={c.pnl === null ? `${c.day} ${m.label}: no trade` : `${c.day} ${m.label}: ${inr(c.pnl, true)}`}
-                  className={`h-3.5 w-3.5 rounded-[3px] ${c.pnl === null ? "bg-brand-navy/[0.06]" : c.pnl >= 0 ? "bg-[#22b455]" : "bg-[#e5484d]"}`}
+                  title={v === null ? `${w.monday} +${i}d: no trade` : `Week of ${w.monday}, day ${i + 1}: ${inr(v, true)}`}
+                  className="h-4 w-4 rounded-[5px]"
+                  style={v === null ? { background: "rgba(14,27,45,0.06)" } : { background: v >= 0 ? GREEN : RED, opacity: shade(v) }}
                 />
-              )
-            )}
-          </div>
-          <p className="mt-2 text-center text-[10px] text-brand-navy/55">{m.label}</p>
-          <p className={`num text-center text-[11px] font-semibold ${m.pnl >= 0 ? "text-[#0b6b30]" : "text-brand-sell"}`}>{inr(m.pnl, true)}</p>
+              ))}
+            </div>
+          ))}
         </div>
-      ))}
+      </div>
+      <p className="mt-2 flex items-center gap-2 text-[10px] text-brand-navy/45">
+        <span className="inline-block h-2.5 w-2.5 rounded-[3px]" style={{ background: RED }} /> loss
+        <span className="inline-block h-2.5 w-2.5 rounded-[3px]" style={{ background: GREEN }} /> profit
+        <span className="inline-block h-2.5 w-2.5 rounded-[3px] bg-brand-navy/[0.06]" /> no trade · stronger colour = bigger day
+      </p>
     </div>
   );
 }
@@ -158,42 +160,73 @@ function Distribution({ trades }: { trades: TradeLite[] }) {
   );
 }
 
-/** Day-by-day and month-by-month views of a backtest: tiles, calendar, monthly returns, drawdown and spread of results. */
+/** The results at a glance, week by week, month by month, the fall from the peak and how trade results are spread. */
 export default function BacktestAnalytics({ trades, equity }: { trades: TradeLite[]; equity: EquityLite[] }) {
   const s = summarize(trades, equity);
-  const share = (n: number, of: number) => (of ? `${((n / of) * 100).toFixed(1)}%` : "—");
+  const split = profitSplit(trades);
+  const net = Math.round((split.profit - split.loss) * 100) / 100;
+  const factor = split.loss > 0 ? split.profit / split.loss : null;
+  const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` : "—");
   return (
     <div className="mt-6 space-y-6">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Tile title="Trading days" big={s.tradingDays}>
-          <Part label="Win days" value={share(s.winDays, s.tradingDays)} tone="up" sub={<Pill tone="up">{s.winDays} of {s.tradingDays}</Pill>} />
-          <Part label="Loss days" value={share(s.lossDays, s.tradingDays)} tone="down" sub={<Pill tone="down">{s.lossDays} of {s.tradingDays}</Pill>} />
-        </Tile>
-        <Tile title="Total trades" big={s.totalTrades}>
-          <Part label="Win trades" value={share(s.winTrades, s.totalTrades)} tone="up" sub={<Pill tone="up">{s.winTrades} of {s.totalTrades}</Pill>} />
-          <Part label="Loss trades" value={share(s.lossTrades, s.totalTrades)} tone="down" sub={<Pill tone="down">{s.lossTrades} of {s.totalTrades}</Pill>} />
-        </Tile>
-        <Tile title="Streaks & extremes" big={<span className="text-base">{s.longestWinStreak}W · {s.longestLossStreak}L</span>}>
-          <Part label="Best day" value={inr(s.bestDay, true)} tone="up" sub={<span className="text-[10px] text-brand-navy/45">best trade {inr(s.bestTrade, true)}</span>} />
-          <Part label="Worst day" value={inr(s.worstDay, true)} tone="down" sub={<span className="text-[10px] text-brand-navy/45">worst trade {inr(s.worstTrade, true)}</span>} />
-        </Tile>
-        <div className="surface flex items-center justify-between gap-3 p-4">
+      <Card className="p-5">
+        <CardHeader title="Results at a glance" subtitle={`${s.totalTrades} trade${s.totalTrades === 1 ? "" : "s"} over ${s.tradingDays} trading day${s.tradingDays === 1 ? "" : "s"}`} icon={Scale} />
+        <div className="mt-5 grid gap-6 lg:grid-cols-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/45">Max drawdown</p>
-            <p className="num mt-1 text-2xl font-bold text-brand-sell">{pct(s.maxDrawdownPct)}</p>
-            <p className="mt-1 text-xs text-brand-navy/50">{inr(s.maxDrawdown)} from peak</p>
-            <p className="mt-2 text-[11px] text-brand-navy/45">
-              Avg win {inr(s.avgWin, true)} · avg loss {inr(s.avgLoss, true)}
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-navy/45">What it earned</p>
+            <p className={`num mt-1 text-3xl font-bold tabular-nums ${net >= 0 ? "text-[#0b6b30]" : "text-brand-sell"}`}>{inr(net, true)}</p>
+            <div className="mt-3">
+              <SplitBar good={split.profit} bad={split.loss} goodLabel={`Won ${inr(split.profit)}`} badLabel={`Lost ${inr(split.loss)}`} />
+            </div>
+            <p className="mt-2 text-xs text-brand-navy/55">{factor === null ? (split.profit > 0 ? "No losing trades." : "") : `Every ₹1 lost was matched by ₹${factor.toFixed(2)} won.`}</p>
+          </div>
+          <div className="space-y-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-navy/45">How often it wins</p>
+            <div>
+              <p className="mb-1 text-xs text-brand-navy/60">Days · {share(s.winDays, s.tradingDays)} were profitable</p>
+              <SplitBar good={s.winDays} bad={s.lossDays} goodLabel={`${s.winDays} up`} badLabel={`${s.lossDays} down`} />
+            </div>
+            <div>
+              <p className="mb-1 text-xs text-brand-navy/60">Trades · {share(s.winTrades, s.totalTrades)} were winners</p>
+              <SplitBar good={s.winTrades} bad={s.lossTrades} goodLabel={`${s.winTrades} won`} badLabel={`${s.lossTrades} lost`} />
+            </div>
+            <p className="text-xs text-brand-navy/55">
+              Average win {inr(s.avgWin, true)} · average loss {inr(s.avgLoss, true)}
             </p>
           </div>
-          <DrawdownRing pctValue={s.maxDrawdownPct} amount={s.maxDrawdown} />
+          <div className="space-y-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-navy/45">Runs and extremes</p>
+            <TradeStrip trades={trades} />
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+              <div>
+                <dt className="text-brand-navy/50">Longest winning run</dt>
+                <dd className="num font-semibold text-[#0b6b30]">{s.longestWinStreak} day{s.longestWinStreak === 1 ? "" : "s"}</dd>
+              </div>
+              <div>
+                <dt className="text-brand-navy/50">Longest losing run</dt>
+                <dd className="num font-semibold text-brand-sell">{s.longestLossStreak} day{s.longestLossStreak === 1 ? "" : "s"}</dd>
+              </div>
+              <div>
+                <dt className="text-brand-navy/50">Best day · best trade</dt>
+                <dd className="num font-semibold text-brand-navy">{inr(s.bestDay, true)} · {inr(s.bestTrade, true)}</dd>
+              </div>
+              <div>
+                <dt className="text-brand-navy/50">Worst day · worst trade</dt>
+                <dd className="num font-semibold text-brand-navy">{inr(s.worstDay, true)} · {inr(s.worstTrade, true)}</dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-brand-navy/50">Deepest fall from a peak</dt>
+                <dd className="num font-semibold text-brand-sell">{pct(s.maxDrawdownPct)} <span className="font-normal text-brand-navy/50">({inr(s.maxDrawdown)})</span></dd>
+              </div>
+            </dl>
+          </div>
         </div>
-      </div>
+      </Card>
 
       <Card className="p-5">
-        <CardHeader title="Day-by-day calendar" subtitle="Each square is a trading day: green = profit, red = loss" icon={CalendarDays} />
+        <CardHeader title="Week by week" subtitle="One column per trading week, Monday at the top — green where it made money, red where it lost" icon={CalendarDays} />
         <div className="mt-4">
-          <CalendarHeatmap trades={trades} />
+          <WeekGrid trades={trades} />
         </div>
       </Card>
 
