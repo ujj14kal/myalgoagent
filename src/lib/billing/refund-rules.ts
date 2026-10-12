@@ -88,7 +88,7 @@ export function policyVerdict(i: PolicyInput): PolicyVerdict {
   const refundPaise = Math.max(0, i.amountPaise - POLICY.feePaise);
   const base = { refundPaise, feePaise: POLICY.feePaise, usedShare, deadline };
   const day = deadline.toLocaleDateString("en-IN", { day: "numeric", month: "long", timeZone: "Asia/Kolkata" });
-  if (i.kind !== "subscription") return { ...base, eligible: false, reason: "Credit top-ups aren't refundable." };
+  if (i.kind !== "subscription") return { ...base, eligible: false, reason: "One-time payments, such as credit top-ups, are final and can't be refunded." };
   if (i.askedAt.getTime() > deadline.getTime()) return { ...base, eligible: false, reason: `A plan payment can be refunded only if you reach us within ${POLICY.workingDays} working days of paying (that was by ${day}).` };
   if (usedShare >= POLICY.maxUsedShare) return { ...base, eligible: false, reason: `A plan payment can be refunded only if less than 5% of its credits have been used; ${Math.round(usedShare * 100)}% have been used.` };
   if (refundPaise <= 0) return { ...base, eligible: false, reason: "There's nothing left to refund after the ₹100 charge." };

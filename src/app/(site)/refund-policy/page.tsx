@@ -42,7 +42,7 @@ export default function RefundPolicyPage() {
           </ul>
           <p>
             When we refund a plan payment, <strong>₹100 is kept as a charge</strong> and the rest goes back to the payment method you used. Your plan then ends and
-            renewals stop, and we email you a <strong>credit note</strong> that refers to your original invoice. Credit top-ups are not refundable.
+            renewals stop, and we email you a <strong>credit note</strong> that refers to your original invoice. One-time payments, such as credit top-ups, are final and not refundable.
           </p>
           <h2>How to ask</h2>
           <p>

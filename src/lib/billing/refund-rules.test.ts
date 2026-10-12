@@ -93,6 +93,6 @@ describe("policyVerdict", () => {
   it("never refunds credit top-ups", () => {
     const v = policyVerdict({ ...base, kind: "topup" });
     expect(v.eligible).toBe(false);
-    expect(v.reason).toMatch(/top-ups aren't refundable/);
+    expect(v.reason).toMatch(/one-time payments.*final/i);
   });
 });
