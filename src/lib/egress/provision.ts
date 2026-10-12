@@ -62,7 +62,7 @@ async function advancePending(row: EgressRow, d: Deps): Promise<EgressPatch | nu
     return { instanceId, tokenEnc: d.encrypt(token), lastError: null };
   }
   const relay = await d.cloud.describeRelay(row.instanceId);
-  if (relay.state === "terminated" || relay.state === "stopping" || relay.state === "stopped") {
+  if (relay.state === "terminated" || relay.state === "shutting-down" || relay.state === "stopping" || relay.state === "stopped") {
     // The relay died before it was ready: start over with a new one, keeping the same IP.
     return { ...fail(row, `relay ${relay.state}`), instanceId: null, tokenEnc: null };
   }
@@ -84,7 +84,14 @@ async function advancePending(row: EgressRow, d: Deps): Promise<EgressPatch | nu
 
 async function advanceReleasing(row: EgressRow, d: Deps): Promise<EgressPatch | null> {
   if (row.graceUntil && row.graceUntil.getTime() > d.now().getTime()) return null; // still inside the grace period
-  if (row.instanceId) await d.cloud.terminateRelay(row.instanceId);
+  // The address can only be given back once the relay is completely gone, so: ask it to stop, come back next pass.
+  if (row.instanceId) {
+    const relay = await d.cloud.describeRelay(row.instanceId);
+    if (relay.state !== "terminated") {
+      if (relay.state !== "shutting-down") await d.cloud.terminateRelay(row.instanceId);
+      return null;
+    }
+  }
   if (row.allocationId) await d.cloud.releaseIp(row.allocationId);
   return { status: "RELEASED", instanceId: null, allocationId: null, publicIp: null, relayHost: null, relayCertPem: null, tokenEnc: null, lastError: null };
 }

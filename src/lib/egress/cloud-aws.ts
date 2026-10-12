@@ -75,7 +75,7 @@ export function awsEgressCloud(cfg: CloudConfig = cloudConfigFromEnv(), client =
       const i = r.Reservations?.[0]?.Instances?.[0];
       if (!i) return { state: "terminated", privateIp: null, publicIp: null };
       const s = i.State?.Name;
-      const state = s === "pending" || s === "running" || s === "stopping" || s === "stopped" ? s : s === "shutting-down" || s === "terminated" ? "terminated" : "unknown";
+      const state = s === "pending" || s === "running" || s === "stopping" || s === "stopped" || s === "shutting-down" || s === "terminated" ? s : "unknown";
       return { state, privateIp: i.PrivateIpAddress ?? null, publicIp: i.PublicIpAddress ?? null };
     },
     async associateIp(allocationId, instanceId) {

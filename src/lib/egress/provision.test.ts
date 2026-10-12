@@ -89,10 +89,16 @@ describe("advance — releasing", () => {
     expect(await advance(releasing(new Date(T0.getTime() + 1000)), f.deps)).toBeNull();
     expect(f.calls).toEqual([]);
   });
-  it("after the grace period removes the relay and gives the IP back", async () => {
-    const f = fake();
-    const p = await advance(releasing(new Date(T0.getTime() - 1000)), f.deps);
-    expect(f.calls).toEqual(["terminate", "release"]);
+  it("after the grace period stops the relay first, then gives the IP back once it is gone", async () => {
+    const running = fake();
+    expect(await advance(releasing(new Date(T0.getTime() - 1000)), running.deps)).toBeNull();
+    expect(running.calls).toEqual(["terminate"]);
+    const closing = fake({ relay: { state: "shutting-down", privateIp: null, publicIp: null } });
+    expect(await advance(releasing(new Date(T0.getTime() - 1000)), closing.deps)).toBeNull();
+    expect(closing.calls).toEqual([]); // already stopping: just wait
+    const gone = fake({ relay: { state: "terminated", privateIp: null, publicIp: null } });
+    const p = await advance(releasing(new Date(T0.getTime() - 1000)), gone.deps);
+    expect(gone.calls).toEqual(["release"]);
     expect(p).toMatchObject({ status: "RELEASED", publicIp: null, tokenEnc: null });
   });
 });

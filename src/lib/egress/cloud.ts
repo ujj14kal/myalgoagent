@@ -1,6 +1,6 @@
 // What the provisioner needs from AWS, as an interface so the state machine is tested without it.
 
-export type RelayState = { state: "pending" | "running" | "stopping" | "stopped" | "terminated" | "unknown"; privateIp: string | null; publicIp: string | null };
+export type RelayState = { state: "pending" | "running" | "stopping" | "stopped" | "shutting-down" | "terminated" | "unknown"; privateIp: string | null; publicIp: string | null };
 
 export interface EgressCloud {
   /** A fresh Elastic IP for this user (tagged so only we can touch it). */
