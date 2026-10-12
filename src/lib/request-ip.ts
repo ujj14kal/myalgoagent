@@ -15,6 +15,9 @@ export function clientIpFrom(get: (name: string) => string | null): string {
     if (ip) return ip;
   }
   const chain = (get("x-forwarded-for") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  // Behind our own load balancer (no CloudFront in front) the balancer appends the real peer as the LAST entry; anything
+  // before it was supplied by the client and must not be trusted.
+  if (process.env.CLIENT_IP_FROM_LAST_XFF === "1" && chain.length >= 1) return chain[chain.length - 1];
   if (chain.length >= 2) return chain[chain.length - 2];
   return chain[0] ?? "unknown";
 }

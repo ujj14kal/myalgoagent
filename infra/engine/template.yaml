@@ -10,6 +10,14 @@ Parameters:
   BrokerEgressUrl: { Type: String }
   LicensedUserIds: { Type: String }
   DesiredCount: { Type: Number, Default: 0, Description: "0 until the image is built, then 1" }
+  AssignPublicIp: { Type: String, Default: ENABLED, AllowedValues: [ENABLED, DISABLED], Description: "DISABLED once the engine runs in the private subnets behind the NAT" }
+  ExistingSecurityGroupId: { Type: String, Default: "", Description: "Shared engine security group from the network stack (so the database accepts it); empty = create one" }
+  DbSecretArn: { Type: String, Default: "", Description: "Secrets Manager database credential; empty = use DATABASE_URL from Parameter Store" }
+  DataKeyArn: { Type: String, Default: "arn:aws:kms:ap-south-1:327076610444:key/d1919b9d-3db7-4d0f-8bfd-5226770a8e6e" }
+
+Conditions:
+  CreateSg: !Equals [!Ref ExistingSecurityGroupId, ""]
+  UseDbSecret: !Not [!Equals [!Ref DbSecretArn, ""]]
 
 Resources:
   Repo:
@@ -22,7 +30,7 @@ Resources:
 
   Logs:
     Type: AWS::Logs::LogGroup
-    Properties: { LogGroupName: /myalgoagent/engine, RetentionInDays: 90 }
+    Properties: { LogGroupName: /myalgoagent/engine, RetentionInDays: 1827 }
 
   Cluster:
     Type: AWS::ECS::Cluster
@@ -41,12 +49,25 @@ Resources:
     Properties:
       AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [{ Effect: Allow, Principal: { Service: ecs-tasks.amazonaws.com }, Action: "sts:AssumeRole" }] }
       ManagedPolicyArns: [arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy]
+      Policies:
+        - PolicyName: read-db-secret
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - { Effect: Allow, Action: secretsmanager:GetSecretValue, Resource: !If [UseDbSecret, !Ref DbSecretArn, !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:myalgoagent/none"] }
+              - { Effect: Allow, Action: kms:Decrypt, Resource: !Ref DataKeyArn }
 
   TaskRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [{ Effect: Allow, Principal: { Service: ecs-tasks.amazonaws.com }, Action: "sts:AssumeRole" }] }
       Policies:
+        - PolicyName: read-db-secret
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - { Effect: Allow, Action: secretsmanager:GetSecretValue, Resource: !If [UseDbSecret, !Ref DbSecretArn, !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:myalgoagent/none"] }
+              - { Effect: Allow, Action: kms:Decrypt, Resource: !Ref DataKeyArn }
         - PolicyName: read-app-secrets
           PolicyDocument:
             Version: "2012-10-17"
@@ -65,6 +86,7 @@ Resources:
 
   Sg:
     Type: AWS::EC2::SecurityGroup
+    Condition: CreateSg
     Properties:
       GroupDescription: Live engine - outbound only, nothing can connect in
       VpcId: !Ref VpcId
@@ -91,6 +113,12 @@ Resources:
             - { Name: APP_SECRETS_PATH, Value: /myalgoagent/app }
             - { Name: BROKER_EGRESS_URL, Value: !Ref BrokerEgressUrl }
             - { Name: MARKET_DATA_LICENSED_USER_IDS, Value: !Ref LicensedUserIds }
+            - !If [UseDbSecret, { Name: DB_SECRET_ID, Value: !Ref DbSecretArn }, !Ref "AWS::NoValue"]
+          Secrets:
+            - !If [UseDbSecret, { Name: DB_HOST, ValueFrom: !Sub "${DbSecretArn}:host::" }, !Ref "AWS::NoValue"]
+            - !If [UseDbSecret, { Name: DB_PORT, ValueFrom: !Sub "${DbSecretArn}:port::" }, !Ref "AWS::NoValue"]
+            - !If [UseDbSecret, { Name: DB_NAME, ValueFrom: !Sub "${DbSecretArn}:dbname::" }, !Ref "AWS::NoValue"]
+            - !If [UseDbSecret, { Name: DB_USER, ValueFrom: !Sub "${DbSecretArn}:username::" }, !Ref "AWS::NoValue"]
           LogConfiguration:
             LogDriver: awslogs
             Options: { awslogs-group: !Ref Logs, awslogs-region: !Ref "AWS::Region", awslogs-stream-prefix: engine }
@@ -110,7 +138,7 @@ Resources:
         MaximumPercent: 200
         DeploymentCircuitBreaker: { Enable: true, Rollback: true }
       NetworkConfiguration:
-        AwsvpcConfiguration: { AssignPublicIp: ENABLED, Subnets: !Ref SubnetIds, SecurityGroups: [!Ref Sg] }
+        AwsvpcConfiguration: { AssignPublicIp: !Ref AssignPublicIp, Subnets: !Ref SubnetIds, SecurityGroups: [!If [CreateSg, !Ref Sg, !Ref ExistingSecurityGroupId]] }
 
   BuildRole:
     Type: AWS::IAM::Role

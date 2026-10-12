@@ -1,0 +1,16 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: MyAlgoAgent public certificate for CloudFront (must live in us-east-1). Validation is by DNS records in Route 53, so it never touches live traffic.
+Parameters:
+  HostedZoneId: { Type: String, Default: Z01955502T07S2HGRRUW4 }
+Resources:
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: myalgoagent.com
+      SubjectAlternativeNames: [www.myalgoagent.com]
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - { DomainName: myalgoagent.com, HostedZoneId: !Ref HostedZoneId }
+        - { DomainName: www.myalgoagent.com, HostedZoneId: !Ref HostedZoneId }
+Outputs:
+  CertificateArn: { Value: !Ref Certificate }

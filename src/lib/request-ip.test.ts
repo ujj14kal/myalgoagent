@@ -15,4 +15,13 @@ describe("clientIpFrom", () => {
     expect(from({ "x-forwarded-for": "198.51.100.7" })).toBe("198.51.100.7");
     expect(from({})).toBe("unknown");
   });
+  it("behind our own load balancer takes the last entry, never a client-supplied one", () => {
+    process.env.CLIENT_IP_FROM_LAST_XFF = "1";
+    try {
+      expect(from({ "x-forwarded-for": "203.0.113.99, 198.51.100.7" })).toBe("198.51.100.7");
+      expect(from({ "x-forwarded-for": "198.51.100.7" })).toBe("198.51.100.7");
+    } finally {
+      delete process.env.CLIENT_IP_FROM_LAST_XFF;
+    }
+  });
 });

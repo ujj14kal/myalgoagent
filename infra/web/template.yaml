@@ -4,13 +4,16 @@ Description: MyAlgoAgent website on ECS Fargate - ECR, task roles, ALB (CloudFro
 Parameters:
   ImageTag: { Type: String, Default: bootstrap, Description: Immutable image tag (git sha) to run }
   DesiredCount: { Type: Number, Default: 0, Description: 0 until the first image is pushed }
-  OriginSecret: { Type: String, NoEcho: true, Description: Value CloudFront sends in X-Origin-Verify; the load balancer rejects requests without it }
+  OriginSecret: { Type: String, NoEcho: true, Default: "", Description: "Set only when CloudFront fronts the load balancer: value it sends in X-Origin-Verify. Empty = the load balancer is public" }
   DatabaseUrlSecretArn: { Type: String, Description: "Secrets Manager secret (JSON: username, password, host, port, dbname) for the database" }
   OriginHostName: { Type: String, Default: origin.myalgoagent.com }
   HostedZoneId: { Type: String, Default: Z01955502T07S2HGRRUW4 }
   DataKeyArn: { Type: String, Default: "arn:aws:kms:ap-south-1:327076610444:key/d1919b9d-3db7-4d0f-8bfd-5226770a8e6e" }
   LogsKeyArn: { Type: String, Default: "arn:aws:kms:ap-south-1:327076610444:key/c36edd8b-7137-4eb3-ab01-ea96b867baf3" }
   AlertsTopicArn: { Type: String, Default: "arn:aws:sns:ap-south-1:327076610444:myalgoagent-alerts" }
+
+Conditions:
+  BehindCloudFront: !Not [!Equals [!Ref OriginSecret, ""]]
 
 Resources:
   Repo:
@@ -75,9 +78,13 @@ Resources:
   Certificate:
     Type: AWS::CertificateManager::Certificate
     Properties:
-      DomainName: !Ref OriginHostName
+      DomainName: myalgoagent.com
+      SubjectAlternativeNames: [www.myalgoagent.com, !Ref OriginHostName]
       ValidationMethod: DNS
-      DomainValidationOptions: [{ DomainName: !Ref OriginHostName, HostedZoneId: !Ref HostedZoneId }]
+      DomainValidationOptions:
+        - { DomainName: myalgoagent.com, HostedZoneId: !Ref HostedZoneId }
+        - { DomainName: www.myalgoagent.com, HostedZoneId: !Ref HostedZoneId }
+        - { DomainName: !Ref OriginHostName, HostedZoneId: !Ref HostedZoneId }
 
   Alb:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
@@ -114,10 +121,20 @@ Resources:
       SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
       Certificates: [{ CertificateArn: !Ref Certificate }]
       DefaultActions:
-        - Type: fixed-response
-          FixedResponseConfig: { StatusCode: "403", ContentType: text/plain, MessageBody: Forbidden }
+        - !If
+          - BehindCloudFront
+          - { Type: fixed-response, FixedResponseConfig: { StatusCode: "403", ContentType: text/plain, MessageBody: Forbidden } }
+          - { Type: forward, TargetGroupArn: !Ref TargetGroup }
+  HttpRedirect:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Alb
+      Port: 80
+      Protocol: HTTP
+      DefaultActions: [{ Type: redirect, RedirectConfig: { Protocol: HTTPS, Port: "443", StatusCode: HTTP_301 } }]
   ForwardRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Condition: BehindCloudFront
     Properties:
       ListenerArn: !Ref Listener
       Priority: 10
@@ -156,6 +173,7 @@ Resources:
           Environment:
             - { Name: NODE_ENV, Value: production }
             - { Name: TZ, Value: UTC }
+            - { Name: CLIENT_IP_FROM_LAST_XFF, Value: "1" }
             - { Name: AUTH_URL, Value: "https://myalgoagent.com" }
             - { Name: AUTH_TRUST_HOST, Value: "true" }
             - { Name: AUTH_GOOGLE_ID, Value: "48546689421-7mcct18pb5qu07pefna0tq71fb5sj244.apps.googleusercontent.com" }
@@ -175,7 +193,7 @@ Resources:
 
   Service:
     Type: AWS::ECS::Service
-    DependsOn: ForwardRule
+    DependsOn: Listener
     Properties:
       ServiceName: myalgoagent-web
       Cluster: myalgoagent
@@ -275,10 +293,10 @@ Resources:
   AlarmTasks:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: "MyAlgoAgent web: no running task"
-      Namespace: ECS/ContainerInsights
-      MetricName: RunningTaskCount
-      Dimensions: [{ Name: ClusterName, Value: myalgoagent }, { Name: ServiceName, Value: myalgoagent-web }]
+      AlarmName: "MyAlgoAgent web: no healthy task"
+      Namespace: AWS/ApplicationELB
+      MetricName: HealthyHostCount
+      Dimensions: [{ Name: LoadBalancer, Value: !GetAtt Alb.LoadBalancerFullName }, { Name: TargetGroup, Value: !GetAtt TargetGroup.TargetGroupFullName }]
       Statistic: Minimum
       Period: 60
       EvaluationPeriods: 3

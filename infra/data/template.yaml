@@ -29,7 +29,7 @@ Resources:
       RotateImmediatelyOnUpdate: false
       RotationRules:
         Duration: 2h
-        ScheduleExpression: "cron(30 20 1 1,4,7,10 ? *)"   # quarterly, 02:00 IST on the 1st (outside market hours)
+        ScheduleExpression: "cron(0 21 1 1,4,7,10 ? *)"   # quarterly, 02:30 IST on the 1st (outside market hours)
       HostedRotationLambda:
         RotationType: PostgreSQLSingleUser
         RotationLambdaName: myalgoagent-db-rotation

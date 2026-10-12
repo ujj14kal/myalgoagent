@@ -144,13 +144,18 @@ Resources:
       MaxAggregationInterval: 600
 
   # Security groups: each tier only talks to the one next to it.
+  # The load balancer is the public front door (CloudFront needs an AWS account verification first; the CloudFront
+  # templates are in infra/edge). Only 80 (redirects to 443) and 443 are open; everything behind it is private.
   AlbSg:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Load balancer - HTTPS from CloudFront only
       VpcId: !Ref Vpc
       SecurityGroupIngress:
-        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, SourcePrefixListId: pl-9aa247f3, Description: CloudFront origin-facing }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0, Description: HTTPS }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIpv6: "::/0", Description: HTTPS over IPv6 }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0, Description: redirect to HTTPS }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIpv6: "::/0", Description: redirect to HTTPS over IPv6 }
       Tags: [{ Key: Name, Value: myalgoagent-alb }]
   WebSg:
     Type: AWS::EC2::SecurityGroup
