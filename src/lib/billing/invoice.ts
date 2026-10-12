@@ -93,10 +93,10 @@ export function invoiceHtml(m: InvoiceModel): string {
   const seller = m.seller;
   const meta = (k: string, v: string) => `<tr><td style="padding:3px 0;color:${MUTED};font-size:12px;white-space:nowrap;padding-right:14px">${k}</td><td style="padding:3px 0;font-size:13px;font-weight:600;color:${NAVY};text-align:right">${v}</td></tr>`;
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:${NAVY};background:#ffffff">
-<tr><td style="background:#ffffff;padding:22px 28px;border:1px solid ${LINE};border-bottom:0;border-radius:14px 14px 0 0">
+<tr><td bgcolor="${PURPLE}" style="background:${PURPLE};padding:20px 28px;border-radius:14px 14px 0 0">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-<td style="vertical-align:middle"><img src="${SITE}/brand/myalgoagent-logo-wide.png" width="190" alt="MyAlgoAgent" style="display:block;border:0;width:190px;height:auto"></td>
-<td style="text-align:right;vertical-align:middle"><span style="color:${PURPLE};font-size:11px;font-weight:700;letter-spacing:2px">${e(m.title)}</span><br><span style="color:${NAVY};font-size:15px;font-weight:700;font-family:Menlo,Consolas,monospace">${e(m.number)}</span></td>
+<td style="vertical-align:middle"><img src="${SITE}/brand/myalgoagent-logo-white.png" width="190" alt="MyAlgoAgent" style="display:block;border:0;width:190px;height:auto"></td>
+<td style="text-align:right;vertical-align:middle"><span style="color:#d9c9f7;font-size:11px;font-weight:700;letter-spacing:2px">${e(m.title)}</span><br><span style="color:#ffffff;font-size:15px;font-weight:700;font-family:Menlo,Consolas,monospace">${e(m.number)}</span></td>
 </tr></table></td></tr>
 <tr><td style="height:4px;background:linear-gradient(90deg,${PURPLE},#bda360);font-size:0;line-height:0">&nbsp;</td></tr>
 <tr><td style="padding:26px 28px 8px">
@@ -129,7 +129,7 @@ ${rows}
 <tr><td style="padding:22px 28px 8px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid ${LINE}"><tr>
 <td style="padding-top:14px;vertical-align:top;font-size:12px;line-height:1.6;color:${MUTED}">
-<img src="${SITE}/brand/shagoon-softech-logo-wide.png" width="170" alt="Shagoon Softech" style="display:block;border:0;width:170px;height:auto;margin:0 0 10px">
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 12px"><tr><td bgcolor="#1d4991" style="background:#1d4991;padding:12px 18px;border-radius:10px"><img src="${SITE}/brand/shagoon-softech-logo-white.png" width="170" alt="Shagoon Softech" style="display:block;border:0;width:170px;height:auto"></td></tr></table>
 <strong style="color:${NAVY}">${e(seller.name)}</strong><br>
 ${seller.address ? `${e(seller.address)}<br>` : ""}${seller.gstin ? `GSTIN: ${e(seller.gstin)}` : ""}${seller.gstin && seller.pan ? " · " : ""}${seller.pan ? `PAN: ${e(seller.pan)}` : ""}${seller.gstin || seller.pan ? "<br>" : ""}
 <a href="mailto:${e(seller.email)}" style="color:${PURPLE};text-decoration:none">${e(seller.email)}</a> · <a href="${e(seller.website)}" style="color:${PURPLE};text-decoration:none">${e(seller.website.replace(/^https?:\/\//, ""))}</a>
