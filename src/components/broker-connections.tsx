@@ -100,7 +100,12 @@ export default function BrokerConnections({
   signedOut,
   storageReady,
   notifierUrl,
+  staticIp = null,
+  staticIpStatus = null,
 }: {
+  /** This account's own static IP (null = none assigned yet) and how its setup stands (ACTIVE / PENDING / FAILED / RELEASING). */
+  staticIp?: string | null;
+  staticIpStatus?: string | null;
   brokers: BrokerInfo[];
   connections: ConnectionView[];
   origin: string;
@@ -304,6 +309,15 @@ export default function BrokerConnections({
         </InfoCard>
         <InfoCard icon={Globe} title="Live orders & static IP">
           Connecting lets us verify your account today. Placing live orders through an API also needs a <strong>static IP</strong> registered on your broker account (a SEBI rule — each client has their own). We&rsquo;ll set that up for you when live trading turns on here; nothing is needed from you yet.
+          <span className="mt-2 block rounded-xl bg-brand-bg/70 px-3 py-2 text-brand-navy">
+            {staticIp ? (
+              <>Your static IP: <strong className="font-mono">{staticIp}</strong>{staticIpStatus === "PENDING" ? " (being set up)" : ""} — register it as the static IP in your broker&rsquo;s API settings.</>
+            ) : staticIpStatus === "PENDING" ? (
+              <>Your static IP is being created — it appears here in a couple of minutes.</>
+            ) : (
+              <>No static IP has been assigned to your account yet.</>
+            )}
+          </span>
         </InfoCard>
       </section>
 

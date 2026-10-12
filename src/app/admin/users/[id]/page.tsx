@@ -52,6 +52,7 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
   if (!u) notFound();
   await audit(staff, "user.view", { type: "user", id: u.id }, `Viewed ${u.email}`);
 
+  const egress = await prisma.userEgress.findUnique({ where: { userId: u.id }, select: { status: true, publicIp: true } }).catch(() => null);
   const [sessions, strategies, paper, brokers, cases, feedback, riskEvents, agentStats, trail] = await Promise.all([
     prisma.session.count({ where: { userId: u.id, expires: { gt: new Date() } } }),
     prisma.strategy.findMany({ where: { userId: u.id }, orderBy: { updatedAt: "desc" }, take: 8, select: { id: true, name: true, status: true, updatedAt: true } }),
@@ -115,7 +116,7 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
             <div className="flex-1">
               <UserActions userId={u.id} status={u.status} canManage={can(staff.role, "users.manage")} isSelf={u.id === staff.id} protectedOwner={role === "OWNER"} />
             </div>
-            {can(staff.role, "team") && <StaticIpControl userId={u.id} ip={u.liveStaticIp} />}
+            {can(staff.role, "team") && <StaticIpControl userId={u.id} ip={u.liveStaticIp ?? egress?.publicIp ?? null} relay={egress?.status ?? null} />}
             {can(staff.role, "team") && <LiveToggle userId={u.id} enabled={!!u.liveTradingEnabledAt} />}
           </div>
           {u.status === "SUSPENDED" && u.suspendedReason && (

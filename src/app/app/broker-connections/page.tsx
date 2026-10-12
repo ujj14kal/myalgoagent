@@ -31,6 +31,11 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ b
     storageReady = false;
   }
 
+  const [ipUser, ipEgress] = await Promise.all([
+    prisma.user.findUnique({ where: { id: session.user.id }, select: { liveStaticIp: true } }).catch(() => null),
+    prisma.userEgress.findUnique({ where: { userId: session.user.id }, select: { status: true, publicIp: true } }).catch(() => null),
+  ]);
+
   const now = new Date();
   // Only display-safe fields cross to the browser — never keys or tokens.
   // Market data access is checked through each logged-in connection (one small read, cached for hours).
@@ -77,6 +82,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ b
         signedOut={result === "signed_out"}
         storageReady={storageReady}
         notifierUrl={storageReady ? notifierUrlFor(session.user.id) : null}
+        staticIp={ipUser?.liveStaticIp ?? ipEgress?.publicIp ?? null}
+        staticIpStatus={ipEgress?.status ?? null}
       />
     </div>
   );

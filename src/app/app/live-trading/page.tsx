@@ -143,7 +143,7 @@ export default async function Page() {
           ) : buildFailed ? (
             <p className="mt-3 text-sm text-brand-navy/60">We couldn&apos;t create your static IP automatically. Our team has been alerted; you can also <Link href="/app/support" className="font-semibold text-brand-primary">contact support</Link>. Live orders stay paused until it&apos;s ready.</p>
           ) : (
-            <p className="mt-3 text-sm text-brand-navy/60">Your own static IP comes with a paid plan — it&apos;s created automatically a couple of minutes after you upgrade, and it shows here. Brokers reject live orders without one.</p>
+            <p className="mt-3 text-sm text-brand-navy/60">No static IP has been assigned to your account yet. A paid plan gets its own — it&apos;s created automatically a couple of minutes after you upgrade, and it shows here. Brokers reject live orders without one.</p>
           )}
           <ul className="mt-4 space-y-2 border-t border-black/[0.05] pt-3 text-sm">
             {[
