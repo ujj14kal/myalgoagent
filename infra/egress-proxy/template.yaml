@@ -15,8 +15,8 @@ Parameters:
     Type: String
     Default: t4g.nano
   AmiId:
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+    Type: String
+    Default: ami-05574c29f0cff2297   # pinned: the running relay's image (a moving "latest" would replace the whitelisted-IP host)
   ParameterPrefix:
     Type: String
     Default: /myalgoagent/egress
@@ -149,6 +149,8 @@ Resources:
 
   StaticIp:
     Type: AWS::EC2::EIP
+    DeletionPolicy: Retain          # this address is whitelisted at the brokers: it must outlive the relay and move to the NAT Gateway
+    UpdateReplacePolicy: Retain
     Properties:
       Domain: vpc
       InstanceId: !Ref Instance

@@ -13,6 +13,9 @@ Parameters:
   DbSecretArn:
     Type: String
     Default: arn:aws:secretsmanager:ap-south-1:327076610444:secret:myalgoagent/prod/database-PA4s0V
+  DbAdminSecretArn:
+    Type: String
+    Default: arn:aws:secretsmanager:ap-south-1:327076610444:secret:myalgoagent/prod/database-admin-*
   DataKeyArn:
     Type: String
     Default: arn:aws:kms:ap-south-1:327076610444:key/d1919b9d-3db7-4d0f-8bfd-5226770a8e6e
@@ -197,7 +200,8 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
-              - { Effect: Allow, Action: secretsmanager:GetSecretValue, Resource: !Ref DbSecretArn }
+              - { Effect: Allow, Action: secretsmanager:GetSecretValue, Resource: [!Ref DbSecretArn, !Ref DbAdminSecretArn] }
+              - { Effect: Allow, Action: s3:GetObject, Resource: !Sub "arn:aws:s3:::myalgoagent-engine-src-${AWS::AccountId}/migrate/*" }
               - { Effect: Allow, Action: kms:Decrypt, Resource: !Ref DataKeyArn }
   BastionProfile:
     Type: AWS::IAM::InstanceProfile
@@ -205,7 +209,7 @@ Resources:
   Bastion:
     Type: AWS::EC2::Instance
     Properties:
-      InstanceType: t4g.nano
+      InstanceType: t4g.small   # 2 GB: Prisma needs more than a nano has; the script stops it when idle
       ImageId: "{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64}}"
       IamInstanceProfile: !Ref BastionProfile
       SubnetId: !Ref PrivateA

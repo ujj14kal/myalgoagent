@@ -3,7 +3,12 @@
 Written 2026-10-11 from a read-only audit of account 327076610444 (ap-south-1). Updated as items finish.
 Legend: ☐ to do · ◐ in progress · ☑ done · ✋ needs the owner (cannot be done from here)
 
-## Where we are (audit)
+## Status 2026-10-12 (cutover done, lean scope)
+Live: website on Fargate behind a public load balancer (`myalgoagent.com`, `www`), engine in the private subnets, private single-AZ database `myalgoagent-db-prod` (encrypted, 14-day backups, daily AWS Backup 35 days, quarterly password rotation), NAT Gateway holding the whitelisted broker IP `13.204.125.24`, relay retired. Old database stopped with final snapshot `cutover-final-old-db-20261012`; Amplify kept (auto-build off) as the rollback. Migrations: `scripts/prod-migrate.sh status|deploy` (bastion, no laptop access). Limits: `scripts/aws-limits-check.sh`.
+Chosen lean scope (owner, 2026-10-12): no WAF, Config, Inspector, Security Hub, Multi-AZ or second web task. CloudFront blocked until AWS verifies the account (templates in `infra/edge`).
+Still open: delete old snapshots/buckets (owner), delete the old database and Amplify after the rollback window (about 2026-10-19), rotate the admin IAM key, SES production access, avatar bucket via CloudFront, alarms for failed DB logins and engine heartbeat, runbooks and restore drill, per-user static IP (`per-user-static-ip-design.md`).
+
+## Where we were (audit before the work)
 - RDS `myalgoagent-db-encrypted`: encrypted (AWS-managed key), SSL-forced, 7-day backups, deletion protection ON — but **publicly accessible, port 5432 open to 0.0.0.0/0**, single AZ, `db.t4g.micro`, app connects as the **master user**.
 - Everything lives in the **default VPC**, public subnets only. No NAT Gateway. Broker calls leave through a single relay (13.204.125.24).
 - The website runs on **Amplify** (cannot join a VPC — the root reason the database must be public). The live engine runs on Fargate (1 task).

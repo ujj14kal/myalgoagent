@@ -7,6 +7,7 @@ Parameters:
   OriginSecret: { Type: String, NoEcho: true, Default: "", Description: "Set only when CloudFront fronts the load balancer: value it sends in X-Origin-Verify. Empty = the load balancer is public" }
   DatabaseUrlSecretArn: { Type: String, Description: "Secrets Manager secret (JSON: username, password, host, port, dbname) for the database" }
   OriginHostName: { Type: String, Default: origin.myalgoagent.com }
+  BrokerEgressUrl: { Type: String, Default: "", Description: "Relay URL, or empty when broker calls leave directly through the NAT Gateway" }
   HostedZoneId: { Type: String, Default: Z01955502T07S2HGRRUW4 }
   DataKeyArn: { Type: String, Default: "arn:aws:kms:ap-south-1:327076610444:key/d1919b9d-3db7-4d0f-8bfd-5226770a8e6e" }
   LogsKeyArn: { Type: String, Default: "arn:aws:kms:ap-south-1:327076610444:key/c36edd8b-7137-4eb3-ab01-ea96b867baf3" }
@@ -179,7 +180,7 @@ Resources:
             - { Name: AUTH_GOOGLE_ID, Value: "48546689421-7mcct18pb5qu07pefna0tq71fb5sj244.apps.googleusercontent.com" }
             - { Name: APP_SECRETS_PATH, Value: /myalgoagent/app }
             - { Name: MARKET_DATA_LICENSED_USER_IDS, Value: "cmtr7u5x400001fl66tnavjf9,cmtlkuh3r0000o4uw0b30e43m,cmtojjip100001fl9gk43el0f" }
-            - { Name: BROKER_EGRESS_URL, Value: "https://13.204.125.24:8443" }
+            - { Name: BROKER_EGRESS_URL, Value: !Ref BrokerEgressUrl }
             - { Name: DB_SECRET_ID, Value: !Ref DatabaseUrlSecretArn }
           Secrets:
             - { Name: DB_HOST, ValueFrom: !Sub "${DatabaseUrlSecretArn}:host::" }
