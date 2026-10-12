@@ -57,6 +57,16 @@ export default function SecurityPage() {
           <li>Every action the team takes &mdash; including opening your account details &mdash; is recorded with who did it and when</li>
         </ul>
 
+        <h2>Payments</h2>
+        <p>
+          Payments are taken by Razorpay, a licensed payment provider, in its own
+          secure window. Your card, UPI or netbanking details go to Razorpay and
+          never reach MyAlgoAgent. We check every payment&rsquo;s signature with
+          Razorpay before crediting anything, and we keep only the payment
+          reference, amount and invoice, so a payment can be matched and
+          refunded safely.
+        </p>
+
         <h2>Monitoring & backups</h2>
         <p>
           The platform is monitored around the clock and our team is alerted

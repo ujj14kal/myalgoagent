@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Activity, Bell, FlaskConical, Layers, Radio, ShieldCheck, Sparkles, Sigma } from "lucide-react";
+import { Activity, Bell, Coins, FlaskConical, Layers, Radio, ShieldCheck, Sparkles, Sigma } from "lucide-react";
 import PageHeader from "@/components/page-header";
 import { Breadcrumbs } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
@@ -146,6 +146,21 @@ const groups: Group[] = [
       "Uses the same validator as the builder, never gives buy or sell calls, and never acts without your confirmation",
     ],
     soon: ["Warns when forward-testing results drift from the backtest", "A daily digest of your sessions"],
+  },
+  {
+    title: "Plans, credits & billing",
+    icon: Coins,
+    items: [
+      "A 7-day free trial of the paid features for every new account, with no card needed, then the Free plan unless you choose to upgrade",
+      "Two paid plans, Trade and Pro, priced before GST: the 18% GST is added at checkout and itemised on your bill",
+      "A live credits meter in the top bar that updates the moment you use the AI, voice or a backtest, with the price of each action shown before you press the button",
+      "A checkout page that shows exactly what you're buying and the bill split into the price and the GST, then opens Razorpay's secure window: pay by UPI, card or netbanking",
+      "Top-up packs of credits for Trade and Pro, kept for a year and used after your monthly credits",
+      "A numbered invoice emailed after every payment and kept under Payments & invoices, with a credit note if a payment is refunded",
+      "Cancel renewal at any time: the plan keeps running to the end of the period you've paid for",
+      "A clear refund policy, with refund requests made from your Payments & invoices page",
+      "Live trading, risk controls, charts, demos and forward tests never use credits",
+    ],
   },
 ];
 
