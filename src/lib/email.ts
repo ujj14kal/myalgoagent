@@ -1,4 +1,5 @@
 import { escapeHtml as e, oneLine } from "@/lib/text";
+import { logWarn } from "@/lib/logger";
 import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
 
 const REGION = "ap-south-1";
@@ -14,15 +15,7 @@ function getClient(): SESv2Client {
   return client;
 }
 
-export async function sendEmail({
-  to,
-  subject,
-  html,
-  text,
-  replyTo,
-  from,
-  headers,
-}: {
+export type OutgoingEmail = {
   to: string;
   subject: string;
   html: string;
@@ -34,25 +27,87 @@ export async function sendEmail({
   from?: string;
   /** Extra mail headers, e.g. Auto-Submitted on automatic replies so other systems don't answer them. */
   headers?: Record<string, string>;
-}): Promise<void> {
+};
+
+async function sendViaSes(m: OutgoingEmail): Promise<void> {
   await getClient().send(
     new SendEmailCommand({
-      FromEmailAddress: from ?? FROM_ADDRESS,
+      FromEmailAddress: m.from ?? FROM_ADDRESS,
       ConfigurationSetName: CONFIGURATION_SET,
-      Destination: { ToAddresses: [to] },
-      ReplyToAddresses: replyTo ? [replyTo] : undefined,
+      Destination: { ToAddresses: [m.to] },
+      ReplyToAddresses: m.replyTo ? [m.replyTo] : undefined,
       Content: {
         Simple: {
-          ...(headers ? { Headers: Object.entries(headers).map(([Name, Value]) => ({ Name, Value })) } : {}),
-          Subject: { Data: subject, Charset: "UTF-8" },
+          ...(m.headers ? { Headers: Object.entries(m.headers).map(([Name, Value]) => ({ Name, Value })) } : {}),
+          Subject: { Data: m.subject, Charset: "UTF-8" },
           Body: {
-            Html: { Data: html, Charset: "UTF-8" },
-            Text: { Data: text, Charset: "UTF-8" },
+            Html: { Data: m.html, Charset: "UTF-8" },
+            Text: { Data: m.text, Charset: "UTF-8" },
           },
         },
       },
     }),
   );
+}
+
+/**
+ * Google Workspace as a second route. Set GOOGLE_SMTP_HOST (default relay: smtp-relay.gmail.com, which trusts our fixed
+ * outgoing address) or GOOGLE_SMTP_USER + GOOGLE_SMTP_PASS (an app password for a Workspace mailbox that has the sender
+ * addresses as aliases). Nothing is configured → this route is off.
+ */
+export function googleConfigured(env: Record<string, string | undefined> = process.env): boolean {
+  return !!(env.GOOGLE_SMTP_HOST || env.GOOGLE_SMTP_USER);
+}
+
+async function sendViaGoogle(m: OutgoingEmail): Promise<void> {
+  const { createTransport } = await import("nodemailer");
+  const user = process.env.GOOGLE_SMTP_USER;
+  const transport = createTransport({
+    host: process.env.GOOGLE_SMTP_HOST || (user ? "smtp.gmail.com" : "smtp-relay.gmail.com"),
+    port: Number(process.env.GOOGLE_SMTP_PORT || 587),
+    secure: false,
+    requireTLS: true,
+    ...(user ? { auth: { user, pass: process.env.GOOGLE_SMTP_PASS ?? "" } } : {}),
+    connectionTimeout: 10_000,
+    socketTimeout: 20_000,
+  });
+  await transport.sendMail({ from: m.from ?? FROM_ADDRESS, to: m.to, replyTo: m.replyTo, subject: m.subject, html: m.html, text: m.text, headers: m.headers });
+}
+
+type Route = "ses" | "google";
+type Sender = (m: OutgoingEmail) => Promise<void>;
+
+/**
+ * Which routes to try, in order. EMAIL_TRANSPORT = "ses" | "google" | "auto" (default). Auto tries Amazon SES first and, if SES
+ * refuses (for example while the account is still in the SES sandbox and the recipient isn't verified), sends through Google
+ * Workspace instead. When SES access is granted nothing needs changing: SES simply stops refusing.
+ */
+export function routesFor(setting: string | undefined, google: boolean): Route[] {
+  if (setting === "ses") return ["ses"];
+  if (setting === "google") return ["google"];
+  return google ? ["ses", "google"] : ["ses"];
+}
+
+export async function deliver(m: OutgoingEmail, routes: Route[], senders: Record<Route, Sender>, onFallback?: (from: Route, err: unknown) => void): Promise<Route> {
+  let last: unknown;
+  for (let i = 0; i < routes.length; i++) {
+    try {
+      await senders[routes[i]](m);
+      return routes[i];
+    } catch (err) {
+      last = err;
+      if (i < routes.length - 1) onFallback?.(routes[i], err);
+    }
+  }
+  throw last;
+}
+
+export async function sendEmail(m: OutgoingEmail): Promise<void> {
+  const routes = routesFor(process.env.EMAIL_TRANSPORT, googleConfigured());
+  const used = await deliver(m, routes, { ses: sendViaSes, google: sendViaGoogle }, (route, err) => {
+    logWarn("email.fallback", `${route} refused, trying the next route`, { reason: err instanceof Error ? err.message.slice(0, 160) : "unknown" });
+  });
+  if (used !== "ses") logWarn("email.route", `sent through ${used}`, {});
 }
 
 const SITE = "https://myalgoagent.com";
