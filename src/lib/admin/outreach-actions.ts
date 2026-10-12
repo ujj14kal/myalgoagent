@@ -8,12 +8,14 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { oneLine, text } from "@/lib/text";
 import { logError } from "@/lib/logger";
 
-export type OutreachInput = { from: string; senderName: string; senderRole: string; to: string; subject: string; body: string };
+export type OutreachInput = { from: string; signName: string; senderRole: string; to: string; subject: string; body: string };
 export type OutreachResult = { ok: true; message: string; html?: string } | { ok: false; error: string };
 
 function clean(input: OutreachInput) {
   const from = (input.from ?? "").trim().toLowerCase();
-  const senderName = oneLine(input.senderName ?? "", 60) || sendersFrom(process.env.OUTREACH_SENDERS).find((s) => s.address === from)?.name || "MyAlgoAgent";
+  // The sender name comes from the address list (fixed per address); only the sign-off at the bottom is typed per message.
+  const fromName = sendersFrom(process.env.OUTREACH_SENDERS).find((s) => s.address === from)?.name || "MyAlgoAgent";
+  const signName = oneLine(input.signName ?? "", 60);
   const senderRole = oneLine(input.senderRole ?? "", 80);
   const subject = oneLine(input.subject ?? "", 150);
   const body = text(input.body ?? "");
@@ -21,7 +23,7 @@ function clean(input: OutreachInput) {
   if (!subject) return { ok: false, error: "Add a subject." } as const;
   if (!body) return { ok: false, error: "Write your message." } as const;
   if (body.length > MAX_BODY) return { ok: false, error: `Keep it under ${MAX_BODY.toLocaleString("en-IN")} characters.` } as const;
-  return { ok: true, from, senderName, senderRole, subject, body } as const;
+  return { ok: true, from, fromName, signName, senderRole, subject, body } as const;
 }
 
 /** What the email will look like, without sending anything. */
@@ -30,7 +32,7 @@ export async function previewOutreach(input: OutreachInput): Promise<OutreachRes
     await assertStaff("outreach");
     const c = clean(input);
     if (!c.ok) return { ok: false, error: c.error };
-    return { ok: true, message: "Preview", html: outreachHtml({ body: c.body, senderName: c.senderName, senderRole: c.senderRole, fromAddress: c.from }) };
+    return { ok: true, message: "Preview", html: outreachHtml({ body: c.body, signName: c.signName, senderRole: c.senderRole }) };
   } catch (err) {
     return fail(err);
   }
@@ -50,7 +52,7 @@ export async function sendOutreach(input: OutreachInput, testToMe: boolean): Pro
     let sent = 0;
     for (const to of parsed.list) {
       try {
-        await sendOutreachEmail(to, { subject: c.subject, body: c.body, senderName: c.senderName, senderRole: c.senderRole, fromAddress: c.from });
+        await sendOutreachEmail(to, { subject: c.subject, body: c.body, fromName: c.fromName, fromAddress: c.from, signName: c.signName, senderRole: c.senderRole });
         sent++;
         results.push(`✓ ${to}`);
       } catch (err) {

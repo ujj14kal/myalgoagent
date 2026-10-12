@@ -308,16 +308,29 @@ export function outreachParagraphs(text: string): string {
     .join("");
 }
 
-export type OutreachEmail = { subject: string; body: string; senderName: string; senderRole?: string; fromAddress: string };
+export type OutreachEmail = {
+  subject: string;
+  body: string;
+  /** The name Gmail shows as the sender: fixed per address (e.g. "MyAlgoAgent Collaborations"), never typed per message. */
+  fromName: string;
+  fromAddress: string;
+  /** The name at the bottom of the message; editable per message. Empty = "The MyAlgoAgent team". */
+  signName?: string;
+  senderRole?: string;
+};
 
 /** The finished HTML for an outreach message: the brand header, the person's own text, their sign-off, and an honest footer. */
-export function outreachHtml(o: Pick<OutreachEmail, "body" | "senderName" | "senderRole" | "fromAddress">): string {
-  const sign = `<p style="margin:24px 0 0"><strong>${e(o.senderName)}</strong>${o.senderRole ? `<br><span style="color:#6b7788">${e(o.senderRole)}</span>` : ""}<br><span style="color:#6b7788">MyAlgoAgent</span></p>`;
-  return wrap(`${outreachParagraphs(o.body)}${sign}`, "", { personal: `This is a personal one-to-one message from ${o.senderName} at MyAlgoAgent. If you would rather not hear from us, just reply "no thanks" and we won't write again.` });
+export function outreachHtml(o: Pick<OutreachEmail, "body" | "signName" | "senderRole">): string {
+  const who = o.signName?.trim();
+  const sign = who
+    ? `<p style="margin:24px 0 0"><strong>${e(who)}</strong>${o.senderRole ? `<br><span style="color:#6b7788">${e(o.senderRole)}</span>` : ""}<br><span style="color:#6b7788">MyAlgoAgent</span></p>`
+    : `<p style="margin:24px 0 0"><strong>The MyAlgoAgent team</strong></p>`;
+  return wrap(`${outreachParagraphs(o.body)}${sign}`, "", { personal: `This is a personal one-to-one message from ${who ? `${who} at MyAlgoAgent` : "the MyAlgoAgent team"}. If you would rather not hear from us, just reply "no thanks" and we won't write again.` });
 }
 
-export function outreachText(o: Pick<OutreachEmail, "body" | "senderName" | "senderRole">): string {
-  return `${o.body.trim()}\n\n${o.senderName}${o.senderRole ? `\n${o.senderRole}` : ""}\nMyAlgoAgent — ${SITE}\n\nThis is a personal one-to-one message. If you would rather not hear from us, just reply "no thanks" and we won't write again.`;
+export function outreachText(o: Pick<OutreachEmail, "body" | "signName" | "senderRole">): string {
+  const who = o.signName?.trim();
+  return `${o.body.trim()}\n\n${who ? `${who}${o.senderRole ? `\n${o.senderRole}` : ""}\nMyAlgoAgent` : "The MyAlgoAgent team"} — ${SITE}\n\nThis is a personal one-to-one message. If you would rather not hear from us, just reply "no thanks" and we won't write again.`;
 }
 
 /** Sends one outreach message through Google Workspace only (SES is kept for transactional mail). Replies go to the chosen address. */
@@ -328,7 +341,7 @@ export async function sendOutreachEmail(to: string, o: OutreachEmail) {
     subject: oneLine(o.subject, 200),
     html: outreachHtml(o),
     text: outreachText(o),
-    from: `${/myalgoagent/i.test(o.senderName) ? o.senderName.replace(/[<>"]/g, "") : `${o.senderName.replace(/[<>"]/g, "")} (MyAlgoAgent)`} <${o.fromAddress}>`,
+    from: `${o.fromName.replace(/[<>"]/g, "")} <${o.fromAddress}>`,
     replyTo: o.fromAddress,
     routes: ["google"],
   });
