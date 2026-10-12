@@ -1,6 +1,6 @@
 import "server-only";
 import type { BrokerId } from "./catalog";
-import { ANGEL, angelHeaders, arr, DHAN, dhanHeaders, FIVEPAISA, fpClientCode, fpHeaders, FYERS, fyersHeaders, http, KITE, kiteHeaders, num, obj, text, upstoxHeaders, type LiveCtx } from "./live-brokers";
+import { ANGEL, angelHeaders, arr, DHAN, dhanHeaders, INDSTOCKS, indstocksHeaders, FIVEPAISA, fpClientCode, fpHeaders, FYERS, fyersHeaders, http, KITE, kiteHeaders, num, obj, text, upstoxHeaders, type LiveCtx } from "./live-brokers";
 
 // Read-only account data from a user's own broker: profile, funds, holdings,
 // positions, today's orders and trades — whatever each broker's API returns.
@@ -228,6 +228,36 @@ const fivepaisa: AccountReader = {
   trades: async (ctx) => rows((await fpPost(ctx, "/V1/TradeBook")).TradeBookDetail).map(trade),
 };
 
-export const ACCOUNT_READERS: Partial<Record<BrokerId, AccountReader>> = { groww, zerodha, upstox, fyers, angelone, dhan, "5paisa": fivepaisa };
+
+// INDstocks: GET endpoints from its official docs. Holdings and positions carry no live price or unrealised P&L, only quantities and averages.
+const indGet = async (ctx: LiveCtx, path: string) => obj(await http(`${INDSTOCKS}${path}`, { headers: indstocksHeaders(ctx) })).data;
+const indstocks: AccountReader = {
+  async profile(ctx) {
+    const d = obj(await indGet(ctx, "/user/profile"));
+    return { name: [t(d, "first_name"), t(d, "last_name")].filter(Boolean).join(" ") || null, clientId: t(d, "user_id"), email: t(d, "email") };
+  },
+  async funds(ctx) {
+    const d = obj(await indGet(ctx, "/funds"));
+    const avl = obj(d.detailed_avl_balance);
+    const lines = [...numericLines(d).filter((l) => !l.name.startsWith("detailed_avl_balance.")), ...numericLines(avl, "available.")];
+    return { available: n(avl, "eq_cnc", "eq_mis"), used: null, total: n(d, "sod_balance"), lines };
+  },
+  holdings: async (ctx) =>
+    rows(await indGet(ctx, "/portfolio/holdings")).map((r) => ({ symbol: t(r, "symbol") ?? "?", exchange: null, quantity: n(r, "total_qty") ?? 0, avgPrice: n(r, "avg_price"), ltp: null, pnl: null })),
+  async positions(ctx) {
+    const out: AccountPosition[] = [];
+    for (const [segment, product] of [["equity", "intraday"], ["equity", "cnc"], ["derivative", "intraday"], ["derivative", "margin"]]) {
+      const list = rows(await indGet(ctx, `/portfolio/positions?segment=${segment}&product=${product}`));
+      out.push(...list.map((r) => ({ symbol: t(r, "symbol") ?? "?", exchange: t(r, "exchange"), product: t(r, "product"), quantity: n(r, "net_qty") ?? 0, avgPrice: n(r, "avg_price"), ltp: null, pnl: null, realised: n(r, "realized_profit") })));
+    }
+    return out;
+  },
+  orders: async (ctx) =>
+    rows(await indGet(ctx, "/order-book")).map((r) => ({ id: t(r, "id") ?? "", symbol: t(r, "name") ?? "?", side: sideOf(r.txn_type), quantity: n(r, "requested_qty") ?? 0, filled: n(r, "traded_qty") ?? 0, orderType: t(r, "order_type"), price: n(r, "requested_price"), avgPrice: n(r, "traded_price"), status: t(r, "status") ?? "", time: null })),
+  trades: async (ctx) =>
+    rows(await indGet(ctx, "/trade-book?segment=EQUITY")).map((r) => ({ id: t(r, "fill_id") ?? "", orderId: t(r, "exch_order_id"), symbol: t(r, "scrip_code") ?? "?", side: "", quantity: n(r, "quantity") ?? 0, price: n(r, "price"), time: t(r, "trade_date") })),
+};
+
+export const ACCOUNT_READERS: Partial<Record<BrokerId, AccountReader>> = { indstocks, groww, zerodha, upstox, fyers, angelone, dhan, "5paisa": fivepaisa };
 export const ACCOUNT_SECTIONS = ["profile", "funds", "holdings", "positions", "orders", "trades"] as const;
 export type AccountSection = (typeof ACCOUNT_SECTIONS)[number];

@@ -5,7 +5,7 @@ import { BrokerError, brokerMessage } from "./adapters";
 import { brokerFetch } from "./egress";
 import { brokerById, type BrokerId } from "./catalog";
 import { nseEquity } from "./nse-lookup";
-import { angelHeaders, dhanHeaders, fpHeaders, fyersHeaders, kiteHeaders, obj, text, upstoxHeaders, type LiveCtx } from "./live-brokers";
+import { angelHeaders, dhanHeaders, indstocksHeaders, fpHeaders, fyersHeaders, kiteHeaders, obj, text, upstoxHeaders, type LiveCtx } from "./live-brokers";
 import { CANDLE_SOURCES, NO_CANDLES_REASON, type BrokerCandleSource, type BrokerRequest } from "./broker-candles";
 
 // Market data from the user's OWN broker account, through their own API session — never shared
@@ -40,6 +40,8 @@ function headers(broker: BrokerId, ctx: LiveCtx): Record<string, string> {
       return dhanHeaders(ctx);
     case "5paisa":
       return fpHeaders(ctx);
+    case "indstocks":
+      return indstocksHeaders(ctx);
     default:
       return {};
   }

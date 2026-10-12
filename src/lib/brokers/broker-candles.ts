@@ -244,7 +244,33 @@ const fivepaisa: BrokerCandleSource = {
  *  - Alice Blue: its history API is closed during market hours (17:30–08:00 only), so it can't feed live signals.
  *  - ICICI Direct: identifies stocks by its own codes (same blocker as its live orders).
  */
-export const CANDLE_SOURCES: Partial<Record<BrokerId, BrokerCandleSource>> = { groww, zerodha, upstox, fyers, angelone, dhan, "5paisa": fivepaisa };
+
+// INDstocks: GET /market/historical/{interval}?scrip-codes=NSE_<id>&start_time=<ms>&end_time=<ms>. Candle `ts` is in epoch seconds.
+// A call reaches 7 days for 1–30 minute candles, 15 days for 60 minute, 1 year for daily. Order and quote limits apply.
+const indstocks: BrokerCandleSource = {
+  id: "indstocks",
+  intradayHistoryDays: 365,
+  intervals: {
+    "1m": { code: "1minute", maxDays: 7 },
+    "5m": { code: "5minute", maxDays: 7 },
+    "15m": { code: "15minute", maxDays: 7 },
+    "30m": { code: "30minute", maxDays: 7 },
+    "60m": { code: "60minute", maxDays: 15 },
+    "1d": { code: "1day", maxDays: 365 },
+  },
+  request: (eq, spec, _i, from, to) =>
+    windows(from, to, spec.maxDays).map(([a, b]) => ({
+      method: "GET" as const,
+      url: `https://api.indstocks.com/market/historical/${spec.code}?scrip-codes=NSE_${eq.token}&start_time=${a * 1000}&end_time=${(b + 1) * 1000}`,
+    })),
+  parse: (body) => {
+    const data = obj(obj(body).data);
+    const first = obj(Object.values(data)[0]);
+    return rowsToCandles(arr(first.candles).map((c) => { const r = obj(c); return [r.ts, r.o, r.h, r.l, r.c, r.v]; }));
+  },
+};
+
+export const CANDLE_SOURCES: Partial<Record<BrokerId, BrokerCandleSource>> = { indstocks, groww, zerodha, upstox, fyers, angelone, dhan, "5paisa": fivepaisa };
 
 export const NO_CANDLES_REASON: Partial<Record<BrokerId, string>> = {
   aliceblue: "Alice Blue's history API only answers outside market hours, so it can't feed live signals.",

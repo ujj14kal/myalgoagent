@@ -43,7 +43,7 @@ describe("symbol read-back", () => {
 
 describe("broker coverage", () => {
   it("has a live adapter for every connectable broker except the documented exceptions", () => {
-    const connectable = ["dhan", "zerodha", "upstox", "fyers", "angelone", "groww", "icicidirect", "5paisa", "aliceblue"];
+    const connectable = ["dhan", "zerodha", "upstox", "fyers", "angelone", "groww", "icicidirect", "5paisa", "aliceblue", "indstocks"];
     for (const id of connectable) expect(!!LIVE_BROKERS[id as keyof typeof LIVE_BROKERS] || !!LIVE_NOT_YET[id as keyof typeof LIVE_NOT_YET]).toBe(true);
   });
   it("claims no broker is proven before a real test, and Angel One refuses market orders", () => {

@@ -572,7 +572,72 @@ const aliceblue: LiveBroker = {
   },
 };
 
-export const LIVE_BROKERS: Partial<Record<BrokerId, LiveBroker>> = { groww, zerodha, upstox, fyers, angelone, dhan, "5paisa": fivepaisa, aliceblue };
+
+// ---------- INDstocks (INDmoney) ----------
+// Endpoints and fields from INDstocks' official API docs (api-docs.indstocks.com, read 13 Oct 2026). Not proven with a real order.
+
+export const INDSTOCKS = "https://api.indstocks.com";
+/** The access token goes in the Authorization header as-is, with no "Bearer" prefix. */
+export const indstocksHeaders = (ctx: LiveCtx) => ({ Authorization: ctx.token });
+const indProduct = { CNC: "CNC", MIS: "INTRADAY", NRML: "MARGIN" } as const;
+
+/** INDstocks' order statuses → ours. "SUCCESS" is a completed order; "SL-PENDING" waits for its trigger price. */
+export function indstocksStatus(raw: string, filled: number, quantity: number): LiveOrderStatus {
+  const s = raw.toUpperCase().trim();
+  if (s === "SUCCESS") return "FILLED";
+  if (s.startsWith("PARTIALLY FILLED")) return "PARTIALLY_FILLED"; // also "PARTIALLY FILLED - CANCELLED / EXPIRED": what filled stays filled
+  if (s === "SL-PENDING") return "TRIGGER_PENDING";
+  if (s === "CANCELLED" || s === "EXPIRED") return filled > 0 ? "PARTIALLY_FILLED" : "CANCELLED";
+  if (s === "ABORTED" || s === "FAILED") return "FAILED";
+  return filled > 0 && filled < quantity ? "PARTIALLY_FILLED" : "OPEN"; // QUEUED, O-PENDING, PROCESSING, INITIATED, PENDING, MODIFIED
+}
+
+const indstocks: LiveBroker = {
+  id: "indstocks",
+  verified: false,
+  marketOrders: true,
+  fno: false,
+  async place(ctx, o) {
+    const b = obj(
+      await http(`${INDSTOCKS}/order`, {
+        method: "POST",
+        headers: indstocksHeaders(ctx),
+        json: {
+          txn_type: o.side,
+          exchange: "NSE",
+          segment: "EQUITY",
+          product: indProduct[o.product],
+          order_type: o.orderType === "MARKET" ? "MARKET" : "LIMIT",
+          validity: "DAY",
+          security_id: o.nseToken,
+          qty: o.quantity,
+          ...(o.orderType === "MARKET" ? {} : { limit_price: o.price }),
+          is_amo: false,
+          algo_id: "99999",
+          remarks: o.reference.slice(0, 20),
+        },
+      }),
+    );
+    const d = obj(b.data);
+    const id = text(d.order_id);
+    if (!id) throw new BrokerError("unknown", "INDstocks didn't return an order ID");
+    return { brokerOrderId: id, brokerStatus: String(d.order_status ?? "QUEUED"), remark: null };
+  },
+  async cancel(ctx, id) {
+    const b = obj(await http(`${INDSTOCKS}/order/cancel`, { method: "POST", headers: indstocksHeaders(ctx), json: { order_id: id, segment: "EQUITY" } }));
+    return String(obj(b.data).order_status ?? "CANCELLED");
+  },
+  async state(ctx, q) {
+    // The order book lists today's orders; the order is found by the ID we were given.
+    const rows = arr(obj(await http(`${INDSTOCKS}/order-book`, { headers: indstocksHeaders(ctx) })).data).map(obj);
+    const d = rows.find((r) => text(r.id) === q.brokerOrderId || text(r.remarks) === q.reference.slice(0, 20)) ?? {};
+    const filled = num(d.traded_qty) ?? 0;
+    const status = String(d.status ?? "");
+    return { brokerOrderId: text(d.id) ?? q.brokerOrderId ?? "", brokerStatus: status, status: indstocksStatus(status, filled, q.quantity), filledQuantity: filled, averagePrice: num(d.traded_price) || null, remark: text(d.extra_info), symbol: plainSymbol(text(d.name)) };
+  },
+};
+
+export const LIVE_BROKERS: Partial<Record<BrokerId, LiveBroker>> = { indstocks, groww, zerodha, upstox, fyers, angelone, dhan, "5paisa": fivepaisa, aliceblue };
 
 /** Brokers where connecting works but live orders don't yet, with why. */
 export const LIVE_NOT_YET: Partial<Record<BrokerId, string>> = {

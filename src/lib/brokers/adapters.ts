@@ -495,4 +495,27 @@ const aliceblue: BrokerAdapter = {
   },
 };
 
-export const ADAPTERS: Partial<Record<BrokerId, BrokerAdapter>> = { dhan, zerodha, upstox, fyers, angelone, groww, icicidirect, "5paisa": fivepaisa, aliceblue };
+
+// INDstocks: the user generates a 24-hour access token on indstocks.com and saves it here; connecting checks it works.
+// (INDstocks can also mint a token from the account MPIN + TOTP, but we never store an MPIN or a 2FA secret.)
+const INDSTOCKS_API = "https://api.indstocks.com";
+const indstocks: BrokerAdapter = {
+  async loginUrl() {
+    return "/app/broker-connections/connecting/indstocks";
+  },
+  stateFrom: () => null,
+  async exchange(c) {
+    const p = await indstocks.profile(c, c.apiKey);
+    // Tokens last 24 hours from the moment they were generated; we don't know when that was, so the session is trusted a little less.
+    return { accessToken: c.apiKey, expiresAt: new Date(Date.now() + 23 * 3_600_000), accountName: p.accountName, brokerClientId: p.brokerClientId };
+  },
+  async profile(_c, accessToken) {
+    const { status, body } = await call(`${INDSTOCKS_API}/user/profile`, { headers: { Accept: "application/json", Authorization: accessToken } });
+    const d = obj(body.data);
+    if (status >= 400 || body.status === "error" || !Object.keys(d).length) fail(status, body, "session_rejected");
+    const name = [str(d.first_name), str(d.last_name)].filter(Boolean).join(" ");
+    return { accountName: name || undefined, brokerClientId: str(d.user_id) };
+  },
+};
+
+export const ADAPTERS: Partial<Record<BrokerId, BrokerAdapter>> = { indstocks, dhan, zerodha, upstox, fyers, angelone, groww, icicidirect, "5paisa": fivepaisa, aliceblue };
