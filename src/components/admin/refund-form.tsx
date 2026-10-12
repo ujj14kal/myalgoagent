@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { approveRefund, declineRefund } from "@/lib/admin/refund-actions";
 
 /** One refund decision: how much, what happens to the account, a note; then refund through Razorpay or decline. */
-export default function RefundForm({ paymentId, requestId, paidRupees, kind }: { paymentId: string; requestId: string | null; paidRupees: string; kind: "subscription" | "topup" }) {
+export default function RefundForm({ paymentId, requestId, paidRupees, defaultRupees, kind }: { paymentId: string; requestId: string | null; paidRupees: string; defaultRupees?: string; kind: "subscription" | "topup" }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [amount, setAmount] = useState(paidRupees);
+  const [amount, setAmount] = useState(defaultRupees ?? paidRupees);
   const [cancelPlan, setCancelPlan] = useState(kind === "subscription");
   const [takeBack, setTakeBack] = useState(kind === "topup");
   const [note, setNote] = useState("");
@@ -31,7 +31,7 @@ export default function RefundForm({ paymentId, requestId, paidRupees, kind }: {
           Refund (₹)
           <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" className="mt-1 block w-32 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm tabular-nums" />
         </label>
-        <p className="pb-1.5 text-xs text-brand-navy/50">Paid ₹{paidRupees}. Less than that is a partial refund.</p>
+        <p className="pb-1.5 text-xs text-brand-navy/50">Paid ₹{paidRupees}. The refund policy keeps ₹100 on a plan refund.</p>
       </div>
       {kind === "subscription" && (
         <label className="flex items-center gap-2 text-xs text-brand-navy/80">

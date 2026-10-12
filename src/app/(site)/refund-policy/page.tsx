@@ -7,7 +7,7 @@ import Reveal from "@/components/reveal";
 
 export const metadata: Metadata = pageMetadata({
   title: "Refund & Cancellation Policy",
-  description: "How cancelling a MyAlgoAgent plan works, and how to ask for a refund: request it from your Payments page, we review every request, and approved refunds go back to your original payment method.",
+  description: "How cancelling a MyAlgoAgent plan works, and our refund policy: plan payments can be refunded within 3 working days if less than 5% of the credits are used, with a ₹100 charge.",
   path: "/refund-policy",
 });
 
@@ -31,26 +31,26 @@ export default function RefundPolicyPage() {
           </p>
           <h2>The free trial</h2>
           <p>Every new account starts with a free trial that needs no card. If you don&rsquo;t choose a paid plan, nothing is charged and your account continues on the Free plan.</p>
-          <h2>Asking for a refund</h2>
+          <h2>Refunds</h2>
           <p>
-            If you were charged by mistake (for example twice, or an upgrade you didn&rsquo;t intend), or something went wrong that stopped you using what you paid for,
-            open <Link href="/app/account/payments">Payments &amp; invoices</Link>, choose <strong>Request refund</strong> next to the payment and tell us briefly what happened.
-            You can also write to <a href="mailto:support@myalgoagent.com">support@myalgoagent.com</a>.
+            As a general rule we don&rsquo;t give refunds. There is one exception, for your <strong>plan payment</strong> (the Trade or Pro charge that renews
+            automatically). We refund it if:
           </p>
           <ul>
-            <li>Every request is reviewed by a person on our team; we email you the decision, usually within 3 working days.</li>
-            <li>We consider requests case by case, and may refund all or part of a payment. Credits that have been used, or paid features that have been used, are taken into account.</li>
-            <li>If we decline, we tell you why, and you can reply to ask us to look again.</li>
+            <li>you reach us <strong>within 3 working days</strong> of the payment (Monday to Friday, Indian time; the day you pay counts as day zero), and</li>
+            <li><strong>none, or less than 5%</strong>, of that plan period&rsquo;s credits have been used.</li>
           </ul>
-          <h2>How the money comes back</h2>
           <p>
-            An approved refund goes back to the payment method you paid with, through Razorpay. Banks and card networks usually take 5–7 working days to show it. We email
-            you a <strong>credit note</strong> for the refund, which refers to your original invoice.
+            When we refund a plan payment, <strong>₹100 is kept as a charge</strong> and the rest goes back to the payment method you used. Your plan then ends and
+            renewals stop, and we email you a <strong>credit note</strong> that refers to your original invoice. Credit top-ups are not refundable.
           </p>
+          <h2>How to ask</h2>
           <p>
-            When a refund is approved we may also cancel the plan it paid for, or take back the credits from a refunded top-up (never more than you still hold). We tell you
-            in the same email.
+            Open <Link href="/app/account/payments">Payments &amp; invoices</Link> and choose <strong>Request refund</strong> next to the payment (it appears when the
+            payment qualifies), or write to <a href="mailto:support@myalgoagent.com">support@myalgoagent.com</a> with your invoice number. A person on our team
+            confirms by email, usually within 3 working days. The refund reaches you through Razorpay; banks and card networks usually take 5–7 working days to show it.
           </p>
+          <p>If we ever charge you by mistake, for example twice for the same period, tell us and we will correct it.</p>
           <h2>Questions</h2>
           <p>Write to <a href="mailto:support@myalgoagent.com">support@myalgoagent.com</a> and include the invoice number from your email.</p>
         </Prose>

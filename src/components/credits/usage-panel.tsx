@@ -13,7 +13,7 @@ import type { PageWindow } from "@/lib/pagination";
 
 const fmt = (n: number) => n.toLocaleString("en-IN");
 const when = (iso: string) => new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" });
-const kindLabel = (e: CreditEventRow) => (e.kind === "SPEND" ? (ACTION_LABEL[e.action as CreditAction] ?? "Used") : e.kind === "RESET" ? "Monthly credits renewed" : e.kind === "PLAN" ? "Plan changed" : e.kind === "TOPUP" ? "Top-up" : "Credits added");
+const kindLabel = (e: CreditEventRow) => (e.kind === "SPEND" ? (ACTION_LABEL[e.action as CreditAction] ?? "Used") : e.kind === "RESET" ? "Monthly credits renewed" : e.kind === "PLAN" ? "Plan changed" : e.kind === "TOPUP_REFUND" ? "Top-up refunded" : e.kind === "TOPUP" ? "Top-up" : "Credits added");
 
 export type BillingView = {
   /** Online payment is switched on (keys and plans are set up). */

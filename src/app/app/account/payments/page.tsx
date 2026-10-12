@@ -7,6 +7,7 @@ import Pager from "@/components/ui/pager";
 import { Card } from "@/components/ui/card";
 import PaymentsTable, { type PaymentRow, type RefundState } from "@/components/billing/payments-table";
 import { pageWindow, readPageQuery } from "@/lib/pagination";
+import { paymentPolicy } from "@/lib/billing/refunds";
 
 export const metadata = { title: "Payments & invoices", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -21,9 +22,21 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
   const win = pageWindow(total, page, size);
   const pays = await prisma.payment.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, skip: win.skip, take: win.take }).catch(() => []);
   const requests = pays.length ? await prisma.refundRequest.findMany({ where: { paymentId: { in: pays.map((p) => p.id) } }, orderBy: { createdAt: "desc" }, select: { paymentId: true, status: true } }).catch(() => []) : [];
+  const verdicts = new Map(await Promise.all(pays.filter((p) => p.status === "captured" && !p.refundedAt).map(async (p) => [p.id, await paymentPolicy(p).catch(() => null)] as const)));
   const rows: PaymentRow[] = pays.map((p) => {
     const latest = requests.find((r) => r.paymentId === p.id);
-    const refund: RefundState = p.refundedAt ? { kind: "refunded", amount: p.refundedAmount ?? p.amount, creditNote: p.creditNoteNumber } : latest?.status === "PENDING" ? { kind: "requested" } : latest?.status === "REJECTED" ? { kind: "declined" } : p.status === "captured" ? { kind: "can-request" } : { kind: "none" };
+    const v = verdicts.get(p.id);
+    const refund: RefundState = p.refundedAt
+      ? { kind: "refunded", amount: p.refundedAmount ?? p.amount, creditNote: p.creditNoteNumber }
+      : latest?.status === "PENDING"
+        ? { kind: "requested" }
+        : latest?.status === "REJECTED"
+          ? { kind: "declined" }
+          : p.status === "captured" && v
+            ? v.eligible
+              ? { kind: "can-request", refundPaise: v.refundPaise, feePaise: v.feePaise }
+              : { kind: "not-eligible", reason: v.reason ?? "Not refundable." }
+            : { kind: "none" };
     return {
     id: p.id,
     when: p.createdAt.toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" }),

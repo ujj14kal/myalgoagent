@@ -8,10 +8,30 @@ import { siteUrl } from "@/lib/site";
 import { rupees } from "./invoice";
 import * as rzp from "./razorpay";
 import { BillingError, recordRefund } from "./service";
-import { cleanReason, creditsToTakeBack, refundAmountProblem, requestProblem } from "./refund-rules";
+import { PLANS } from "@/lib/credits/config";
+import { cleanReason, creditsToTakeBack, policyVerdict, refundAmountProblem, requestProblem, type PolicyVerdict } from "./refund-rules";
 
 // Refunds, end to end. A customer asks (with a reason); a person on the team decides; if they approve, the money goes back
 // through Razorpay, the credit note is sent, and — only if staff choose — the plan is cancelled or top-up credits taken back.
+
+type PolicyPayment = { id: string; userId: string; kind: string; amount: number; createdAt: Date; subscriptionId: string | null };
+
+/**
+ * Applies the refund policy to a payment: was it a plan payment, are we inside the 3 working days, and how much of that
+ * period's credits had been used by `at` (the moment the customer got in touch, or now).
+ */
+export async function paymentPolicy(p: PolicyPayment, at: Date = new Date()): Promise<PolicyVerdict> {
+  let planCredits = 0;
+  let creditsUsed = 0;
+  if (p.kind === "subscription") {
+    const sub = p.subscriptionId ? await prisma.subscription.findUnique({ where: { id: p.subscriptionId }, select: { plan: true } }) : null;
+    planCredits = sub ? PLANS[sub.plan].monthlyCredits : 0;
+    // Only what was really spent: reservations that were handed back are VOID and don't count.
+    const spent = await prisma.creditEvent.aggregate({ _sum: { credits: true }, where: { userId: p.userId, kind: "SPEND", createdAt: { gte: p.createdAt, lte: at } } });
+    creditsUsed = Math.abs(spent._sum.credits ?? 0);
+  }
+  return policyVerdict({ kind: p.kind, amountPaise: p.amount, paidAt: p.createdAt, askedAt: at, creditsUsed, planCredits });
+}
 
 /** The customer's request. Nothing moves yet: the team is told and the customer gets an acknowledgement. */
 export async function requestRefund(userId: string, paymentId: string, rawReason: unknown) {
@@ -23,6 +43,9 @@ export async function requestRefund(userId: string, paymentId: string, rawReason
   const open = await prisma.refundRequest.count({ where: { paymentId: p.id, status: "PENDING" } });
   const problem = requestProblem(p, open > 0);
   if (problem) throw new BillingError(problem);
+  // The policy decides who can ask: anything else is turned away up front, with the reason, instead of waiting in a queue.
+  const verdict = await paymentPolicy(p);
+  if (!verdict.eligible) throw new BillingError(verdict.reason ?? "This payment isn't eligible for a refund.");
   const req = await prisma.refundRequest.create({ data: { userId, paymentId: p.id, reason: reason.reason } });
   const ref = `RF-${req.id.slice(-6).toUpperCase()}`;
   await Promise.allSettled([
@@ -30,7 +53,7 @@ export async function requestRefund(userId: string, paymentId: string, rawReason
     sendEventEmail(p.user.email, {
       subject: `We've received your refund request (${ref})`,
       headline: "Your refund request is with our team",
-      body: `Thanks${p.user.name ? `, ${p.user.name.split(" ")[0]}` : ""} — we've received your request to refund ${rupees(p.amount)} (${p.description ?? "your payment"}). We'll look at it and email you the decision, usually within 3 working days. If it's approved, the money returns to the payment method you used and you'll get a credit note.\n\nReference: ${ref}`,
+      body: `Thanks${p.user.name ? `, ${p.user.name.split(" ")[0]}` : ""} — we've received your request to refund ${rupees(p.amount)} (${p.description ?? "your payment"}). We'll look at it and email you the decision, usually within 3 working days. If it's approved, the money returns to the payment method you used and you'll get a credit note. As our policy says, ${rupees(verdict.feePaise)} is kept as a charge, so the refund would be ${rupees(verdict.refundPaise)}, and your plan would end.\n\nReference: ${ref}`,
       link: `${siteUrl}/app/account/payments`,
       linkLabel: "See your payments",
     }),
@@ -79,7 +102,7 @@ export async function issueRefund(i: IssueInput): Promise<{ refundId: string; am
         creditsTakenBack = creditsToTakeBack(p.creditsGranted, acct.topupBalance);
         if (creditsTakenBack > 0) {
           const updated = await prisma.creditAccount.update({ where: { userId: p.userId }, data: { topupBalance: { decrement: creditsTakenBack } } });
-          await prisma.creditEvent.create({ data: { userId: p.userId, kind: "REFUND", credits: -creditsTakenBack, monthlyAfter: updated.monthlyBalance, topupAfter: updated.topupBalance, meta: { source: "refund", paymentId: p.razorpayPaymentId } } });
+          await prisma.creditEvent.create({ data: { userId: p.userId, kind: "TOPUP_REFUND", credits: -creditsTakenBack, monthlyAfter: updated.monthlyBalance, topupAfter: updated.topupBalance, meta: { source: "refund", paymentId: p.razorpayPaymentId } } });
         }
       }
     }
