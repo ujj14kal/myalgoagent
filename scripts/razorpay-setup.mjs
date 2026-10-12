@@ -10,7 +10,9 @@ const env = Object.fromEntries(readFileSync(new URL("../.env.local", import.meta
 const keyId = env.RAZORPAY_KEY_ID, keySecret = env.RAZORPAY_KEY_SECRET;
 if (!keyId || !keySecret) throw new Error("RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET are not in .env.local");
 const mode = keyId.startsWith("rzp_live_") ? "LIVE" : "test";
-if (mode === "LIVE" && process.argv[2] !== "--live") throw new Error("These are LIVE keys. Re-run with --live only when you mean to charge real money.");
+const wantLive = process.argv.includes("--live");
+if (mode === "LIVE" && !wantLive) throw new Error("These are LIVE keys. Re-run with --live only when you mean to charge real money.");
+if (wantLive && mode !== "LIVE") throw new Error("--live needs RAZORPAY_KEY_ID to be a rzp_live_… key in .env.local.");
 const auth = "Basic " + Buffer.from(`${keyId}:${keySecret}`).toString("base64");
 const api = async (path, body) => {
   const res = await fetch(`https://api.razorpay.com/v1${path}`, { method: body ? "POST" : "GET", headers: { Authorization: auth, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
@@ -35,6 +37,9 @@ const put = (name, value, secure) => execFileSync("aws", ["ssm", "put-parameter"
 put("RAZORPAY_KEY_ID", keyId, false);
 put("RAZORPAY_KEY_SECRET", keySecret, true);
 for (const [k, v] of Object.entries(ids)) put(k, v, false);
-const existingWh = (() => { try { return execFileSync("aws", ["ssm", "get-parameter", "--profile", "myalgoagent", "--region", "ap-south-1", "--name", "/myalgoagent/app/RAZORPAY_WEBHOOK_SECRET", "--query", "Parameter.Value", "--output", "text"], { stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); } catch { return null; } })();
+// Going live: the live webhook gets its own, new secret (the test one stops being used). Paste this one into Razorpay's LIVE webhook.
+if (wantLive) { put("RAZORPAY_WEBHOOK_SECRET", randomBytes(24).toString("hex"), true); console.log("NEW live webhook secret saved to Parameter Store — set the same value in the Razorpay LIVE-mode webhook"); }
+const existingWh = wantLive ? "kept" : (() => { try { return execFileSync("aws", ["ssm", "get-parameter", "--profile", "myalgoagent", "--region", "ap-south-1", "--name", "/myalgoagent/app/RAZORPAY_WEBHOOK_SECRET", "--query", "Parameter.Value", "--output", "text"], { stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); } catch { return null; } })();
 if (!existingWh) { put("RAZORPAY_WEBHOOK_SECRET", randomBytes(24).toString("hex"), true); console.log("webhook secret created in Parameter Store"); } else console.log("webhook secret already in Parameter Store");
 console.log("saved to Parameter Store: key id, key secret, plan ids");
+console.log(mode === "LIVE" ? "NEXT: restart the website so it loads them (any new release does), then make one real ₹ purchase yourself to confirm." : "Test mode only: no real money moves.");

@@ -1,4 +1,7 @@
-import { Activity, Bell, Bug, Database, DollarSign, Globe, Mail, Rocket, Server, ShieldAlert } from "lucide-react";
+import { Activity, Bell, Bug, CreditCard, Database, DollarSign, Globe, Mail, Rocket, Server, ShieldAlert } from "lucide-react";
+import { prisma } from "@/lib/prisma";
+import { razorpayKeys, razorpayMode } from "@/lib/billing/razorpay";
+import { RAZORPAY_PLAN_ENV } from "@/lib/billing/brand";
 import { licensedFeedStatus } from "@/lib/market-data";
 import { requireStaff } from "@/lib/admin/access";
 import { getAlarms, getCost, getDatabase, getDeploys, getEmailStatus, getRecentLogs, getSecurityFindings, load } from "@/lib/admin/aws";
@@ -23,6 +26,12 @@ export default async function SystemPage() {
     load(currentEgressIp),
   ]);
   // Brokers see the NAT Gateway's address (the old relay is retired); BROKER_EGRESS_URL only if a relay is configured again.
+  const rzpKeys = razorpayKeys();
+  const payments = await load(async () => ({
+    activeSubscriptions: await prisma.subscription.count({ where: { status: "active" } }),
+    paid: await prisma.payment.count({ where: { status: "captured" } }),
+    lastPaid: (await prisma.payment.findFirst({ where: { status: "captured" }, orderBy: { createdAt: "desc" }, select: { createdAt: true } }))?.createdAt ?? null,
+  }));
   const staticIp = process.env.BROKER_EGRESS_URL?.match(/\/\/([^:/]+)/)?.[1] ?? process.env.SHARED_EGRESS_IP ?? "13.204.125.24";
 
   const firing = alarms.ok ? alarms.data.filter((a) => a.state === "ALARM").length : null;
@@ -232,6 +241,28 @@ export default async function SystemPage() {
             <span className="text-xs text-brand-navy/45">Shared address, held by the NAT Gateway (stack “myalgoagent-network”). Paid accounts get their own IP (stack “myalgoagent-user-egress”).</span>
           </div>
         )}
+      </Card>
+
+      <Card title="Payments (Razorpay)" icon={CreditCard}>
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          {!rzpKeys ? (
+            <Pill tone="gray" dot>not configured</Pill>
+          ) : razorpayMode(rzpKeys.keyId) === "live" ? (
+            <Pill tone="red" dot>LIVE — real money</Pill>
+          ) : (
+            <Pill tone="gold" dot>test mode — no real money</Pill>
+          )}
+          <Pill tone={process.env[RAZORPAY_PLAN_ENV.TRADE] && process.env[RAZORPAY_PLAN_ENV.PRO] ? "green" : "gray"} dot>{process.env[RAZORPAY_PLAN_ENV.TRADE] && process.env[RAZORPAY_PLAN_ENV.PRO] ? "plans set up" : "plans missing"}</Pill>
+          <Pill tone={process.env.RAZORPAY_WEBHOOK_SECRET ? "green" : "gray"} dot>{process.env.RAZORPAY_WEBHOOK_SECRET ? "webhook secret set" : "webhook secret missing"}</Pill>
+          {payments.ok ? (
+            <span className="text-xs text-brand-navy/55">
+              {payments.data.activeSubscriptions} active subscription{payments.data.activeSubscriptions === 1 ? "" : "s"} · {payments.data.paid} payment{payments.data.paid === 1 ? "" : "s"} received{payments.data.lastPaid ? ` · last ${ago(payments.data.lastPaid.toISOString())}` : ""}
+            </span>
+          ) : (
+            <LoadError error={payments.error} />
+          )}
+        </div>
+        <p className="mt-2 text-xs text-brand-navy/45">Switching to live: docs/payments-go-live.md. Plans and payments themselves are managed in the Razorpay dashboard.</p>
       </Card>
 
       <Card title="Security findings (GuardDuty)" icon={ShieldAlert} pad={false}>
