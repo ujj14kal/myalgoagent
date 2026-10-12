@@ -12,6 +12,7 @@ import { RAZORPAY_PLAN_ENV } from "@/lib/billing/brand";
 import { snapshot } from "@/lib/credits/service";
 import { PLANS, TOPUP_PACKS, withGst } from "@/lib/credits/config";
 import { ShoppingCart } from "lucide-react";
+import BillingBrand from "@/components/billing/billing-brand";
 
 export const metadata = { title: "Checkout", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -108,6 +109,7 @@ function BillCard({ bill, name, email, testMode }: { bill: Bill; name: string; e
           </div>
         </Card>
         <Card className="min-w-0 p-5 lg:col-span-2 lg:sticky lg:top-24 lg:self-start">
+          <BillingBrand className="mb-4" />
           <CardHeader title="Your bill" subtitle="Price plus 18% GST" icon={Receipt} />
           <dl className="mt-3 divide-y divide-brand-navy/[0.07] text-sm">
             <div className={row}><dt className="min-w-0 text-brand-navy/70">{bill.title}<span className="block text-xs text-brand-navy/45">Price, before GST</span></dt><dd className="num shrink-0 font-semibold tabular-nums text-brand-navy">{rupees(bill.taxablePaise)}</dd></div>

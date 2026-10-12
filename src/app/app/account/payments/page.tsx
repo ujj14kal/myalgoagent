@@ -5,9 +5,9 @@ import { prisma } from "@/lib/prisma";
 import PageHeader from "@/components/ui/page-header";
 import Pager from "@/components/ui/pager";
 import { Card } from "@/components/ui/card";
-import PaymentsTable, { type PaymentRow, type RefundState } from "@/components/billing/payments-table";
+import BillingBrand from "@/components/billing/billing-brand";
+import PaymentsTable, { type PaymentRow } from "@/components/billing/payments-table";
 import { pageWindow, readPageQuery } from "@/lib/pagination";
-import { paymentPolicy } from "@/lib/billing/refunds";
 
 export const metadata = { title: "Payments & invoices", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -21,42 +21,27 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
   const { page, size } = readPageQuery(sp, 10);
   const win = pageWindow(total, page, size);
   const pays = await prisma.payment.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, skip: win.skip, take: win.take }).catch(() => []);
-  const requests = pays.length ? await prisma.refundRequest.findMany({ where: { paymentId: { in: pays.map((p) => p.id) } }, orderBy: { createdAt: "desc" }, select: { paymentId: true, status: true } }).catch(() => []) : [];
-  const verdicts = new Map(await Promise.all(pays.filter((p) => p.status === "captured" && !p.refundedAt).map(async (p) => [p.id, await paymentPolicy(p).catch(() => null)] as const)));
-  const rows: PaymentRow[] = pays.map((p) => {
-    const latest = requests.find((r) => r.paymentId === p.id);
-    const v = verdicts.get(p.id);
-    const refund: RefundState = p.refundedAt
-      ? { kind: "refunded", amount: p.refundedAmount ?? p.amount, creditNote: p.creditNoteNumber }
-      : latest?.status === "PENDING"
-        ? { kind: "requested" }
-        : latest?.status === "REJECTED"
-          ? { kind: "declined" }
-          : p.status === "captured" && v
-            ? v.eligible
-              ? { kind: "can-request", refundPaise: v.refundPaise, feePaise: v.feePaise }
-              : { kind: "not-eligible", reason: v.reason ?? "Not refundable." }
-            : { kind: "none" };
-    return {
+  const rows: PaymentRow[] = pays.map((p) => ({
     id: p.id,
     when: p.createdAt.toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" }),
     what: p.description ?? (p.kind === "topup" ? "Credit top-up" : "Plan payment"),
     amount: p.amount,
     status: p.status,
     invoice: p.invoiceNumber,
-    refund,
-    };
-  });
+    refund: p.refundedAt ? { kind: "refunded", amount: p.refundedAmount ?? p.amount, creditNote: p.creditNoteNumber } : { kind: "none" },
+  }));
   return (
     <div>
       <PageHeader title="Payments & invoices" icon={Receipt} description="Every payment you've made through Razorpay, with its numbered invoice. Each invoice shows the price and the 18% GST added to it." />
       <Card className="p-5">
+        <BillingBrand className="mb-3" />
         {rows.length === 0 ? (
           <p className="text-sm text-brand-navy/55">No payments yet. <Link href="/app/checkout" className="font-semibold text-brand-primary hover:underline">Choose a plan or top up credits</Link>.</p>
         ) : (
           <>
             <PaymentsTable rows={rows} />
             <Pager basePath="/app/account/payments" window={win} />
+            <p className="mt-4 text-xs text-brand-navy/50">Questions about a payment? <Link href="/app/support" className="font-semibold text-brand-primary hover:underline">Contact customer support</Link> with the invoice number.</p>
           </>
         )}
       </Card>

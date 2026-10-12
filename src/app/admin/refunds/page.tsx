@@ -26,7 +26,7 @@ export default async function RefundsPage() {
   const prefill = (paise: number, v: Awaited<ReturnType<typeof paymentPolicy>> | null) => asRupees(v?.eligible ? v.refundPaise : paise);
   return (
     <div className="space-y-6">
-      <AdminPageHeader title="Refunds" icon={RotateCcw} description="Customers ask from their Payments page; you decide here. Approving sends the money back through Razorpay, emails the credit note, and (if you choose) cancels the plan or takes top-up credits back." />
+      <AdminPageHeader title="Refunds" icon={RotateCcw} description="Customers write to support; after you review the payment against the policy, you refund it here. Approving sends the money back through Razorpay, emails the credit note, and (if you choose) cancels the plan or takes top-up credits back." />
 
       <Card title={`Waiting for a decision (${pending.length})`}>
         {pending.length === 0 ? (

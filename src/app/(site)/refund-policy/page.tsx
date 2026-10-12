@@ -46,9 +46,9 @@ export default function RefundPolicyPage() {
           </p>
           <h2>How to ask</h2>
           <p>
-            Open <Link href="/app/account/payments">Payments &amp; invoices</Link> and choose <strong>Request refund</strong> next to the payment (it appears when the
-            payment qualifies), or write to <a href="mailto:support@myalgoagent.com">support@myalgoagent.com</a> with your invoice number. A person on our team
-            confirms by email, usually within 3 working days. The refund reaches you through Razorpay; banks and card networks usually take 5–7 working days to show it.
+            Write to <a href="mailto:support@myalgoagent.com">support@myalgoagent.com</a>, or use Help &amp; Support in the app, with your invoice number. Refunds are
+            handled only by our customer support team: a person reviews your payment against this policy and, if it qualifies, approves the refund from our admin
+            portal and confirms by email, usually within 3 working days. The refund reaches you through Razorpay; banks and card networks usually take 5–7 working days to show it.
           </p>
           <p>If we ever charge you by mistake, for example twice for the same period, tell us and we will correct it.</p>
           <h2>Questions</h2>
