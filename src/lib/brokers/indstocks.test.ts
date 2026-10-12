@@ -85,3 +85,19 @@ describe("Paytm Money", () => {
     expect(ADAPTERS.paytmmoney!.stateFrom(new URLSearchParams("requestToken=t"))).toBe("");
   });
 });
+
+import { xtsParts } from "./live-brokers";
+describe("Anand Rathi (XTS)", () => {
+  it("is connectable with keys only, no browser login", () => {
+    const info = brokerById("anandrathi")!;
+    expect(info.availability).toBe("live");
+    expect(info.flow).toBe("approval");
+    expect(ADAPTERS.anandrathi).toBeDefined();
+    expect(LIVE_NOT_YET.anandrathi).toBeDefined();
+    expect(loginView(info, null).fields.map((f) => f.name)).toEqual(["apiKey", "apiSecret"]);
+  });
+  it("keeps the server address with the token", () => {
+    expect(xtsParts("https://algozy.rathi.com/1interactive|abc.def")).toEqual({ root: "https://algozy.rathi.com/1interactive", token: "abc.def" });
+    expect(xtsParts("plain-token")).toEqual({ root: "", token: "plain-token" });
+  });
+});

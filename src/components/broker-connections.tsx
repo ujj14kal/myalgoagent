@@ -187,7 +187,10 @@ export default function BrokerConnections({
                   <Logo broker={b} />
                   <span className="min-w-0 truncate text-sm font-semibold text-brand-navy">{b.name}</span>
                 </div>
-                <Badge kind={b.availability === "next" ? "next" : (conn?.state ?? "none")} />
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <Badge kind={b.availability === "next" ? "next" : (conn?.state ?? "none")} />
+                  {b.beta && <span title="Built from the broker's documents; not yet proven with a real account" className="inline-flex rounded-full bg-brand-gold/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#8a7437] ring-1 ring-brand-gold/30">Beta</span>}
+                </span>
               </button>
             );
           })}
@@ -200,7 +203,8 @@ export default function BrokerConnections({
           <div className="flex items-center gap-3">
             <Logo broker={selected} size={44} />
             <div>
-              <p className="text-base font-semibold text-brand-navy">Connect {selected.name}</p>
+              <p className="text-base font-semibold text-brand-navy">Connect {selected.name}{selected.beta && <span className="ml-2 align-middle rounded-full bg-brand-gold/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#8a7437]">Beta</span>}</p>
+              {selected.beta && <p className="mt-1 text-xs text-brand-navy/55">This connection is built from {selected.name}&rsquo;s own documents and hasn&rsquo;t been proven with a real account yet. If it fails, tell us the message you see.</p>}
               <a href={selected.portal.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-brand-primary hover:underline">
                 Open {selected.portal.label} <ExternalLink size={12} />
               </a>

@@ -617,4 +617,42 @@ const paytmmoney: BrokerAdapter = {
   },
 };
 
-export const ADAPTERS: Partial<Record<BrokerId, BrokerAdapter>> = { paytmmoney, hdfcsky, motilal, indstocks, dhan, zerodha, upstox, fyers, angelone, groww, icicidirect, "5paisa": fivepaisa, aliceblue };
+
+// Anand Rathi (Algozy, an XTS interactive API): no browser login. A host lookup gives a unique key and the server address; the
+// session call with the app key and secret key gives the token. Stored as "<server>|<token>" (see live-brokers.ts).
+const XTS_LOOKUP_URL = "https://algozy.rathi.com/hostlookup";
+const anandrathi: BrokerAdapter = {
+  async loginUrl() {
+    return "/app/broker-connections/connecting/anandrathi";
+  },
+  stateFrom: () => null,
+  async exchange(c) {
+    const look = await call(XTS_LOOKUP_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ AccessPassword: "2021HostLookUpAccess", version: "interactive_1.0.1" }) });
+    const r = obj(look.body.result);
+    const uniqueKey = str(r.uniqueKey) ?? str(r.UniqueKey);
+    const base = (str(r.connectionString) ?? str(r.ConnectionString) ?? "").replace(/\/$/, "");
+    if (look.status >= 400 || !uniqueKey || !base) fail(look.status, look.body, "unreachable");
+    // The session path is "<server>/user/session" in the docs; older XTS servers put "/interactive" in between, so both are tried.
+    let session: { status: number; body: Record<string, unknown> } | null = null;
+    let root = base;
+    for (const prefix of ["", "/interactive"]) {
+      const res = await call(`${base}${prefix}/user/session`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secretKey: need(c.apiSecret), appKey: c.apiKey, uniqueKey, source: "WebAPI" }) });
+      session = res;
+      root = `${base}${prefix}`;
+      if (res.status !== 404) break;
+    }
+    const sr = obj(session!.body.result);
+    const token = str(sr.token);
+    if (session!.status >= 400 || !token) fail(session!.status, session!.body, "bad_keys");
+    return { accessToken: `${root}|${token}`, expiresAt: new Date(Date.now() + 11.5 * 3_600_000), brokerClientId: str(sr.userID) };
+  },
+  async profile(_c, accessToken) {
+    const i = accessToken.indexOf("|");
+    const { status, body } = await call(`${accessToken.slice(0, i)}/user/profile`, { headers: { authorization: accessToken.slice(i + 1), Accept: "application/json" } });
+    if (status >= 400 || body.type === "error") fail(status, body, "session_rejected");
+    const r = obj(body.result);
+    return { accountName: str(r.ClientName) ?? str(r.clientName), brokerClientId: str(r.ClientId) ?? str(r.clientId) ?? str(r.userID) };
+  },
+};
+
+export const ADAPTERS: Partial<Record<BrokerId, BrokerAdapter>> = { anandrathi, paytmmoney, hdfcsky, motilal, indstocks, dhan, zerodha, upstox, fyers, angelone, groww, icicidirect, "5paisa": fivepaisa, aliceblue };

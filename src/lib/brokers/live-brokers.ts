@@ -596,6 +596,20 @@ export const hdfcskyQuery = (ctx: LiveCtx, extra: Record<string, string> = {}) =
 export const PAYTM = "https://developer.paytmmoney.com";
 export const paytmHeaders = (ctx: LiveCtx) => ({ "x-jwt-token": ctx.token, "Content-Type": "application/json", "openapi-client-src": "sdk" });
 
+// ---------- XTS brokers (Anand Rathi "Algozy", and others on Symphony's XTS standard) ----------
+// Anand Rathi's interactive API document (algozy.rathi.com/doc/interactive, read 13 Oct 2026). Login is by keys, no browser step:
+// a host lookup returns a unique key and the server address, then the session call returns a token (valid 12 hours). Reply
+// shapes for balance, positions and the books follow the XTS standard because the public spec file doesn't include them.
+// The session is stored as "<server address>|<token>" so every later call knows where to go.
+
+export const XTS_LOOKUP = "https://algozy.rathi.com/hostlookup";
+export function xtsParts(token: string): { root: string; token: string } {
+  const i = token.indexOf("|");
+  return i > 0 ? { root: token.slice(0, i), token: token.slice(i + 1) } : { root: "", token };
+}
+export const xtsHeaders = (ctx: LiveCtx) => ({ authorization: xtsParts(ctx.token).token, "Content-Type": "application/json" });
+export const xtsUrl = (ctx: LiveCtx, path: string) => `${xtsParts(ctx.token).root}${path}`;
+
 // ---------- INDstocks (INDmoney) ----------
 // Endpoints and fields from INDstocks' official API docs (api-docs.indstocks.com, read 13 Oct 2026). Not proven with a real order.
 
@@ -664,6 +678,7 @@ export const LIVE_BROKERS: Partial<Record<BrokerId, LiveBroker>> = { indstocks, 
 
 /** Brokers where connecting works but live orders don't yet, with why. */
 export const LIVE_NOT_YET: Partial<Record<BrokerId, string>> = {
+  anandrathi: "Anand Rathi connects and shows your account here; live orders follow once the connection has been proven with a real login.",
   paytmmoney: "Paytm Money connects and shows your account here; live orders follow once the connection has been proven with a real login (a Paytm order needs several exchange fields we haven't confirmed yet).",
   hdfcsky: "HDFC Securities connects and shows your account here; live orders follow once the connection has been proven with a real login (HDFC also requires a registered static IP).",
   motilal: "Motilal Oswal connects and shows your account here; live orders follow once the connection has been proven with a real login (Motilal also requires a registered static IP and a price on every API order).",

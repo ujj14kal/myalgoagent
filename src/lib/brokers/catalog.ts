@@ -35,6 +35,8 @@ export type BrokerInfo = {
   logo: string;
   /** "live" = connect works today; "next" = guide shown, connecting comes in a later release. */
   availability: "live" | "next";
+  /** Connecting works from the broker's own documents but hasn't been proven with a real account yet; shown as "Beta". */
+  beta?: boolean;
   /**
    * How the daily login works. "redirect" (default): the user logs in on the
    * broker's page and is sent back to our Redirect URL. "approval": no
@@ -322,6 +324,7 @@ export const BROKERS: BrokerInfo[] = [
     name: "HDFC Securities (HDFC Sky)",
     logo: "/brokers/hdfcsky.svg",
     availability: "live",
+    beta: true,
     portal: { label: "developer.hdfcsky.com", url: "https://developer.hdfcsky.com" },
     callbackFieldName: "Redirect URL",
     fields: [
@@ -349,6 +352,7 @@ export const BROKERS: BrokerInfo[] = [
     name: "Motilal Oswal",
     logo: "/brokers/motilal.svg",
     availability: "live",
+    beta: true,
     portal: { label: "invest.motilaloswal.com/moapi", url: "https://invest.motilaloswal.com/moapi/APIDocumentation/Introduction" },
     callbackFieldName: "Redirect URL",
     fields: [
@@ -377,6 +381,7 @@ export const BROKERS: BrokerInfo[] = [
     name: "Paytm Money",
     logo: "/brokers/paytmmoney.svg",
     availability: "live",
+    beta: true,
     portal: { label: "developer.paytmmoney.com", url: "https://developer.paytmmoney.com" },
     callbackFieldName: "Redirect URL",
     fields: [
@@ -509,25 +514,35 @@ export const BROKERS: BrokerInfo[] = [
     id: "anandrathi",
     name: "Anand Rathi",
     logo: "/brokers/anandrathi.svg",
-    availability: "next",
+    availability: "live",
+    beta: true,
+    flow: "approval",
     portal: { label: "anandrathi.com/algozy", url: "https://anandrathi.com/algozy" },
-    callbackFieldName: "Redirect URL",
-    fields: [],
+    callbackFieldName: "",
+    fields: [
+      { name: "apiKey", label: "App key", placeholder: "Paste the app key (appKey)" },
+      { name: "apiSecret", label: "Secret key", placeholder: "Paste the secret key (secretKey)", secret: true },
+    ],
     steps: [
-      "Open Anand Rathi's Algozy page and request API access for your account.",
-      "Create your order app and your market-data app.",
-      "Copy the keys. Connecting Anand Rathi on this page is coming next.",
+      "Open Anand Rathi's Algozy page and register as an API user on the broker's API dashboard. Confirm your email from the link they send.",
+      "On the dashboard, choose the Interactive API subscription and wait for the approval email. It contains your appKey and secretKey.",
+      "Paste both keys below and click Save & connect Anand Rathi. There is no login page: we sign in with the keys.",
+      "Only one session can use a key pair at a time, so don't use the same keys in another app at the same moment.",
     ],
     cost: "Anand Rathi's Algozy API is free.",
     apiCost: "Free",
-    session: "Anand Rathi sessions last for the trading day — you log in again each trading day.",
-    notes: ["Anand Rathi lists up to 10 orders a second on its order API."],
+    session: "Anand Rathi sessions last about 12 hours — click “Connect for today” each trading day.",
+    notes: [
+      "For now you can connect and see your account here; live order placing for Anand Rathi follows after the connection has been proven.",
+      "Anand Rathi lists up to 10 orders a second on its order API.",
+    ],
   },
   {
     id: "indstocks",
     name: "INDstocks (INDmoney)",
     logo: "/brokers/indstocks.svg",
     availability: "live",
+    beta: true,
     flow: "approval",
     portal: { label: "indstocks.com — Access Tokens", url: "https://api-docs.indstocks.com/getting-started/" },
     callbackFieldName: "",
