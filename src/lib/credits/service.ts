@@ -1,7 +1,7 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { AI_ACTIONS, PLANS, refusalFor, slotRefusal, splitSpend, totalOf, type CreditAction, type CreditPlan, type Refusal, type Usage } from "./config";
+import { AI_ACTIONS, PLANS, TRIAL_DAYS, TRIAL_SPEC, effectivePlan, refusalFor, slotRefusal, specOf, splitSpend, totalOf, type CreditAction, type CreditPlan, type PlanKey, type Refusal, type Usage } from "./config";
 import type { CreditEventRow, CreditSnapshot } from "./types";
 import { creditWarning } from "@/lib/event-email-config";
 import { emailEvent } from "@/lib/event-email";
@@ -23,9 +23,10 @@ type Account = Awaited<ReturnType<typeof prisma.creditAccount.findUniqueOrThrow>
 export async function getAccount(userId: string, now = new Date()): Promise<Account> {
   let acct = await prisma.creditAccount.findUnique({ where: { userId } });
   if (!acct) {
-    const spec = PLANS.FREE;
+    // Every new account starts with the 7-day trial; when it ends the first renewal below drops it to the Free allowance.
+    const trialEnd = new Date(now.getTime() + TRIAL_DAYS * 86_400_000);
     acct = await prisma.creditAccount
-      .create({ data: { userId, plan: "FREE", monthlyBalance: spec.monthlyCredits, periodStart: now, periodEnd: new Date(now.getTime() + MONTH_MS) } })
+      .create({ data: { userId, plan: "FREE", monthlyBalance: TRIAL_SPEC.monthlyCredits, periodStart: now, periodEnd: trialEnd, trialEndsAt: trialEnd } })
       .catch(() => prisma.creditAccount.findUniqueOrThrow({ where: { userId } })); // created at the same moment elsewhere
   }
   if (acct.periodEnd <= now) {
@@ -49,11 +50,13 @@ async function usageOf(userId: string, aiRepliesEver: number): Promise<Usage> {
 
 export async function snapshot(userId: string): Promise<CreditSnapshot> {
   const acct = await getAccount(userId);
-  const spec = PLANS[acct.plan];
+  const key = effectivePlan(acct.plan, acct.trialEndsAt);
+  const spec = specOf(key);
   const u = await usageOf(userId, acct.aiRepliesUsed);
   return {
     plan: acct.plan,
     planLabel: spec.label,
+    trial: key === "TRIAL" && acct.trialEndsAt ? { endsAt: acct.trialEndsAt.toISOString() } : null,
     monthly: acct.monthlyBalance,
     monthlyOf: spec.monthlyCredits,
     topup: acct.topupBalance,
@@ -69,7 +72,7 @@ export async function snapshot(userId: string): Promise<CreditSnapshot> {
 export async function precheck(userId: string, action: CreditAction, cost: number): Promise<Refusal | null> {
   const acct = await getAccount(userId);
   const usage = await usageOf(userId, acct.aiRepliesUsed);
-  return refusalFor(acct.plan, { monthly: acct.monthlyBalance, topup: acct.topupBalance }, usage, action, cost);
+  return refusalFor(effectivePlan(acct.plan, acct.trialEndsAt), { monthly: acct.monthlyBalance, topup: acct.topupBalance }, usage, action, cost);
 }
 
 /**
@@ -80,7 +83,7 @@ export async function charge(userId: string, action: CreditAction, cost: number,
   const isAi = AI_ACTIONS.includes(action);
   for (let attempt = 0; attempt < 4; attempt++) {
     const acct = await getAccount(userId);
-    const spec = PLANS[acct.plan];
+    const spec = specOf(effectivePlan(acct.plan, acct.trialEndsAt));
     const freeAi = isAi && spec.aiLifetimeReplies !== null;
     const next = freeAi ? { monthly: acct.monthlyBalance, topup: acct.topupBalance } : splitSpend({ monthly: acct.monthlyBalance, topup: acct.topupBalance }, cost) ?? { monthly: 0, topup: 0 };
     const ok = await prisma.$transaction(async (tx) => {
@@ -110,7 +113,7 @@ export async function setPlan(userId: string, plan: CreditPlan, meta?: Prisma.In
   const acct = await getAccount(userId);
   const now = new Date();
   const monthly = PLANS[plan].monthlyCredits;
-  await prisma.creditAccount.update({ where: { userId }, data: { plan, monthlyBalance: monthly, periodStart: now, periodEnd: new Date(now.getTime() + MONTH_MS) } });
+  await prisma.creditAccount.update({ where: { userId }, data: { plan, trialEndsAt: null, monthlyBalance: monthly, periodStart: now, periodEnd: new Date(now.getTime() + MONTH_MS) } });
   await prisma.creditEvent.create({ data: { userId, kind: "PLAN", credits: monthly - acct.monthlyBalance, monthlyAfter: monthly, topupAfter: acct.topupBalance, meta: { from: acct.plan, to: plan, ...(typeof meta === "object" && meta && !Array.isArray(meta) ? meta : {}) } } });
   // A paid plan gets its own static IP (off until USER_EGRESS_ENABLED=1); a move to Free starts the grace period. Never blocks the plan change.
   const { syncEgressForPlan } = await import("@/lib/egress/service");
@@ -136,7 +139,7 @@ export async function slotCheck(userId: string, kind: "live" | "forward"): Promi
   const used = kind === "live"
     ? await prisma.liveDeployment.count({ where: { userId, status: { in: ["ACTIVE", "PAUSED"] } } })
     : await prisma.paperSession.count({ where: { userId, status: { in: ["ACTIVE", "PAUSED"] } } });
-  return slotRefusal(acct.plan, kind, used);
+  return slotRefusal(effectivePlan(acct.plan, acct.trialEndsAt), kind, used);
 }
 
 // ---------- reserve → settle: credits are taken BEFORE the work, atomically, and handed back if the work doesn't happen ----------
@@ -154,9 +157,9 @@ export async function reserve(userId: string, action: CreditAction, cost: number
     const acct = await getAccount(userId);
     const usage = await usageOf(userId, acct.aiRepliesUsed);
     const balance = { monthly: acct.monthlyBalance, topup: acct.topupBalance };
-    const refusal = refusalFor(acct.plan, balance, usage, action, cost);
+    const refusal = refusalFor(effectivePlan(acct.plan, acct.trialEndsAt), balance, usage, action, cost);
     if (refusal) return { ok: false, refusal };
-    const freeAi = isAi && PLANS[acct.plan].aiLifetimeReplies !== null;
+    const freeAi = isAi && specOf(effectivePlan(acct.plan, acct.trialEndsAt)).aiLifetimeReplies !== null;
     const next = freeAi ? balance : splitSpend(balance, cost);
     if (!next) return { ok: false, refusal: { code: "NO_CREDITS", message: `This needs ${cost} credits.` } };
     const taken = { monthly: balance.monthly - next.monthly, topup: balance.topup - next.topup };
@@ -170,7 +173,7 @@ export async function reserve(userId: string, action: CreditAction, cost: number
     });
     if (made) {
       // Running low / out: say so once as the balance crosses the line, so nobody is surprised by a refusal later.
-      const warn = creditWarning(totalOf(balance), totalOf(next), PLANS[acct.plan].monthlyCredits);
+      const warn = creditWarning(totalOf(balance), totalOf(next), specOf(effectivePlan(acct.plan, acct.trialEndsAt)).monthlyCredits);
       if (warn) void emailEvent(userId, warn, warn === "credits_out"
         ? { subject: "You're out of credits", headline: "You're out of credits", body: "The AI assistant and backtests that use credits are paused until your credits renew or you top up. Charts, forward tests and your live strategies keep working and never use credits.", path: "/app/account/usage", linkLabel: "See credits and top-ups" }
         : { subject: "Your credits are running low", headline: "Your credits are running low", body: `You have ${totalOf(next)} credits left. They renew on ${acct.periodEnd.toLocaleDateString("en-IN", { day: "numeric", month: "long", timeZone: "Asia/Kolkata" })}; you can also top up.`, path: "/app/account/usage", linkLabel: "See credits and top-ups" });
@@ -210,7 +213,7 @@ export async function upgrade(r: Reservation, action: CreditAction, cost: number
     const usage = await usageOf(r.userId, acct.aiRepliesUsed);
     const balance = { monthly: acct.monthlyBalance, topup: acct.topupBalance };
     // Judge the new kind of work as if this reservation were not yet counted (it is already one AI reply today).
-    const refusal = refusalFor(acct.plan, balance, { ...usage, aiToday: Math.max(0, usage.aiToday - 1), buildsToday: usage.buildsToday, aiRepliesEver: Math.max(0, usage.aiRepliesEver - (r.freeAi ? 1 : 0)) }, action, r.freeAi ? 0 : extra);
+    const refusal = refusalFor(effectivePlan(acct.plan, acct.trialEndsAt), balance, { ...usage, aiToday: Math.max(0, usage.aiToday - 1), buildsToday: usage.buildsToday, aiRepliesEver: Math.max(0, usage.aiRepliesEver - (r.freeAi ? 1 : 0)) }, action, r.freeAi ? 0 : extra);
     if (refusal) return { ok: false, refusal };
     const next = r.freeAi ? balance : splitSpend(balance, extra);
     if (!next) return { ok: false, refusal: { code: "NO_CREDITS", message: `This needs ${extra} more credits.` } };

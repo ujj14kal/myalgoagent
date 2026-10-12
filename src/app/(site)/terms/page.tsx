@@ -56,6 +56,15 @@ const sections: LegalSection[] = [
     ],
   },
   {
+    id: "plans-billing",
+    title: "Plans, billing and cancellation",
+    paragraphs: [
+      "Every new account starts with a free trial of the paid features, then continues on the Free plan unless you choose a paid plan. Paid plans (Trade and Pro) are billed monthly in advance, in Indian rupees, with applicable GST included in the price shown, through our payment provider Razorpay. By choosing a paid plan you authorize recurring monthly charges to your chosen payment method until you cancel.",
+      "You can stop renewal at any time from Plan, credits & billing in the app. Your plan then continues until the end of the period you have already paid for, after which your account moves to the Free plan. If you believe you have been charged in error, contact us and we will review it. Plan features, credit allowances and prices may change; we will tell you before a change affects a renewal.",
+      "Credits and top-up packs are used for the metered features shown in the app. Monthly plan credits renew each period and do not carry over; purchased top-up credits stay for a year. Your card or UPI details are handled by Razorpay and are never stored by MyAlgoAgent.",
+    ],
+  },
+  {
     id: "results",
     title: "No guarantee of results",
     paragraphs: [

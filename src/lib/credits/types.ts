@@ -4,6 +4,8 @@ import type { CreditPlan } from "./config";
 export type CreditSnapshot = {
   plan: CreditPlan;
   planLabel: string;
+  /** While the account is on its first-week trial: when it ends (ISO). Null otherwise. */
+  trial: { endsAt: string } | null;
   /** Credits left from the plan's monthly allowance, and what it started the period with. */
   monthly: number;
   monthlyOf: number;

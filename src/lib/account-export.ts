@@ -4,7 +4,7 @@ import { classifyCustom, type CustomIndicatorDef } from "@/lib/custom-indicator"
 
 /** Everything an account owns, for the user's own data export (and staff fulfilling a data request). Never includes broker keys or tokens. */
 export async function collectUserData(userId: string) {
-  const [user, watchlistItems, strategies, backtestRuns, paperSessions, riskSettings, riskEvents, notifications, feedback, supportCases, agentConversations, brokerConnections, workspaces, blocks, concepts, customIndicators, staticIp] =
+  const [user, watchlistItems, strategies, backtestRuns, paperSessions, riskSettings, riskEvents, notifications, feedback, supportCases, agentConversations, brokerConnections, workspaces, blocks, concepts, customIndicators, staticIp, subscriptions, payments] =
     await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
@@ -44,6 +44,9 @@ export async function collectUserData(userId: string) {
       prisma.customIndicator.findMany({ where: { userId }, orderBy: { name: "asc" } }),
       // The account's own static IP (never its access token or certificate).
       prisma.userEgress.findUnique({ where: { userId }, select: { status: true, publicIp: true, graceUntil: true, createdAt: true } }).catch(() => null),
+      // Plan subscriptions and payments (amounts in paise, GST included); never card or UPI details, which we don't hold.
+      prisma.subscription.findMany({ where: { userId }, orderBy: { createdAt: "asc" }, select: { plan: true, status: true, currentStart: true, currentEnd: true, cancelAtPeriodEnd: true, paidCount: true, createdAt: true } }).catch(() => []),
+      prisma.payment.findMany({ where: { userId }, orderBy: { createdAt: "asc" }, select: { razorpayPaymentId: true, kind: true, amount: true, currency: true, status: true, method: true, description: true, creditsGranted: true, createdAt: true } }).catch(() => []),
     ]);
 
   if (!user) return null;
@@ -63,6 +66,8 @@ export async function collectUserData(userId: string) {
     agentConversations,
     brokerConnections,
     staticIp,
+    subscriptions,
+    payments,
     // The workspace in its three layers: blocks, concepts, and trading systems (a draft plus its published versions).
     blocks,
     concepts,

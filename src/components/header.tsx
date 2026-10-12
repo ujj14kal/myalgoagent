@@ -6,6 +6,7 @@ import SiteNavLinks from "@/components/site-nav-links";
 const links = [
   { href: "/product", label: "Product" },
   { href: "/backtesting", label: "Backtesting" },
+  { href: "/pricing", label: "Pricing" },
   { href: "/live-trading", label: "Live Trading" },
   { href: "/risk-management", label: "Risk" },
   { href: "/faq", label: "FAQ" },

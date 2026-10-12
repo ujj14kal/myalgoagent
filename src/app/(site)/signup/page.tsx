@@ -17,7 +17,8 @@ export default async function SignupPage() {
     <div className="mx-auto flex min-h-[70vh] max-w-sm flex-col items-center px-4 py-12 text-center">
       <Agent2D pose="wave" size={110} />
       <h1 className="mt-6 text-2xl font-bold text-brand-navy">Create your account</h1>
-      <p className="mt-2 text-sm text-brand-navy/60">
+      <p className="mt-2 rounded-full bg-brand-gold/15 px-3 py-1 text-xs font-semibold text-brand-navy">7-day free trial — no card needed</p>
+      <p className="mt-3 text-sm text-brand-navy/60">
         Already have an account?{" "}
         <Link href="/login" className="font-semibold text-brand-primary">
           Sign in

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ACTION_COST, PLANS, TOPUP_PACKS, backtestCost, priceOf, refusalFor, slotRefusal, splitSpend, type Usage } from "./config";
+import { ACTION_COST, PLANS, TOPUP_PACKS, TRIAL_DAYS, TRIAL_SPEC, backtestCost, effectivePlan, priceOf, refusalFor, slotRefusal, splitSpend, type Usage } from "./config";
 
 const none: Usage = { aiToday: 0, buildsToday: 0, voiceToday: 0, aiRepliesEver: 0 };
 
@@ -85,5 +85,34 @@ describe("slot limits", () => {
     expect(slotRefusal("TRADE", "live", 3)?.code).toBe("SLOTS_FULL");
     expect(slotRefusal("PRO", "forward", 39)).toBeNull();
     expect(slotRefusal("PRO", "forward", 40)?.code).toBe("SLOTS_FULL");
+  });
+});
+
+describe("the 7-day trial", () => {
+  const usage = { aiToday: 0, buildsToday: 0, voiceToday: 0, aiRepliesEver: 5 };
+  it("is Free with an end date: behaves as the trial until then, as Free after", () => {
+    const now = new Date("2026-10-12T10:00:00Z");
+    expect(effectivePlan("FREE", new Date("2026-10-15T00:00:00Z"), now)).toBe("TRIAL");
+    expect(effectivePlan("FREE", new Date("2026-10-11T00:00:00Z"), now)).toBe("FREE");
+    expect(effectivePlan("FREE", null, now)).toBe("FREE");
+    expect(effectivePlan("TRADE", new Date("2026-10-15T00:00:00Z"), now)).toBe("TRADE"); // a paid plan is never the trial
+  });
+  it("lets a new account try the paid features, but not go live", () => {
+    expect(refusalFor("TRIAL", { monthly: 300, topup: 0 }, usage, "ai_voice", 6)).toBeNull();
+    expect(refusalFor("TRIAL", { monthly: 300, topup: 0 }, usage, "backtest", 3)).toBeNull();
+    expect(refusalFor("TRIAL", { monthly: 300, topup: 0 }, usage, "ai_reply", 2)).toBeNull(); // not limited to 2 lifetime replies
+    expect(slotRefusal("TRIAL", "live", 0)?.code).toBe("NOT_ON_PLAN");
+    expect(slotRefusal("TRIAL", "forward", 4)).toBeNull();
+    expect(slotRefusal("TRIAL", "forward", 5)?.code).toBe("SLOTS_FULL");
+  });
+  it("has daily ceilings and points to the paid plans when credits run out", () => {
+    expect(refusalFor("TRIAL", { monthly: 300, topup: 0 }, { ...usage, aiToday: TRIAL_SPEC.daily.ai }, "ai_reply", 2)?.code).toBe("DAILY_CAP");
+    const r = refusalFor("TRIAL", { monthly: 1, topup: 0 }, usage, "ai_build", 5);
+    expect(r?.code).toBe("NO_CREDITS");
+    expect(r?.message).toMatch(/Trade and Pro/);
+  });
+  it("costs us at most about ₹100 per account (300 credits at the worst-case ₹0.33)", () => {
+    expect(TRIAL_SPEC.monthlyCredits * 0.33).toBeLessThanOrEqual(100);
+    expect(TRIAL_DAYS).toBe(7);
   });
 });

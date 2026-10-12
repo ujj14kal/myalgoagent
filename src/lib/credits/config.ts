@@ -52,6 +52,28 @@ export const PLANS: Record<CreditPlan, PlanSpec> = {
   PRO: { label: "Pro", price: 3499, monthlyCredits: 4000, aiLifetimeReplies: null, voice: true, bigBacktests: true, daily: { ai: 100, build: 40, voice: 120 }, slots: { live: 10, forward: 40 } },
 };
 
+/**
+ * What every new account gets first: a 7-day taste of the paid features with no card. It is not a plan in the database (the
+ * account is Free with a trial end date), so it can never be "bought". Going live is not part of it: a live strategy needs the
+ * account's own static IP, which costs real money per user. Worst case it costs us about ₹100 per account (300 credits at ₹0.33).
+ */
+export const TRIAL_DAYS = 7;
+export const TRIAL_SPEC: PlanSpec = {
+  label: "Free trial",
+  price: null,
+  monthlyCredits: 300,
+  aiLifetimeReplies: null,
+  voice: true,
+  bigBacktests: true,
+  daily: { ai: 20, build: 8, voice: 12 },
+  slots: { live: 0, forward: 5 },
+};
+
+/** The plan an account is behaving as right now: a paid plan, Free, or the trial. */
+export type PlanKey = CreditPlan | "TRIAL";
+export const specOf = (k: PlanKey): PlanSpec => (k === "TRIAL" ? TRIAL_SPEC : PLANS[k]);
+export const effectivePlan = (plan: CreditPlan, trialEndsAt: Date | null | undefined, now = new Date()): PlanKey => (plan === "FREE" && trialEndsAt && trialEndsAt > now ? "TRIAL" : plan);
+
 /** Top-up packs (paid plans): priced for at least a 54% margin even if every credit is spent at the worst-case cost. Rupees, GST included. */
 export const TOPUP_PACKS = [
   { credits: 250, price: 299 },
@@ -89,9 +111,9 @@ export type Refusal = { code: "NO_CREDITS" | "DAILY_CAP" | "FREE_AI_USED" | "NOT
  * May this account do this now? `cost` is the price (for a backtest, from backtestCost). Returns why not, in plain words, or null.
  * The free plan trades credits for a short list of allowances; paid plans spend credits under daily ceilings.
  */
-export function refusalFor(plan: CreditPlan, balance: Balance, usage: Usage, action: CreditAction, cost: number): Refusal | null {
-  const spec = PLANS[plan];
-  const upgrade = plan === "FREE" ? "Trade and Pro" : "Pro";
+export function refusalFor(plan: PlanKey, balance: Balance, usage: Usage, action: CreditAction, cost: number): Refusal | null {
+  const spec = specOf(plan);
+  const upgrade = plan === "FREE" || plan === "TRIAL" ? "Trade and Pro" : "Pro";
   const isAi = AI_ACTIONS.includes(action);
   if ((action === "ai_voice" || action === "ai_speak") && !spec.voice) return { code: "NOT_ON_PLAN", message: "Voice is part of the Trade and Pro plans." };
   if (action === "backtest" && cost > 1 && !spec.bigBacktests) return { code: "NOT_ON_PLAN", message: "Intraday and long-history backtests are part of the Trade and Pro plans. On Free, daily candles up to a year work." };
@@ -105,7 +127,7 @@ export function refusalFor(plan: CreditPlan, balance: Balance, usage: Usage, act
     if ((action === "ai_voice" || action === "ai_speak") && usage.voiceToday >= spec.daily.voice) return { code: "DAILY_CAP", message: `You've reached today's voice limit on ${spec.label}. It resets at midnight IST.` };
   }
   if (totalOf(balance) < cost) {
-    return { code: "NO_CREDITS", message: `This needs ${cost} credit${cost === 1 ? "" : "s"} and you have ${totalOf(balance)}. ${plan === "FREE" ? "Trade and Pro come with more every month." : "Top up, or wait for your credits to renew."}` };
+    return { code: "NO_CREDITS", message: `This needs ${cost} credit${cost === 1 ? "" : "s"} and you have ${totalOf(balance)}. ${plan === "FREE" || plan === "TRIAL" ? "Trade and Pro come with more every month." : "Top up, or wait for your credits to renew."}` };
   }
   return null;
 }
@@ -116,8 +138,8 @@ export function priceOf(action: CreditAction, opts?: { timeframe?: string; range
 }
 
 /** Whether one more live strategy / forward test fits the plan. `used` counts those running or paused now. Null = it fits. */
-export function slotRefusal(plan: CreditPlan, kind: "live" | "forward", used: number): Refusal | null {
-  const spec = PLANS[plan];
+export function slotRefusal(plan: PlanKey, kind: "live" | "forward", used: number): Refusal | null {
+  const spec = specOf(plan);
   const cap = spec.slots[kind];
   if (used < cap) return null;
   const what = kind === "live" ? "live strategies" : "forward tests";

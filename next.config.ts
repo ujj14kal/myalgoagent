@@ -19,7 +19,7 @@ const securityHeaders = [
       // Next's inline hydration scripts need 'unsafe-inline'; 'unsafe-eval' is
       // only for the dev server's hot reload, never production. Google
       // Analytics (gtag.js) is loaded from googletagmanager.com.
-      `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""} https://www.googletagmanager.com`,
+      `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""} https://www.googletagmanager.com https://checkout.razorpay.com`,
       "style-src 'self' 'unsafe-inline'",
       // blob: = local previews (e.g. a profile photo before upload).
       "img-src 'self' data: blob: https:",
@@ -31,12 +31,13 @@ const securityHeaders = [
       // Google's OAuth pages, our own API/market-data routes, GA4's beacon
       // endpoints (gtag sends hits to both of these hosts), and Amazon
       // Transcribe streaming for voice chat (a pre-signed WebSocket).
-      "connect-src 'self' https://accounts.google.com https://query1.finance.yahoo.com https://www.googletagmanager.com https://www.google-analytics.com https://region1.google-analytics.com wss://transcribestreaming.ap-south-1.amazonaws.com:8443",
-      "frame-src https://accounts.google.com",
+      "connect-src 'self' https://accounts.google.com https://query1.finance.yahoo.com https://www.googletagmanager.com https://www.google-analytics.com https://region1.google-analytics.com wss://transcribestreaming.ap-south-1.amazonaws.com:8443 https://api.razorpay.com https://lumberjack.razorpay.com https://checkout.razorpay.com",
+      // Razorpay's payment window (card, UPI, netbanking) opens in a frame on top of our own page.
+      "frame-src https://accounts.google.com https://api.razorpay.com https://checkout.razorpay.com",
       "frame-ancestors 'none'",
       "object-src 'none'",
       "base-uri 'self'",
-      "form-action 'self' https://accounts.google.com",
+      "form-action 'self' https://accounts.google.com https://api.razorpay.com",
     ].join("; "),
   },
 ];

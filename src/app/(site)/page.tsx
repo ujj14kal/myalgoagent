@@ -410,6 +410,19 @@ export default function Home() {
       </Reveal>
 
       <Reveal>
+        <section id="pricing" className="border-t border-black/5 bg-white">
+          <div className="mx-auto flex max-w-6xl flex-col items-start gap-4 px-4 py-10 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-primary">Pricing</p>
+              <h2 className="mt-1 text-2xl font-bold tracking-tight text-brand-navy">Start free — 7 days of everything except live trading, no card needed.</h2>
+              <p className="mt-2 max-w-2xl text-sm text-brand-navy/65">Then stay on Free, or choose Trade (₹1,999/month) or Pro (₹3,499/month). Prices include GST. Upgrade whenever you like, even mid-trial.</p>
+            </div>
+            <Link href="/pricing" className="shrink-0 rounded-full bg-brand-primary px-6 py-3 text-sm font-semibold text-white transition hover:bg-brand-primary-light">See plans &amp; pricing</Link>
+          </div>
+        </section>
+      </Reveal>
+
+      <Reveal>
         <section id="disclosure" className="bg-brand-primary text-white">
           <div className="mx-auto flex max-w-6xl flex-col items-start gap-4 px-4 py-8 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">

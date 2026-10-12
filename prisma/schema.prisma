@@ -22,6 +22,8 @@ enum AdminRole {
 model User {
   creditAccount CreditAccount?
   egress        UserEgress?
+  subscriptions Subscription[]
+  payments      Payment[]
   creditEvents  CreditEvent[]
   customerNotes CustomerNote[]
   id            String    @id @default(cuid())
@@ -275,6 +277,55 @@ model UserEgress {
   @@index([status])
 }
 
+/// A paid plan billed monthly through Razorpay (autopay). The plan on CreditAccount follows this row.
+model Subscription {
+  id                     String    @id @default(cuid())
+  userId                 String
+  plan                   CreditPlan
+  razorpaySubscriptionId String    @unique
+  razorpayPlanId         String
+  /// Razorpay's own states: created, authenticated, active, pending, halted, cancelled, completed.
+  status                 String
+  currentStart           DateTime?
+  currentEnd             DateTime?
+  cancelAtPeriodEnd      Boolean   @default(false)
+  paidCount              Int       @default(0)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+}
+
+/// Money received (or failed/refunded): a subscription charge or a credit top-up. Amounts in paise, GST included.
+model Payment {
+  id                String   @id @default(cuid())
+  userId            String
+  razorpayPaymentId String   @unique
+  razorpayOrderId   String?
+  subscriptionId    String?
+  kind              String // "subscription" | "topup"
+  amount            Int
+  currency          String   @default("INR")
+  status            String // captured | failed | refunded
+  method            String?
+  description       String?
+  creditsGranted    Int?
+  createdAt         DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+/// Razorpay webhook events already handled (their event id), so a repeated delivery changes nothing.
+model BillingEvent {
+  id        String   @id
+  type      String
+  createdAt DateTime @default(now())
+}
+
 enum CreditPlan {
   FREE
   TRADE
@@ -292,6 +343,8 @@ model CreditAccount {
   periodEnd      DateTime
   /// AI replies ever used — the free plan allows only a couple.
   aiRepliesUsed  Int        @default(0)
+  /// New accounts start with a short trial of the paid features (no card); null once it is over or the account has paid.
+  trialEndsAt    DateTime?
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 

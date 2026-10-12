@@ -19,4 +19,12 @@ describe("Content-Security-Policy", () => {
     expect(csp).toMatch(/object-src 'none'/);
     expect(csp).toMatch(/frame-ancestors 'none'/);
   });
+  it("allows only Razorpay's own hosts for the payment window", async () => {
+    const csp = (await nextConfig.headers!())[0].headers.find((h) => h.key === "Content-Security-Policy")!.value;
+    const dir = (name: string) => csp.split(";").map((d) => d.trim()).find((d) => d.startsWith(name)) ?? "";
+    expect(dir("script-src")).toMatch(/https:\/\/checkout\.razorpay\.com/);
+    expect(dir("frame-src")).toMatch(/https:\/\/api\.razorpay\.com/);
+    expect(dir("connect-src")).toMatch(/https:\/\/api\.razorpay\.com/);
+    expect(csp).not.toMatch(/\*\.razorpay|script-src[^;]*\*/); // no wildcards
+  });
 });
