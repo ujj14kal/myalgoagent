@@ -15,6 +15,11 @@ describe("outreach rules", () => {
     expect(parseRecipients("nope").ok).toBe(false);
     expect(parseRecipients("a@x.com b@x.com c@x.com d@x.com e@x.com f@x.com").ok).toBe(false);
   });
+  it("offers collaborations first, with its own name", () => {
+    const list = sendersFrom(undefined);
+    expect(list[0]).toEqual({ address: "collaborations@myalgoagent.com", name: "MyAlgoAgent Collaborations" });
+    expect(list.map((s) => s.address)).toEqual(["collaborations@myalgoagent.com", "info@myalgoagent.com", "sales@myalgoagent.com", "support@myalgoagent.com"]);
+  });
   it("adds extra senders from the setting, our domain only", () => {
     const list = sendersFrom("collab@myalgoagent.com|MyAlgoAgent Partnerships, bad@gmail.com|X");
     expect(list.some((s) => s.address === "collab@myalgoagent.com" && s.name === "MyAlgoAgent Partnerships")).toBe(true);

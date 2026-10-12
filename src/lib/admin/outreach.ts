@@ -2,9 +2,10 @@
 
 /** Addresses offered in the picker; any other address on our domain can still be typed. Extend with OUTREACH_SENDERS="addr|Name,addr|Name". */
 export const DEFAULT_SENDERS = [
+  { address: "collaborations@myalgoagent.com", name: "MyAlgoAgent Collaborations" },
+  { address: "info@myalgoagent.com", name: "MyAlgoAgent" },
+  { address: "sales@myalgoagent.com", name: "MyAlgoAgent Sales" },
   { address: "support@myalgoagent.com", name: "MyAlgoAgent Support" },
-  { address: "admin@myalgoagent.com", name: "MyAlgoAgent" },
-  { address: "feedbacks@myalgoagent.com", name: "MyAlgoAgent" },
 ] as const;
 
 export function sendersFrom(env: string | undefined): { address: string; name: string }[] {
