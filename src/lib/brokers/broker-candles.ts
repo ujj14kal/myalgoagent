@@ -273,6 +273,8 @@ const indstocks: BrokerCandleSource = {
 export const CANDLE_SOURCES: Partial<Record<BrokerId, BrokerCandleSource>> = { indstocks, groww, zerodha, upstox, fyers, angelone, dhan, "5paisa": fivepaisa };
 
 export const NO_CANDLES_REASON: Partial<Record<BrokerId, string>> = {
+  paytmmoney: "Paytm Money's chart data isn't documented well enough to feed signals yet, so charts use another source.",
+  hdfcsky: "HDFC Sky's chart data doesn't say how its candles are timed, so charts and signals use another source for now.",
   motilal: "Motilal Oswal's API only serves end-of-day data, so it can't feed intraday signals or charts.",
   aliceblue: "Alice Blue's history API only answers outside market hours, so it can't feed live signals.",
   icicidirect: "ICICI Direct identifies stocks by its own codes; market data from it will follow with its live orders.",

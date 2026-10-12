@@ -583,6 +583,19 @@ export const MOTILAL = "https://openapi.motilaloswal.com";
 export const motilalHeadersFor = (ctx: LiveCtx) => motilalHeaders(ctx.creds, ctx.token);
 export { motilalHeaders };
 
+// ---------- HDFC Securities (HDFC Sky Open API) ----------
+// Paths and fields from developer.hdfcsky.com/sky-docs (read 13 Oct 2026). Every call carries the key and client ID as query params.
+
+export const HDFCSKY = "https://developer.hdfcsky.com";
+export const HDFC_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
+export const hdfcskyHeaders = (ctx: LiveCtx) => ({ Authorization: ctx.token, "User-Agent": HDFC_UA });
+export const hdfcskyQuery = (ctx: LiveCtx, extra: Record<string, string> = {}) => new URLSearchParams({ client_id: ctx.creds.clientId ?? "", api_key: ctx.creds.apiKey, ...extra }).toString();
+
+// ---------- Paytm Money (Open API) ----------
+// Paths from Paytm Money's official client library (github.com/paytmmoney/pyPMClient, read 13 Oct 2026).
+export const PAYTM = "https://developer.paytmmoney.com";
+export const paytmHeaders = (ctx: LiveCtx) => ({ "x-jwt-token": ctx.token, "Content-Type": "application/json", "openapi-client-src": "sdk" });
+
 // ---------- INDstocks (INDmoney) ----------
 // Endpoints and fields from INDstocks' official API docs (api-docs.indstocks.com, read 13 Oct 2026). Not proven with a real order.
 
@@ -651,6 +664,8 @@ export const LIVE_BROKERS: Partial<Record<BrokerId, LiveBroker>> = { indstocks, 
 
 /** Brokers where connecting works but live orders don't yet, with why. */
 export const LIVE_NOT_YET: Partial<Record<BrokerId, string>> = {
+  paytmmoney: "Paytm Money connects and shows your account here; live orders follow once the connection has been proven with a real login (a Paytm order needs several exchange fields we haven't confirmed yet).",
+  hdfcsky: "HDFC Securities connects and shows your account here; live orders follow once the connection has been proven with a real login (HDFC also requires a registered static IP).",
   motilal: "Motilal Oswal connects and shows your account here; live orders follow once the connection has been proven with a real login (Motilal also requires a registered static IP and a price on every API order).",
   icicidirect: "ICICI Direct identifies stocks by its own codes, which it only publishes in a large download — live orders will follow once that lookup is built.",
 };

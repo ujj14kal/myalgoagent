@@ -53,3 +53,35 @@ describe("Motilal Oswal", () => {
     expect(url).toBe("https://invest.motilaloswal.com/OpenAPI/Login.aspx?apikey=KEY%201");
   });
 });
+
+import { jwtExpiry } from "./jwt-expiry";
+describe("HDFC Securities (HDFC Sky)", () => {
+  it("is connectable, shows the account, and keeps live orders off for now", () => {
+    expect(brokerById("hdfcsky")?.availability).toBe("live");
+    expect(ADAPTERS.hdfcsky).toBeDefined();
+    expect(LIVE_BROKERS.hdfcsky).toBeUndefined();
+    expect(LIVE_NOT_YET.hdfcsky).toMatch(/static IP/);
+    expect(loginView(brokerById("hdfcsky")!, null).fields.map((f) => f.name)).toEqual(["apiKey", "apiSecret", "clientId"]);
+  });
+  it("starts login on HDFC's page with our API key", async () => {
+    expect(await ADAPTERS.hdfcsky!.loginUrl({ apiKey: "K1" }, { state: "x", redirectUri: "y" })).toBe("https://developer.hdfcsky.com/oapi/v1/login?api_key=K1");
+  });
+  it("reads when a JWT access token ends", () => {
+    const payload = Buffer.from(JSON.stringify({ exp: 1722958997, iat: 1722930197 })).toString("base64url");
+    expect(jwtExpiry(`aaa.${payload}.sig`)?.toISOString()).toBe(new Date(1722958997 * 1000).toISOString());
+    expect(jwtExpiry("not-a-jwt")).toBeNull();
+    expect(jwtExpiry("a.b.c")).toBeNull();
+  });
+});
+
+describe("Paytm Money", () => {
+  it("is connectable and checks the state Paytm sends back", async () => {
+    expect(brokerById("paytmmoney")?.availability).toBe("live");
+    expect(ADAPTERS.paytmmoney).toBeDefined();
+    expect(LIVE_NOT_YET.paytmmoney).toBeDefined();
+    const url = await ADAPTERS.paytmmoney!.loginUrl({ apiKey: "K" }, { state: "abc", redirectUri: "r" });
+    expect(url).toBe("https://login.paytmmoney.com/merchant-login?apiKey=K&state=abc");
+    expect(ADAPTERS.paytmmoney!.stateFrom(new URLSearchParams("state=abc&requestToken=t"))).toBe("abc");
+    expect(ADAPTERS.paytmmoney!.stateFrom(new URLSearchParams("requestToken=t"))).toBe("");
+  });
+});

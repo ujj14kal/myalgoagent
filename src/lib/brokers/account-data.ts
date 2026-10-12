@@ -1,6 +1,6 @@
 import "server-only";
 import type { BrokerId } from "./catalog";
-import { ANGEL, angelHeaders, arr, DHAN, dhanHeaders, MOTILAL, motilalHeadersFor, INDSTOCKS, indstocksHeaders, FIVEPAISA, fpClientCode, fpHeaders, FYERS, fyersHeaders, http, KITE, kiteHeaders, num, obj, text, upstoxHeaders, type LiveCtx } from "./live-brokers";
+import { ANGEL, angelHeaders, arr, DHAN, dhanHeaders, PAYTM, paytmHeaders, HDFCSKY, hdfcskyHeaders, hdfcskyQuery, MOTILAL, motilalHeadersFor, INDSTOCKS, indstocksHeaders, FIVEPAISA, fpClientCode, fpHeaders, FYERS, fyersHeaders, http, KITE, kiteHeaders, num, obj, text, upstoxHeaders, type LiveCtx } from "./live-brokers";
 
 // Read-only account data from a user's own broker: profile, funds, holdings,
 // positions, today's orders and trades — whatever each broker's API returns.
@@ -290,6 +290,73 @@ const motilal: AccountReader = {
     rows(await moPost(ctx, "/rest/book/v4/gettradebook")).map((r) => ({ id: t(r, "tradeno", "tradenumber", "uniquetradeid") ?? "", orderId: t(r, "uniqueorderid"), symbol: t(r, "symbol") ?? "?", side: sideOf(r.buyorsell), quantity: n(r, "tradeqty", "quantity") ?? 0, price: n(r, "tradeprice", "price"), time: t(r, "tradetime", "recordinserttime") })),
 };
 
-export const ACCOUNT_READERS: Partial<Record<BrokerId, AccountReader>> = { motilal, indstocks, groww, zerodha, upstox, fyers, angelone, dhan, "5paisa": fivepaisa };
+
+// HDFC Securities (HDFC Sky): GET endpoints from its docs. Orders are two lists (pending and completed); funds come as "description / value" rows.
+const hdGet = async (ctx: LiveCtx, path: string, extra: Record<string, string> = {}) => obj(await http(`${HDFCSKY}${path}?${hdfcskyQuery(ctx, extra)}`, { headers: hdfcskyHeaders(ctx) }));
+const hdfcsky: AccountReader = {
+  async profile(ctx) {
+    const d = obj((await hdGet(ctx, "/oapi/v1/user/trading_info")).data);
+    return { name: t(d, "name"), clientId: t(d, "client_id"), email: null };
+  },
+  async funds(ctx) {
+    const d = obj((await hdGet(ctx, "/oapi/v2/funds/view", { type: "all" })).data);
+    const lines = rows(d.values).flatMap((r) => {
+      const name = t(r, "0");
+      const value = num(r["1"]);
+      return name && value !== null ? [{ name, value }] : [];
+    });
+    const pick = (name: string) => lines.find((l) => l.name.toLowerCase() === name)?.value ?? null;
+    return { available: pick("available margin"), used: pick("margin used"), total: pick("opening balance"), lines };
+  },
+  async holdings(ctx) {
+    const d = obj((await hdGet(ctx, "/oapi/v1/holdings")).data);
+    return rows(d.holdings).map((r) => ({ symbol: t(r, "symbol", "trading_symbol") ?? "?", exchange: t(r, "exchange"), quantity: n(r, "quantity") ?? 0, avgPrice: n(r, "buy_avg"), ltp: n(r, "ltp"), pnl: null }));
+  },
+  async positions(ctx) {
+    return rows((await hdGet(ctx, "/oapi/v1/positions", { type: "historical" })).data).map((r) => ({ symbol: t(r, "trading_symbol", "symbol") ?? "?", exchange: t(r, "exchange"), product: t(r, "product"), quantity: n(r, "net_quantity") ?? 0, avgPrice: n(r, "average_price", "average_buy_price"), ltp: n(r, "ltp"), pnl: null, realised: n(r, "realized_mtm") }));
+  },
+  async orders(ctx) {
+    const out: AccountOrder[] = [];
+    for (const type of ["pending", "completed"]) {
+      const d = obj((await hdGet(ctx, "/oapi/v1/orders", { type })).data);
+      out.push(...rows(d.orders).map((r) => ({ id: t(r, "oms_order_id") ?? "", symbol: t(r, "trading_symbol") ?? "?", side: sideOf(r.order_side), quantity: n(r, "quantity") ?? 0, filled: n(r, "filled_quantity") ?? 0, orderType: t(r, "order_type"), price: n(r, "price"), avgPrice: n(r, "average_price"), status: t(r, "order_status") ?? "", time: t(r, "order_entry_time") })));
+    }
+    return out;
+  },
+  async trades(ctx) {
+    const d = obj((await hdGet(ctx, "/oapi/v1/trades")).data);
+    return rows(d.trades).map((r) => ({ id: t(r, "trade_number") ?? "", orderId: t(r, "oms_order_id"), symbol: t(r, "trading_symbol") ?? "?", side: sideOf(r.order_side), quantity: n(r, "trade_quantity") ?? 0, price: n(r, "trade_price"), time: t(r, "trade_time") }));
+  },
+};
+
+
+// Paytm Money: GET endpoints from Paytm's official client library. Its public docs don't spell out the reply fields for holdings,
+// positions and orders, so each figure is read under every name it is likely to carry and the list is found wherever it sits in the reply.
+const pmGet = async (ctx: LiveCtx, path: string) => obj(await http(`${PAYTM}${path}`, { headers: paytmHeaders(ctx) }));
+/** The first list of records inside a reply, wherever the broker put it (data, data.results, data.holdings …). */
+function firstRows(v: unknown, depth = 0): Record<string, unknown>[] {
+  if (Array.isArray(v)) return v.map(obj).filter((r) => Object.keys(r).length);
+  if (v && typeof v === "object" && depth < 3) for (const x of Object.values(v as Record<string, unknown>)) { const r = firstRows(x, depth + 1); if (r.length) return r; }
+  return [];
+}
+const paytmmoney: AccountReader = {
+  async profile(ctx) {
+    const d = obj((await pmGet(ctx, "/accounts/v1/user/details")).data);
+    return { name: t(d, "name", "user_name"), clientId: t(d, "client_id", "pml_id"), email: t(d, "email") };
+  },
+  async funds(ctx) {
+    const d = obj((await pmGet(ctx, "/accounts/v1/funds/summary?config=true")).data);
+    const lines = numericLines(d);
+    return { available: n(d, "funds_available", "available_cash", "available_balance"), used: n(d, "utilised_amount", "used_margin"), total: n(d, "funds_added", "total_balance"), lines };
+  },
+  holdings: async (ctx) =>
+    firstRows((await pmGet(ctx, "/holdings/v1/get-user-holdings-data")).data).map((r) => ({ symbol: t(r, "nse_symbol", "symbol", "display_name", "name") ?? "?", exchange: t(r, "exchange"), quantity: n(r, "quantity", "remaining_quantity", "total_quantity") ?? 0, avgPrice: n(r, "cost_price", "average_price", "avg_price"), ltp: n(r, "last_traded_price", "ltp"), pnl: n(r, "pnl", "unrealised_pnl") })),
+  positions: async (ctx) =>
+    firstRows((await pmGet(ctx, "/orders/v1/position")).data).map((r) => ({ symbol: t(r, "display_name", "symbol", "name") ?? "?", exchange: t(r, "exchange"), product: t(r, "product"), quantity: n(r, "net_qty", "quantity", "net_quantity") ?? 0, avgPrice: n(r, "net_avg", "average_price", "avg_price"), ltp: n(r, "last_traded_price", "ltp"), pnl: n(r, "pnl", "unrealised_pnl"), realised: n(r, "realised_profit", "realized_pnl") })),
+  orders: async (ctx) =>
+    firstRows((await pmGet(ctx, "/orders/v1/order-book")).data).map((r) => ({ id: t(r, "order_no", "order_id") ?? "", symbol: t(r, "display_name", "symbol", "name") ?? "?", side: sideOf(r.txn_type), quantity: n(r, "quantity") ?? 0, filled: n(r, "traded_qty", "filled_quantity") ?? 0, orderType: t(r, "order_type"), price: n(r, "price"), avgPrice: n(r, "avg_traded_price", "average_price"), status: t(r, "status", "order_status") ?? "", time: t(r, "order_date_time", "order_time") })),
+};
+
+export const ACCOUNT_READERS: Partial<Record<BrokerId, AccountReader>> = { paytmmoney, hdfcsky, motilal, indstocks, groww, zerodha, upstox, fyers, angelone, dhan, "5paisa": fivepaisa };
 export const ACCOUNT_SECTIONS = ["profile", "funds", "holdings", "positions", "orders", "trades"] as const;
 export type AccountSection = (typeof ACCOUNT_SECTIONS)[number];

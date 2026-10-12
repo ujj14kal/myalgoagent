@@ -3,6 +3,7 @@ import { request as httpsRequest } from "node:https";
 import type { BrokerId, LoginMethodId } from "./catalog";
 import { totpCode } from "./totp";
 import { motilalHeaders } from "./motilal-headers";
+import { jwtExpiry } from "./jwt-expiry";
 import { brokerFetch, brokerGetWithBody } from "./egress";
 import { classifyBrokerMessage, type Failure, type FailureCode } from "./failures";
 
@@ -557,4 +558,63 @@ const motilal: BrokerAdapter = {
   },
 };
 
-export const ADAPTERS: Partial<Record<BrokerId, BrokerAdapter>> = { motilal, indstocks, dhan, zerodha, upstox, fyers, angelone, groww, icicidirect, "5paisa": fivepaisa, aliceblue };
+
+// HDFC Securities (HDFC Sky Open API): login on HDFC's page with our API key; HDFC returns a request_token, which we swap for an access token.
+const HDFC_API = "https://developer.hdfcsky.com";
+const HDFC_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
+const hdfcsky: BrokerAdapter = {
+  async loginUrl(c) {
+    return `${HDFC_API}/oapi/v1/login?api_key=${encodeURIComponent(c.apiKey)}`;
+  },
+  stateFrom: () => null,
+  async exchange(c, params) {
+    const requestToken = params.get("request_token");
+    if (!requestToken) throw new BrokerError("no_code");
+    const { status, body } = await call(`${HDFC_API}/oapi/v1/access-token?api_key=${encodeURIComponent(c.apiKey)}&request_token=${encodeURIComponent(requestToken)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": HDFC_AGENT },
+      body: JSON.stringify({ apiSecret: need(c.apiSecret) }),
+    });
+    const accessToken = str(body.accessToken) ?? str(obj(body.data).accessToken);
+    if (status >= 400 || !accessToken) fail(status, body, "code_expired");
+    return { accessToken, expiresAt: jwtExpiry(accessToken) ?? nextIstClock(6, 0), brokerClientId: c.clientId };
+  },
+  async profile(c, accessToken) {
+    const q = new URLSearchParams({ client_id: need(c.clientId, "missing_client_id"), api_key: c.apiKey });
+    const { status, body } = await call(`${HDFC_API}/oapi/v1/user/trading_info?${q}`, { headers: { Authorization: accessToken, "User-Agent": HDFC_AGENT, Accept: "application/json" } });
+    const d = obj(body.data);
+    if (status >= 400 || body.status === "error" || !Object.keys(d).length) fail(status, body, "session_rejected");
+    return { accountName: str(d.name), brokerClientId: str(d.client_id) ?? c.clientId };
+  },
+};
+
+
+// Paytm Money: login on Paytm's page with our API key (plus a state we check); Paytm sends back a requestToken, swapped here for the day's tokens.
+const PAYTM_API = "https://developer.paytmmoney.com";
+const paytmmoney: BrokerAdapter = {
+  async loginUrl(c, o) {
+    return `https://login.paytmmoney.com/merchant-login?apiKey=${encodeURIComponent(c.apiKey)}&state=${encodeURIComponent(o.state)}`;
+  },
+  stateFrom: (params) => params.get("state") ?? "",
+  async exchange(c, params) {
+    const requestToken = params.get("requestToken") ?? params.get("request_token");
+    if (!requestToken) throw new BrokerError("no_code");
+    const { status, body } = await call(`${PAYTM_API}/accounts/v2/gettoken`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "openapi-client-src": "sdk" },
+      body: JSON.stringify({ api_key: c.apiKey, api_secret_key: need(c.apiSecret), request_token: requestToken }),
+    });
+    const d = obj(body.data);
+    const accessToken = str(body.access_token) ?? str(d.access_token);
+    if (status >= 400 || !accessToken) fail(status, body, "code_expired");
+    return { accessToken, expiresAt: jwtExpiry(accessToken) ?? nextIstClock(6, 0) };
+  },
+  async profile(_c, accessToken) {
+    const { status, body } = await call(`${PAYTM_API}/accounts/v1/user/details`, { headers: { "x-jwt-token": accessToken, Accept: "application/json", "openapi-client-src": "sdk" } });
+    if (status >= 400 || body.status === "error") fail(status, body, "session_rejected");
+    const d = obj(body.data);
+    return { accountName: str(d.name) ?? str(d.user_name), brokerClientId: str(d.client_id) ?? str(d.pml_id) };
+  },
+};
+
+export const ADAPTERS: Partial<Record<BrokerId, BrokerAdapter>> = { paytmmoney, hdfcsky, motilal, indstocks, dhan, zerodha, upstox, fyers, angelone, groww, icicidirect, "5paisa": fivepaisa, aliceblue };
