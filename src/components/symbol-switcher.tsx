@@ -45,7 +45,12 @@ export default function SymbolSwitcher({
 
   const q = query.trim().toLowerCase();
   const results = useMemo(() => {
-    if (!q) return allInstruments.slice(0, 8);
+    // With nothing typed, start from the well-known names rather than whatever sorts first alphabetically.
+    if (!q) {
+      const popular = ["^NSEI", "^NSEBANK", "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS", "SBIN.NS"];
+      const known = popular.map((sym) => allInstruments.find((i) => i.symbol === sym)).filter((i): i is InstrumentOption => !!i);
+      return known.length >= 4 ? known : allInstruments.slice(0, 8);
+    }
     return allInstruments.filter((i) => i.symbol.toLowerCase().includes(q) || i.name.toLowerCase().includes(q)).slice(0, 8);
   }, [q, allInstruments]);
 

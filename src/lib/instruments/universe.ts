@@ -58,6 +58,8 @@ export function parseBseUniverseCsv(csv: string): UniverseRow[] {
     const sym = f[iSym]?.trim().toUpperCase();
     if (!sym || !/^[A-Z0-9&-]+$/.test(sym)) continue;
     const name = (iDisplay >= 0 && f[iDisplay]?.trim()) || (iName >= 0 && titleCase(f[iName]?.trim() ?? "")) || sym;
+    // The master also lists mutual-fund scheme units (e.g. "08ABB" Nippon India Mutual Fund): they are not stocks and crowd every picker.
+    if (/mutual fund/i.test(name) || (iName >= 0 && /mutual fund/i.test(f[iName] ?? ""))) continue;
     out.set(sym, { symbol: `${sym}.BO`, name, exchange: "BSE" });
   }
   return [...out.values()].sort((a, b) => a.symbol.localeCompare(b.symbol));

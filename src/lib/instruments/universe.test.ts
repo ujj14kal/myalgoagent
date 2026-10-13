@@ -25,6 +25,7 @@ describe("parseBseUniverseCsv", () => {
     "BSE,E,100001,INE000000003,EQUITY,,TNS,TRADE FOR TRADE,Tns,ES,T,1.0",
     "BSE,I,1,,INDEX,,SENSEX,SENSEX,Sensex,INDEX,NA,1.0",
     "BSE,E,100002,INE000000004,EQUITY,,BAD$,BAD SYMBOL,Bad,ES,A,1.0",
+    "BSE,E,100003,INF000000001,EQUITY,,08ABB,NIPPON INDIA MUTUAL FUND,Nippon India Mutual Fund,MF,A,1.0",
   ].join("\n");
   it("keeps groups A and B equities as .BO symbols on the BSE", () => {
     expect(parseBseUniverseCsv(csv)).toEqual([
