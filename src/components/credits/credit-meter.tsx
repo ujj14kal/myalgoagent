@@ -98,6 +98,7 @@ export default function CreditMeter() {
         <span className="hidden h-1.5 w-10 overflow-hidden rounded-full bg-brand-navy/10 sm:block">
           <span className={`block h-full rounded-full transition-all duration-700 ${tone(share)}`} style={{ width: `${Math.round(share * 100)}%` }} />
         </span>
+        {snap.topup > 0 && <span aria-hidden title="Top-up credits" className="hidden h-1.5 w-4 rounded-full bg-brand-gold sm:block" />}
         {delta !== null && delta !== 0 && (
           <span aria-hidden className={`absolute -bottom-5 right-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold shadow-sm ${delta < 0 ? "bg-brand-navy text-white" : "bg-brand-buy text-white"}`}>
             {delta > 0 ? "+" : "−"}{Math.abs(delta)}
@@ -111,12 +112,27 @@ export default function CreditMeter() {
             <p className="text-[11px] text-brand-navy/50">renews {day(snap.periodEnd)} · {days} day{days === 1 ? "" : "s"}</p>
           </div>
           <p className="num mt-2 text-2xl font-bold tabular-nums">{fmt(snap.total)} <span className="text-sm font-medium text-brand-navy/50">credits left</span></p>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-brand-navy/[0.08]">
-            <div className={`h-full rounded-full transition-all duration-700 ${tone(share)}`} style={{ width: `${Math.round(share * 100)}%` }} />
+          <div className="mt-3">
+            <div className="flex items-baseline justify-between text-[11px]">
+              <span className="font-semibold text-brand-navy/70">Monthly plan credits</span>
+              <span className="num tabular-nums text-brand-navy/55">{fmt(snap.monthly)} of {fmt(snap.monthlyOf)}</span>
+            </div>
+            <div className="mt-1 h-2 overflow-hidden rounded-full bg-brand-navy/[0.08]">
+              <div className={`h-full rounded-full transition-all duration-700 ${tone(share)}`} style={{ width: `${Math.round(share * 100)}%` }} />
+            </div>
           </div>
-          <p className="mt-1.5 text-[11px] text-brand-navy/55">
-            {fmt(snap.monthly)} of {fmt(snap.monthlyOf)} monthly{snap.topup > 0 ? ` · plus ${fmt(snap.topup)} top-up` : ""}
-          </p>
+          {snap.topup > 0 && (
+            <div className="mt-2.5">
+              <div className="flex items-baseline justify-between text-[11px]">
+                <span className="font-semibold text-brand-navy/70">Top-up credits</span>
+                <span className="num tabular-nums text-brand-navy/55">{fmt(snap.topup)}</span>
+              </div>
+              <div className="mt-1 h-2 overflow-hidden rounded-full bg-brand-navy/[0.08]">
+                <div className="h-full w-full rounded-full bg-brand-gold transition-all duration-700" />
+              </div>
+              <p className="mt-1 text-[10px] text-brand-navy/45">Used after your monthly credits · kept for a year</p>
+            </div>
+          )}
           {snap.aiRepliesLeft !== null && (
             <p className="mt-2 rounded-lg bg-brand-primary/[0.06] px-2.5 py-1.5 text-xs text-brand-navy/75">
               <strong>{snap.aiRepliesLeft}</strong> free AI repl{snap.aiRepliesLeft === 1 ? "y" : "ies"} left, ever. Backtests use the credits above.

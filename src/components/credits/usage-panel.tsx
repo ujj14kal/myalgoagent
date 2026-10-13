@@ -48,12 +48,29 @@ export default function UsagePanel({ events, historyWindow, billing }: { events:
           <p className="num mt-4 break-words text-4xl font-bold tabular-nums text-brand-navy">
             {fmt(snap.total)} <span className="text-base font-medium text-brand-navy/50">credits left</span>
           </p>
-          <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-brand-navy/[0.08]">
-            <div className="h-full rounded-full bg-brand-primary transition-all duration-700" style={{ width: `${share}%` }} />
+          <div className="mt-4 space-y-3">
+            <div>
+              <div className="flex items-baseline justify-between text-sm">
+                <span className="font-semibold text-brand-navy/75">Monthly plan credits</span>
+                <span className="num tabular-nums text-brand-navy/60">{fmt(snap.monthly)} of {fmt(snap.monthlyOf)}</span>
+              </div>
+              <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-brand-navy/[0.08]">
+                <div className="h-full rounded-full bg-brand-primary transition-all duration-700" style={{ width: `${share}%` }} />
+              </div>
+            </div>
+            {snap.topup > 0 && (
+              <div>
+                <div className="flex items-baseline justify-between text-sm">
+                  <span className="font-semibold text-brand-navy/75">Top-up credits</span>
+                  <span className="num tabular-nums text-brand-navy/60">{fmt(snap.topup)}</span>
+                </div>
+                <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-brand-navy/[0.08]">
+                  <div className="h-full w-full rounded-full bg-brand-gold transition-all duration-700" />
+                </div>
+                <p className="mt-1 text-xs text-brand-navy/50">Used after your monthly credits run out. Kept for a year.</p>
+              </div>
+            )}
           </div>
-          <p className="mt-2 text-sm text-brand-navy/60">
-            {fmt(snap.monthly)} of {fmt(snap.monthlyOf)} monthly credits{snap.topup > 0 ? `, plus ${fmt(snap.topup)} top-up credits (kept for a year)` : ""}.
-          </p>
           {snap.trial && (
             <div className="mt-3 rounded-xl border border-brand-gold/40 bg-brand-gold/10 p-3 text-sm text-brand-navy">
               <p className="flex items-center gap-2 font-semibold"><Sparkles size={15} className="shrink-0 text-brand-gold" /> Free trial — {daysLeft(snap.trial.endsAt)} day{daysLeft(snap.trial.endsAt) === 1 ? "" : "s"} left</p>
