@@ -40,6 +40,10 @@ export async function renewUnattended(row: BrokerConnection): Promise<boolean> {
   } catch (err) {
     if (!(err instanceof BrokerError)) logError("broker.renew", err, { userId: row.userId, broker: row.broker });
     await saveError(row.id, err, { keepSession });
+    if (row.loginMethod === "stored" && !keepSession) {
+      const name = brokerById(row.broker)?.name ?? row.broker;
+      await notify(row.userId, `We couldn't sign in to ${name} for you. Check the PIN and 2FA secret you stored, or log in yourself, so your live strategies can keep trading.`, new Date(Date.now() - 6 * 3_600_000));
+    }
     return false;
   }
 }

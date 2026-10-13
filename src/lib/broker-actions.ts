@@ -9,7 +9,7 @@ import { BrokerError, requestUpstoxApproval } from "@/lib/brokers/adapters";
 import { brokerById, loginView, type LoginMethodId } from "@/lib/brokers/catalog";
 import { isBase32Secret } from "@/lib/brokers/totp";
 import { cleanKey, KeyInputError } from "@/lib/brokers/keys";
-import { brokerEncryptionReady } from "@/lib/brokers/crypto";
+import { brokerEncryptionReady, storedLoginReady } from "@/lib/brokers/crypto";
 import { decodeFailure, type Failure } from "@/lib/brokers/failures";
 import {
   accessTokenOf,
@@ -25,6 +25,7 @@ import {
   redirectUriFor,
   saveError,
   saveSession,
+  sealStoredLogin,
 } from "@/lib/brokers/service";
 
 // Broker Connections. Returned (not thrown) results: Next.js redacts thrown
@@ -38,7 +39,7 @@ export type BrokerActionResult =
 export type ConnectedAccount = { accountName: string | null; brokerClientId: string | null; sessionUntil: string | null };
 export type CompleteLoginResult = { ok: true; account: ConnectedAccount } | { ok: false; failure: Failure };
 
-type KeysInput = { apiKey?: string; apiSecret?: string; clientId?: string };
+type KeysInput = { apiKey?: string; apiSecret?: string; clientId?: string; pin?: string; totpSecret?: string; /** "yes" once the user ticked the consent box (stored login only). */ consent?: string };
 
 
 const istTime = (d: Date) =>
@@ -75,6 +76,11 @@ async function loginFor(userId: string, brokerId: string) {
       throw err;
     }
   }
+  if (row.loginMethod === "stored") {
+    // A wrong PIN too many times can lock the trading account, so by hand it is only tried a few times a day.
+    const limited = await checkRateLimit(`broker-stored:${userId}:${brokerId}`, 6, 86_400_000);
+    if (limited) throw new BrokerError("rate_limited");
+  }
   if (row.loginMethod === "totp") {
     // Groww allows 150 token requests a day per key; stay well inside it.
     const limited = await checkRateLimit(`broker-totp:${userId}:${brokerId}`, 40, 86_400_000);
@@ -108,12 +114,21 @@ export async function saveBrokerKeys(brokerId: string, input: KeysInput, rawMeth
     const method = view.method;
     const wants = new Set(view.fields.map((f) => f.name));
     const label = (n: string) => view.fields.find((f) => f.name === n)?.label ?? n;
-    const apiKey = cleanKey(input?.apiKey, label("apiKey"));
+    const apiKey = wants.has("apiKey") ? cleanKey(input?.apiKey, label("apiKey")) : "-";
     // A TOTP secret is often shown in spaced groups — join it before checking.
     const rawSecret = method === "totp" && typeof input?.apiSecret === "string" ? input.apiSecret.replace(/[\s-]/g, "").toUpperCase() : input?.apiSecret;
     const apiSecret = wants.has("apiSecret") ? cleanKey(rawSecret, label("apiSecret")) : undefined;
     if (method === "totp" && apiSecret && !isBase32Secret(apiSecret)) {
       throw new KeyInputError("That TOTP secret doesn't look right — it's the shorter code under the QR (letters A–Z and digits 2–7), not the long TOTP token.");
+    }
+    let storedLoginEnc: string | null = null;
+    if (method === "stored") {
+      if (!storedLoginReady()) throw new KeyInputError("Automatic daily login isn't switched on for this site yet.");
+      if (input?.consent !== "yes") throw new KeyInputError("Tick the box to confirm you understand we will keep your PIN and 2FA secret.");
+      const pin = cleanKey(input?.pin, label("pin"), { maxLength: 12, pattern: /^\d{4,12}$/ });
+      const totpSecret = cleanKey(typeof input?.totpSecret === "string" ? input.totpSecret.replace(/[\s-]/g, "").toUpperCase() : input?.totpSecret, label("totpSecret"));
+      if (!isBase32Secret(totpSecret)) throw new KeyInputError("That 2FA secret doesn't look right — it's the setup key shown under the QR code (letters A–Z and digits 2–7), not a 6-digit code.");
+      storedLoginEnc = sealStoredLogin(userId, info.id, { pin, totpSecret });
     }
     const clientId = wants.has("clientId") ? cleanKey(input?.clientId, label("clientId"), { maxLength: 64, pattern: /^[A-Za-z0-9_-]+$/ }) : undefined;
 
@@ -121,7 +136,7 @@ export async function saveBrokerKeys(brokerId: string, input: KeysInput, rawMeth
       status: "KEYS_SAVED" as const,
       apiKeyEnc: encryptFor(userId, info.id, "apiKey", apiKey),
       apiSecretEnc: apiSecret ? encryptFor(userId, info.id, "apiSecret", apiSecret) : null,
-      apiKeyHint: apiKey.slice(-4),
+      apiKeyHint: apiKey === "-" ? "----" : apiKey.slice(-4),
       brokerClientId: clientId ?? null,
       // New keys invalidate any session made with the old ones.
       accessTokenEnc: null,
@@ -130,6 +145,7 @@ export async function saveBrokerKeys(brokerId: string, input: KeysInput, rawMeth
       connectedAt: null,
       lastError: null,
       loginMethod: method,
+      storedLoginEnc,
       notifierTokenHash: method === "phone" ? notifierTokenHash(notifierToken(userId)) : null,
     };
     await prisma.brokerConnection.upsert({

@@ -5,7 +5,7 @@ import { logWarn } from "@/lib/logger";
 import { siteUrl } from "@/lib/site";
 import { ADAPTERS, BrokerError, type BrokerCreds, type BrokerSession } from "./adapters";
 import { brokerById, callbackUrl, notifierUrl, type BrokerId, type LoginMethodId } from "./catalog";
-import { decryptSecret, encryptSecret } from "./crypto";
+import { decryptSecret, decryptStoredLogin, encryptSecret, encryptStoredLogin } from "./crypto";
 import { encodeFailure, type Failure, type FailureCode } from "./failures";
 
 // Shared by the Server Actions (save keys, start login, test, disconnect) and
@@ -39,8 +39,24 @@ export function encryptFor(userId: string, broker: string, field: string, value:
   return encryptSecret(value, { userId, broker, field });
 }
 
+/** Seal the opt-in stored login (PIN + 2FA secret) with its own key. */
+export function sealStoredLogin(userId: string, broker: string, v: { pin: string; totpSecret: string }): string {
+  return encryptStoredLogin(JSON.stringify(v), { userId, broker, field: "storedLogin" });
+}
+
+function openStoredLogin(row: BrokerConnection): { pin?: string; totpSecret?: string } {
+  if (row.loginMethod !== "stored" || !row.storedLoginEnc) return {};
+  try {
+    const v = JSON.parse(decryptStoredLogin(row.storedLoginEnc, ctx(row, "storedLogin"))) as { pin?: string; totpSecret?: string };
+    return { pin: v.pin, totpSecret: v.totpSecret };
+  } catch {
+    throw new BrokerError("bad_keys", "The stored login couldn't be read — save it again.");
+  }
+}
+
 export function credsOf(row: BrokerConnection): BrokerCreds {
   return {
+    ...openStoredLogin(row),
     apiKey: decryptSecret(row.apiKeyEnc, ctx(row, "apiKey")),
     apiSecret: row.apiSecretEnc ? decryptSecret(row.apiSecretEnc, ctx(row, "apiSecret")) : undefined,
     clientId: row.brokerClientId ?? undefined,

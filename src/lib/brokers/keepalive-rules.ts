@@ -7,12 +7,15 @@ type Row = Pick<BrokerConnection, "broker" | "loginMethod" | "status" | "tokenEx
 /** Renew this long before the session ends, and never try more often than the retry gap. */
 export const RENEW_BEFORE_MS = 10 * 60_000;
 export const RETRY_GAP_MS = 5 * 60_000;
+/** After a failed stored login we wait much longer: repeated wrong PINs can lock a trading account. */
+export const STORED_RETRY_GAP_MS = 3 * 3_600_000;
 /** How often a live session is re-checked with the broker while the market is open. */
 export const CHECK_EVERY_MS = 15 * 60_000;
 
-/** Only Groww's TOTP key lets us sign in without the account holder; every other broker needs their own daily login. */
+/** Where we can sign in without the account holder: Groww's API TOTP key, or a stored login the user opted into (Dhan, Angel One). Every other broker needs their own daily login. */
+export const STORED_LOGIN_BROKERS = ["dhan", "angelone"];
 export function canRenewUnattended(row: Pick<Row, "broker" | "loginMethod">): boolean {
-  return row.broker === "groww" && row.loginMethod === "totp";
+  return (row.broker === "groww" && row.loginMethod === "totp") || (row.loginMethod === "stored" && STORED_LOGIN_BROKERS.includes(row.broker));
 }
 
 export function renewalDue(row: Row, now = new Date()): boolean {
@@ -20,7 +23,7 @@ export function renewalDue(row: Row, now = new Date()): boolean {
   const valid = row.status === "CONNECTED" && !!row.tokenExpiresAt && row.tokenExpiresAt.getTime() - t > RENEW_BEFORE_MS;
   if (valid) return false;
   if (row.connectedAt && t - row.connectedAt.getTime() < RETRY_GAP_MS) return false;
-  if (row.lastError && row.lastCheckedAt && t - row.lastCheckedAt.getTime() < RETRY_GAP_MS) return false;
+  if (row.lastError && row.lastCheckedAt && t - row.lastCheckedAt.getTime() < (row.loginMethod === "stored" ? STORED_RETRY_GAP_MS : RETRY_GAP_MS)) return false;
   return true;
 }
 

@@ -11,7 +11,7 @@ import { classifyBrokerMessage, type Failure, type FailureCode } from "./failure
 // official API docs. Each user brings their own API app, so every call runs
 // with that user's key/secret. Nothing here logs or returns a secret.
 
-export type BrokerCreds = { apiKey: string; apiSecret?: string; clientId?: string; /** The daily-login method the user chose, when the broker offers one. */ method?: LoginMethodId };
+export type BrokerCreds = { apiKey: string; apiSecret?: string; clientId?: string; /** Only for the opt-in stored login: the account PIN and the 2FA secret. */ pin?: string; totpSecret?: string; /** The daily-login method the user chose, when the broker offers one. */ method?: LoginMethodId };
 export type BrokerSession = { accessToken: string; expiresAt: Date; accountName?: string; brokerClientId?: string };
 export type BrokerProfile = { accountName?: string; brokerClientId?: string };
 
@@ -111,8 +111,18 @@ function need(v: string | undefined, code: FailureCode = "bad_keys"): string {
 
 // ---------- Dhan (DhanHQ v2, individual API key flow) ----------
 
+/** The opt-in stored login: a fresh 2FA code from the stored secret, made at this moment. */
+function storedCode(c: BrokerCreds): string {
+  try {
+    return totpCode(need(c.totpSecret));
+  } catch {
+    throw new BrokerError("bad_keys", "The 2FA secret isn't a valid setup key — copy it again from your broker.");
+  }
+}
+
 const dhan: BrokerAdapter = {
   async loginUrl(c) {
+    if (c.method === "stored") return "/app/broker-connections/connecting/dhan";
     const { status, body } = await call(
       `https://auth.dhan.co/app/generate-consent?client_id=${encodeURIComponent(need(c.clientId, "missing_client_id"))}`,
       { method: "POST", headers: { app_id: c.apiKey, app_secret: need(c.apiSecret) } },
@@ -123,6 +133,14 @@ const dhan: BrokerAdapter = {
   },
   stateFrom: () => null,
   async exchange(c, params) {
+    if (c.method === "stored") {
+      // Official PIN + TOTP login (valid 24 hours); needs TOTP switched on in the Dhan account.
+      const q = new URLSearchParams({ dhanClientId: need(c.clientId, "missing_client_id"), pin: need(c.pin), totp: storedCode(c) });
+      const { status, body } = await call(`https://auth.dhan.co/app/generateAccessToken?${q}`, { method: "POST" });
+      const token = str(body.accessToken);
+      if (status >= 400 || !token) fail(status, body, "bad_keys");
+      return { accessToken: token, expiresAt: istWallClock(str(body.expiryTime)) ?? new Date(Date.now() + 24 * 3_600_000), accountName: str(body.dhanClientName), brokerClientId: str(body.dhanClientId) ?? c.clientId };
+    }
     const tokenId = params.get("tokenId");
     if (!tokenId) throw new BrokerError("no_code");
     const { status, body } = await call(
@@ -290,11 +308,25 @@ const ANGEL_HEADERS = {
 
 const angelone: BrokerAdapter = {
   async loginUrl(c, { state }) {
+    if (c.method === "stored") return "/app/broker-connections/connecting/angelone";
     const q = new URLSearchParams({ api_key: c.apiKey, state });
     return `https://smartapi.angelone.in/publisher-login?${q}`;
   },
   stateFrom: (p) => p.get("state"),
   async exchange(c, params) {
+    if (c.method === "stored") {
+      // Official SmartAPI login with client code + PIN + 2FA code; the app's key goes in X-PrivateKey.
+      const { status, body } = await call("https://apiconnect.angelone.in/rest/auth/angelbroking/user/v1/loginByPassword", {
+        method: "POST",
+        headers: { ...ANGEL_HEADERS, "X-PrivateKey": c.apiKey },
+        body: JSON.stringify({ clientcode: need(c.clientId, "missing_client_id"), password: need(c.pin), totp: storedCode(c) }),
+      });
+      const data = obj(body.data);
+      const token = str(data.jwtToken);
+      if (status >= 400 || body.status === false || !token) fail(status, body, "bad_keys");
+      const profile = await angelone.profile(c, token).catch(() => ({}) as BrokerProfile);
+      return { accessToken: token, expiresAt: nextIstClock(0, 0), ...profile, brokerClientId: c.clientId };
+    }
     // Publisher login hands the session token straight to the redirect URL.
     const accessToken = params.get("auth_token");
     if (!accessToken) throw new BrokerError("no_code");

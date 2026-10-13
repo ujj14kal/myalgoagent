@@ -26,6 +26,6 @@ export default async function Page({
     if (typeof v === "string") query[k] = v;
   }
   const row = await prisma.brokerConnection.findUnique({ where: { userId_broker: { userId: session.user.id, broker: broker.id } }, select: { loginMethod: true } });
-  const method = row?.loginMethod === "totp" || row?.loginMethod === "phone" ? row.loginMethod : null;
+  const method = row?.loginMethod === "totp" || row?.loginMethod === "phone" || row?.loginMethod === "stored" ? row.loginMethod : null;
   return <BrokerConnecting broker={broker} query={query} method={method} />;
 }

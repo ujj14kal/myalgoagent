@@ -4,15 +4,16 @@
 
 export type BrokerId = "dhan" | "zerodha" | "upstox" | "fyers" | "angelone" | "groww" | "icicidirect" | "kotak" | "5paisa" | "aliceblue" | "hdfcsky" | "motilal" | "paytmmoney" | "sharekhan" | "axisdirect" | "iifl" | "mstock" | "jainam" | "smc" | "anandrathi" | "indstocks" | "nuvama";
 
-export type BrokerField = { name: "apiKey" | "apiSecret" | "clientId"; label: string; placeholder: string; help?: string; secret?: boolean };
+export type BrokerField = { name: "apiKey" | "apiSecret" | "clientId" | "pin" | "totpSecret"; label: string; placeholder: string; help?: string; secret?: boolean };
 
 /**
  * A second way to do the daily login, offered next to the broker's usual one.
  * "totp": Groww's API TOTP key — we generate the code, no daily approval.
+ * "stored": opt-in — the user's account PIN and 2FA secret are kept (sealed with their own key) so we can sign in every day.
  * "phone": Upstox's access-token request — the user taps Approve in the
  * Upstox app or on WhatsApp instead of visiting a login page.
  */
-export type LoginMethodId = "totp" | "phone";
+export type LoginMethodId = "totp" | "phone" | "stored";
 export type AltLogin = {
   id: LoginMethodId;
   /** Names for the two choices, e.g. "Approve daily on Groww" / "Automatic with TOTP". */
@@ -86,6 +87,27 @@ export const BROKERS: BrokerInfo[] = [
     apiCost: "Free (optional ₹499 data add-on)",
     session: "Your Dhan login lasts 24 hours — log in again from this page each trading day.",
     notes: ["The API key and secret are valid for 12 months; generate new ones on Dhan when they expire and save them here again."],
+    altLogin: {
+      id: "stored",
+      tag: "Beta",
+      defaultLabel: "Log in on Dhan's page",
+      defaultSummary: "Each day, sign in on Dhan's login page and come straight back.",
+      label: "Automatic daily login",
+      summary: "We sign in for you every day with the PIN and 2FA code you store once. Nothing to click.",
+      fields: [
+        { name: "clientId", label: "Dhan Client ID", placeholder: "e.g. 1100012345", help: "Shown under your name in the Dhan profile menu." },
+        { name: "pin", label: "Dhan PIN", placeholder: "Your 6-digit Dhan PIN", secret: true },
+        { name: "totpSecret", label: "2FA (TOTP) secret", placeholder: "The setup key shown under the QR code", help: "Letters A–Z and digits 2–7. Dhan shows it when you turn on TOTP.", secret: true },
+      ],
+      steps: [
+        "On web.dhan.co open Profile → DhanHQ Trading APIs and make sure TOTP is turned on for your account (Dhan shows a QR code and a setup key — keep the setup key).",
+        "Paste your Client ID, PIN and the TOTP setup key below, tick the consent box and click Save & connect Dhan.",
+        "From then on we sign in to Dhan for you every day before your session ends. No API key is needed for this method.",
+      ],
+      session: "We renew your Dhan session by ourselves before it ends (every 24 hours).",
+      tradeoff:
+        "Convenient, but it means MyAlgoAgent keeps your Dhan PIN and 2FA secret. Anyone who got hold of both could log in to your Dhan account, not just use the API. We seal them with a separate encryption key, never show them again and use them only for this daily login. You can delete them any time with Disconnect, and you should only turn this on if you accept that risk.",
+    },
   },
   {
     id: "zerodha",
@@ -193,6 +215,28 @@ export const BROKERS: BrokerInfo[] = [
     apiCost: "Free",
     session: "Angel One sessions end at midnight — log in again each trading day.",
     notes: ["Angel One doesn’t allow market orders from algos — live strategies on Angel One will send limit orders."],
+    altLogin: {
+      id: "stored",
+      tag: "Beta",
+      defaultLabel: "Log in on Angel One's page",
+      defaultSummary: "Each day, sign in on Angel One's login page and come straight back.",
+      label: "Automatic daily login",
+      summary: "We sign in for you every day with the PIN and 2FA code you store once. Nothing to click.",
+      fields: [
+        { name: "apiKey", label: "API key", placeholder: "Paste the SmartAPI key" },
+        { name: "clientId", label: "Angel One client code", placeholder: "e.g. A123456" },
+        { name: "pin", label: "Angel One PIN", placeholder: "Your 4-digit Angel One PIN", secret: true },
+        { name: "totpSecret", label: "2FA (TOTP) secret", placeholder: "The setup key shown under the QR code", help: "Letters A–Z and digits 2–7. Angel One shows it when you enable TOTP at smartapi.angelone.in/enable-totp.", secret: true },
+      ],
+      steps: [
+        "Create the SmartAPI app as described above and copy its API key (a Redirect URL isn't used by this method).",
+        "At smartapi.angelone.in/enable-totp turn on TOTP and keep the setup key shown under the QR code.",
+        "Paste the API key, your client code, PIN and the setup key below, tick the consent box and click Save & connect Angel One.",
+      ],
+      session: "We renew your Angel One session by ourselves before it ends (it ends at midnight).",
+      tradeoff:
+        "Convenient, but it means MyAlgoAgent keeps your Angel One PIN and 2FA secret. Anyone who got hold of both could log in to your Angel One account, not just use the API. We seal them with a separate encryption key, never show them again and use them only for this daily login. You can delete them any time with Disconnect, and you should only turn this on if you accept that risk.",
+    },
   },
   {
     id: "groww",

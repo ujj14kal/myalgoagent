@@ -1011,6 +1011,8 @@ model BrokerConnection {
   // the broker's usual login, "totp" = Groww's API TOTP key (automatic),
   // "phone" = Upstox approval request (tap Approve in the Upstox app).
   loginMethod       String?
+  // Only for loginMethod "stored" (opt-in): the account PIN and 2FA secret as one encrypted JSON value, sealed with its own key.
+  storedLoginEnc    String?
   // sha256 of this user's private Upstox notifier path, so the approval
   // webhook can find the right connection without revealing anything.
   notifierTokenHash String? @unique

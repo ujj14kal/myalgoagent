@@ -81,7 +81,7 @@ function Confetti() {
 }
 
 export default function BrokerConnecting({ broker, query, method = null }: { broker: BrokerInfo; query: Record<string, string>; method?: LoginMethodId | null }) {
-  const STEPS = method === "totp" ? TOTP_STEPS : broker.flow === "approval" ? APPROVAL_STEPS : REDIRECT_STEPS;
+  const STEPS = method === "totp" || method === "stored" ? TOTP_STEPS : broker.flow === "approval" ? APPROVAL_STEPS : REDIRECT_STEPS;
   const phone = method === "phone" && query.wait === "phone";
   const [waitedMs, setWaitedMs] = useState(0);
   const { agentName, flyHome } = useAgentChat();

@@ -38,3 +38,18 @@ describe("daily-login methods", () => {
     }
   });
 });
+
+describe("stored login (opt-in) for Dhan and Angel One", () => {
+  it("is offered as a beta choice, asking for the PIN and the 2FA secret", () => {
+    for (const id of ["dhan", "angelone"] as const) {
+      const b = brokerById(id)!;
+      expect(b.altLogin?.id).toBe("stored");
+      expect(b.altLogin?.tag).toBe("Beta");
+      const names = loginView(b, "stored").fields.map((f) => f.name);
+      expect(names).toEqual(expect.arrayContaining(["clientId", "pin", "totpSecret"]));
+      expect(b.altLogin?.tradeoff).toMatch(/PIN and 2FA secret/);
+    }
+    expect(loginView(brokerById("dhan")!, "stored").fields.map((f) => f.name)).not.toContain("apiKey");
+    expect(loginView(brokerById("angelone")!, "stored").fields.map((f) => f.name)).toContain("apiKey");
+  });
+});

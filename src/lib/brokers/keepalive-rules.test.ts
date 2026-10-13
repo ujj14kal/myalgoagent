@@ -40,3 +40,19 @@ describe("needsMorningLogin", () => {
   it("not when already logged in", () => expect(needsMorningLogin({ ...manual, status: "CONNECTED", tokenExpiresAt: at("2026-10-06T10:00:00Z") }, at("2026-10-06T03:15:00Z"))).toBe(false));
   it("not for brokers we renew ourselves", () => expect(needsMorningLogin({ ...base, status: "ERROR" }, at("2026-10-06T03:15:00Z"))).toBe(false));
 });
+
+describe("stored login (opt-in)", () => {
+  const stored = { ...base, broker: "dhan", loginMethod: "stored" };
+  const now = at("2026-10-06T00:00:00Z");
+  it("renews unattended only for Dhan and Angel One with the stored login", () => {
+    expect(canRenewUnattended({ broker: "dhan", loginMethod: "stored" })).toBe(true);
+    expect(canRenewUnattended({ broker: "angelone", loginMethod: "stored" })).toBe(true);
+    expect(canRenewUnattended({ broker: "dhan", loginMethod: null })).toBe(false);
+    expect(canRenewUnattended({ broker: "zerodha", loginMethod: "stored" })).toBe(false);
+  });
+  it("waits hours, not minutes, after a failed attempt (a wrong PIN can lock the account)", () => {
+    const failed = { ...stored, status: "ERROR" as const, lastError: "x" };
+    expect(renewalDue({ ...failed, lastCheckedAt: at("2026-10-05T23:30:00Z") }, now)).toBe(false);
+    expect(renewalDue({ ...failed, lastCheckedAt: at("2026-10-05T20:00:00Z") }, now)).toBe(true);
+  });
+});

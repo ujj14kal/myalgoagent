@@ -399,13 +399,13 @@ function RedirectOverlay({ broker, method }: { broker: BrokerInfo; method: Login
             <Logo broker={broker} size={56} />
           </div>
           <p className="mt-5 text-base font-semibold text-brand-navy">
-            {method === "phone" ? `Asking ${broker.name} to notify your phone…` : broker.flow === "approval" || method === "totp" ? `Connecting to ${broker.name}…` : `Taking you to ${broker.name}…`}
+            {method === "phone" ? `Asking ${broker.name} to notify your phone…` : broker.flow === "approval" || method === "totp" || method === "stored" ? `Connecting to ${broker.name}…` : `Taking you to ${broker.name}…`}
           </p>
           <p className="mt-1.5 text-sm text-brand-navy/60">
             {method === "phone"
               ? `You'll get an approval request in the ${broker.name} app and on WhatsApp in a moment.`
-              : method === "totp"
-                ? `Creating today’s one-time code from your TOTP key and asking ${broker.name} for today’s session.`
+              : method === "totp" || method === "stored"
+                ? `Creating today’s one-time code from your 2FA secret and asking ${broker.name} for today’s session.`
                 : broker.flow === "approval"
                   ? `Asking ${broker.name} for today’s session with the key you approved on ${broker.name}.`
                   : `Log in there with your ${broker.name} password and 2FA. ${broker.name} will bring you straight back here.`}
@@ -464,7 +464,7 @@ function ConnectPanel({ broker, view, conn, disabled, startEditing }: { broker: 
   // With a TOTP key nobody should have to click: if today's session isn't there yet (the background renewal normally has it
   // ready), connect right now, once, and let the page say so.
   const autoTried = useRef(false);
-  const auto = !!conn && !editing && method === "totp" && conn.loginMethod === "totp" && !disabled && (conn.state === "expired" || conn.state === "keys_saved") && !conn.failure;
+  const auto = !!conn && !editing && (method === "totp" || method === "stored") && conn.loginMethod === method && !disabled && (conn.state === "expired" || conn.state === "keys_saved") && !conn.failure;
   useEffect(() => {
     if (!auto || autoTried.current) return;
     autoTried.current = true;
@@ -476,7 +476,7 @@ function ConnectPanel({ broker, view, conn, disabled, startEditing }: { broker: 
   const shownFailure = failure ?? (conn && conn.state !== "connected" ? conn.failure : null);
 
   const overlay = <AnimatePresence>{redirecting && <RedirectOverlay broker={broker} method={method} />}</AnimatePresence>;
-  const instant = broker.flow === "approval" || method === "totp";
+  const instant = broker.flow === "approval" || method === "totp" || method === "stored";
 
   if (conn && !editing) {
     return (
@@ -578,7 +578,7 @@ function ConnectPanel({ broker, view, conn, disabled, startEditing }: { broker: 
             <p className="text-sm font-semibold text-brand-navy">{conn ? `Replace your ${broker.name} keys` : `Paste your ${broker.name} keys`}</p>
             <p className="mt-1 text-xs text-brand-navy/55">
               Encrypted before they&rsquo;re stored.{" "}
-              {method === "totp"
+              {method === "totp" || method === "stored"
                 ? `Saving connects you for today straight away — no approval needed.`
                 : method === "phone"
                   ? `After saving, tap Approve in the ${broker.name} app or on WhatsApp.`
@@ -613,6 +613,17 @@ function ConnectPanel({ broker, view, conn, disabled, startEditing }: { broker: 
             </div>
           ))}
         </div>
+        {method === "stored" && (
+          <label className="mt-4 flex items-start gap-2 rounded-xl bg-brand-gold/10 px-3 py-2.5 text-xs leading-relaxed text-brand-navy/80 ring-1 ring-brand-gold/25">
+            <input
+              type="checkbox"
+              checked={values.consent === "yes"}
+              onChange={(e) => setValues((v) => ({ ...v, consent: e.target.checked ? "yes" : "" }))}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-[#471898]"
+            />
+            <span>I understand MyAlgoAgent will keep my {broker.name} PIN and 2FA secret, sealed with a separate key, to sign in for me every day, and that I can delete them any time with Disconnect.</span>
+          </label>
+        )}
         {formError && (
           <p className="mt-3 flex items-start gap-1.5 text-sm text-brand-sell">
             <AlertTriangle size={15} className="mt-0.5 shrink-0" /> {formError}
@@ -622,7 +633,10 @@ function ConnectPanel({ broker, view, conn, disabled, startEditing }: { broker: 
           <LogIn size={15} /> {pending ? `Checking with ${broker.name}…` : method === "phone" ? "Save & send approval" : instant ? `Save & connect ${broker.name}` : `Save & log in to ${broker.name}`}
         </button>
         <p className="mt-4 flex items-start gap-1.5 text-[11px] text-brand-navy/45">
-          <Lock size={12} className="mt-0.5 shrink-0" /> Never paste your broker password or PIN anywhere on MyAlgoAgent — you only enter those on {broker.name}&rsquo;s own login page.
+          <Lock size={12} className="mt-0.5 shrink-0" />{" "}
+          {method === "stored"
+            ? `You are choosing to let us keep your ${broker.name} PIN and 2FA secret. Never share them anywhere else.`
+            : `Never paste your broker password or PIN anywhere on MyAlgoAgent — you only enter those on ${broker.name}’s own login page.`}
         </p>
       </form>
       {failure && <BrokerFailureCard compact brokerId={broker.id} brokerName={broker.name} failure={failure} onRetry={() => run(() => saveBrokerKeys(broker.id, values, method), { redirects: true })} onReplaceKeys={() => setFailure(null)} retrying={pending} />}

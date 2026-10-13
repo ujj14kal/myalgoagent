@@ -34,3 +34,18 @@ describe("broker secret encryption", () => {
     expect(() => decryptSecret(parts.join(":"), ctx)).toThrow();
   });
 });
+
+describe("stored-login encryption uses its own key", () => {
+  it("seals with the login key, not the broker key", async () => {
+    process.env.BROKER_LOGIN_ENCRYPTION_KEY = randomBytes(32).toString("base64");
+    const { encryptStoredLogin, decryptStoredLogin, storedLoginReady } = await import("./crypto");
+    expect(storedLoginReady()).toBe(true);
+    const sealed = encryptStoredLogin('{"pin":"123456"}', ctx);
+    expect(sealed).not.toContain("123456");
+    expect(decryptStoredLogin(sealed, ctx)).toBe('{"pin":"123456"}');
+    // The broker key cannot open it.
+    expect(() => decryptSecret(sealed, ctx)).toThrow();
+    delete process.env.BROKER_LOGIN_ENCRYPTION_KEY;
+    expect(storedLoginReady()).toBe(false);
+  });
+});
