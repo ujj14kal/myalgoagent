@@ -15,7 +15,9 @@ interface InstrumentOption {
 export default function SymbolSwitcher({
   currentSymbol,
   allInstruments,
+  basePath = "/app/instruments",
 }: {
+  basePath?: string;
   currentSymbol: string;
   allInstruments: InstrumentOption[];
 }) {
@@ -50,7 +52,7 @@ export default function SymbolSwitcher({
   function goTo(symbol: string) {
     setOpen(false);
     setQuery("");
-    router.push(`/app/instruments/${encodeURIComponent(symbol)}`);
+    router.push(`${basePath}/${encodeURIComponent(symbol)}`);
   }
 
   return (

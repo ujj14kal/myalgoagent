@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Activity, Bell, Coins, FlaskConical, Layers, Radio, ShieldCheck, Sparkles, Sigma } from "lucide-react";
+import { Activity, Bell, Coins, FlaskConical, Gauge, Layers, Radio, ShieldCheck, Sparkles, Sigma } from "lucide-react";
 import PageHeader from "@/components/page-header";
 import { Breadcrumbs } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
@@ -127,6 +127,16 @@ const groups: Group[] = [
       "Send the legs as real orders to your broker after a priced preview — buy legs first, open legs cancelled if one is refused",
     ],
     soon: ["Option chains from more brokers (Zerodha, Angel One, Fyers, 5paisa)"],
+  },
+  {
+    title: "Analyst Pro",
+    icon: Gauge,
+    items: [
+      "Pick any stock and see what its daily chart says through standard indicators: trend, momentum, volume and volatility",
+      "Every indicator shows its reading in plain words and its weight, so you can see exactly how the overall picture was counted",
+      "Nearest support and resistance from recent swing points, and the typical daily range",
+      "Counts what the chart shows today. It is not a forecast, a prediction of the price, or advice",
+    ],
   },
   {
     title: "Your AI agent",
