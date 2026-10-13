@@ -18,6 +18,9 @@ export type AltLogin = {
   /** Names for the two choices, e.g. "Approve daily on Groww" / "Automatic with TOTP". */
   defaultLabel: string;
   defaultSummary: string;
+  /** Shown first and chosen for a new connection, with the tag beside it (e.g. "Faster"). */
+  preferred?: boolean;
+  tag?: string;
   label: string;
   summary: string;
   fields: BrokerField[];
@@ -215,6 +218,8 @@ export const BROKERS: BrokerInfo[] = [
     session: "Groww tokens expire at 6 AM every day — approve the key on Groww, then connect for today.",
     altLogin: {
       id: "totp",
+      preferred: true,
+      tag: "Faster",
       defaultLabel: "Approve daily on Groww",
       defaultSummary: "Each day, click Approve next to your key on Groww, then connect here.",
       label: "Automatic with TOTP",

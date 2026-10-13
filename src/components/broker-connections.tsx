@@ -123,7 +123,8 @@ export default function BrokerConnections({
   const byBroker = new Map(connections.map((c) => [c.broker, c]));
   // The daily-login method picked per broker (starts at what the user saved).
   const [methods, setMethods] = useState<Record<string, LoginMethodId | null>>(() => Object.fromEntries(connections.map((c) => [c.broker, c.loginMethod])));
-  const method = methods[selected.id] ?? null;
+  // A broker that has a faster login starts on it for a new connection.
+  const method = selected.id in methods ? methods[selected.id] : selected.altLogin?.preferred && !byBroker.has(selected.id) ? selected.altLogin.id : null;
   const view = loginView(selected, method);
   const live = brokers.filter((b) => b.availability === "live");
   const next = brokers.filter((b) => b.availability === "next");
@@ -216,9 +217,11 @@ export default function BrokerConnections({
               <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/45">How do you want to log in each day?</p>
               <div className="mt-2 grid gap-2 sm:grid-cols-2" role="radiogroup">
                 {[
-                  { id: null, label: selected.altLogin.defaultLabel, summary: selected.altLogin.defaultSummary },
-                  { id: selected.altLogin.id, label: selected.altLogin.label, summary: selected.altLogin.summary },
-                ].map((o) => {
+                  { id: null as LoginMethodId | null, label: selected.altLogin.defaultLabel, summary: selected.altLogin.defaultSummary, tag: undefined as string | undefined },
+                  { id: selected.altLogin.id as LoginMethodId | null, label: selected.altLogin.label, summary: selected.altLogin.summary, tag: selected.altLogin.tag },
+                ]
+                  .sort((a, b) => (selected.altLogin?.preferred ? Number(b.id !== null) - Number(a.id !== null) : 0))
+                  .map((o) => {
                   const on = method === o.id;
                   return (
                     <button
@@ -232,6 +235,7 @@ export default function BrokerConnections({
                       <span className="flex items-center gap-2 text-sm font-semibold text-brand-navy">
                         <span className={`flex h-4 w-4 items-center justify-center rounded-full border ${on ? "border-brand-primary" : "border-brand-navy/25"}`}>{on && <span className="h-2 w-2 rounded-full bg-brand-primary" />}</span>
                         {o.label}
+                        {o.tag && <span className="rounded-full bg-brand-buy/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-buy">{o.tag}</span>}
                       </span>
                       <span className="mt-1 block text-xs text-brand-navy/60">{o.summary}</span>
                     </button>
