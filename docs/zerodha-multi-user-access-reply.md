@@ -34,14 +34,20 @@ Demo account: [CREATE a demo account and paste the email and password here; do n
 
 **6. API endpoints required**
 
-Kite Connect v3, per user, using that user's own session:
-- `GET /user/profile` and `GET /user/margins` (account check and funds)
-- `GET /portfolio/holdings` and `GET /portfolio/positions` (to show the user's real portfolio and to reconcile)
-- `POST /orders/regular` and `DELETE /orders/regular/{order_id}` (place and cancel)
-- `GET /orders` and `GET /orders/{order_id}` (order book and order history, for status and reconciliation)
-- `GET /trades` (trade book: fills)
-- `POST /session/token` (the OAuth token exchange)
-- Historical candles (`GET /instruments/historical/{instrument_token}/{interval}`), only where the user has Zerodha's historical-data subscription, for charts, backtests and signals.
+We would like access to the full set of endpoints our features use, so that a Zerodha user gets the same experience on MyAlgoAgent as users of other brokers. All of it is per user, with that user's own session, and shown only to that user.
+
+*Account, portfolio and trading*
+- `POST /session/token` (the OAuth token exchange), `GET /user/profile`, `GET /user/margins`
+- `GET /portfolio/holdings`, `GET /portfolio/positions`
+- `POST /orders/regular`, `PUT /orders/regular/{order_id}` and `DELETE /orders/regular/{order_id}` (place, modify, cancel)
+- `GET /orders`, `GET /orders/{order_id}` and `GET /orders/{order_id}/trades` (order book, order history, fills), `GET /trades` (trade book)
+- `POST /margins/orders` and `POST /margins/basket` (order and basket margin: to show a priced, margin-checked preview before a multi-leg options order)
+
+*Market data*
+- `GET /instruments` and `GET /instruments/{exchange}` (the instrument master, including NFO, to identify equity and option contracts)
+- `GET /quote`, `GET /quote/ohlc` and `GET /quote/ltp` (live quotes, OHLC and last price, including bid/ask and market depth, volume and open interest)
+- `GET /instruments/historical/{instrument_token}/{interval}` (historical candles, minute to day, with open interest where available)
+- The WebSocket streaming API (KiteTicker) for live ticks, so live prices and option data update in real time instead of by polling
 
 **7. Unique features**
 
@@ -58,22 +64,26 @@ Options analysis tools (payoff, Greeks, option chain from the user's own broker 
 
 **9. Intended API use: limited to Holdings, Portfolio, Positions, Order Book and Trade Book, or more?**
 
-More than read-only: in addition to Holdings, Positions, Order Book and Trade Book (all read), we need to place and cancel orders on the user's own account for strategies the user has switched live, plus Profile and Margins to confirm the account and funds before an order. We do not need any endpoint for other people's accounts, mutual funds, GTT or alerts.
+More. In addition to Holdings, Positions, Order Book and Trade Book (all read), we need to place, modify and cancel orders on the user's own account for strategies the user has switched live, Profile and Margins to confirm the account and funds, the order and basket margin endpoints for a margin-checked options preview, and the market-data endpoints in the next section. We do not need any endpoint for other people's accounts, mutual funds, GTT or alerts.
 
 **10. SEBI Research Analyst registration**
 
 MyAlgoAgent does not provide investment research, recommendations or advisory services, and does not hold a SEBI RA registration. It does not tell users what to buy or sell, does not rank or pick stocks and does not predict prices. Strategy rules are written by the user. Our technical-indicator reader ("Analyst Pro") only shows what standard indicators read on a stock's chart today, with each indicator's value and weight; it states plainly that it is not a forecast or advice. Our AI assistant is instructed never to give advice and adds a note that its analysis is not trading advice. We would welcome your view if you see any of this differently. [CONFIRM with your own legal advice before sending.]
 
-**11. Market data endpoints required**
+**11. Market data endpoints required, and what each is used for**
 
-Only historical candles (above), and only where the user holds the historical-data subscription. We do not use Quote, LTP or WebSocket streaming from Kite at present: strategy rules are evaluated on candles about once a minute. We do not redistribute Zerodha data: it is shown and used only for the user who owns the session.
+We request all of these for the user who owns the session:
+- **Historical candles** (with the user's historical-data subscription): charts, backtests (up to five years), the forward tests and live strategies that read candles, and the technical-indicator reader ("Analyst Pro").
+- **Instrument master** (`/instruments`): to map a stock or an option contract to its Kite instrument, and to build the option chain.
+- **Quote, OHLC and LTP**: the watchlist, the portfolio's live value and P&L, the markets overview (index levels, advances and declines, top gainers and losers, volume leaders), the price shown on every order preview, protected limit prices for live orders, and key stats on each stock.
+- **WebSocket (KiteTicker)**: real-time ticks for the forming candle, live P&L, option-chain updates and the live order screens.
+- **Option chain and Greeks**: our Options Lab shows the option chain (open interest, change in OI, volume, IV, PCR, max pain) and Greeks (delta, gamma, theta, vega, rho). We build the chain from `/instruments` (NFO) plus `/quote` for the underlying's expiry and strikes, and calculate the Greeks ourselves from each contract's price (or estimate and label them): we do not need Greeks from Zerodha. Today, for users of other brokers, the chain comes from their own broker; we would like Zerodha users to get the same.
 
-**12. Options: option chain and Greeks (added so nothing is missed)**
+We do not redistribute Zerodha data: it is shown and used only for the user who owns the session, kept only briefly in memory to avoid repeat requests, and never shown to anyone else or sold.
 
-Our Options Lab builds multi-leg positions and shows payoff, breakevens, option chain (OI, change in OI, IV, PCR, max pain) and Greeks (delta, gamma, theta, vega, rho). For Zerodha users today:
-- We do not read an option chain or option quotes from Kite. The chain shown comes from the user's own connected broker where that broker provides one, or from a licensed feed for permitted accounts, and every figure is labelled with its source. The Greeks are calculated by us from the contract's price (or estimated and labelled as estimates); we do not take Greeks from Zerodha.
-- Option legs the user chooses to trade are sent as ordinary orders on NFO through `POST /orders/regular`, with the exchange's own contract symbols (taken from the exchange's master files, not from Kite's instrument dump), after a priced preview and the user's explicit confirmation. Buy legs go first, and if a leg fails the open legs are cancelled.
-- If you would also allow option chain data for Zerodha users, we would need `GET /instruments` (NFO) and `GET /quote` (or LTP/OHLC) per user, and would use them only to show that user their own chain. We have not requested this above because we do not use it today. Please tell us if you would like it included in the request.
+**12. Options: how the data and orders are used**
+
+Option legs the user chooses to trade are sent as ordinary orders on NFO through `POST /orders/regular`, with a priced, margin-checked preview and the user's explicit confirmation first. Buy legs go first, and if a leg fails the open legs are cancelled. Every chain figure on our pages is labelled with its source and with whether a Greek was provided, calculated or estimated.
 
 We are happy to schedule a demo call at your convenience.
 
