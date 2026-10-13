@@ -145,6 +145,8 @@ export const INDICATOR_CATALOG: IndicatorDef[] = [
   { kind: "FIB_MANUAL_RET_786", dslName: "fibmanual786", label: "Fibonacci 78.6% (swing you enter)", paramLabels: ["Swing start price", "Swing end price"], defaults: [100, 200], maxes: { 0: MAX_PRICE_PARAM, 1: MAX_PRICE_PARAM } },
   { kind: "FIB_MANUAL_EXT_1272", dslName: "fibmanualext1272", label: "Fibonacci 1.272 extension (swing you enter)", paramLabels: ["Swing start price", "Swing end price"], defaults: [100, 200], maxes: { 0: MAX_PRICE_PARAM, 1: MAX_PRICE_PARAM } },
   { kind: "FIB_MANUAL_EXT_1618", dslName: "fibmanualext1618", label: "Fibonacci 1.618 extension (swing you enter)", paramLabels: ["Swing start price", "Swing end price"], defaults: [100, 200], maxes: { 0: MAX_PRICE_PARAM, 1: MAX_PRICE_PARAM } },
+  { kind: "OPENING_RANGE_HIGH", dslName: "openingrangehigh", label: "Opening range high (first N minutes)", paramLabels: ["Minutes"], defaults: [15], maxes: { 0: 120 } },
+  { kind: "OPENING_RANGE_LOW", dslName: "openingrangelow", label: "Opening range low (first N minutes)", paramLabels: ["Minutes"], defaults: [15], maxes: { 0: 120 } },
   { kind: "FIB_MANUAL_GOLDEN_ZONE", dslName: "fibmanualgoldenzone", label: "In golden zone of the swing you enter (1 = yes)", paramLabels: ["Swing start price", "Swing end price"], defaults: [100, 200], maxes: { 0: MAX_PRICE_PARAM, 1: MAX_PRICE_PARAM } },
 ];
 

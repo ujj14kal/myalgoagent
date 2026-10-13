@@ -544,3 +544,41 @@ export function manualFibGoldenZone(candles: Candle[], start: number, end: numbe
   }
   return out;
 }
+
+// ---------- Opening range ----------
+
+/** NSE regular session opens 09:15 IST. */
+const SESSION_OPEN_MINUTE = 9 * 60 + 15;
+
+/** Minute of the IST day (0-1439) a candle starts at. */
+const istMinute = (time: number) => Math.floor(((time + 19_800) % 86_400) / 60);
+
+/**
+ * The opening range: the highest high (or lowest low) of the first `minutes` of each session, from 09:15 IST.
+ * It has no value until that range is complete (a candle that starts at or after 09:15 + minutes), restarts every day, and is
+ * never known earlier than it really was, so a breakout rule can't see the future. On daily or longer candles there is no range.
+ */
+export function openingRange(candles: Candle[], minutes = 15, kind: "high" | "low"): IndicatorPoint[] {
+  const out: IndicatorPoint[] = [];
+  let day = Number.NaN;
+  let value = Number.NaN;
+  let complete = false;
+  for (const c of candles) {
+    const d = sessionDay(c.time);
+    if (d !== day) {
+      day = d;
+      value = Number.NaN;
+      complete = false;
+    }
+    const m = istMinute(c.time);
+    if (m < SESSION_OPEN_MINUTE) continue; // before the open
+    if (m < SESSION_OPEN_MINUTE + minutes) {
+      const v = kind === "high" ? c.high : c.low;
+      value = Number.isNaN(value) ? v : kind === "high" ? Math.max(value, v) : Math.min(value, v);
+    } else if (!Number.isNaN(value)) {
+      complete = true;
+    }
+    if (complete) out.push({ time: c.time, value });
+  }
+  return out;
+}

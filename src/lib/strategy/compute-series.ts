@@ -41,6 +41,7 @@ import {
   keltnerSqueeze,
   macdEx,
   manualFibGoldenZone,
+  openingRange,
   manualFibLevel,
   periodVwap,
   ppo,
@@ -58,7 +59,7 @@ import { INDICATOR_BY_KIND } from "./indicator-catalog";
  * drift apart on what an indicator actually computes. */
 /** Settings that count bars (periods, lookbacks) — must be whole numbers ≥ 1. */
 // (Source, Smoothing and Average type are picks from a list; 0 is the first choice.)
-const COUNT_PARAM = /period|fast|slow|signal|strength|touches|left|right|lookback|bars|percentile/i;
+const COUNT_PARAM = /period|fast|slow|signal|strength|touches|left|right|lookback|bars|percentile|minutes/i;
 
 /**
  * Settings as typed by a user can be blank, 0 or nonsense (the chart lets
@@ -253,6 +254,10 @@ export function computeIndicatorSeries(candles: Candle[], type: IndicatorKind, r
       return bollingerWM(candles, params[0], params[1], params[2], params[3], params[4], false);
     case "BB_M_TOP":
       return bollingerWM(candles, params[0], params[1], params[2], params[3], params[4], true);
+    case "OPENING_RANGE_HIGH":
+      return openingRange(candles, params[0], "high");
+    case "OPENING_RANGE_LOW":
+      return openingRange(candles, params[0], "low");
     case "VWAP_WEEK":
       return periodVwap(candles, "week");
     case "VWAP_MONTH":

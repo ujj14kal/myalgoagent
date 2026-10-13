@@ -93,7 +93,9 @@ export type IndicatorKind =
   | "FIB_MANUAL_RET_786"
   | "FIB_MANUAL_EXT_1272"
   | "FIB_MANUAL_EXT_1618"
-  | "FIB_MANUAL_GOLDEN_ZONE";
+  | "FIB_MANUAL_GOLDEN_ZONE"
+  | "OPENING_RANGE_HIGH"
+  | "OPENING_RANGE_LOW";
 
 export type PriceField = "OPEN" | "HIGH" | "LOW" | "CLOSE" | "VOLUME";
 export type ComparisonOperator = "GT" | "LT" | "GTE" | "LTE" | "EQ" | "CROSSES_ABOVE" | "CROSSES_BELOW";

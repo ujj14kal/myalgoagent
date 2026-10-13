@@ -136,3 +136,27 @@ describe("Fibonacci levels (Fibonacci study)", () => {
     expect(fibonacciLevels([c(0, 1), c(1, 2)], 5, 5, 3).ret500).toEqual([]);
   });
 });
+
+describe("Opening range", () => {
+  // 2026-10-12: 09:15 IST = 03:45 UTC.
+  const open = Date.UTC(2026, 9, 12, 3, 45, 0) / 1000;
+  const bar = (min: number, high: number, low: number) => ({ time: open + min * 60, open: low, high, low, close: high, volume: 100 });
+  it("is the high and low of the first 15 minutes, known only once those minutes are over", async () => {
+    const { openingRange } = await import("@/lib/indicators-study");
+    const bars = [bar(0, 105, 100), bar(5, 108, 102), bar(10, 107, 101), bar(15, 120, 110), bar(30, 90, 80)];
+    const hi = openingRange(bars, 15, "high");
+    const lo = openingRange(bars, 15, "low");
+    expect(hi.map((p) => p.value)).toEqual([108, 108]);
+    expect(lo.map((p) => p.value)).toEqual([100, 100]);
+    expect(hi[0].time).toBe(open + 15 * 60); // first value on the candle after the range closes
+  });
+  it("restarts every day and has no range on daily candles", async () => {
+    const { openingRange } = await import("@/lib/indicators-study");
+    const next = 86_400;
+    const bars = [bar(0, 105, 100), bar(15, 110, 104), { ...bar(0, 205, 200), time: open + next }, { ...bar(15, 210, 204), time: open + next + 900 }];
+    const hi = openingRange(bars, 15, "high");
+    expect(hi.map((p) => p.value)).toEqual([105, 205]);
+    const daily = [{ time: open - 3 * 3600, open: 1, high: 5, low: 1, close: 4, volume: 1 }]; // 06:15 IST: before the open
+    expect(openingRange(daily, 15, "high")).toEqual([]);
+  });
+});

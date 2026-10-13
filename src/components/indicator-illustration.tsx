@@ -69,6 +69,8 @@ const COMPANIONS: Partial<Record<IndicatorKind, IndicatorKind[]>> = {
   PPO_SIGNAL: ["PPO_LINE"],
   VWAP_WEEK: ["VWAP_MONTH"],
   VWAP_MONTH: ["VWAP_WEEK"],
+  OPENING_RANGE_HIGH: ["OPENING_RANGE_LOW"],
+  OPENING_RANGE_LOW: ["OPENING_RANGE_HIGH"],
 };
 
 /** Levels rules commonly use for oscillators. */
@@ -196,6 +198,8 @@ const TEXT: Record<IndicatorKind, string> = {
   FIB_MANUAL_RET_786: "78.6% retracement of a swing you type in (start price, end price).",
   FIB_MANUAL_EXT_1272: "1.272 extension target of a swing you type in (start price, end price).",
   FIB_MANUAL_EXT_1618: "1.618 extension target of a swing you type in (start price, end price).",
+  OPENING_RANGE_HIGH: "Opening range high: the highest price in the first N minutes after the 9:15 open (15 by default), known only once those minutes are over. A close above it is an opening-range breakout. Intraday candles only.",
+  OPENING_RANGE_LOW: "Opening range low: the lowest price in the first N minutes after the open. A close below it is an opening-range breakdown. Intraday candles only.",
   FIB_MANUAL_GOLDEN_ZONE: "1 while a candle has pulled back into the 50%–61.8% zone of a swing you type in (within 0.3 ATR), otherwise 0.",
   FIB_DIRECTION: "Fibonacci swing direction: 1 after an up-swing (low then high), −1 after a down-swing, no value when there is no valid swing. The swing is void once price closes beyond its start.",
 };
