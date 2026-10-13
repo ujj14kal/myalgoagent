@@ -54,6 +54,9 @@ function validateSignal(v: unknown, path: string): asserts v is BooleanSignalKin
     if (typeof v.pattern !== "string" || !CHART_PATTERN_BY_KIND.has(v.pattern as never)) {
       throw new Error(`${path}.pattern: unrecognized chart pattern "${String(v.pattern)}"`);
     }
+    if (v.atLevel !== undefined && v.atLevel !== "SUPPORT" && v.atLevel !== "RESISTANCE") {
+      throw new Error(`${path}.atLevel: must be SUPPORT, RESISTANCE or omitted`);
+    }
     validateTimeframe(v.timeframe, path);
     return;
   }

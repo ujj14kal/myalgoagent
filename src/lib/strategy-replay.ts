@@ -176,7 +176,7 @@ export function buildReplayStudies(
       }
       return;
     }
-    const label = readable({ kind: "signal", signal: { ...sig, ...(sig.family === "CANDLE_PATTERN" ? { atLevel: undefined, window: undefined } : {}) } as BooleanSignalKind });
+    const label = readable({ kind: "signal", signal: { ...sig, ...(sig.family === "CANDLE_PATTERN" ? { atLevel: undefined, window: undefined } : sig.family === "CHART_PATTERN" ? { atLevel: undefined } : {}) } as BooleanSignalKind });
     if (sig.timeframe) {
       const note = `${label} on the ${sig.timeframe} chart is checked but not marked here.`;
       if (!studies.notes.includes(note)) studies.notes.push(note);

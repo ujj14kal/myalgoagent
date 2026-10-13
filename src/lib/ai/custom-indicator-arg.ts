@@ -1,4 +1,4 @@
-import { validateCustomDef, type CustomIndicatorDef } from "@/lib/custom-indicator";
+import { validateCustomDef, ENTRY_OPERATORS, type CustomIndicatorDef, type EntryOperator } from "@/lib/custom-indicator";
 
 // The agent's draft_custom_indicator arguments → a checked definition, and the
 // link that opens it in the builder. Pure, so it's unit-tested.
@@ -18,6 +18,24 @@ function day(v: unknown, endOfDay = false): number | undefined {
 
 /** Throws a plain-English error the model can fix. */
 export function draftDefFrom(a: Record<string, unknown>): CustomIndicatorDef {
+  const entry = entryFrom(a);
+  const def = baseDef(a);
+  return entry ? validateCustomDef({ ...def, entry }) : def;
+}
+
+/** The entry rule the user chose, from entry_operator ("crosses above", "above"…) and an optional entry_value. */
+function entryFrom(a: Record<string, unknown>): { operator: EntryOperator; value?: number } | undefined {
+  const w = s(a.entry_operator).toLowerCase().replace(/[\s_-]+/g, " ");
+  if (!w) return undefined;
+  const map: Record<string, EntryOperator> = { "crosses above": "CROSSES_ABOVE", "crosses below": "CROSSES_BELOW", above: "GT", "is above": "GT", below: "LT", "is below": "LT" };
+  const operator = map[w] ?? (ENTRY_OPERATORS.find((o) => o.toLowerCase().replace(/_/g, " ") === w) as EntryOperator | undefined);
+  if (!operator) throw new Error('entry_operator must be "crosses above", "crosses below", "above" or "below".');
+  const value = a.entry_value === undefined || a.entry_value === null || a.entry_value === "" ? undefined : n(a.entry_value);
+  if (value !== undefined && !Number.isFinite(value)) throw new Error("entry_value must be a number.");
+  return { operator, ...(value !== undefined ? { value } : {}) };
+}
+
+function baseDef(a: Record<string, unknown>): CustomIndicatorDef {
   const kind = (s(a.kind).toLowerCase() || (a.pane === "price" ? "price overlay" : "graph line")) as DraftKind;
   const pane = a.pane === "separate" ? "separate" : a.pane === "price" ? "price" : undefined;
   switch (kind) {

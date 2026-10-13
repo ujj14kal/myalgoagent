@@ -32,7 +32,7 @@ const groups: Group[] = [
       "Run on the timeframe you choose — 1m, 3m, 5m, 15m, 30m, 1H, 4H, daily or weekly — with entry and exit times, \"no new entries after\" and an intraday square-off time; intraday positions are never carried overnight",
       "Combine two conditions with Match both / Match any, or build any AND/OR group in advanced mode",
       "Indicator-to-indicator and price-to-indicator comparisons, crossovers and crossunders",
-      "Candlestick, chart and volume patterns, each shown with a picture of what it looks like — and candle patterns that only count at a support or resistance level",
+      "Candlestick, chart and volume patterns, each shown with a picture of what it looks like — and candle and chart patterns that only count at a support or resistance level",
       "Stop-loss, take-profit and trailing-stop rules, or up to three staged targets that sell part of the position and lock profit on the rest",
       "Workspace in three layers: define blocks (My BOS, My FVG, an order block, a level, a session), combine them into bullish or bearish concepts — all at once, in sequence, confirmed by, unless, or only after a prerequisite has held — then assemble concepts into a trading system with your instrument, sessions, capital, sizing, leverage, multi-target exits, conflict and reversal rules. Published versions are backtested, forward tested and traded like any strategy",
       "Swing strategies (held for days to weeks): build a position in stages with a multi-level entry plan (a share on the signal, more as price reaches each level), a holding limit, and daily or weekly candle rules that can read a longer trend",

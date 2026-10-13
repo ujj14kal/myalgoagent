@@ -163,7 +163,7 @@ function signalKey(signal: BooleanSignalKind): string {
     case "CANDLE_PATTERN":
       return `CANDLE_PATTERN:${signal.pattern}:${timeframe ?? ""}:${signal.atLevel ?? ""}:${signal.window ? `${signal.window.startMinute}-${signal.window.endMinute}` : ""}`;
     case "CHART_PATTERN":
-      return `CHART_PATTERN:${signal.pattern}:${timeframe ?? ""}`;
+      return `CHART_PATTERN:${signal.pattern}:${timeframe ?? ""}:${signal.atLevel ?? ""}`;
     case "VOLUME_PATTERN":
       return `VOLUME_PATTERN:${signal.pattern}:${timeframe ?? ""}`;
     case "SMC":
@@ -190,8 +190,12 @@ function detectPattern(candles: Candle[], signal: BooleanSignalKind): boolean[] 
       }
       return series;
     }
-    case "CHART_PATTERN":
-      return computeChartPatternSeries(candles, signal.pattern);
+    case "CHART_PATTERN": {
+      const series = computeChartPatternSeries(candles, signal.pattern);
+      if (!signal.atLevel) return series;
+      const at = atLevelSeries(candles, signal.atLevel);
+      return series.map((p, i) => p && at[i]);
+    }
     case "VOLUME_PATTERN":
       return computeVolumePatternSeries(candles, signal.pattern);
     case "SMC":

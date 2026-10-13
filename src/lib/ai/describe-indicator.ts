@@ -13,8 +13,13 @@ export const TALK_STRATEGY_PREFIX = "Help me build a strategy: ";
 const GUIDED_ORDER =
   "Follow this order in this conversation. STEP 1 — if the user has not yet said, in this conversation, how THEY define it: do not prepare anything yet and call no propose_ tool. In two or three plain sentences explain what the idea means in the market (no jargon without a quick gloss), then ask how they would define it, offering 2 to 4 concrete definitions on separate lines that start with “• ” (each a complete definition they could simply pick, e.g. “• Volume at least 2× its 20-candle average for 3 candles in a row”), and end by asking which fits or to write their own. STEP 2 — once they have answered (they may pick one or write their own): prepare it in a single call. Say in one or two sentences what you made, and that a demo on a made-up stock will show how it looks before anything is created — they review it, see the demo, and only then does it get created. Never create or save anything yourself.";
 
+// Two more things the indicator window asks in STEP 1, alongside the definition: how it should be shown, and when it should signal an entry.
+const INDICATOR_EXTRAS =
+  "In STEP 1, besides the definition, ALSO ask (in the same message, as two short separate questions, each with its own “• ” choices) (a) HOW IT SHOULD BE SHOWN: a graph line in its own pane, a line on the price chart, signal markers, a horizontal level, a zone, a range (a rectangle between two dates), a channel or a band; and (b) ITS ENTRY RULE: when should it count as an entry signal, e.g. “• Crosses above 0”, “• Goes below 30”, “• Price crosses above it” (for price-type indicators) or “• No entry rule for now”. In STEP 2 pass their choices as kind, and entry_operator / entry_value (omit entry_value for a price-versus-indicator rule; omit both if they want no entry rule). The entry rule is filled in automatically whenever that indicator is picked in a strategy's entry condition, and the user can still change it there. ";
+
 export const DESCRIBE_INSTRUCTION =
   "\n\nThis message came from the app's Custom Indicators window. Build ONLY the indicator, with propose_custom_indicator — no strategy, no stock and no timeframe questions. Pick the kind that matches the words (graph line, price overlay, signal markers, level, zone, rectangle, channel or band) and write a formula or levels the user can read. " +
+  INDICATOR_EXTRAS +
   GUIDED_ORDER;
 
 export const DESCRIBE_BLOCK_INSTRUCTION =

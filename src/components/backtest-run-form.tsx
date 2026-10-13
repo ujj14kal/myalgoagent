@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { Check, ChevronDown } from "lucide-react";
 import { friendlyError } from "@/lib/friendly-error";
 import Link from "next/link";
 import { runBacktestAction, runBacktestsAction } from "@/lib/backtest-actions";
@@ -40,6 +41,16 @@ export default function BacktestRunForm({ strategies, depth = "standard", notice
   const [range, setRange] = useState<CandleRange>("1y");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [open, setOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => !pickerRef.current?.contains(e.target as Node) && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", esc);
+    return () => (document.removeEventListener("mousedown", away), document.removeEventListener("keydown", esc));
+  }, [open]);
 
   const chosen = strategies.filter((s) => selected.includes(s.id));
   const selectedStrategy = chosen.length === 1 ? chosen[0] : undefined;
@@ -90,19 +101,52 @@ export default function BacktestRunForm({ strategies, depth = "standard", notice
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
             Strategies <span className="font-normal normal-case tracking-normal text-brand-navy/45">— tick several to backtest them together (up to 8)</span>
           </label>
-          <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-brand-navy/15 p-1.5">
-            {strategies.map((st) => {
-              const on = selected.includes(st.id);
-              return (
-                <label key={st.id} className={`flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm ${on ? "bg-brand-primary/[0.07]" : "hover:bg-brand-bg"}`}>
-                  <input type="checkbox" checked={on} onChange={() => toggle(st.id)} className="h-4 w-4 accent-[#471898]" />
-                  <span className="min-w-0 flex-1 truncate text-brand-navy">
-                    {st.name} <span className="text-brand-navy/50">({st.instrumentSymbol})</span>
-                  </span>
-                </label>
-              );
-            })}
+          <div ref={pickerRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setOpen((o) => !o)}
+              aria-haspopup="listbox"
+              aria-expanded={open}
+              className="flex w-full items-center justify-between gap-2 rounded-lg border border-brand-navy/15 bg-white px-3 py-2 text-left text-sm outline-none focus:border-brand-primary"
+            >
+              <span className="min-w-0 truncate text-brand-navy">
+                {chosen.length === 0 ? "Choose strategies…" : chosen.length === 1 ? `${chosen[0].name} (${chosen[0].instrumentSymbol})` : `${chosen.length} strategies selected`}
+              </span>
+              <ChevronDown size={16} className={`shrink-0 text-brand-navy/50 transition-transform ${open ? "rotate-180" : ""}`} />
+            </button>
+            {open && (
+              <div role="listbox" aria-multiselectable className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-brand-navy/15 bg-white p-1.5 shadow-lg">
+                {strategies.map((st) => {
+                  const on = selected.includes(st.id);
+                  return (
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={on}
+                      key={st.id}
+                      onClick={() => toggle(st.id)}
+                      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${on ? "bg-brand-primary/[0.07]" : "hover:bg-brand-bg"}`}
+                    >
+                      <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${on ? "border-brand-primary bg-brand-primary text-white" : "border-brand-navy/25"}`}>{on && <Check size={12} />}</span>
+                      <span className="min-w-0 flex-1 truncate text-brand-navy">
+                        {st.name} <span className="text-brand-navy/50">({st.instrumentSymbol})</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
+          {chosen.length > 1 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {chosen.map((st) => (
+                <span key={st.id} className="inline-flex items-center gap-1 rounded-full bg-brand-primary/[0.08] px-2.5 py-1 text-xs font-medium text-brand-primary">
+                  {st.name}
+                  <button type="button" aria-label={`Remove ${st.name}`} onClick={() => toggle(st.id)} className="text-brand-primary/60 hover:text-brand-primary">×</button>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         <div>
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Capital (₹)</label>

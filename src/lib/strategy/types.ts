@@ -90,7 +90,8 @@ export type BooleanSignalKind =
       atLevel?: "SUPPORT" | "RESISTANCE";
       window?: { startMinute: number; endMinute: number };
     }
-  | { family: "CHART_PATTERN"; pattern: ChartPatternKind; timeframe?: CandleInterval }
+  // Chart patterns take `atLevel` too: the pattern only counts when its signal bar sits at a support (or resistance) level.
+  | { family: "CHART_PATTERN"; pattern: ChartPatternKind; timeframe?: CandleInterval; atLevel?: "SUPPORT" | "RESISTANCE" }
   | { family: "VOLUME_PATTERN"; pattern: VolumePatternKind; timeframe?: CandleInterval }
   // Smart-money / market-structure components (lib/smc.ts): BOS, CHoCH, liquidity sweep, FVG and its retest, order
   // block retest — each bullish or bearish, with its own swing size, age limit and minimum gap.

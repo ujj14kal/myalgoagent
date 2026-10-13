@@ -87,3 +87,10 @@ describe("intraday options for the agent", () => {
     expect(valid({ left: { indicator: "rsi", timeframe: "3m" }, op: ">", right: 50 })).toMatchObject({ left: { timeframe: "3m" } });
   });
 });
+
+describe("chart patterns at a level", () => {
+  it("accepts at_level on a chart pattern", () => {
+    expect(toConditionNode({ chart_pattern: "double_bottom", at_level: "support" })).toMatchObject({ signal: { family: "CHART_PATTERN", pattern: "DOUBLE_BOTTOM", atLevel: "SUPPORT" } });
+    expect(() => toConditionNode({ chart_pattern: "double_bottom", at_level: "sideways" })).toThrow(/at_level/);
+  });
+});

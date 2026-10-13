@@ -18,6 +18,8 @@ The syntax:
 - Combine with and, or, not, and ( ) for grouping.
 - Examples: "sma(20) crossesAbove ema(50) and rsi(14) < 70"   "close < bollingerLower(20, 2) or rsi(14) < 30"   "not (rsi(14) > 70)"
 
+When a "Current rule" is given, change only what the user asks for and keep the rest of it.
+
 Use only names from the list below. Do not invent indicators. If the idea can't be written in this syntax (for example it needs a time of day, another stock or a chart pattern), write the closest rule you can and nothing more.
 
 Indicators:
@@ -46,7 +48,7 @@ export type AskModel = (system: string, user: string) => Promise<string>;
 export function rulePrompt(a: { description: string; part: RuleCodePart; current?: string; problem?: string }): string {
   const what = a.part === "entry" ? "the ENTRY rule (when to open a position)" : "the EXIT rule (when to close a position)";
   if (a.problem && a.current) return `Fix this ${a.part} rule so it parses. The parser said: ${a.problem}\n\nCurrent rule:\n${a.current}\n\nWhat the user wants: ${a.description || "keep the same idea"}`;
-  return `Write ${what}.${a.current?.trim() ? `\n\nThe rule written so far (change it only as asked):\n${a.current}` : ""}\n\nWhat the user wants: ${a.description}`;
+  return `Write ${what}.${a.current?.trim() ? `\n\nCurrent rule: ${a.current.trim()}` : ""}\n\nWhat the user wants: ${a.description}`;
 }
 
 export async function writeRule(ask: AskModel, a: { description: string; part: RuleCodePart; current?: string; problem?: string }): Promise<{ ok: true; code: string; retried: boolean } | { ok: false; error: string }> {

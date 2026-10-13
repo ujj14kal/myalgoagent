@@ -106,7 +106,7 @@ export default async function DashboardPage() {
         lines={lines}
         primaryAction={isNewAccount ? { href: "/app/strategies/new", label: "Create your first strategy" } : { href: "/app/live-trading", label: "Live trading" }}
         secondaryAction={isNewAccount ? { href: "/app/instruments", label: "Browse market data" } : { href: "/app/strategies/new", label: "New strategy" }}
-        tertiary={<TalkToAgentButton variant="onDark" />}
+        tertiary={<TalkToAgentButton variant="onDark" fullChat />}
       />
 
       {isNewAccount && <DashboardEmptyState agentName={agentName} />}

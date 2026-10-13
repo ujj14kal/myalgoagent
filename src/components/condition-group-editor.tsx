@@ -408,7 +408,7 @@ function SignalEditor({
           className={inputClass}
           value={signal.pattern}
           onChange={(e) =>
-            onChange({ kind: "signal", signal: { family: "CHART_PATTERN", pattern: e.target.value as never, timeframe: signal.timeframe } })
+            onChange({ kind: "signal", signal: { family: "CHART_PATTERN", pattern: e.target.value as never, timeframe: signal.timeframe, atLevel: signal.atLevel } })
           }
         >
           {CHART_PATTERN_CATALOG.map((def) => (
@@ -421,6 +421,16 @@ function SignalEditor({
           value={signal.timeframe}
           onChange={(timeframe) => onChange({ kind: "signal", signal: { ...signal, timeframe } })}
         />
+        <select
+          className={`${inputClass} text-brand-navy/70`}
+          value={signal.atLevel ?? ""}
+          title="Where the pattern must form"
+          onChange={(e) => onChange({ kind: "signal", signal: { ...signal, atLevel: (e.target.value || undefined) as "SUPPORT" | "RESISTANCE" | undefined } })}
+        >
+          <option value="">Anywhere</option>
+          <option value="SUPPORT">At a support level</option>
+          <option value="RESISTANCE">At a resistance level</option>
+        </select>
         <button type="button" onClick={onRemove} className="ml-auto text-xs text-brand-navy/40 hover:text-brand-sell">
           Remove
         </button>
@@ -683,12 +693,26 @@ function ComparisonEditor({
   // snap the other side back to a fixed value the moment it becomes
   // invalid, which is always a safe fallback since a constant is
   // compatible with everything.
+  // A custom indicator that came with its own entry rule fills it in the moment it is picked (the user can still change it).
+  function withEntryRule(picked: Operand, previous: Operand): ConditionNode | null {
+    if (picked.kind !== "custom" || !picked.def.entry) return null;
+    if (previous.kind === "custom" && previous.name === picked.name) return null;
+    const { operator, value } = picked.def.entry;
+    return value === undefined
+      ? { ...node, left: { kind: "price", field: "CLOSE" }, operator, right: picked }
+      : { ...node, left: picked, operator, right: { kind: "constant", value } };
+  }
+
   function handleLeftChange(left: Operand) {
+    const applied = withEntryRule(left, node.left);
+    if (applied) return onChange(applied);
     const right = operandsScaleCompatible(left, node.right) ? node.right : { kind: "constant" as const, value: 0 };
     onChange({ ...node, left, right });
   }
 
   function handleRightChange(right: Operand) {
+    const applied = withEntryRule(right, node.right);
+    if (applied) return onChange(applied);
     const left = operandsScaleCompatible(node.left, right) ? node.left : { kind: "constant" as const, value: 0 };
     onChange({ ...node, left, right });
   }

@@ -50,7 +50,7 @@ function signalToText(s: BooleanSignalKind): string {
         s.window ? ` between ${clock(s.window.startMinute)} and ${clock(s.window.endMinute)}` : ""
       }${suffix(s)}`;
     case "CHART_PATTERN":
-      return `${humanize(s.pattern)} pattern${suffix(s)}`;
+      return `${humanize(s.pattern)} pattern${s.atLevel ? ` at ${s.atLevel === "SUPPORT" ? "support" : "resistance"}` : ""}${suffix(s)}`;
     case "VOLUME_PATTERN":
       // "volume spike", not "volume spike volume".
       return `${humanize(s.pattern)}${/volume/i.test(s.pattern) ? "" : " (volume)"}${suffix(s)}`;

@@ -24,7 +24,31 @@ import { evaluateFormula, parseFormula } from "./formula";
 export type LinePoint = { time: number; price: number };
 export type CustomPane = "price" | "separate";
 /** Optional drawing colour (#rrggbb); charts pick one when it's not set. */
-type Look = { color?: string };
+type Look = { color?: string; entry?: CustomEntry };
+
+/**
+ * The indicator's own entry rule, added when it is made: "crosses above 0", or (no value) "price crosses above it". When the
+ * indicator is picked in a strategy's entry condition, the rule is filled in for the user, who can still change it.
+ */
+export type EntryOperator = "CROSSES_ABOVE" | "CROSSES_BELOW" | "GT" | "LT";
+export type CustomEntry = { operator: EntryOperator; value?: number };
+export const ENTRY_OPERATORS: EntryOperator[] = ["CROSSES_ABOVE", "CROSSES_BELOW", "GT", "LT"];
+const ENTRY_WORDS: Record<EntryOperator, string> = { CROSSES_ABOVE: "crosses above", CROSSES_BELOW: "crosses below", GT: "is above", LT: "is below" };
+
+/** "entry: crosses above 0" / "entry: price crosses above it" — null when the indicator has no entry rule. */
+export function describeEntry(def: CustomIndicatorDef): string | null {
+  if (!def.entry) return null;
+  return def.entry.value === undefined ? `entry: price ${ENTRY_WORDS[def.entry.operator]} it` : `entry: it ${ENTRY_WORDS[def.entry.operator]} ${def.entry.value}`;
+}
+
+/** A checked entry rule, or undefined when there is none; throws a plain-English error when it makes no sense. */
+export function parseEntry(raw: unknown): CustomEntry | undefined {
+  if (raw === undefined || raw === null || raw === "") return undefined;
+  const e = raw as { operator?: unknown; value?: unknown };
+  if (typeof e !== "object" || !ENTRY_OPERATORS.includes(e.operator as EntryOperator)) throw new Error("The entry rule must be crosses above, crosses below, is above or is below.");
+  if (e.value !== undefined && e.value !== null && (typeof e.value !== "number" || !Number.isFinite(e.value))) throw new Error("The entry rule's number isn't valid.");
+  return { operator: e.operator as EntryOperator, ...(typeof e.value === "number" ? { value: e.value } : {}) };
+}
 
 export type CustomIndicatorDef =
   | ({ type: "formula"; formula: string; pane: CustomPane } & Look)
@@ -163,6 +187,12 @@ const rs = (p: number) => `₹${Math.round(p * 100) / 100}`;
 
 /** A one-line description shown wherever the indicator appears. */
 export function describeCustom(def: CustomIndicatorDef): string {
+  const entry = describeEntry(def);
+  const base = describeBase(def);
+  return entry ? `${base} · ${entry}` : base;
+}
+
+function describeBase(def: CustomIndicatorDef): string {
   switch (def.type) {
     case "formula":
       return def.formula;
@@ -209,6 +239,12 @@ const sym = (s: unknown) => (typeof s === "string" && s ? { symbol: s } : {});
 
 /** Throws a plain-English error if the definition can't be used; returns a clean copy. */
 export function validateCustomDef(def: unknown): CustomIndicatorDef {
+  const clean = validateCore(def);
+  const entry = parseEntry((def as { entry?: unknown } | null)?.entry);
+  return entry ? { ...clean, entry } : clean;
+}
+
+function validateCore(def: unknown): CustomIndicatorDef {
   const d = def as Record<string, unknown> & { type?: string };
   if (!d || typeof d !== "object") throw new Error("Missing indicator definition.");
   switch (d.type) {

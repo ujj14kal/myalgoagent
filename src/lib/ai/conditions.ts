@@ -205,7 +205,10 @@ export function toConditionNode(v: unknown, where = "condition"): ConditionNode 
     };
   }
   if ("chart_pattern" in v) {
-    return { kind: "signal", signal: { family: "CHART_PATTERN", pattern: pattern(CHARTS, v.chart_pattern, "chart", where) as never, ...(tf ? { timeframe: tf } : {}) } };
+    const at = String(v.at_level ?? v.atLevel ?? "").trim().toUpperCase();
+    if (at && at !== "SUPPORT" && at !== "RESISTANCE" && at !== "ANYWHERE") throw new Error(`${where}: at_level must be "support", "resistance" or "anywhere".`);
+    const atLevel = at === "SUPPORT" || at === "RESISTANCE" ? at : undefined;
+    return { kind: "signal", signal: { family: "CHART_PATTERN", pattern: pattern(CHARTS, v.chart_pattern, "chart", where) as never, ...(tf ? { timeframe: tf } : {}), ...(atLevel ? { atLevel } : {}) } };
   }
   if ("volume_pattern" in v) {
     return { kind: "signal", signal: { family: "VOLUME_PATTERN", pattern: pattern(VOLUMES, v.volume_pattern, "volume", where) as never, ...(tf ? { timeframe: tf } : {}) } };
@@ -255,7 +258,7 @@ export const CONDITION_REFERENCE = [
   `- chart pattern: {"chart_pattern":"DOUBLE_BOTTOM"} — ${CHART_PATTERN_CATALOG.map((p) => p.kind).join(", ")}`,
   `- volume pattern: {"volume_pattern":"VOLUME_SPIKE"} — ${VOLUME_PATTERN_CATALOG.map((p) => p.kind).join(", ")}`,
   `- smart-money / market structure: {"smc":"BOS","side":"bullish"} — ${SMC_KINDS.join(", ")} (BOS = close beyond the last confirmed swing high/low; CHOCH = the first BOS against the previous one; LIQUIDITY_SWEEP = wick through the last swing low/high closing back inside; FVG = a three-candle gap forms; FVG_RETEST / ORDER_BLOCK_RETEST = price returns into an earlier gap / order block). Optional "swing" (candles each side of a swing, default 3), "max_age" (retests: candles a gap/order block stays valid, default 30), "min_gap_pct" (FVG). True/false like other patterns; swings only count once confirmed, so nothing looks ahead.`,
-  '  Patterns can add "timeframe" to detect on another chart. A candle pattern can add "at_level": "support" or "resistance" to count only when the candle forms at that level (omit = anywhere). Whenever the user wants a pattern "at", "near" or "on" support/resistance, use at_level — never build your own close-vs-support comparison for it (that checks something different). Patterns and time windows are true/false conditions — never compare them to a value.',
+  '  Patterns can add "timeframe" to detect on another chart. A candle pattern or chart pattern can add "at_level": "support" or "resistance" to count only when it forms at that level (omit = anywhere). Whenever the user wants a pattern "at", "near" or "on" support/resistance, use at_level — never build your own close-vs-support comparison for it (that checks something different). Patterns and time windows are true/false conditions — never compare them to a value.',
   '- support / resistance levels are indicators on the price scale: {"indicator":"support"} is the nearest support level below price (swing lows that price bounced from), {"indicator":"resistance"} the nearest level above (swing highs price failed to break). Compare them with price, e.g. close crosses_above resistance (breakout), close < support (breakdown).',
   '- the user\'s own custom indicators (list_custom_indicators): {"custom":"<exact name>"} — zones, rectangles, channels and bands also need "part": "upper" | "middle" | "lower" | "inside" (inside = 1 while the close is in it, compare EQ 1), e.g. {"custom":"Demand zone","part":"lower"}; signal-marker indicators read 1 where true, 0 otherwise; or a formula written inline: {"formula":"(close - sma(close, 50)) / atr(14)","name":"Trend strength"}. Compare formulas that are ratios/scores/0-1 flags to fixed numbers, and price-level ones (lines, midlines) to price.',
   "- indicators and their settings: " + INDICATOR_CATALOG.map((d) => `${d.dslName}(${d.paramLabels.join(", ") || "no settings"})`).join(", "),
