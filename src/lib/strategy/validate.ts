@@ -1,6 +1,6 @@
 import { customParts, validateCustomDef, type CustomIndicatorDef, type CustomPart } from "@/lib/custom-indicator";
 import type { BooleanSignalKind, ComparisonOperator, ConditionNode, Operand, PriceField } from "./types";
-import { INDICATOR_BY_KIND } from "./indicator-catalog";
+import { INDICATOR_BY_KIND, requiredParamCount } from "./indicator-catalog";
 import { CANDLE_PATTERN_BY_KIND } from "./candle-pattern-catalog";
 import { CHART_PATTERN_BY_KIND } from "./chart-pattern-catalog";
 import { VOLUME_PATTERN_BY_KIND } from "./volume-pattern-catalog";
@@ -114,14 +114,19 @@ function validateOperand(v: unknown, path: string): asserts v is Operand {
     if (!def) {
       throw new Error(`${path}.type: unrecognized indicator "${String(v.type)}"`);
     }
-    if (!Array.isArray(v.params) || v.params.length !== def.paramLabels.length) {
-      throw new Error(`${path}.params: ${def.label} expects ${def.paramLabels.length} value(s) (${def.paramLabels.join(", ") || "none"})`);
+    const needed = requiredParamCount(def);
+    if (!Array.isArray(v.params) || v.params.length < needed || v.params.length > def.paramLabels.length) {
+      throw new Error(`${path}.params: ${def.label} expects ${needed === def.paramLabels.length ? needed : `${needed} to ${def.paramLabels.length}`} value(s) (${def.paramLabels.join(", ") || "none"})`);
     }
-    for (const p of v.params) {
-      if (typeof p !== "number" || !Number.isFinite(p) || p <= 0 || p > 500) {
-        throw new Error(`${path}.params: expected each value to be a finite number between 0 and 500`);
+    (v.params as unknown[]).forEach((p, i) => {
+      const optional = i >= needed; // optional settings may be 0 (the first choice in their list)
+      const max = def.maxes?.[i] ?? 500;
+      if (typeof p !== "number" || !Number.isFinite(p) || (optional ? p < 0 : p <= 0) || p > max) {
+        throw new Error(`${path}.params: expected each value to be a finite number between ${optional ? "0" : ">0"} and ${max}`);
       }
-    }
+      const choices = def.options?.[i];
+      if (choices && !choices.some((o) => o.value === p)) throw new Error(`${path}.params: ${def.paramLabels[i]} must be one of ${choices.map((o) => `${o.value} (${o.label})`).join(", ")}`);
+    });
     // MACD-style settings: the fast average must be shorter than the slow one.
     if (def.paramLabels[0] === "Fast" && def.paramLabels[1] === "Slow" && (v.params as number[])[0] >= (v.params as number[])[1]) {
       throw new Error(`${path}.params: the Fast period must be shorter than the Slow period`);

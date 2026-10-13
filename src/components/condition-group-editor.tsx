@@ -1,4 +1,5 @@
 "use client";
+import IndicatorParamInput from "@/components/indicator-param-input";
 import InstrumentCombobox from "@/components/instrument-combobox";
 import { useCustomIndicators } from "@/components/custom-indicators/context";
 import { useSavedBlocks } from "@/components/system/saved-blocks";
@@ -621,21 +622,17 @@ function OperandEditor({
 
       {value.kind === "indicator" &&
         indicatorDef?.paramLabels.map((paramLabel, i) => (
-          <input
+          <IndicatorParamInput
             key={paramLabel + i}
-            type="number"
-            min={0}
-            max={500}
-            step="any"
+            def={indicatorDef}
+            index={i}
             value={value.params[i]}
-            onChange={(e) => {
-              const params = value.params.slice();
-              params[i] = Number(e.target.value);
+            className={inputClass}
+            onChange={(v) => {
+              const params = indicatorDef.paramLabels.map((_, k) => value.params[k] ?? indicatorDef.defaults[k]);
+              params[i] = v;
               onChange({ ...value, params });
             }}
-            className={`${inputClass} w-16`}
-            aria-label={paramLabel}
-            title={paramLabel}
           />
         ))}
 

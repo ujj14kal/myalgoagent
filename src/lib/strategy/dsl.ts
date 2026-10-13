@@ -1,5 +1,5 @@
 import type { ComparisonOperator, ConditionNode, Operand, PriceField } from "./types";
-import { INDICATOR_BY_DSL_NAME } from "./indicator-catalog";
+import { INDICATOR_BY_DSL_NAME, requiredParamCount } from "./indicator-catalog";
 
 export class DslSyntaxError extends Error {
   line: number;
@@ -252,7 +252,10 @@ class Parser {
         this.next();
         this.expect("LPAREN", '"("');
         const params: number[] = [];
+        const required = requiredParamCount(indicatorDef);
         for (let k = 0; k < indicatorDef.paramLabels.length; k++) {
+          // Optional settings (e.g. RSI's source) may simply be left off: rsi(14).
+          if (k >= required && this.peek().type === "RPAREN") break;
           if (k > 0) this.expect("COMMA", '","');
           const paramTok = this.expect("NUMBER", `a value for "${indicatorDef.paramLabels[k]}"`);
           params.push(Number(paramTok.value));

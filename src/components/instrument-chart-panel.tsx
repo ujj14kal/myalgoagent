@@ -1,5 +1,6 @@
 "use client";
 
+import IndicatorParamInput from "@/components/indicator-param-input";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import CandlestickChart, { type Overlay, type ChartType } from "@/components/candlestick-chart";
 import OscillatorPanel, { type OscillatorSeries } from "@/components/oscillator-panel";
@@ -95,20 +96,17 @@ function IndicatorChip({
     <div className="flex items-center gap-1.5 rounded-full border border-brand-navy/15 bg-brand-bg px-2 py-1 text-xs">
       <span className="font-medium text-brand-navy">{def?.label ?? instance.kind}</span>
       {def?.paramLabels.map((paramLabel, i) => (
-        <input
+        <IndicatorParamInput
           key={paramLabel + i}
-          type="number"
-          min={0}
-          step="any"
+          def={def}
+          index={i}
           value={instance.params[i]}
-          title={paramLabel}
-          aria-label={paramLabel}
-          onChange={(e) => {
-            const params = instance.params.slice();
-            params[i] = Number(e.target.value);
+          className="rounded border border-brand-navy/15 bg-white px-1 py-0.5 text-xs outline-none focus:border-brand-primary"
+          onChange={(v) => {
+            const params = def.paramLabels.map((_, k) => instance.params[k] ?? def.defaults[k]);
+            params[i] = v;
             onChange(params);
           }}
-          className="w-12 rounded border border-brand-navy/15 bg-white px-1 py-0.5 text-xs outline-none focus:border-brand-primary"
         />
       ))}
       <button type="button" onClick={onRemove} className="text-brand-navy/40 hover:text-brand-sell" aria-label={`Remove ${def?.label ?? instance.kind}`}>

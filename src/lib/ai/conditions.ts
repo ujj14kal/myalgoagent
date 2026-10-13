@@ -1,7 +1,7 @@
 import { parseFormula } from "@/lib/custom-indicator/formula";
 import { customParts, type CustomIndicatorDef, type CustomPart } from "@/lib/custom-indicator";
 import { parseDsl } from "@/lib/strategy/dsl";
-import { INDICATOR_CATALOG, OSCILLATOR_KINDS, OSCILLATOR_SCALE_GROUP } from "@/lib/strategy/indicator-catalog";
+import { INDICATOR_CATALOG, OSCILLATOR_KINDS, OSCILLATOR_SCALE_GROUP, requiredParamCount } from "@/lib/strategy/indicator-catalog";
 import { CANDLE_PATTERN_CATALOG } from "@/lib/strategy/candle-pattern-catalog";
 import { CHART_PATTERN_CATALOG } from "@/lib/strategy/chart-pattern-catalog";
 import { VOLUME_PATTERN_CATALOG } from "@/lib/strategy/volume-pattern-catalog";
@@ -125,7 +125,8 @@ function toOperand(v: unknown, where: string): Operand {
       const def = INDICATORS.get(v.indicator.toLowerCase().replace(/[\s_-]/g, ""));
       if (!def) throw new Error(`${where}: unknown indicator "${v.indicator}". Available: ${[...INDICATORS.keys()].join(", ")}.`);
       const raw = Array.isArray(v.params) ? v.params.map(Number) : [];
-      const params = def.paramLabels.map((_, i) => (Number.isFinite(raw[i]) ? raw[i] : def.defaults[i]));
+      // Optional settings (source, smoothing…) are only included when the agent gave them.
+      const params = def.paramLabels.slice(0, Math.max(requiredParamCount(def), raw.length)).map((_, i) => (Number.isFinite(raw[i]) ? raw[i] : def.defaults[i]));
       return { kind: "indicator", type: def.kind, params, ...(timeframe ? { timeframe } : {}), ...(instrumentSymbol ? { instrumentSymbol } : {}) };
     }
   }

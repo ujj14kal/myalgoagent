@@ -10,20 +10,58 @@ export interface IndicatorDef {
   paramLabels: string[];
   /** sensible starting values for the visual builder */
   defaults: number[];
+  /**
+   * Settings from this position on are optional: strategies saved before they existed (or typed in code without them) keep the
+   * defaults, and 0 is a valid choice for them (0 = the first option, e.g. "Close" or "Wilder").
+   */
+  optionalFrom?: number;
+  /** Settings that are a pick from a short list rather than a number: shown as a dropdown. Keyed by position. */
+  options?: Record<number, { value: number; label: string }[]>;
+  /** Highest value a setting may take, by position (default 500; prices and dates need more). */
+  maxes?: Record<number, number>;
 }
+
+export const SOURCE_OPTIONS = [
+  { value: 0, label: "Close" },
+  { value: 1, label: "High+Low / 2" },
+  { value: 2, label: "High+Low+Close / 3" },
+  { value: 3, label: "Open+High+Low+Close / 4" },
+];
+const RSI_SMOOTHING = [
+  { value: 0, label: "Wilder (standard)" },
+  { value: 1, label: "Simple average" },
+  { value: 2, label: "Exponential average" },
+];
+const MACD_MA = [
+  { value: 0, label: "EMA (standard)" },
+  { value: 1, label: "SMA" },
+];
+const BB_MA = [
+  { value: 0, label: "SMA (standard)" },
+  { value: 1, label: "EMA" },
+  { value: 2, label: "WMA" },
+];
+export const MAX_PRICE_PARAM = 10_000_000;
+
+/** The setting values to use for an indicator: what was given, with any missing optional ones filled from the defaults. */
+export function withDefaultParams(def: IndicatorDef, params: number[]): number[] {
+  return def.paramLabels.map((_, i) => (Number.isFinite(params[i]) ? params[i] : def.defaults[i]));
+}
+/** How many settings a rule must give: all of them, unless the later ones are optional. */
+export const requiredParamCount = (def: IndicatorDef) => def.optionalFrom ?? def.paramLabels.length;
 
 export const INDICATOR_CATALOG: IndicatorDef[] = [
   { kind: "SMA", dslName: "sma", label: "SMA", paramLabels: ["Period"], defaults: [20] },
   { kind: "EMA", dslName: "ema", label: "EMA", paramLabels: ["Period"], defaults: [20] },
   { kind: "WMA", dslName: "wma", label: "WMA", paramLabels: ["Period"], defaults: [20] },
   { kind: "HMA", dslName: "hma", label: "Hull MA", paramLabels: ["Period"], defaults: [20] },
-  { kind: "RSI", dslName: "rsi", label: "RSI", paramLabels: ["Period"], defaults: [14] },
-  { kind: "MACD_LINE", dslName: "macdline", label: "MACD Line", paramLabels: ["Fast", "Slow", "Signal"], defaults: [12, 26, 9] },
-  { kind: "MACD_SIGNAL", dslName: "macdsignal", label: "MACD Signal", paramLabels: ["Fast", "Slow", "Signal"], defaults: [12, 26, 9] },
-  { kind: "MACD_HISTOGRAM", dslName: "macdhistogram", label: "MACD Histogram", paramLabels: ["Fast", "Slow", "Signal"], defaults: [12, 26, 9] },
-  { kind: "BB_UPPER", dslName: "bollingerupper", label: "Bollinger Upper", paramLabels: ["Period", "Std Dev"], defaults: [20, 2] },
-  { kind: "BB_MIDDLE", dslName: "bollingermiddle", label: "Bollinger Middle", paramLabels: ["Period", "Std Dev"], defaults: [20, 2] },
-  { kind: "BB_LOWER", dslName: "bollingerlower", label: "Bollinger Lower", paramLabels: ["Period", "Std Dev"], defaults: [20, 2] },
+  { kind: "RSI", dslName: "rsi", label: "RSI", paramLabels: ["Period", "Source", "Smoothing"], defaults: [14, 0, 0], optionalFrom: 1, options: { 1: SOURCE_OPTIONS, 2: RSI_SMOOTHING } },
+  { kind: "MACD_LINE", dslName: "macdline", label: "MACD Line", paramLabels: ["Fast", "Slow", "Signal", "Source", "Average type"], defaults: [12, 26, 9, 0, 0], optionalFrom: 3, options: { 3: SOURCE_OPTIONS, 4: MACD_MA } },
+  { kind: "MACD_SIGNAL", dslName: "macdsignal", label: "MACD Signal", paramLabels: ["Fast", "Slow", "Signal", "Source", "Average type"], defaults: [12, 26, 9, 0, 0], optionalFrom: 3, options: { 3: SOURCE_OPTIONS, 4: MACD_MA } },
+  { kind: "MACD_HISTOGRAM", dslName: "macdhistogram", label: "MACD Histogram", paramLabels: ["Fast", "Slow", "Signal", "Source", "Average type"], defaults: [12, 26, 9, 0, 0], optionalFrom: 3, options: { 3: SOURCE_OPTIONS, 4: MACD_MA } },
+  { kind: "BB_UPPER", dslName: "bollingerupper", label: "Bollinger Upper", paramLabels: ["Period", "Std Dev", "Source", "Average type"], defaults: [20, 2, 0, 0], optionalFrom: 2, options: { 2: SOURCE_OPTIONS, 3: BB_MA } },
+  { kind: "BB_MIDDLE", dslName: "bollingermiddle", label: "Bollinger Middle", paramLabels: ["Period", "Std Dev", "Source", "Average type"], defaults: [20, 2, 0, 0], optionalFrom: 2, options: { 2: SOURCE_OPTIONS, 3: BB_MA } },
+  { kind: "BB_LOWER", dslName: "bollingerlower", label: "Bollinger Lower", paramLabels: ["Period", "Std Dev", "Source", "Average type"], defaults: [20, 2, 0, 0], optionalFrom: 2, options: { 2: SOURCE_OPTIONS, 3: BB_MA } },
   { kind: "VWAP", dslName: "vwap", label: "VWAP", paramLabels: [], defaults: [] },
   { kind: "ATR", dslName: "atr", label: "ATR", paramLabels: ["Period"], defaults: [14] },
   { kind: "ADX", dslName: "adx", label: "ADX", paramLabels: ["Period"], defaults: [14] },
@@ -62,8 +100,8 @@ export const INDICATOR_CATALOG: IndicatorDef[] = [
   { kind: "ENVELOPE_UPPER", dslName: "envelopeupper", label: "Envelope Upper", paramLabels: ["Period", "Percent"], defaults: [20, 2.5] },
   { kind: "ENVELOPE_LOWER", dslName: "envelopelower", label: "Envelope Lower", paramLabels: ["Period", "Percent"], defaults: [20, 2.5] },
   { kind: "STDDEV", dslName: "stddev", label: "Std Deviation", paramLabels: ["Period"], defaults: [20] },
-  { kind: "BB_PERCENT_B", dslName: "bollingerpercentb", label: "Bollinger %B", paramLabels: ["Period", "Std Dev"], defaults: [20, 2] },
-  { kind: "BB_BANDWIDTH", dslName: "bollingerbandwidth", label: "Bollinger BandWidth %", paramLabels: ["Period", "Std Dev"], defaults: [20, 2] },
+  { kind: "BB_PERCENT_B", dslName: "bollingerpercentb", label: "Bollinger %B", paramLabels: ["Period", "Std Dev", "Source", "Average type"], defaults: [20, 2, 0, 0], optionalFrom: 2, options: { 2: SOURCE_OPTIONS, 3: BB_MA } },
+  { kind: "BB_BANDWIDTH", dslName: "bollingerbandwidth", label: "Bollinger BandWidth %", paramLabels: ["Period", "Std Dev", "Source", "Average type"], defaults: [20, 2, 0, 0], optionalFrom: 2, options: { 2: SOURCE_OPTIONS, 3: BB_MA } },
   { kind: "BB_SQUEEZE", dslName: "bollingersqueeze", label: "Bollinger squeeze (narrowest bands)", paramLabels: ["Period", "Std Dev", "Lookback", "Percentile"], defaults: [20, 2, 120, 15] },
   { kind: "BB_KC_SQUEEZE", dslName: "squeezebbkc", label: "Squeeze (Bollinger inside Keltner)", paramLabels: ["Period", "Std Dev", "Keltner Mult"], defaults: [20, 2, 1.5] },
   { kind: "VWAP_UPPER_1", dslName: "vwapupper1", label: "VWAP +1 SD band", paramLabels: [], defaults: [] },
@@ -83,6 +121,31 @@ export const INDICATOR_CATALOG: IndicatorDef[] = [
   { kind: "FIB_EXT_1618", dslName: "fibextension1618", label: "Fibonacci 1.618 extension", paramLabels: ["Left", "Right", "Min swing ATR"], defaults: [5, 5, 3] },
   { kind: "FIB_GOLDEN_ZONE", dslName: "fibgoldenzone", label: "In Fibonacci golden zone (1 = yes)", paramLabels: ["Left", "Right", "Min swing ATR"], defaults: [5, 5, 3] },
   { kind: "FIB_DIRECTION", dslName: "fibdirection", label: "Fibonacci swing direction (1 up, -1 down)", paramLabels: ["Left", "Right", "Min swing ATR"], defaults: [5, 5, 3] },
+  // From the analyst studies: divergence flags (1 on the candle the divergence is confirmed, `Right` candles after the second swing),
+  // PPO, Bollinger W-bottom / M-top, anchored VWAPs and extra Fibonacci tools.
+  { kind: "RSI_BULL_DIVERGENCE", dslName: "rsibulldivergence", label: "RSI bullish divergence", paramLabels: ["Period", "Left", "Right", "Max bars"], defaults: [14, 5, 5, 60] },
+  { kind: "RSI_BEAR_DIVERGENCE", dslName: "rsibeardivergence", label: "RSI bearish divergence", paramLabels: ["Period", "Left", "Right", "Max bars"], defaults: [14, 5, 5, 60] },
+  { kind: "MACD_BULL_DIVERGENCE", dslName: "macdbulldivergence", label: "MACD bullish divergence", paramLabels: ["Fast", "Slow", "Signal", "Left", "Right", "Max bars"], defaults: [12, 26, 9, 5, 5, 60] },
+  { kind: "MACD_BEAR_DIVERGENCE", dslName: "macdbeardivergence", label: "MACD bearish divergence", paramLabels: ["Fast", "Slow", "Signal", "Left", "Right", "Max bars"], defaults: [12, 26, 9, 5, 5, 60] },
+  { kind: "PPO_LINE", dslName: "ppoline", label: "PPO line (MACD as % of price)", paramLabels: ["Fast", "Slow", "Signal"], defaults: [12, 26, 9] },
+  { kind: "PPO_SIGNAL", dslName: "pposignal", label: "PPO signal", paramLabels: ["Fast", "Slow", "Signal"], defaults: [12, 26, 9] },
+  { kind: "PPO_HISTOGRAM", dslName: "ppohistogram", label: "PPO histogram", paramLabels: ["Fast", "Slow", "Signal"], defaults: [12, 26, 9] },
+  { kind: "BB_W_BOTTOM", dslName: "bollingerwbottom", label: "Bollinger W-bottom", paramLabels: ["Period", "Std Dev", "Left", "Right", "Max bars"], defaults: [20, 2, 5, 5, 60] },
+  { kind: "BB_M_TOP", dslName: "bollingermtop", label: "Bollinger M-top", paramLabels: ["Period", "Std Dev", "Left", "Right", "Max bars"], defaults: [20, 2, 5, 5, 60] },
+  { kind: "VWAP_WEEK", dslName: "vwapweek", label: "Weekly VWAP", paramLabels: [], defaults: [] },
+  { kind: "VWAP_MONTH", dslName: "vwapmonth", label: "Monthly VWAP", paramLabels: [], defaults: [] },
+  { kind: "VWAP_FROM_DATE", dslName: "vwapfromdate", label: "Anchored VWAP from a date", paramLabels: ["Anchor date (YYYYMMDD)"], defaults: [20260101], maxes: { 0: 99991231 } },
+  { kind: "VWAP_SWING_LOW", dslName: "vwapfromswinglow", label: "Anchored VWAP from the latest swing low", paramLabels: ["Left", "Right"], defaults: [5, 5] },
+  { kind: "VWAP_SWING_HIGH", dslName: "vwapfromswinghigh", label: "Anchored VWAP from the latest swing high", paramLabels: ["Left", "Right"], defaults: [5, 5] },
+  { kind: "FIB_CONFLUENCE", dslName: "fibconfluence", label: "Fibonacci cluster (levels of 2+ swings together)", paramLabels: ["Left", "Right", "Min swing ATR"], defaults: [5, 5, 3] },
+  { kind: "FIB_SETUP_AGE", dslName: "fibsetupage", label: "Fibonacci swing age (candles)", paramLabels: ["Left", "Right", "Min swing ATR"], defaults: [5, 5, 3] },
+  { kind: "FIB_MANUAL_RET_382", dslName: "fibmanual382", label: "Fibonacci 38.2% (swing you enter)", paramLabels: ["Swing start price", "Swing end price"], defaults: [100, 200], maxes: { 0: MAX_PRICE_PARAM, 1: MAX_PRICE_PARAM } },
+  { kind: "FIB_MANUAL_RET_500", dslName: "fibmanual500", label: "Fibonacci 50% (swing you enter)", paramLabels: ["Swing start price", "Swing end price"], defaults: [100, 200], maxes: { 0: MAX_PRICE_PARAM, 1: MAX_PRICE_PARAM } },
+  { kind: "FIB_MANUAL_RET_618", dslName: "fibmanual618", label: "Fibonacci 61.8% (swing you enter)", paramLabels: ["Swing start price", "Swing end price"], defaults: [100, 200], maxes: { 0: MAX_PRICE_PARAM, 1: MAX_PRICE_PARAM } },
+  { kind: "FIB_MANUAL_RET_786", dslName: "fibmanual786", label: "Fibonacci 78.6% (swing you enter)", paramLabels: ["Swing start price", "Swing end price"], defaults: [100, 200], maxes: { 0: MAX_PRICE_PARAM, 1: MAX_PRICE_PARAM } },
+  { kind: "FIB_MANUAL_EXT_1272", dslName: "fibmanualext1272", label: "Fibonacci 1.272 extension (swing you enter)", paramLabels: ["Swing start price", "Swing end price"], defaults: [100, 200], maxes: { 0: MAX_PRICE_PARAM, 1: MAX_PRICE_PARAM } },
+  { kind: "FIB_MANUAL_EXT_1618", dslName: "fibmanualext1618", label: "Fibonacci 1.618 extension (swing you enter)", paramLabels: ["Swing start price", "Swing end price"], defaults: [100, 200], maxes: { 0: MAX_PRICE_PARAM, 1: MAX_PRICE_PARAM } },
+  { kind: "FIB_MANUAL_GOLDEN_ZONE", dslName: "fibmanualgoldenzone", label: "In golden zone of the swing you enter (1 = yes)", paramLabels: ["Swing start price", "Swing end price"], defaults: [100, 200], maxes: { 0: MAX_PRICE_PARAM, 1: MAX_PRICE_PARAM } },
 ];
 
 export const INDICATOR_BY_KIND: Map<IndicatorKind, IndicatorDef> = new Map(
@@ -136,6 +199,18 @@ export const OSCILLATOR_KINDS: Set<IndicatorKind> = new Set([
   "BB_MIDDLE_CHANGE",
   "FIB_GOLDEN_ZONE",
   "FIB_DIRECTION",
+  "RSI_BULL_DIVERGENCE",
+  "RSI_BEAR_DIVERGENCE",
+  "MACD_BULL_DIVERGENCE",
+  "MACD_BEAR_DIVERGENCE",
+  "PPO_LINE",
+  "PPO_SIGNAL",
+  "PPO_HISTOGRAM",
+  "BB_W_BOTTOM",
+  "BB_M_TOP",
+  "FIB_CONFLUENCE",
+  "FIB_SETUP_AGE",
+  "FIB_MANUAL_GOLDEN_ZONE",
 ]);
 
 /** A handful of oscillators are actually *paired* by construction — both
@@ -161,6 +236,9 @@ export const OSCILLATOR_SCALE_GROUP: Partial<Record<IndicatorKind, string>> = {
   MINUS_DI: "DI",
   AROON_UP: "AROON",
   AROON_DOWN: "AROON",
+  PPO_LINE: "PPO",
+  PPO_SIGNAL: "PPO",
+  PPO_HISTOGRAM: "PPO",
 };
 
 /** True when two operands can meaningfully appear on either side of a

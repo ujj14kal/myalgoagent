@@ -70,7 +70,30 @@ export type IndicatorKind =
   | "FIB_EXT_1272"
   | "FIB_EXT_1618"
   | "FIB_GOLDEN_ZONE"
-  | "FIB_DIRECTION";
+  | "FIB_DIRECTION"
+  | "RSI_BULL_DIVERGENCE"
+  | "RSI_BEAR_DIVERGENCE"
+  | "MACD_BULL_DIVERGENCE"
+  | "MACD_BEAR_DIVERGENCE"
+  | "PPO_LINE"
+  | "PPO_SIGNAL"
+  | "PPO_HISTOGRAM"
+  | "BB_W_BOTTOM"
+  | "BB_M_TOP"
+  | "VWAP_WEEK"
+  | "VWAP_MONTH"
+  | "VWAP_FROM_DATE"
+  | "VWAP_SWING_LOW"
+  | "VWAP_SWING_HIGH"
+  | "FIB_CONFLUENCE"
+  | "FIB_SETUP_AGE"
+  | "FIB_MANUAL_RET_382"
+  | "FIB_MANUAL_RET_500"
+  | "FIB_MANUAL_RET_618"
+  | "FIB_MANUAL_RET_786"
+  | "FIB_MANUAL_EXT_1272"
+  | "FIB_MANUAL_EXT_1618"
+  | "FIB_MANUAL_GOLDEN_ZONE";
 
 export type PriceField = "OPEN" | "HIGH" | "LOW" | "CLOSE" | "VOLUME";
 export type ComparisonOperator = "GT" | "LT" | "GTE" | "LTE" | "EQ" | "CROSSES_ABOVE" | "CROSSES_BELOW";

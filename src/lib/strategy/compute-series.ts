@@ -29,7 +29,26 @@ import {
   standardDeviation,
 } from "@/lib/indicators";
 import { supportResistance } from "@/lib/support-resistance";
-import { bollingerBandwidth, bollingerPercentB, bollingerSqueeze, changeOver, fibonacciLevels, keltnerSqueeze, sessionVwap } from "@/lib/indicators-study";
+import {
+  bollingerBandwidth,
+  bollingerEx,
+  bollingerPercentB,
+  bollingerSqueeze,
+  bollingerWM,
+  changeOver,
+  divergenceFlags,
+  fibonacciLevels,
+  keltnerSqueeze,
+  macdEx,
+  manualFibGoldenZone,
+  manualFibLevel,
+  periodVwap,
+  ppo,
+  rsiEx,
+  sessionVwap,
+  vwapFromDate,
+  vwapFromSwing,
+} from "@/lib/indicators-study";
 import type { IndicatorKind } from "./types";
 import { INDICATOR_BY_KIND } from "./indicator-catalog";
 
@@ -38,6 +57,7 @@ import { INDICATOR_BY_KIND } from "./indicator-catalog";
  * condition evaluator and the strategy chart overlay so they can never
  * drift apart on what an indicator actually computes. */
 /** Settings that count bars (periods, lookbacks) — must be whole numbers ≥ 1. */
+// (Source, Smoothing and Average type are picks from a list; 0 is the first choice.)
 const COUNT_PARAM = /period|fast|slow|signal|strength|touches|left|right|lookback|bars|percentile/i;
 
 /**
@@ -76,19 +96,19 @@ export function computeIndicatorSeries(candles: Candle[], type: IndicatorKind, r
     case "HMA":
       return hma(candles, params[0]);
     case "RSI":
-      return rsi(candles, params[0]);
+      return rsiEx(candles, params[0], params[1], params[2]);
     case "MACD_LINE":
-      return macd(candles, params[0], params[1], params[2]).macd;
+      return macdEx(candles, params[0], params[1], params[2], params[3], params[4]).macd;
     case "MACD_SIGNAL":
-      return macd(candles, params[0], params[1], params[2]).signal;
+      return macdEx(candles, params[0], params[1], params[2], params[3], params[4]).signal;
     case "MACD_HISTOGRAM":
-      return macd(candles, params[0], params[1], params[2]).histogram;
+      return macdEx(candles, params[0], params[1], params[2], params[3], params[4]).histogram;
     case "BB_UPPER":
-      return bollingerBands(candles, params[0], params[1]).upper;
+      return bollingerEx(candles, params[0], params[1], params[2], params[3]).upper;
     case "BB_MIDDLE":
-      return bollingerBands(candles, params[0], params[1]).middle;
+      return bollingerEx(candles, params[0], params[1], params[2], params[3]).middle;
     case "BB_LOWER":
-      return bollingerBands(candles, params[0], params[1]).lower;
+      return bollingerEx(candles, params[0], params[1], params[2], params[3]).lower;
     case "VWAP":
       return vwap(candles);
     case "VWAP_UPPER_1":
@@ -168,9 +188,9 @@ export function computeIndicatorSeries(candles: Candle[], type: IndicatorKind, r
     case "STDDEV":
       return standardDeviation(candles, params[0]);
     case "BB_PERCENT_B":
-      return bollingerPercentB(candles, params[0], params[1]);
+      return bollingerPercentB(candles, params[0], params[1], params[2], params[3]);
     case "BB_BANDWIDTH":
-      return bollingerBandwidth(candles, params[0], params[1]);
+      return bollingerBandwidth(candles, params[0], params[1], params[2], params[3]);
     case "BB_SQUEEZE":
       return bollingerSqueeze(candles, params[0], params[1], params[2], params[3]);
     case "BB_KC_SQUEEZE":
@@ -197,5 +217,51 @@ export function computeIndicatorSeries(candles: Candle[], type: IndicatorKind, r
       return fibonacciLevels(candles, params[0], params[1], params[2]).goldenZone;
     case "FIB_DIRECTION":
       return fibonacciLevels(candles, params[0], params[1], params[2]).direction;
+    case "FIB_CONFLUENCE":
+      return fibonacciLevels(candles, params[0], params[1], params[2]).confluence;
+    case "FIB_SETUP_AGE":
+      return fibonacciLevels(candles, params[0], params[1], params[2]).age;
+    case "FIB_MANUAL_RET_382":
+      return manualFibLevel(candles, params[0], params[1], 382);
+    case "FIB_MANUAL_RET_500":
+      return manualFibLevel(candles, params[0], params[1], 500);
+    case "FIB_MANUAL_RET_618":
+      return manualFibLevel(candles, params[0], params[1], 618);
+    case "FIB_MANUAL_RET_786":
+      return manualFibLevel(candles, params[0], params[1], 786);
+    case "FIB_MANUAL_EXT_1272":
+      return manualFibLevel(candles, params[0], params[1], 1272);
+    case "FIB_MANUAL_EXT_1618":
+      return manualFibLevel(candles, params[0], params[1], 1618);
+    case "FIB_MANUAL_GOLDEN_ZONE":
+      return manualFibGoldenZone(candles, params[0], params[1]);
+    case "RSI_BULL_DIVERGENCE":
+      return divergenceFlags(candles, rsiEx(candles, params[0]), params[1], params[2], params[3], true);
+    case "RSI_BEAR_DIVERGENCE":
+      return divergenceFlags(candles, rsiEx(candles, params[0]), params[1], params[2], params[3], false);
+    case "MACD_BULL_DIVERGENCE":
+      return divergenceFlags(candles, macdEx(candles, params[0], params[1], params[2]).macd, params[3], params[4], params[5], true);
+    case "MACD_BEAR_DIVERGENCE":
+      return divergenceFlags(candles, macdEx(candles, params[0], params[1], params[2]).macd, params[3], params[4], params[5], false);
+    case "PPO_LINE":
+      return ppo(candles, params[0], params[1], params[2]).line;
+    case "PPO_SIGNAL":
+      return ppo(candles, params[0], params[1], params[2]).signal;
+    case "PPO_HISTOGRAM":
+      return ppo(candles, params[0], params[1], params[2]).histogram;
+    case "BB_W_BOTTOM":
+      return bollingerWM(candles, params[0], params[1], params[2], params[3], params[4], false);
+    case "BB_M_TOP":
+      return bollingerWM(candles, params[0], params[1], params[2], params[3], params[4], true);
+    case "VWAP_WEEK":
+      return periodVwap(candles, "week");
+    case "VWAP_MONTH":
+      return periodVwap(candles, "month");
+    case "VWAP_FROM_DATE":
+      return vwapFromDate(candles, params[0]);
+    case "VWAP_SWING_LOW":
+      return vwapFromSwing(candles, params[0], params[1], "low");
+    case "VWAP_SWING_HIGH":
+      return vwapFromSwing(candles, params[0], params[1], "high");
   }
 }
