@@ -4,6 +4,10 @@ Dear Nagaveni,
 
 Thank you for your reply. Our answers to each of your points are below.
 
+**What we are asking for, in one paragraph**
+
+Multi-user access for MyAlgoAgent so that every Zerodha user who connects through us gets the same, complete set of data and trading access, with no user getting a reduced version: the full account and trading APIs, and all Kite market data our features use (instrument master, full quotes with open interest and market depth, OHLC and LTP, historical candles for equities, indices and F&O contracts, and live WebSocket streaming). The details and the feature each item supports are in points 6, 9, 11 and 12 below.
+
 **1. Complete workflow: how the platform functions and how trades are executed**
 
 MyAlgoAgent (https://myalgoagent.com) is software for building, testing and running a trader's own rule-based strategies. We do not hold funds, we do not trade for anyone, and every rule is written and visible to the user.
@@ -82,6 +86,15 @@ We request all of these for the user who owns the session:
 - **Option chain and Greeks**: our Options Lab shows the option chain (open interest, change in OI, volume, IV, PCR, max pain) and Greeks (delta, gamma, theta, vega, rho). We build the chain from `/instruments` (NFO) plus `/quote` for the underlying's expiry and strikes, and calculate the Greeks ourselves from each contract's price (or estimate and label them): we do not need Greeks from Zerodha. Today, for users of other brokers, the chain comes from their own broker; we would like Zerodha users to get the same.
 
 We do not redistribute Zerodha data: it is shown and used only for the user who owns the session, kept only briefly in memory to avoid repeat requests, and never shown to anyone else or sold.
+
+**11a. The same data for every user**
+
+We ask that the entitlement is the same for every user who connects through MyAlgoAgent, whatever plan they are on with us:
+- every connected user receives the same market-data set listed above (quotes with depth and open interest, historical candles for equities, indices and F&O, instrument master, and WebSocket streaming), so that charts, backtests, forward tests, live signals, the option chain and Analyst Pro behave identically for all of them, including users who do not hold a separate historical-data subscription;
+- the same account and trading endpoints for every user: profile, margins, holdings, positions, orders, trades, order and basket margins, and order placement, modification and cancellation;
+- the same rate limits and the same WebSocket subscription limits per user, with our server making the calls on each user's own session and from the static IP registered for that user.
+
+If Zerodha prefers to charge for market data at the platform level, or per user, we are open to discussing the commercial terms.
 
 **12. Options: option chain and Greeks, and what we need for Zerodha users**
 
