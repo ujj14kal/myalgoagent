@@ -189,6 +189,8 @@ export default function CandlestickChart({
       case "trendline":
       case "rectangle":
       case "fibonacci":
+      case "fibFan":
+      case "fibTimeZones":
       case "ray":
       case "arrow":
       case "circle":
@@ -224,6 +226,8 @@ export default function CandlestickChart({
       case "trendline":
       case "rectangle":
       case "fibonacci":
+      case "fibFan":
+      case "fibTimeZones":
       case "ray":
       case "arrow":
       case "circle":
@@ -257,6 +261,8 @@ export default function CandlestickChart({
       case "trendline":
       case "rectangle":
       case "fibonacci":
+      case "fibFan":
+      case "fibTimeZones":
       case "ray":
       case "arrow":
       case "circle":
@@ -427,6 +433,8 @@ export default function CandlestickChart({
       if (tool === "trendline") onDrawingCompleteRef.current?.({ kind: "trendline", from, to: point });
       else if (tool === "rectangle") onDrawingCompleteRef.current?.({ kind: "rectangle", from, to: point });
       else if (tool === "fibonacci") onDrawingCompleteRef.current?.({ kind: "fibonacci", from, to: point });
+      else if (tool === "fibFan") onDrawingCompleteRef.current?.({ kind: "fibFan", from, to: point });
+      else if (tool === "fibTimeZones") onDrawingCompleteRef.current?.({ kind: "fibTimeZones", from, to: point });
       else if (tool === "ray") onDrawingCompleteRef.current?.({ kind: "ray", from, to: point });
       else if (tool === "arrow") onDrawingCompleteRef.current?.({ kind: "arrow", from, to: point });
       else if (tool === "circle") onDrawingCompleteRef.current?.({ kind: "circle", from, to: point });

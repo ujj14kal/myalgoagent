@@ -96,7 +96,40 @@ const FLAG_UP: Art = {
   text: "A sharp rise (the pole), then a short, gently falling pause (the flag). The rule fires when price breaks out above the flag.",
 };
 
+/** A bullish XABCD harmonic: X low, A high, B, C, D low (the rule fires when D is confirmed). */
+const harmonic = (name: string, ys: [number, number, number, number, number], ratios: string): Art => ({
+  bias: "Bullish",
+  path: [[4, ys[0]], [26, ys[1]], [46, ys[2]], [68, ys[3]], [90, ys[4]]],
+  guides: [
+    { from: [4, ys[0]], to: [46, ys[2]] },
+    { from: [26, ys[1]], to: [68, ys[3]] },
+  ],
+  signal: { at: [90, ys[4]], dir: "up" },
+  labels: [
+    { at: [4, ys[0] - 9], text: "X" },
+    { at: [26, ys[1] + 6], text: "A" },
+    { at: [46, ys[2] - 9], text: "B" },
+    { at: [68, ys[3] + 6], text: "C" },
+    { at: [90, ys[4] - 10], text: "D" },
+  ],
+  text: `${name}: five swings X-A-B-C-D whose legs follow set Fibonacci ratios (${ratios}). The rule fires once, when the last swing D is confirmed. Harmonics are complex and easy to over-fit: treat them as a warning and test them.`,
+});
+const harmonicBear = (a: Art, name: string): Art => ({ ...mirror(a, "Bearish", a.text.replace(/^[^:]+:/, `${name}:`)) });
+
+const GARTLEY = harmonic("Bullish Gartley", [14, 90, 44, 70, 31], "B at 61.8% of XA, D at 78.6% of XA");
+const BAT = harmonic("Bullish Bat", [14, 90, 52, 72, 24], "B at 38.2–50% of XA, D at 88.6% of XA");
+const BUTTERFLY = harmonic("Bullish Butterfly", [22, 92, 37, 65, 5], "B at 78.6% of XA, D beyond X at 127–162% of XA");
+const CRAB = harmonic("Bullish Crab", [40, 95, 67, 85, 6], "B at 38.2–61.8% of XA, D at 161.8% of XA");
+
 const ART: Record<ChartPatternKind, Art> = {
+  BULLISH_GARTLEY: GARTLEY,
+  BEARISH_GARTLEY: harmonicBear(GARTLEY, "Bearish Gartley"),
+  BULLISH_BAT: BAT,
+  BEARISH_BAT: harmonicBear(BAT, "Bearish Bat"),
+  BULLISH_BUTTERFLY: BUTTERFLY,
+  BEARISH_BUTTERFLY: harmonicBear(BUTTERFLY, "Bearish Butterfly"),
+  BULLISH_CRAB: CRAB,
+  BEARISH_CRAB: harmonicBear(CRAB, "Bearish Crab"),
   HEAD_AND_SHOULDERS: HS,
   INVERSE_HEAD_AND_SHOULDERS: {
     ...mirror(HS, "Bullish", "Three dips with the middle one deepest. The rule fires when price breaks above the neckline joining the two peaks — often the end of a downtrend."),

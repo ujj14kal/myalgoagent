@@ -391,6 +391,18 @@ function chartPatternShape(candles: Candle[], swings: SwingPoint[], i: number, p
       }
       break;
     }
+    case "BULLISH_GARTLEY":
+    case "BEARISH_GARTLEY":
+    case "BULLISH_BAT":
+    case "BEARISH_BAT":
+    case "BULLISH_BUTTERFLY":
+    case "BEARISH_BUTTERFLY":
+    case "BULLISH_CRAB":
+    case "BEARISH_CRAB": {
+      const t = tail(5);
+      if (t.length === 5) zigzag(t, ["X", "A", "B", "C", "D"]);
+      break;
+    }
     case "ROUNDING_BOTTOM":
     case "ROUNDING_TOP":
       if (i - 30 >= 0) shape.lines.push({ pane: "price", pts: closesEvery(candles, i - 30, i), style: "shape" });

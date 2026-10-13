@@ -18,7 +18,15 @@ export type ChartPatternKind =
   | "RECTANGLE"
   | "CUP_AND_HANDLE"
   | "ROUNDING_BOTTOM"
-  | "ROUNDING_TOP";
+  | "ROUNDING_TOP"
+  | "BULLISH_GARTLEY"
+  | "BEARISH_GARTLEY"
+  | "BULLISH_BAT"
+  | "BEARISH_BAT"
+  | "BULLISH_BUTTERFLY"
+  | "BEARISH_BUTTERFLY"
+  | "BULLISH_CRAB"
+  | "BEARISH_CRAB";
 
 // Tunable thresholds — a single spot to retune if backtesting shows a
 // pattern firing too often/rarely, without touching detector logic.
@@ -173,6 +181,41 @@ function detectTripleBottom(swings: SwingPoint[], candle: Candle): boolean {
   const troughsMatch =
     withinTolerance(l1.price, l2.price, T.peak) && withinTolerance(l2.price, l3.price, T.peak);
   return troughsMatch && candle.close > Math.max(h1.price, h2.price);
+}
+
+// ---------- Harmonic patterns (XABCD) ----------
+//
+// Five alternating swings X, A, B, C, D whose legs sit in set Fibonacci ratios. The pattern is "complete" at D, so it fires once,
+// on the first candle on which swing D is known (a swing needs SWING_LOOKBACK candles after it), never earlier. A bullish pattern
+// ends in a swing low (X low, A high, B low, C high, D low); the bearish one is its mirror. Ratios are the textbook ones, each
+// allowed 5% either side; the study that these come from itself calls the family complex and prone to overfitting.
+
+type Range = [number, number];
+const HARMONIC_TOLERANCE = 0.05;
+const HARMONICS: Record<"GARTLEY" | "BAT" | "BUTTERFLY" | "CRAB", { b: Range; c: Range; d: Range; bc: Range }> = {
+  // b = AB / XA, c = BC / AB, d = AD / XA (how far D sits from A in XA's), bc = CD / BC
+  GARTLEY: { b: [0.618, 0.618], c: [0.382, 0.886], d: [0.786, 0.786], bc: [1.272, 1.618] },
+  BAT: { b: [0.382, 0.5], c: [0.382, 0.886], d: [0.886, 0.886], bc: [1.618, 2.618] },
+  BUTTERFLY: { b: [0.786, 0.786], c: [0.382, 0.886], d: [1.272, 1.618], bc: [1.618, 2.618] },
+  CRAB: { b: [0.382, 0.618], c: [0.382, 0.886], d: [1.618, 1.618], bc: [2.24, 3.618] },
+};
+const inRange = (x: number, [lo, hi]: Range) => x >= lo * (1 - HARMONIC_TOLERANCE) && x <= hi * (1 + HARMONIC_TOLERANCE);
+
+function detectHarmonic(swings: SwingPoint[], index: number, kind: keyof typeof HARMONICS, bullish: boolean): boolean {
+  const tail = tailTypesMatch(swings, bullish ? ["low", "high", "low", "high", "low"] : ["high", "low", "high", "low", "high"]);
+  if (!tail) return false;
+  const [x, a, b, c, d] = tail;
+  if (index - SWING_LOOKBACK !== d.index) return false; // fire once, when D first becomes known
+  // Work in "upward" prices so one set of ratios serves both directions.
+  const sign = bullish ? 1 : -1;
+  const [X, A, B, C, D] = [x.price, a.price, b.price, c.price, d.price].map((p) => p * sign);
+  const xa = A - X;
+  const ab = A - B;
+  const bc = C - B;
+  const cd = C - D;
+  if (!(xa > 0 && ab > 0 && bc > 0 && cd > 0)) return false;
+  const r = HARMONICS[kind];
+  return inRange(ab / xa, r.b) && inRange(bc / ab, r.c) && inRange((A - D) / xa, r.d) && inRange(cd / bc, r.bc) && C < A && B > Math.min(X, D);
 }
 
 function detectHeadAndShoulders(swings: SwingPoint[], candle: Candle, index: number): boolean {
@@ -418,6 +461,22 @@ function detectAt(candles: Candle[], swings: SwingPoint[], i: number, pattern: C
       return detectRoundingBottom(candles, i);
     case "ROUNDING_TOP":
       return detectRoundingTop(candles, i);
+    case "BULLISH_GARTLEY":
+      return detectHarmonic(known, i, "GARTLEY", true);
+    case "BEARISH_GARTLEY":
+      return detectHarmonic(known, i, "GARTLEY", false);
+    case "BULLISH_BAT":
+      return detectHarmonic(known, i, "BAT", true);
+    case "BEARISH_BAT":
+      return detectHarmonic(known, i, "BAT", false);
+    case "BULLISH_BUTTERFLY":
+      return detectHarmonic(known, i, "BUTTERFLY", true);
+    case "BEARISH_BUTTERFLY":
+      return detectHarmonic(known, i, "BUTTERFLY", false);
+    case "BULLISH_CRAB":
+      return detectHarmonic(known, i, "CRAB", true);
+    case "BEARISH_CRAB":
+      return detectHarmonic(known, i, "CRAB", false);
   }
 }
 

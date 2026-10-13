@@ -301,6 +301,17 @@ export const PRESETS: Preset[] = [
     ],
   },
   {
+    id: "fib-harmonic-confirmation",
+    study: "Fibonacci",
+    name: "Harmonic pattern with confirmation (experimental)",
+    summary: "Waits for a completed bullish Gartley, Bat, Butterfly or Crab (five swings whose legs follow set Fibonacci ratios) in the last 5 candles, then buys when RSI turns up and price closes green. Harmonics are complex and easy to over-fit, and the study itself defers them: test this carefully on many stocks before trusting it.",
+    timeframe: "1d",
+    product: "DELIVERY",
+    entry: and(or(...(["BULLISH_GARTLEY", "BULLISH_BAT", "BULLISH_BUTTERFLY", "BULLISH_CRAB"] as const).map((pattern) => recent({ kind: "signal", signal: { family: "CHART_PATTERN", pattern } }, 5))), cmp(ind("RSI_CHANGE", 14, 1), "GT", num(0)), cmp(price("CLOSE"), "GT", price("OPEN"))),
+    exit: or(cmp(ind("RSI", 14), "GTE", num(70)), cmp(price("CLOSE"), "CROSSES_BELOW", ind("EMA", 20))),
+    stopLoss: { unit: "ATR_MULTIPLE", value: 2 },
+  },
+  {
     id: "fib-confluence-zone",
     study: "Fibonacci",
     name: "Fibonacci confluence zone",

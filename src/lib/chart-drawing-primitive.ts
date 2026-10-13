@@ -15,6 +15,8 @@ export type Drawing =
   | { kind: "horizontal"; price: number }
   | { kind: "rectangle"; from: { time: number; price: number }; to: { time: number; price: number } }
   | { kind: "fibonacci"; from: { time: number; price: number }; to: { time: number; price: number } }
+  | { kind: "fibFan"; from: { time: number; price: number }; to: { time: number; price: number } }
+  | { kind: "fibTimeZones"; from: { time: number; price: number }; to: { time: number; price: number } }
   | { kind: "text"; at: { time: number; price: number }; text: string }
   | { kind: "ray"; from: { time: number; price: number }; to: { time: number; price: number } }
   | { kind: "arrow"; from: { time: number; price: number }; to: { time: number; price: number } }
@@ -25,6 +27,8 @@ export type Drawing =
   | { kind: "longPosition" | "shortPosition"; entryTime: number; entryPrice: number; stopPrice: number; targetPrice: number };
 
 const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+const FIB_FAN_LEVELS = [0.382, 0.5, 0.618];
+const FIB_SEQUENCE = [0, 1, 2, 3, 5, 8, 13, 21, 34];
 const VOLUME_PROFILE_BIN_COUNT = 24;
 
 // Shared by the Fixed Range Volume Profile drawing and the always-on
@@ -127,6 +131,53 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
             ctx.fillStyle = "#bda360";
             ctx.fillText(`${(level * 100).toFixed(1)}% (${price.toFixed(2)})`, right + 4, y + 3);
           }
+        } else if (d.kind === "fibFan") {
+          // From the first point, lines through 38.2 / 50 / 61.8% of the vertical distance to the second point, extended to the edge.
+          const x1 = toX(d.from.time);
+          const y1 = toY(d.from.price);
+          const x2 = toX(d.to.time);
+          if (x1 === null || y1 === null || x2 === null || x2 === x1) return;
+          const range = d.to.price - d.from.price;
+          ctx.strokeStyle = "rgba(71, 24, 152, 0.45)";
+          const y2 = toY(d.to.price);
+          if (y2 !== null) {
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+          }
+          for (const level of FIB_FAN_LEVELS) {
+            const yL = toY(d.from.price + range * level);
+            if (yL === null) continue;
+            const dx = x2 - x1;
+            const t = dx > 0 ? (mediaSize.width - x1) / dx : (0 - x1) / dx;
+            ctx.strokeStyle = "rgba(189, 163, 96, 0.85)";
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x1 + dx * t, y1 + (yL - y1) * t);
+            ctx.stroke();
+            ctx.fillStyle = "#bda360";
+            ctx.fillText(`${(level * 100).toFixed(1)}%`, x2 + 4, yL - 3);
+          }
+        } else if (d.kind === "fibTimeZones") {
+          // Vertical lines at 0, 1, 2, 3, 5, 8, 13, 21, 34 times the distance between the two points.
+          const x1 = toX(d.from.time);
+          const x2 = toX(d.to.time);
+          if (x1 === null || x2 === null || x2 === x1) return;
+          const step = x2 - x1;
+          ctx.setLineDash([3, 3]);
+          ctx.strokeStyle = "rgba(189, 163, 96, 0.8)";
+          ctx.fillStyle = "#bda360";
+          for (const n of FIB_SEQUENCE) {
+            const x = x1 + step * n;
+            if (x < 0 || x > mediaSize.width) continue;
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, mediaSize.height);
+            ctx.stroke();
+            ctx.fillText(String(n), x + 3, 12);
+          }
+          ctx.setLineDash([]);
         } else if (d.kind === "text") {
           const x = toX(d.at.time);
           const y = toY(d.at.price);

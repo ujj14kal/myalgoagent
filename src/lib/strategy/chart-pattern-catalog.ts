@@ -24,6 +24,14 @@ export const CHART_PATTERN_CATALOG: ChartPatternDef[] = [
   { kind: "CUP_AND_HANDLE", label: "Cup and Handle" },
   { kind: "ROUNDING_BOTTOM", label: "Rounding Bottom" },
   { kind: "ROUNDING_TOP", label: "Rounding Top" },
+  { kind: "BULLISH_GARTLEY", label: "Bullish Gartley (harmonic)" },
+  { kind: "BEARISH_GARTLEY", label: "Bearish Gartley (harmonic)" },
+  { kind: "BULLISH_BAT", label: "Bullish Bat (harmonic)" },
+  { kind: "BEARISH_BAT", label: "Bearish Bat (harmonic)" },
+  { kind: "BULLISH_BUTTERFLY", label: "Bullish Butterfly (harmonic)" },
+  { kind: "BEARISH_BUTTERFLY", label: "Bearish Butterfly (harmonic)" },
+  { kind: "BULLISH_CRAB", label: "Bullish Crab (harmonic)" },
+  { kind: "BEARISH_CRAB", label: "Bearish Crab (harmonic)" },
 ];
 
 export const CHART_PATTERN_BY_KIND: Map<ChartPatternKind, ChartPatternDef> = new Map(

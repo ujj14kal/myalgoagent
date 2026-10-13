@@ -155,6 +155,7 @@ describe("no-look-ahead: computeChartPatternSeries (swing-point-based patterns)"
       "TRIPLE_TOP", "TRIPLE_BOTTOM", "ASCENDING_TRIANGLE", "DESCENDING_TRIANGLE",
       "SYMMETRICAL_TRIANGLE", "RISING_WEDGE", "FALLING_WEDGE", "BULL_FLAG", "BEAR_FLAG",
       "PENNANT", "RECTANGLE", "CUP_AND_HANDLE", "ROUNDING_BOTTOM", "ROUNDING_TOP",
+      "BULLISH_GARTLEY", "BEARISH_GARTLEY", "BULLISH_BAT", "BEARISH_BAT", "BULLISH_BUTTERFLY", "BEARISH_BUTTERFLY", "BULLISH_CRAB", "BEARISH_CRAB",
     ] as const;
 
     for (const pattern of patterns) {

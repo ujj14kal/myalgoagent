@@ -69,6 +69,26 @@ const CORE_TOOLS: Tool[] = [
 
 const MORE_TOOLS: Tool[] = [
   {
+    kind: "fibFan",
+    label: "Fibonacci fan",
+    hint: "Click two points — lines at 38.2 / 50 / 61.8%",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M2 13 L14 3 M2 13 L14 6.5 M2 13 L14 10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    kind: "fibTimeZones",
+    label: "Fibonacci time zones",
+    hint: "Click two points — verticals at 1, 2, 3, 5, 8, 13…",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M3 2 V14 M5 2 V14 M8 2 V14 M13 2 V14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeDasharray="2 1.5" />
+      </svg>
+    ),
+  },
+  {
     kind: "ray",
     label: "Ray",
     hint: "Click two points",
