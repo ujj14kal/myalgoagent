@@ -4,11 +4,12 @@ import LegalPage, { type LegalSection } from "@/components/legal-page";
 import { Callout } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 import BrokerLogos from "@/components/broker-logos";
+import { ALL_BROKERS_SENTENCE, BROKER_COUNT } from "@/lib/brokers/public-copy";
 
 export const metadata: Metadata = pageMetadata({
   title: "Live Algo Trading & Broker Integration",
   description:
-    "Connect your own account at 9 Indian brokers today. Live order placement is rolling out account by account — protected by explicit user confirmation, server-side risk controls, your own static IP and a global kill switch.",
+    `Connect your own account at ${BROKER_COUNT} Indian brokers today. Live order placement is rolling out account by account — protected by explicit user confirmation, server-side risk controls, your own static IP and a global kill switch.`,
   path: "/live-trading",
 });
 
@@ -17,14 +18,14 @@ const sections: LegalSection[] = [
     id: "status",
     title: "Availability",
     paragraphs: [
-      "Broker connections are live: you can link your own account at Dhan, Zerodha, Upstox, Fyers, Angel One, Groww, ICICI Direct, 5paisa or Alice Blue today. Live order placement is being switched on account by account: every order is checked on our servers (kill switch, per-order and daily limits, duplicate protection), sent from the static IP registered on your broker account, and recorded with its full history. Once it's on, you take a strategy live with one Go Live button: it keeps running on MyAlgoAgent and sends its orders to your broker. Until it's on for you, you build strategies, backtest them and forward test them on new market data.",
+      `Broker connections are live: you can link your own account at ${ALL_BROKERS_SENTENCE} today. Live order placement is being switched on account by account: every order is checked on our servers (kill switch, per-order and daily limits, duplicate protection), sent from the static IP registered on your broker account, and recorded with its full history. Once it's on, you take a strategy live with one Go Live button: it keeps running on MyAlgoAgent and sends its orders to your broker. Until it's on for you, you build strategies, backtest them and forward test them on new market data. A broker shows as ready for live orders once its readiness check passes.`,
     ],
   },
   {
     id: "brokers",
     title: "Broker connection",
     paragraphs: [
-      "You create a free API app on your broker's developer site, paste the Redirect URL we give you, paste your API key and secret on the Broker Connections page, and log in on your broker's own page — your password, PIN and 2FA are never entered on MyAlgoAgent. (Groww works slightly differently: you approve your key on Groww each day — or choose automatic login with Groww's API TOTP key — instead of logging in through a redirect. With Upstox you can also approve with a tap on your phone.) The platform verifies the connection with your broker before marking it connected.",
+      "You create a free API app on your broker's developer site, paste the Redirect URL we give you, paste your API key and secret on the Broker Connections page, and log in on your broker's own page — by default your password, PIN and 2FA are never entered on MyAlgoAgent. (Groww works slightly differently: you approve your key on Groww each day — or choose automatic login with Groww's API TOTP key — instead of logging in through a redirect. With Upstox you can also approve with a tap on your phone, and for Dhan and Angel One you can opt in to an automatic daily login (beta) that keeps your PIN and 2FA secret sealed with a separate key, only if you tick a consent box.) The platform verifies the connection with your broker before marking it connected.",
       "Your API key, secret and each day's session token are encrypted with AES-256 before they're stored and are never sent to the browser. Broker sessions end every day by exchange rules, so you log in once each trading day. Placing live orders needs a static IP registered on your broker account (a SEBI rule) — on a paid plan your own static IP is created for you automatically within a couple of minutes, the Live Trading page shows you the exact IP to register, and a readiness check confirms your broker, login and IP are all in order without placing any order.",
     ],
     extra: (
@@ -90,7 +91,7 @@ export default function LiveTradingPage() {
       <LegalPage
         label="Product / Live Trading"
         title="Live execution, protected by explicit confirmation and risk controls"
-        updated="September 2026"
+        updated="October 2026"
         intro="Connect your broker today; live trading is never enabled implicitly — it will require a connected broker account and explicit user authorization."
         sections={sections}
         breadcrumbLabel="Live Trading"

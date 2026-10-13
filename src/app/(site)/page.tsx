@@ -5,6 +5,7 @@ import Reveal from "@/components/reveal";
 import Agent2D from "@/components/robot/agent-2d";
 import ComingSoonTag from "@/components/coming-soon-tag";
 import BrokerLogos from "@/components/broker-logos";
+import { ALL_BROKERS_SENTENCE, BROKER_COUNT } from "@/lib/brokers/public-copy";
 
 export const metadata: Metadata = {
   description:
@@ -26,20 +27,24 @@ const capabilities = [
   { title: "Realistic backtesting", text: "Configurable brokerage, fees, slippage and position sizing — not just raw price math." },
   { title: "Forward testing", text: "Validate strategies on daily or intraday candles with notional capital before risking real money." },
   { title: "Risk management engine", text: "Per-session loss limits, a losing-streak limit and an emergency kill switch, enforced on the server." },
-  { title: "Broker connections", text: "Link your own account at 9 Indian brokers with your own API key — encrypted, verified on connect." },
+  { title: "Broker connections", text: `Link your own account at ${BROKER_COUNT} Indian brokers with your own API key — encrypted, verified on connect, with optional automatic daily login.` },
   { title: "Watch your strategy trade", text: "An animated replay ticks off every condition on the signal candle and plays out the entry, take-profit, stop-loss and trailing stop." },
   { title: "Options Lab", text: "Multi-leg options payoffs, breakevens, max profit and loss, and Greeks before you trade." },
   { title: "Your broker account, in one place", text: "Real holdings, positions, funds and orders from your connected broker." },
   { title: "Alerts & notifications", text: "Signal, fill and risk-limit alerts, delivered in the app as they happen." },
   { title: "Go Live on your own broker", text: "A tested strategy keeps running here and sends its orders to your broker automatically — intraday or delivery, within your per-order and daily limits, with pause, exit-now, stop and a kill switch. Switched on account by account." },
   { title: "Custom indicators", text: "Describe an indicator to your agent in plain words — it writes the formula you can read, builds a strategy around it and lets you preview and replay it before saving." },
-  { title: "An AI agent you can talk to", text: "Type or speak: it drafts strategies, backtests and limits for you to review, reads the market and your account, and never places an order on its own." },
+  { title: "Blocks, concepts and trading systems", text: "Define a setup once (your own BOS, FVG or order block), combine blocks into bullish or bearish concepts, then assemble a trading system that sets the instrument, risk and what to do when setups conflict." },
+  { title: "Analyst Pro", text: "Pick any stock and see what its chart says, indicator by indicator, with each reading and its weight, plus the nearest support and resistance. An analysis of the data, never a forecast or advice." },
+  { title: "Free trial, simple plans", text: "Every account starts with a 7-day free trial, no card. Then Free, or Trade and Pro with a live credit meter, a clear bill split into price and GST, and numbered invoices." },
+  { title: "Real people for support", text: "Open Help & Support in the app, or just reply to any of our emails: every message becomes a numbered request that our team answers, with the reply in the app and your inbox." },
+  { title: "An AI agent you can talk to", text: "Type or speak: it explains any part of trading and the markets, drafts strategies, backtests and limits for you to review, reads your account, never gives advice and never places an order on its own." },
 ];
 
 const faqs = [
   { q: "Can I test without risking real capital?", a: "Yes. Forward testing runs a strategy forward on daily or intraday candles using notional capital only." },
   { q: "Does a successful backtest guarantee results?", a: "No. Historical and backtested results are illustrative and cannot guarantee future performance." },
-  { q: "Can I connect my broker?", a: "Yes — Dhan, Zerodha, Upstox, Fyers, Angel One, Groww, ICICI Direct, 5paisa and Alice Blue today, with your own API key. By default you log in on your broker’s own page and we never see your password or 2FA; for a few brokers there is an optional automatic login you can turn on yourself." },
+  { q: "Can I connect my broker?", a: `Yes — ${ALL_BROKERS_SENTENCE} today, with your own API key. By default you log in on your broker’s own page and we never see your password or 2FA; for a few brokers there is an optional automatic login you can turn on yourself.` },
   { q: "How is live trading authorized?", a: "You start it yourself. Live trading is switched on account by account; you connect your own broker, pass a readiness check that places no order, and press Go Live after acknowledging the risk. From then on the strategy’s orders go to your broker automatically whenever its rules trigger, checked first against your limits and the kill switch. You can pause it, exit the position, stop it or disconnect the broker at any time." },
 ];
 

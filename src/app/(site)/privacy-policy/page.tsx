@@ -51,7 +51,7 @@ const sections: LegalSection[] = [
     id: "storage",
     title: "How we store and protect your information",
     paragraphs: [
-      "Account and platform data is stored in a managed PostgreSQL database hosted on Amazon Web Services (AWS) infrastructure, protected in transit with TLS/SSL encryption. Broker API keys, secrets and session tokens you connect are encrypted (AES-256) before storage with a key held separately from the database, and are never exposed to client-side/browser code. We never receive your broker password, PIN or 2FA codes — those are entered only on your broker\u2019s own page. Access to production data is restricted to what is operationally necessary.",
+      "Account and platform data is stored in a managed PostgreSQL database hosted on Amazon Web Services (AWS) infrastructure, protected in transit with TLS/SSL encryption. Broker API keys, secrets and session tokens you connect are encrypted (AES-256) before storage with a key held separately from the database, and are never exposed to client-side/browser code. By default we never receive your broker password, PIN or 2FA codes — those are entered only on your broker\u2019s own page. The exception is an optional, opt-in automatic daily login for some brokers (currently Dhan and Angel One, in beta): if you tick its consent box we store your PIN and 2FA secret, sealed with a separate encryption key, only to sign in for you each day; they are never shown again and are deleted when you disconnect the broker or delete your account. Access to production data is restricted to what is operationally necessary.",
     ],
   },
   {
@@ -79,7 +79,7 @@ const sections: LegalSection[] = [
     ],
     extra: (
       <p className="mt-4 text-sm leading-relaxed text-brand-navy/70">
-        Our sub-processors — companies that process data on our behalf under the categories above — are: Amazon Web Services (hosting, database, email delivery, AI processing through Amazon Bedrock, and voice through Amazon Transcribe and Amazon Polly) and Google (OAuth sign-in and analytics).
+        Our sub-processors — companies that process data on our behalf under the categories above — are: Amazon Web Services (hosting, database, email delivery, AI processing through Amazon Bedrock, and voice through Amazon Transcribe and Amazon Polly) Google (OAuth sign-in, analytics and, as a second route for our email, Google Workspace), and Razorpay (payments).
       </p>
     ),
   },
@@ -97,7 +97,7 @@ const sections: LegalSection[] = [
     id: "email",
     title: "Email communications",
     paragraphs: [
-      "We send service email only — never marketing or promotional email, and never to a purchased or imported list. Most emails are triggered directly by an action you take: account verification, a password-reset link, a sign-in (“magic link”) email, a confirmation that we received a support request or feedback, or our team's reply to it. We also send automatic alerts about your own account and strategies, such as a live signal waiting for your confirmation, a live order being filled, a strategy being paused, your broker login ending, or your credits running low; you can switch off most of these in Agent settings, but alerts that a strategy was paused or a broker login ended are safety alerts and are always sent. If you write to our no-reply address, we open a support request from your message so our team can answer it. We may also email you important notices about your account or the Service — for example a message from our team about your account, planned maintenance, or changes to our Terms or this policy. If an email to your address bounces or you mark one as spam, our provider (Amazon SES) automatically suppresses future sends to that address until the issue is resolved.",
+      "We send service email only — never marketing or promotional email, and never to a purchased or imported list. Most emails are triggered directly by an action you take: account verification, a password-reset link, a sign-in (“magic link”) email, a confirmation that we received a support request or feedback, or our team's reply to it. We also send automatic alerts about your own account and strategies, such as a live signal waiting for your confirmation, a live order being filled, a strategy being paused, your broker login ending, or your credits running low; you can switch off most of these in Agent settings, but alerts that a strategy was paused or a broker login ended are safety alerts and are always sent. If you write to our no-reply address, or reply to one of our emails, we open a support request from your message so our team can answer it. Occasionally our team may also write personally, one email at a time, to a person about a collaboration or partnership; that is not bulk marketing, and you can ask us to stop at any time. We may also email you important notices about your account or the Service — for example a message from our team about your account, planned maintenance, or changes to our Terms or this policy. If an email to your address bounces or you mark one as spam, our provider (Amazon SES) automatically suppresses future sends to that address until the issue is resolved.",
     ],
   },
   {

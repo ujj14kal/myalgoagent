@@ -73,6 +73,23 @@ export default function SecurityPage() {
           refunded safely.
         </p>
 
+        <h2>Live orders</h2>
+        <ul>
+          <li>On a paid plan your orders leave from your own static IP, created for you and registered on your broker account, so your broker sees one stable, known address</li>
+          <li>Every order is checked on our servers first: kill switch, per-order and daily limits, duplicate protection</li>
+          <li>An order is recorded before it is sent and confirmed with the broker afterwards, so it is never sent twice or guessed at</li>
+          <li>A readiness check proves your broker, login and IP are in order without placing any order</li>
+        </ul>
+
+        <h2>Email you can trust</h2>
+        <p>
+          Our emails are sent from our own domain with SPF, DKIM and DMARC set
+          up, so they can be verified as ours. We never ask for your password,
+          API keys, PIN or one-time codes by email or in chat. If you reply to
+          one of our emails, your reply becomes a numbered support request that
+          our team answers.
+        </p>
+
         <h2>Monitoring & backups</h2>
         <p>
           The platform is monitored around the clock and our team is alerted

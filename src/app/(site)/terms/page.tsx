@@ -51,7 +51,7 @@ const sections: LegalSection[] = [
     title: "Broker connections",
     paragraphs: [
       "You connect a broker using an API app you create in your own broker account. Connecting authorizes MyAlgoAgent to use those credentials with your broker's official API on your behalf — to log you in, verify your account and read account information and, where live trading is switched on for your account, to place, modify and cancel orders strictly as you initiate or authorize them. When you take a strategy live, you authorize MyAlgoAgent to send the orders that strategy's own rules generate on your account automatically, without asking you to confirm each one, until you pause or stop it, switch live trading off, or trigger the kill switch. A readiness check only reads your account and never places an order. Every order is checked against your risk limits first, and records of live orders are kept for five years. You may disconnect a broker or trigger the kill switch at any time, and you can revoke access from your broker's side.",
-      "If you choose an automatic daily login your broker offers (such as Groww's API TOTP key), you authorize MyAlgoAgent to use the credential you provide solely to start your daily API session with that broker; you can revoke this at any time by disconnecting here or deleting the key at your broker.",
+      "If you choose an automatic daily login your broker offers (such as Groww's API TOTP key), you authorize MyAlgoAgent to use the credential you provide solely to start your daily API session with that broker; you can revoke this at any time by disconnecting here or deleting the key at your broker. For some brokers (currently Dhan and Angel One, in beta) you may instead opt in, by ticking a consent box, to an automatic daily login that keeps your account PIN and 2FA secret, sealed with a separate encryption key, solely to sign in for you each day. You understand that anyone who obtained both could log in to that broker account, you choose this at your own risk, and you can revoke it at any time by disconnecting that broker, which deletes them.",
       "You are responsible for your broker account and its API app: keeping your API keys secret (regenerate them if they may have been exposed), your broker's API terms and any fees your broker charges for API or data access, logging in each trading day, and any requirements your broker or exchange sets for API trading, such as registering a static IP address. MyAlgoAgent is not affiliated with, endorsed by or responsible for any broker, and a broker may change or withdraw its API at any time.",
     ],
   },
@@ -137,7 +137,7 @@ export default function TermsPage() {
       <LegalPage
         label="Legal / Platform use"
         title="Terms & Conditions"
-        updated="September 2026"
+        updated="October 2026"
         intro="The rules, responsibilities and risk terms that govern use of the MyAlgoAgent platform."
         sections={sections}
         breadcrumbLabel="Terms"

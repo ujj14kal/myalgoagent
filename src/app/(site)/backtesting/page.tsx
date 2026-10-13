@@ -95,7 +95,7 @@ export default function BacktestingPage() {
       <LegalPage
         label="Product / Backtesting"
         title="Realistic backtesting, not just raw price math"
-        updated="September 2026"
+        updated="October 2026"
         intro="Backtests are built to reflect what a strategy would actually have cost and earned — not an idealized, frictionless simulation."
         sections={sections}
         breadcrumbLabel="Backtesting"

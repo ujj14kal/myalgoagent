@@ -1,16 +1,17 @@
 import type { Metadata } from "next";
-import { Activity, Bell, Coins, FlaskConical, Gauge, Layers, Radio, ShieldCheck, Sparkles, Sigma } from "lucide-react";
+import { Activity, Bell, Coins, FlaskConical, Gauge, LifeBuoy, Layers, Radio, ShieldCheck, Sparkles, Sigma } from "lucide-react";
 import PageHeader from "@/components/page-header";
 import { Breadcrumbs } from "@/components/section";
 import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 import Reveal from "@/components/reveal";
 import ComingSoonTag, { ComingSoonList } from "@/components/coming-soon-tag";
+import { ALL_BROKERS_SENTENCE, BROKER_COUNT } from "@/lib/brokers/public-copy";
 import BrokerLogos from "@/components/broker-logos";
 
 export const metadata: Metadata = pageMetadata({
   title: "Features",
   description:
-    "Strategy builder, 46 technical indicators, realistic backtesting, forward testing, risk controls, connections to 9 Indian brokers and an AI agent — and live trading on your own broker, switched on account by account.",
+    `Strategy builder, 46 technical indicators, realistic backtesting, forward testing, risk controls, connections to ${BROKER_COUNT} Indian brokers and an AI agent — and live trading on your own broker, switched on account by account.`,
   path: "/features",
 });
 
@@ -79,7 +80,8 @@ const groups: Group[] = [
     icon: Radio,
     items: [
       "Forward testing with notional capital and hypothetical fills on the strategy's own candles — daily or intraday — updated automatically during market hours, with stops and trailing stops closing trades on their own",
-      "Broker connections for Dhan, Zerodha, Upstox, Fyers, Angel One, Groww, ICICI Direct, 5paisa and Alice Blue — your own API key, encrypted, verified on connect",
+      `Broker connections for ${ALL_BROKERS_SENTENCE} — your own API key, encrypted, verified on connect (${BROKER_COUNT} brokers in all)`,
+      "Quicker daily logins where the broker allows it: Groww signs in automatically with its API TOTP key, Upstox needs only a tap in its app or on WhatsApp, and Dhan and Angel One offer an optional automatic login (beta) that you switch on yourself after reading what it stores. A morning reminder tells you if a session is missing before the market opens",
       "A readiness check for each broker — login, static IP, account access and order book — that places no order",
       "Go Live: a tested strategy keeps running on MyAlgoAgent and sends its orders to your broker automatically — intraday or delivery, within your per-order and daily limits — with pause, exit-now, stop and a kill switch. Switched on account by account",
       "Order lifecycle tracking: pending, submitted, filled, rejected, cancelled — with each order's full history",
@@ -103,6 +105,17 @@ const groups: Group[] = [
     ],
   },
   {
+    title: "Market Data & Charts",
+    icon: Activity,
+    items: [
+      "Every NSE-listed stock and the main BSE stocks, plus NIFTY 50, NIFTY Bank, NIFTY IT and SENSEX, with interactive candlestick charts from 1 minute to 1 month",
+      "Zoom, pan and a crosshair readout, indicator overlays, your own custom indicators and drawing tools — trend lines, levels, zones and channels you can save with your layout",
+      "Backtests, forward tests and charts use prices from your own broker account when it supplies data, and say plainly which source they used",
+      "A markets overview with advances and declines, top gainers and losers, volume leaders and a NIFTY 50 heatmap, plus live quotes, 52-week range and corporate actions, on accounts with live market data",
+      "A watchlist with the day's change for each stock",
+    ],
+  },
+  {
     title: "Monitoring & Reporting",
     icon: Bell,
     items: [
@@ -110,6 +123,16 @@ const groups: Group[] = [
       "Your real portfolio, orders and positions from your connected broker, in one place",
     ],
     soon: ["Audit logs for authentication, strategy and trading actions", "CSV export of trades and backtest results"],
+  },
+  {
+    title: "Help & Support",
+    icon: LifeBuoy,
+    items: [
+      "Help & Support inside the app: every request and every reply in one place, with a notification and an email when we answer",
+      "Reply to any email we send and your reply becomes a numbered support request, so nothing gets lost in an inbox",
+      "A person on the team reads and answers every request, including account, billing and refund questions",
+      "A feedback button on every page that opens a request too",
+    ],
   },
   {
     title: "Options Lab",
@@ -153,7 +176,8 @@ const groups: Group[] = [
       "Explains why each forward test happened and flags risk events as they occur",
       "Chat in a side panel or full screen, with all your past conversations",
       "Walks you through connecting your broker step by step — and never asks for your keys or passwords in chat",
-      "Uses the same validator as the builder, never gives buy or sell calls, and never acts without your confirmation",
+      "Knows trading and the markets in depth, not just this platform: concepts, order types, derivatives, indicators, tax, macro and more. It never gives buy or sell calls or advice, warns about risk, and ends any market view with a note that it is an analysis based on market data and sentiment, not trading advice",
+      "Uses the same validator as the builder and never acts without your confirmation",
     ],
     soon: ["Warns when forward-testing results drift from the backtest", "A daily digest of your sessions"],
   },
@@ -168,7 +192,7 @@ const groups: Group[] = [
       "Top-up packs of credits for Trade and Pro, kept for a year and used after your monthly credits",
       "A numbered invoice emailed after every payment and kept under Payments & invoices, with a credit note if a payment is refunded",
       "Cancel renewal at any time: the plan keeps running to the end of the period you've paid for",
-      "A clear refund policy, with refund requests made from your Payments & invoices page",
+      "A clear refund policy: refunds are reviewed and approved by our support team, so you write to us with your invoice number and a person decides",
       "Live trading, risk controls, charts, demos and forward tests never use credits",
     ],
   },

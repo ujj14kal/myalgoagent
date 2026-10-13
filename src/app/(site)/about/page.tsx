@@ -39,6 +39,22 @@ export default function AboutPage() {
           <li>Backtested performance is informative, not a promise — and the product should say so clearly.</li>
         </ul>
 
+        <h2>What you can do with it today</h2>
+        <ul>
+          <li>Build strategies visually, as code, or by describing them to your own AI agent, and compose your own blocks, concepts and trading systems</li>
+          <li>Backtest on up to five years of history with fees and slippage, and backtest several strategies together as one account</li>
+          <li>Forward test on new market data, with every hypothetical trade explained</li>
+          <li>Connect your own account at the brokers listed on our <a href="/features">Features</a> page and, where switched on for you, run a tested strategy live from your own static IP</li>
+          <li>Read any stock&rsquo;s chart indicator by indicator with Analyst Pro, and explore options in the Options Lab</li>
+          <li>Start with a free 7-day trial, then pick the plan that fits &mdash; see <a href="/pricing">Pricing</a></li>
+        </ul>
+        <h2>How we work</h2>
+        <ul>
+          <li>Every strategy rule stays visible to you &mdash; there are no black boxes and no hidden signals</li>
+          <li>Our AI agent explains and drafts, you review and confirm; it never gives investment advice and never acts on its own</li>
+          <li>We are software, not a broker or an adviser: we never hold your money and we do not tell you what to trade</li>
+          <li>Real people answer support, and refunds, where our policy allows them, are decided by a person</li>
+        </ul>
         <h2>Company</h2>
         <p>
           MyAlgoAgent is developed and operated by <CompanyLink />. For company or product inquiries, see the{" "}

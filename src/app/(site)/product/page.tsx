@@ -1,3 +1,4 @@
+import { ALL_BROKERS_SENTENCE } from "@/lib/brokers/public-copy";
 import type { Metadata } from "next";
 import Link from "next/link";
 import BrokerLogos from "@/components/broker-logos";
@@ -8,7 +9,7 @@ import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 export const metadata: Metadata = pageMetadata({
   title: "Product Overview — What MyAlgoAgent Does",
   description:
-    "A plain-language overview of MyAlgoAgent: an algo-trading software platform covering strategy building, backtesting, forward testing and risk management, with live broker execution coming soon.",
+    "A plain-language overview of MyAlgoAgent: an algo-trading software platform covering strategy building, backtesting, forward testing and risk management, with live trading on your own broker account, switched on account by account.",
   path: "/product",
 });
 
@@ -94,12 +95,14 @@ const sections: LegalSection[] = [
     title: "Broker connections & live trading",
     body: (
       <p className="mt-3 text-sm leading-relaxed text-brand-navy/70">
-        Users can connect their own account at Dhan, Zerodha, Upstox,
-        Fyers, Angel One, Groww, ICICI Direct, 5paisa or Alice Blue today,
+        Users can connect their own account at {ALL_BROKERS_SENTENCE} today,
         through the broker&rsquo;s official API, with their API keys
-        encrypted on our servers. Live order placement is coming soon: it
-        will require that connection plus confirmed risk settings before
-        any strategy can place real orders. The platform does not custody
+        encrypted on our servers. Live order placement is switched on
+        account by account: a tested strategy keeps running on
+        MyAlgoAgent and sends its orders to the user&rsquo;s broker from the
+        account&rsquo;s own static IP, after a readiness check and an
+        explicit risk acknowledgement, with every order checked against the
+        user&rsquo;s limits and a kill switch. The platform does not custody
         funds; it connects to broker APIs on the user&rsquo;s behalf. See{" "}
         <Link href="/live-trading" className="text-brand-primary underline">Live Trading</Link>.
       </p>
@@ -111,12 +114,27 @@ const sections: LegalSection[] = [
     ),
   },
   {
+    id: "market-data",
+    title: "Market data, charts and Analyst Pro",
+    paragraphs: [
+      "Every NSE-listed stock and the main BSE stocks, plus NIFTY 50, NIFTY Bank, NIFTY IT and SENSEX, with interactive candlestick charts from 1 minute to 1 month, indicator overlays, your own custom indicators and drawing tools. Backtests and forward tests use prices from the user's own broker account when it supplies data, and every page says which source it used.",
+      "Analyst Pro reads any stock's daily chart through standard trend, momentum, volume and volatility indicators and shows each one's reading and weight, with the nearest support and resistance. It is an analysis of the data, not a forecast and not advice.",
+    ],
+  },
+  {
+    id: "workspace",
+    title: "Blocks, concepts and trading systems",
+    paragraphs: [
+      "A three-layer workspace for rules that go beyond a simple indicator: define a market idea once as a block (your own BOS, FVG or order block), combine blocks into bullish or bearish concepts (all together, in sequence, confirmed, vetoed), and assemble concepts into a trading system with its own instrument, sessions, sizing, risk and conflict rules. Published versions never change under a running trade.",
+    ],
+  },
+  {
     id: "options-lab",
     title: "Options Lab",
     paragraphs: [
       "A calculator for multi-leg options positions: pick a ready-made strategy (spreads, straddles, strangles, iron condors and more) or build it leg by leg, and see the payoff at expiry and today, net credit or debit, maximum profit and loss, exact breakevens and the position's Greeks — before trading it. Premiums are Black–Scholes estimates you can overwrite until a live option chain is connected.",
     ],
-    soon: ["Live option chain with real premiums, IV and open interest", "Options backtesting and forward testing"],
+    soon: ["Option chains from more brokers (Zerodha, Angel One, Fyers, 5paisa)"],
   },
   {
     id: "risk-management",
@@ -126,7 +144,7 @@ const sections: LegalSection[] = [
         A per-session loss limit, a consecutive-loss limit and a global
         kill switch are enforced on the server, independently of the user
         interface, so a session can be stopped even if you are offline.
-        Daily loss, position-size and exposure limits are coming soon. See{" "}
+        Per-strategy daily-loss and drawdown limits stop new entries once reached; position-size and exposure limits are coming soon. See{" "}
         <Link href="/risk-management" className="text-brand-primary underline">Risk Management</Link>.
       </p>
     ),
@@ -149,6 +167,20 @@ const sections: LegalSection[] = [
     soon: ["Flagging signs of possible overfitting in backtest results", "Warning when forward-testing results drift from the backtest"],
   },
   {
+    id: "plans",
+    title: "Plans, credits and billing",
+    paragraphs: [
+      "Every new account starts with a 7-day free trial of the paid features, with no card needed, then continues on Free unless the user upgrades to Trade or Pro. Prices are before 18% GST, which is added at checkout and itemised; payment is through Razorpay by UPI, card or netbanking, and every payment gets a numbered invoice. Credits pay for the AI, voice and backtests, with a live meter and the price of each action shown before it is used. See Pricing for the details.",
+    ],
+  },
+  {
+    id: "support",
+    title: "Support",
+    paragraphs: [
+      "Requests made in the app or by replying to any of our emails become numbered support cases that a person on the team answers, with the reply in the app and in the user's inbox. Refunds, where our policy allows them, are reviewed and approved by that team.",
+    ],
+  },
+  {
     id: "disclosure",
     title: "Important disclosure",
     body: (
@@ -165,7 +197,7 @@ const sections: LegalSection[] = [
     id: "stage",
     title: "Product stage",
     paragraphs: [
-      "MyAlgoAgent is in active development. Public marketing and documentation pages describe the target product architecture; features are being built out in stages, starting with the strategy, backtesting and risk-management core described above.",
+      "MyAlgoAgent is live and still growing. Strategy building, backtesting, forward testing, risk controls, broker connections, the AI agent and billing are available today; live trading is switched on account by account, and anything not yet available is marked Coming soon on these pages.",
     ],
   },
 ];
@@ -182,7 +214,7 @@ export default function ProductPage() {
       <LegalPage
         label="Product / Overview"
         title="What MyAlgoAgent does"
-        updated="September 2026"
+        updated="October 2026"
         intro="A software platform that helps traders and developers build, test and run rule-based trading strategies. Not a financial advisor — it does not manage money on a user's behalf without explicit, user-initiated broker connections."
         sections={sections}
         breadcrumbLabel="Product Overview"

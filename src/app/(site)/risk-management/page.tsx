@@ -18,6 +18,8 @@ const sections: LegalSection[] = [
     bullets: [
       "Maximum loss per session, as a percentage of its starting capital",
       "Maximum consecutive losses",
+      "Per-strategy maximum daily loss and maximum drawdown: once reached, no new positions open, while existing ones still exit by their rules",
+      "Live orders: a per-order value limit, a daily order limit, duplicate-order protection and a kill switch that blocks new buys but never blocks an exit",
       "Per-strategy stop-loss, take-profit and trailing stop — in %, points or ATR multiples",
       "Build a trading system in three clear layers — blocks, concepts, then the system that decides instrument, capital, sizing, stops, targets and what to do when setups conflict — with every problem listed before you can publish, and published versions that never change under a running trade",
       "Size each trade by the amount you are willing to lose: risk a set percentage of your capital and the shares are worked out from your stop-loss distance",
@@ -26,7 +28,6 @@ const sections: LegalSection[] = [
       "Per-strategy time rules for intraday: no new entries after a set time, and an automatic square-off so positions are never carried overnight",
     ],
     soon: [
-      "Maximum daily loss",
       "Maximum position size",
       "Maximum capital allocated to one strategy",
       "Maximum portfolio exposure",
@@ -40,7 +41,7 @@ const sections: LegalSection[] = [
     id: "kill-switches",
     title: "Kill switches",
     paragraphs: [
-      "A global kill switch immediately blocks every forward test on your account from opening new positions. Any single session can also be paused or stopped on its own without affecting the others. The kill switch is always one click away on the Risk Controls page.",
+      "A global kill switch immediately blocks every forward test, and every live strategy, on your account from opening new positions; exits are never blocked. Any single session can also be paused or stopped on its own without affecting the others. The kill switch is always one click away on the Risk Controls page.",
     ],
   },
   {
@@ -87,7 +88,7 @@ export default function RiskManagementPage() {
       <LegalPage
         label="Product / Risk Management"
         title="Risk controls that don't depend on the interface"
-        updated="September 2026"
+        updated="October 2026"
         intro="Every limit below is designed to be enforced on the backend, so a strategy can be stopped safely even if the user isn't watching."
         sections={sections}
         breadcrumbLabel="Risk Management"

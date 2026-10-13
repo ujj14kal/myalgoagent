@@ -59,7 +59,7 @@ const sections: LegalSection[] = [
     title: "No investment advice",
     paragraphs: [
       "MyAlgoAgent provides software tools for building, testing and operating trading strategies. Nothing on this platform constitutes personalized investment advice, a recommendation to buy or sell any security, or a guarantee of profit. AI-generated content is informational only.",
-      "Your in-app agent is an AI assistant: it explains the platform and trading concepts and can draft strategy rules for you to review, test and decide on yourself. It does not tell you what to buy or sell, does not predict prices or returns, never acts without your confirmation, and — like any AI — can be wrong. Always review what it drafts before using it.",
+      "Your in-app agent is an AI assistant: it explains the platform and trading concepts and can draft strategy rules for you to review, test and decide on yourself. It can explain trading and the markets in depth and describe what a chart or data shows, but it never tells you what to buy, sell or hold, never picks or ranks stocks, does not predict prices or returns, never acts without your confirmation, and — like any AI — can be wrong. Any market view it gives is an analysis based on market data and sentiment and not trading advice. Analyst Pro works the same way: its percentages are only the share of indicator weight leaning up, down or neutral today, not the chance of a price move. Always review what you are given before using it.",
     ],
   },
   {
@@ -128,7 +128,7 @@ export default function RiskDisclosurePage() {
       <LegalPage
         label="Legal / Risk"
         title="Risk Disclosure"
-        updated="September 2026"
+        updated="October 2026"
         intro="What you should understand about risk before creating a strategy, backtesting it, or connecting real capital."
         sections={sections}
         breadcrumbLabel="Risk Disclosure"
