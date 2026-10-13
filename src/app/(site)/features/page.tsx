@@ -7,6 +7,7 @@ import Reveal from "@/components/reveal";
 import ComingSoonTag, { ComingSoonList } from "@/components/coming-soon-tag";
 import { ALL_BROKERS_SENTENCE, BROKER_COUNT } from "@/lib/brokers/public-copy";
 import { INDICATOR_CATALOG } from "@/lib/strategy/indicator-catalog";
+import { PRESETS } from "@/lib/strategy/presets";
 import BrokerLogos from "@/components/broker-logos";
 
 export const metadata: Metadata = pageMetadata({
@@ -55,6 +56,9 @@ const groups: Group[] = [
       "Bollinger Bands with %B, BandWidth and two kinds of squeeze (narrowest bands of the last N candles, or Bollinger inside Keltner)",
       "VWAP that restarts every trading session, with one and two standard-deviation bands — made for intraday candles",
       "Fibonacci retracement and extension levels drawn from the latest confirmed swing (no repainting), with a golden-zone flag and the swing direction",
+      `${PRESETS.length} ready-made recipes from classic RSI, MACD, Bollinger, VWAP and Fibonacci setups, each opening as an ordinary strategy you can read rule by rule, change and backtest`,
+      "Divergence flags for RSI and MACD (confirmed a few candles after the second swing, so never early), Bollinger W-bottom and M-top, PPO, and a source or smoothing choice on RSI, MACD and Bollinger",
+      "Anchored VWAPs: weekly, monthly, from any date, or from the latest swing low or high; Fibonacci clusters, swing age and swings you type in yourself",
       "Momentum helpers: RSI change, MACD histogram change and band slope over N candles, so rules can say \"turning up\" or \"building for three bars\"",
       "Moving averages: SMA, EMA, WMA and Hull MA",
       "RSI, MACD, Bollinger Bands, ATR, Standard Deviation",

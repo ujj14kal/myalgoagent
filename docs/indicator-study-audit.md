@@ -26,3 +26,15 @@ Checked 2026-10-13 against the five analyst study documents. "Phase 2" items are
 | Fibonacci | Multi-swing confluence clusters, harmonics, fans, expiry by age, manual swing in rules | Not built |
 | All | Preset recipes as one-click templates | Not built; the AI agent can build any recipe from these pieces |
 | All | Closed-bar only, higher-timeframe last-closed bar | Already how the engine works (see no-look-ahead tests) |
+
+## Update 2026-10-13 (second pass): the remaining gaps were built
+
+- Source (close / hl2 / hlc3 / ohlc4) on RSI, MACD and Bollinger; RSI smoothing (Wilder / SMA / EMA); MACD average type (EMA / SMA); Bollinger middle line (SMA / EMA / WMA). They are optional trailing settings, so every saved strategy is unchanged.
+- PPO line, signal and histogram.
+- RSI and MACD bullish and bearish divergence flags (confirmed `Right` candles after the second swing, pivots at most `Max bars` apart).
+- Bollinger W-bottom and M-top flags.
+- Anchored VWAP as rule indicators: weekly, monthly, from a date (YYYYMMDD), from the latest swing low or high.
+- Fibonacci: cluster flag (levels of two or more of the last three swings within 0.3 ATR), swing age in candles, and manual-swing levels and golden-zone flag from prices typed in.
+- 21 preset recipes in `lib/strategy/presets.ts`, offered on New Strategy ("Start from a ready-made recipe"): RSI (5), MACD (5), Bollinger (4), VWAP (4), Fibonacci (4).
+
+Still not built, on purpose or for lack of data: the opening-range-breakout + VWAP recipe (the platform has no opening-range indicator), Fibonacci harmonics and fans (the study defers them), a standalone Fibonacci extension "target manager" (the staged Targets 1-3 and an exit rule on an extension level cover it), and VWAP execution slicing (the study keeps it out of the signal indicator).

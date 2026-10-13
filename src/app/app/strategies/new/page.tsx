@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { loadSavedBlocks } from "@/lib/system/saved-blocks-server";
 import { SavedBlocksProvider } from "@/components/system/saved-blocks";
 import NewStrategyWithDraft from "@/components/new-strategy-draft";
+import StrategyPresets from "@/components/strategy-presets";
 import { Layers } from "lucide-react";
 import PageHeader from "@/components/ui/page-header";
 
@@ -22,6 +23,7 @@ export default async function NewStrategyPage() {
     <div>
       <PageHeader title="New Strategy" icon={Layers} description={<>Build your entry and exit rules visually, or write them as code — both are evaluated identically.</>} />
       <div className="mt-6">
+        <StrategyPresets instruments={instruments} />
         <SavedBlocksProvider value={blocks}>
           <NewStrategyWithDraft instruments={instruments} />
         </SavedBlocksProvider>

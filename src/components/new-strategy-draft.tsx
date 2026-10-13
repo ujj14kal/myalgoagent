@@ -50,6 +50,7 @@ function toInitial(d: StrategyInput): StrategyInitial | null {
 export default function NewStrategyWithDraft({ instruments }: { instruments: InstrumentOption[] }) {
   const [draft, setDraft] = useState<StrategyInitial | null>(null);
   const [fromAgent, setFromAgent] = useState(false);
+  const [fromPreset, setFromPreset] = useState(false);
   // The builder keeps its own state in the same place as the draft the instant it mounts, so it must not mount until the
   // draft has been read — or a blank form overwrites the strategy the assistant (or an earlier visit) left there.
   const [ready, setReady] = useState(false);
@@ -63,6 +64,7 @@ export default function NewStrategyWithDraft({ instruments }: { instruments: Ins
         // eslint-disable-next-line react-hooks/set-state-in-effect -- restoring browser-kept state after mount (not available during render)
         setDraft(d);
         setFromAgent(sessionStorage.getItem(NEW_STRATEGY_DRAFT_FROM_KEY) === "agent");
+        setFromPreset(sessionStorage.getItem(NEW_STRATEGY_DRAFT_FROM_KEY) === "preset");
         sessionStorage.removeItem(NEW_STRATEGY_DRAFT_FROM_KEY); // only the first open says "from your assistant"
         setKey((k) => k + 1);
       }
@@ -77,7 +79,7 @@ export default function NewStrategyWithDraft({ instruments }: { instruments: Ins
     <>
       {draft && (
         <p className="mx-auto mb-3 flex max-w-4xl flex-wrap items-center gap-2 rounded-xl bg-brand-primary/[0.06] px-4 py-2.5 text-sm text-brand-navy/75">
-          {fromAgent ? "Opened from your assistant — this is the strategy it prepared. Preview it below, change anything, then save." : "Restored the strategy you were building."}
+          {fromAgent ? "Opened from your assistant — this is the strategy it prepared. Preview it below, change anything, then save." : fromPreset ? "A ready-made recipe, filled in on RELIANCE. Read every rule, change the stock or anything else, preview it, backtest it, then save." : "Restored the strategy you were building."}
           <button
             type="button"
             onClick={() => {
