@@ -68,6 +68,13 @@ MyAlgoAgent does not provide investment research, recommendations or advisory se
 
 Only historical candles (above), and only where the user holds the historical-data subscription. We do not use Quote, LTP or WebSocket streaming from Kite at present: strategy rules are evaluated on candles about once a minute. We do not redistribute Zerodha data: it is shown and used only for the user who owns the session.
 
+**12. Options: option chain and Greeks (added so nothing is missed)**
+
+Our Options Lab builds multi-leg positions and shows payoff, breakevens, option chain (OI, change in OI, IV, PCR, max pain) and Greeks (delta, gamma, theta, vega, rho). For Zerodha users today:
+- We do not read an option chain or option quotes from Kite. The chain shown comes from the user's own connected broker where that broker provides one, or from a licensed feed for permitted accounts, and every figure is labelled with its source. The Greeks are calculated by us from the contract's price (or estimated and labelled as estimates); we do not take Greeks from Zerodha.
+- Option legs the user chooses to trade are sent as ordinary orders on NFO through `POST /orders/regular`, with the exchange's own contract symbols (taken from the exchange's master files, not from Kite's instrument dump), after a priced preview and the user's explicit confirmation. Buy legs go first, and if a leg fails the open legs are cancelled.
+- If you would also allow option chain data for Zerodha users, we would need `GET /instruments` (NFO) and `GET /quote` (or LTP/OHLC) per user, and would use them only to show that user their own chain. We have not requested this above because we do not use it today. Please tell us if you would like it included in the request.
+
 We are happy to schedule a demo call at your convenience.
 
 Regards,
