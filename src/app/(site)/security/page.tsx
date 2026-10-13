@@ -51,7 +51,7 @@ export default function SecurityPage() {
         <h2>Your account</h2>
         <ul>
           <li>Passwords are stored only as one-way hashes &mdash; nobody at MyAlgoAgent can read yours</li>
-          <li>Sign in with a password, an email link or Google; sessions are protected and can be signed out any time</li>
+          <li>Sign in with a password, an email link or Google (which always asks which account to use); one active sign-in per account, so a new sign-in ends the old one, and you can sign out any time</li>
           <li>Repeated attempts are rate-limited to protect your account from automated attacks</li>
           <li>Every trading action is checked on our servers, so limits can&rsquo;t be bypassed from the browser</li>
         </ul>

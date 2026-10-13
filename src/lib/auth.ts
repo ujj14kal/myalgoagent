@@ -2,6 +2,7 @@ import { sendWelcomeEmail } from "@/lib/email";
 import NextAuth, { customFetch } from "next-auth";
 import Google from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
+import type { Adapter } from "next-auth/adapters";
 import { prisma } from "@/lib/prisma";
 import { reactivateIfPending } from "@/lib/account-status";
 import { oauthFetch } from "@/lib/oauth-fetch";
@@ -15,8 +16,19 @@ import { isCustomAvatarUrl } from "@/lib/avatar";
 // end-to-end and finding zero Session rows created. Those flows instead
 // verify identity themselves and create the session directly via
 // createSessionForUser, the same trusted path used for passkey login.
+// One active sign-in per account: a new session (Google sign-in here; password, magic link and passkey in session-cookie.ts)
+// ends every other session the account has, so two browsers or devices can never be signed in at the same time.
+const baseAdapter = PrismaAdapter(prisma);
+const adapter: Adapter = {
+  ...baseAdapter,
+  async createSession(data) {
+    await prisma.session.deleteMany({ where: { userId: data.userId } });
+    return baseAdapter.createSession!(data);
+  },
+};
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(prisma),
+  adapter,
   session: { strategy: "database" },
   providers: [
     // Google verifies email ownership itself, so it's safe to auto-link a
@@ -24,7 +36,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // without this, a user who signed up with a password and later clicks
     // "Continue with Google" using the same address hits Auth.js's default
     // OAuthAccountNotLinked dead end instead of just signing in.
-    Google({ allowDangerousEmailAccountLinking: true, [customFetch]: oauthFetch }),
+    // prompt: select_account — always show Google's account chooser, so signing out and clicking "Continue with Google" never
+    // slips straight back into the last account.
+    Google({ allowDangerousEmailAccountLinking: true, authorization: { params: { prompt: "select_account" } }, [customFetch]: oauthFetch }),
   ],
   pages: {
     signIn: "/login",

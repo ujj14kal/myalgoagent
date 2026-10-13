@@ -19,6 +19,7 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   Verification: "That sign-in link is invalid or has expired.",
   Configuration: "Sign-in is temporarily unavailable — please try again shortly.",
   Suspended: SUSPENDED_MESSAGE,
+  SessionEnded: "You were signed out: this account signed in on another browser or device (only one sign-in is active at a time), or your session expired. Sign in again to continue.",
   Default: "Something went wrong signing you in — please try again.",
 };
 

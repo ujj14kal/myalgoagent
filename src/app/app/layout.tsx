@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import CustomIndicatorsRoot from "@/components/custom-indicators/root";
 import type { CustomIndicatorDef } from "@/lib/custom-indicator";
@@ -38,7 +39,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 async function AppShell({ children }: { children: React.ReactNode }) {
   const session = await auth();
   if (!session?.user?.id) {
-    redirect("/login");
+    // A session cookie that no longer matches a session means it ended (another sign-in replaced it, or it expired): say so.
+    const jar = await cookies();
+    const hadCookie = jar.has("__Secure-authjs.session-token") || jar.has("authjs.session-token");
+    redirect(hadCookie ? "/login?error=SessionEnded" : "/login");
   }
 
   const dbUser = await prisma.user.findUnique({

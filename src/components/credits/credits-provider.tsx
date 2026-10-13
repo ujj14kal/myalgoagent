@@ -51,7 +51,14 @@ export default function CreditsProvider({ initial, children }: { initial: Credit
     if (busy.current) return;
     busy.current = true;
     fetch("/api/credits", { cache: "no-store" })
-      .then((r) => (r.ok ? (r.json() as Promise<CreditSnapshot>) : null))
+      .then((r) => {
+        // This window's session has ended (the account signed in somewhere else, or it expired): go to sign-in at once.
+        if (r.status === 401) {
+          window.location.assign("/login?error=SessionEnded");
+          return null;
+        }
+        return r.ok ? (r.json() as Promise<CreditSnapshot>) : null;
+      })
       .then((s) => apply(s))
       .catch(() => undefined)
       .finally(() => {

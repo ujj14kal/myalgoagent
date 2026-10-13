@@ -13,7 +13,8 @@ const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days, matches Auth.js
 export async function createSessionForUser(userId: string): Promise<void> {
   const sessionToken = randomUUID();
   const expires = new Date(Date.now() + SESSION_MAX_AGE_MS);
-  await prisma.session.create({ data: { sessionToken, userId, expires } });
+  // One active sign-in per account: signing in here ends any session this account has on another browser or device.
+  await prisma.$transaction([prisma.session.deleteMany({ where: { userId } }), prisma.session.create({ data: { sessionToken, userId, expires } })]);
 
   const useSecureCookies = process.env.NODE_ENV === "production";
   const cookieName = useSecureCookies ? "__Secure-authjs.session-token" : "authjs.session-token";
