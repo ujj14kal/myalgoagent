@@ -371,7 +371,7 @@ export const BROKERS: BrokerInfo[] = [
   {
     id: "hdfcsky",
     name: "HDFC Securities (HDFC Sky)",
-    logo: "/brokers/hdfcsky.svg",
+    logo: "/brokers/hdfcsky.png",
     availability: "live",
     beta: true,
     portal: { label: "developer.hdfcsky.com", url: "https://developer.hdfcsky.com" },
@@ -399,7 +399,7 @@ export const BROKERS: BrokerInfo[] = [
   {
     id: "motilal",
     name: "Motilal Oswal",
-    logo: "/brokers/motilal.svg",
+    logo: "/brokers/motilal.png",
     availability: "live",
     beta: true,
     portal: { label: "invest.motilaloswal.com/moapi", url: "https://invest.motilaloswal.com/moapi/APIDocumentation/Introduction" },
@@ -428,7 +428,7 @@ export const BROKERS: BrokerInfo[] = [
   {
     id: "paytmmoney",
     name: "Paytm Money",
-    logo: "/brokers/paytmmoney.svg",
+    logo: "/brokers/paytmmoney.png",
     availability: "live",
     beta: true,
     portal: { label: "developer.paytmmoney.com", url: "https://developer.paytmmoney.com" },
@@ -562,7 +562,7 @@ export const BROKERS: BrokerInfo[] = [
   {
     id: "anandrathi",
     name: "Anand Rathi",
-    logo: "/brokers/anandrathi.svg",
+    logo: "/brokers/anandrathi.png",
     availability: "live",
     beta: true,
     flow: "approval",
@@ -589,7 +589,7 @@ export const BROKERS: BrokerInfo[] = [
   {
     id: "indstocks",
     name: "INDstocks (INDmoney)",
-    logo: "/brokers/indstocks.svg",
+    logo: "/brokers/indstocks.png",
     availability: "live",
     beta: true,
     flow: "approval",

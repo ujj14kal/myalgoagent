@@ -119,16 +119,15 @@ export default function BrokerConnections({
   notifierUrl: string | null;
 }) {
   const [selectedId, setSelectedId] = useState(initialBroker);
-  const selected = brokers.find((b) => b.id === selectedId) ?? brokers[0];
+  // Only brokers that can be connected today are shown; ones still being built stay out of sight.
+  const live = brokers.filter((b) => b.availability === "live");
+  const selected = live.find((b) => b.id === selectedId) ?? live[0];
   const byBroker = new Map(connections.map((c) => [c.broker, c]));
   // The daily-login method picked per broker (starts at what the user saved).
   const [methods, setMethods] = useState<Record<string, LoginMethodId | null>>(() => Object.fromEntries(connections.map((c) => [c.broker, c.loginMethod])));
   // A broker that has a faster login starts on it for a new connection.
   const method = selected.id in methods ? methods[selected.id] : selected.altLogin?.preferred && !byBroker.has(selected.id) ? selected.altLogin.id : null;
   const view = loginView(selected, method);
-  const live = brokers.filter((b) => b.availability === "live");
-  const next = brokers.filter((b) => b.availability === "next");
-
   const pick = (id: BrokerId) => {
     setSelectedId(id);
     document.getElementById("broker-setup")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -172,8 +171,8 @@ export default function BrokerConnections({
       {/* Broker grid */}
       <section>
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-brand-navy/45">Choose your broker</p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {[...live, ...next].map((b) => {
+        <div className="flex flex-wrap justify-center gap-3">
+          {live.map((b) => {
             const conn = byBroker.get(b.id);
             const active = b.id === selected.id;
             return (
@@ -182,14 +181,14 @@ export default function BrokerConnections({
                 type="button"
                 onClick={() => pick(b.id)}
                 aria-pressed={active}
-                className={`surface surface-interactive flex flex-col items-start gap-2.5 p-3.5 text-left ${active ? "ring-2 ring-brand-primary" : ""} ${b.availability === "next" ? "opacity-80" : ""}`}
+                className={`surface surface-interactive flex w-[calc(50%-6px)] flex-col items-start gap-2.5 p-3.5 text-left sm:w-[calc(33.333%-8px)] lg:w-[calc(20%-10px)] ${active ? "ring-2 ring-brand-primary" : ""}`}
               >
                 <div className="flex w-full items-center gap-2.5">
                   <Logo broker={b} />
-                  <span className="min-w-0 truncate text-sm font-semibold text-brand-navy">{b.name}</span>
+                  <span className="min-w-0 truncate text-sm font-semibold text-brand-navy" title={b.name}>{b.name.replace(/\s*\(.*\)$/, "")}</span>
                 </div>
                 <span className="flex flex-wrap items-center gap-1.5">
-                  <Badge kind={b.availability === "next" ? "next" : (conn?.state ?? "none")} />
+                  <Badge kind={conn?.state ?? "none"} />
                   {b.beta && <span title="Built from the broker's documents; not yet proven with a real account" className="inline-flex rounded-full bg-brand-gold/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#8a7437] ring-1 ring-brand-gold/30">Beta</span>}
                 </span>
               </button>
@@ -294,16 +293,7 @@ export default function BrokerConnections({
         </div>
 
         <div className="min-w-0 lg:col-span-2">
-          {selected.availability === "next" ? (
-            <div className="surface p-5 text-sm text-brand-navy/70">
-              <p className="font-semibold text-brand-navy">{selected.name} is coming next</p>
-              <p className="mt-2">
-                You can create your {selected.name} API app now using the steps on the left, with the Redirect URL above. When {selected.name} goes live here, you&rsquo;ll just paste your keys and log in.
-              </p>
-            </div>
-          ) : (
-            <ConnectPanel key={selected.id} broker={selected} view={view} conn={byBroker.get(selected.id)} disabled={!storageReady} startEditing={startEditing && selected.id === initialBroker} />
-          )}
+          <ConnectPanel key={selected.id} broker={selected} view={view} conn={byBroker.get(selected.id)} disabled={!storageReady} startEditing={startEditing && selected.id === initialBroker} />
         </div>
       </section>
 

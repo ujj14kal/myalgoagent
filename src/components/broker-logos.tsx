@@ -7,14 +7,14 @@ import { BROKERS, type BrokerInfo } from "@/lib/brokers/catalog";
 // compact scrolling row for pages that only need a mention.
 
 const live = BROKERS.filter((b) => b.availability === "live");
-const next = BROKERS.filter((b) => b.availability === "next");
+const short = (name: string) => name.replace(/\s*\(.*\)$/, "");
 const WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
 
 function Logo({ broker, size = 44 }: { broker: BrokerInfo; size?: number }) {
   return (
-    <span className="flex shrink-0 items-center justify-center rounded-xl bg-white ring-1 ring-black/[0.06]" style={{ width: size, height: size }}>
+    <span className="flex shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white ring-1 ring-black/[0.06]" style={{ width: size, height: size }}>
       {/* eslint-disable-next-line @next/next/no-img-element -- small static brand marks */}
-      <img src={broker.logo} alt={`${broker.name} logo`} width={Math.round(size * 0.64)} height={Math.round(size * 0.64)} className="object-contain" />
+      <img src={broker.logo} alt={`${broker.name} logo`} width={Math.round(size * 0.66)} height={Math.round(size * 0.66)} className="object-contain" />
     </span>
   );
 }
@@ -27,7 +27,6 @@ export default function BrokerLogos({ variant = "full" }: { variant?: "full" | "
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm font-semibold text-brand-navy">
             <span className="text-brand-primary">{live.length} brokers</span> you can connect today
-            {next.length > 0 && <span className="font-normal text-brand-navy/50"> · {next.map((b) => b.name).join(", ")} next</span>}
           </p>
           <Link href="/live-trading#brokers" className="text-xs font-semibold text-brand-primary hover:underline">
             How connecting works →
@@ -38,7 +37,7 @@ export default function BrokerLogos({ variant = "full" }: { variant?: "full" | "
             {row.map((b, i) => (
               <li key={`${b.id}-${i}`} aria-hidden={i >= live.length} className="mr-3 flex items-center gap-2 rounded-full bg-brand-bg/80 py-1.5 pl-1.5 pr-3.5 ring-1 ring-black/[0.05]">
                 <Logo broker={b} size={30} />
-                <span className="whitespace-nowrap text-xs font-semibold text-brand-navy/80">{b.name}</span>
+                <span className="whitespace-nowrap text-xs font-semibold text-brand-navy/80">{short(b.name)}</span>
               </li>
             ))}
           </ul>
@@ -61,7 +60,7 @@ export default function BrokerLogos({ variant = "full" }: { variant?: "full" | "
           <span className="pb-1.5 text-sm font-medium leading-snug text-brand-navy/70">
             Indian brokers you can
             <br />
-            connect today{next.length > 0 && <span className="text-brand-navy/45"> — {next.map((b) => b.name).join(", ")} next</span>}
+            connect today
           </span>
         </div>
         <p className="mt-5 text-brand-navy/70">
@@ -72,7 +71,7 @@ export default function BrokerLogos({ variant = "full" }: { variant?: "full" | "
           {[
             "Your own API key — encrypted with AES-256, never shown again",
             "You log in on your broker’s own page — we never see your password, PIN or 2FA",
-            "Disconnect any time; live order placement is coming soon",
+            "Disconnect any time; orders go out only from strategies you switch on, in your own broker account",
           ].map((t) => (
             <li key={t} className="flex gap-2.5">
               <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-primary" />
@@ -87,25 +86,15 @@ export default function BrokerLogos({ variant = "full" }: { variant?: "full" | "
 
       <div className="relative">
         <div aria-hidden className="absolute -inset-6 -z-10 rounded-[2rem] bg-gradient-to-br from-brand-primary/[0.07] via-transparent to-brand-gold/[0.08] blur-2xl" />
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3" aria-label={`${count} supported brokers`}>
+        <ul className="grid grid-cols-2 gap-3" aria-label={`${count} supported brokers`}>
           {live.map((b) => (
             <li key={b.id} className="hover-lift flex items-center gap-3 rounded-2xl bg-white p-3.5 shadow-[0_10px_30px_-18px_rgba(14,27,45,0.35)] ring-1 ring-black/[0.05]">
-              <Logo broker={b} />
+              <Logo broker={b} size={48} />
               <span className="min-w-0">
-                <span className="block truncate text-sm font-semibold text-brand-navy">{b.name}</span>
+                <span className="block truncate text-sm font-semibold text-brand-navy" title={b.name}>{short(b.name)}</span>
                 <span className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-brand-buy">
                   <span className="h-1.5 w-1.5 rounded-full bg-brand-buy" /> Connect now
                 </span>
-              </span>
-            </li>
-          ))}
-          {next.map((b) => (
-            <li key={b.id} className="col-span-2 flex items-center gap-3 rounded-2xl border border-dashed border-brand-navy/15 bg-white/50 p-3.5 sm:col-span-3">
-              <span className="opacity-60">
-                <Logo broker={b} size={36} />
-              </span>
-              <span className="text-sm text-brand-navy/55">
-                <strong className="font-semibold text-brand-navy/70">{b.name}</strong> — coming next
               </span>
             </li>
           ))}

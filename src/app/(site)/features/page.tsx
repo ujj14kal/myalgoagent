@@ -97,7 +97,7 @@ const groups: Group[] = [
       "Optional VWAP-style entry slicing at Go Live: a large entry goes out in 3, 5 or 8 slices through the session, more of them when the market is busiest; exits always go out at once and the slices stop the moment the position closes",
       "Order lifecycle tracking: pending, submitted, filled, rejected, cancelled — with each order's full history",
     ],
-    soon: ["Kotak Neo connection", "Position and P&L reconciliation with the connected broker"],
+    soon: ["Position and P&L reconciliation with the connected broker"],
   },
   {
     title: "Risk Management",
