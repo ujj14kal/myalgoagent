@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -457,6 +457,16 @@ function ConnectPanel({ broker, view, conn, disabled, startEditing }: { broker: 
   }
 
   const login = () => run(() => startBrokerLogin(broker.id), { redirects: true });
+  // With a TOTP key nobody should have to click: if today's session isn't there yet (the background renewal normally has it
+  // ready), connect right now, once, and let the page say so.
+  const autoTried = useRef(false);
+  const auto = !!conn && !editing && method === "totp" && conn.loginMethod === "totp" && !disabled && (conn.state === "expired" || conn.state === "keys_saved") && !conn.failure;
+  useEffect(() => {
+    if (!auto || autoTried.current) return;
+    autoTried.current = true;
+    login();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auto]);
   const btn = "inline-flex items-center justify-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium disabled:opacity-50";
   // A failure from this visit wins; otherwise show the one saved from the last attempt.
   const shownFailure = failure ?? (conn && conn.state !== "connected" ? conn.failure : null);
