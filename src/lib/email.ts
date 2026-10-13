@@ -5,6 +5,7 @@ import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
 const REGION = "ap-south-1";
 const FROM_ADDRESS = "MyAlgoAgent <noreply@myalgoagent.com>";
 // Replies to automatic mail go here: Amazon SES receives them and the app turns each into a support case.
+// Support conversations: a person replying to our email is answered by this address, so the reply joins the case (the [MAA-…] in the subject) and shows in the admin portal.
 const INBOUND_REPLY = "MyAlgoAgent <reply@mail.myalgoagent.com>";
 /** Anything a person may answer (support replies, case confirmations) comes from here, so a reply reaches a real inbox. */
 /** SES configuration set: reports bounces and complaints (to an alert topic) and feeds the reputation alarms. */
@@ -226,7 +227,7 @@ export async function sendSupportCaseConfirmation(to: string, caseId: string, vi
     html: wrap(`<p>Thanks for reaching out. Your case ID is <strong>${caseId}</strong>.</p><p>Our support team will follow up at this email address within 2–3 days.</p>${viewUrl ? `<p>You can follow it, read our replies and write back from your Help &amp; Support page in MyAlgoAgent, or just reply to this email.</p>${emailButton(viewUrl, "View your request")}` : ""}`),
     text: `Thanks for reaching out. Your case ID is ${caseId}.\n\nOur support team will follow up at this email address within 2-3 days.${viewUrl ? `\n\nFollow it and reply from your Help & Support page: ${viewUrl}` : ""}`,
     from: SUPPORT_FROM,
-    replyTo: "support@myalgoagent.com",
+    replyTo: INBOUND_REPLY,
   });
 }
 
@@ -244,7 +245,7 @@ export async function sendSupportReplyEmail(to: string, opts: { ref: string; top
     ),
     text: `${opts.ref} · ${opts.topic}\n\n${opts.body}\n\n— ${opts.staffName}, MyAlgoAgent support\n\n${opts.threadUrl ? `View and reply: ${opts.threadUrl}` : "Reply to this email to continue the conversation."}`,
     from: SUPPORT_FROM,
-    replyTo: "support@myalgoagent.com",
+    replyTo: INBOUND_REPLY,
   });
 }
 
@@ -275,7 +276,7 @@ export async function sendInboundAck(to: string, ref: string, topic: string, add
     ),
     text: `The address you wrote to (noreply@myalgoagent.com) is automatic and nobody reads it. ${addedToExisting ? `We've added your message to your existing request ${ref}.` : `We've opened a support request for you: ${ref}.`}\n\nOur support team will reply from support@myalgoagent.com within 2-3 days. To add anything, reply to our email and keep ${ref} in the subject.`,
     from: SUPPORT_FROM,
-    replyTo: "support@myalgoagent.com",
+    replyTo: INBOUND_REPLY,
     headers: { "Auto-Submitted": "auto-replied", Precedence: "bulk", "X-Auto-Response-Suppress": "All" },
   });
 }

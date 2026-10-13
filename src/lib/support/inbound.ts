@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
-import { sendInboundAck } from "@/lib/email";
+import { sendInboundAck, sendSupportCaseNotice } from "@/lib/email";
 import { logError } from "@/lib/logger";
 import { caseRef, MAX_REPLY, threadLink } from "@/lib/support/tickets";
 import { caseNumberIn, cleanSubject, freshText, isAutomated } from "./inbound-parse";
@@ -41,6 +41,8 @@ export async function handleInbound(m: Inbound): Promise<InboundResult> {
     if (c && (c.email.toLowerCase() === from || (user && c.userId === user.id))) {
       await prisma.supportMessage.create({ data: { caseId: c.id, author: "USER", authorId: user?.id ?? null, authorName: name, body } });
       await prisma.supportCase.update({ where: { id: c.id }, data: { status: "OPEN", lastActivityAt: new Date() } });
+      // The team's own mailbox gets a copy too, so nothing lives only in the admin portal.
+      await sendSupportCaseNotice(caseRef(c.caseNumber), `Reply: ${c.subject}`, body, from).catch((err) => logError("support.inbound-notice", err, { ref: caseRef(c.caseNumber) }));
       await sendInboundAck(from, caseRef(c.caseNumber), c.subject, true, user ? threadLink("case", c.id) : null).catch((err) => logError("support.inbound-ack", err, { ref: caseRef(c.caseNumber) }));
       return { action: "added", ref: caseRef(c.caseNumber) };
     }
@@ -48,6 +50,7 @@ export async function handleInbound(m: Inbound): Promise<InboundResult> {
 
   const created = await prisma.supportCase.create({ data: { userId: user?.id ?? null, email: from, subject: cleanSubject(m.subject), message: body } });
   const ref = caseRef(created.caseNumber);
+  await sendSupportCaseNotice(ref, created.subject, body, from).catch((err) => logError("support.inbound-notice", err, { ref }));
   await sendInboundAck(from, ref, created.subject, false, user ? threadLink("case", created.id) : null).catch((err) => logError("support.inbound-ack", err, { ref }));
   return { action: "created", ref };
 }
