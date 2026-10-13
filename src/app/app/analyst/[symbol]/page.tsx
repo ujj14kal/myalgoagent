@@ -74,9 +74,9 @@ export default async function AnalystSymbolPage({ params }: { params: Promise<{ 
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/50">What the indicators say today</p>
                 <p className="mt-1 text-3xl font-bold text-brand-navy">{result.verdict}</p>
-                <p className="text-sm text-brand-navy/60">Close {formatPrice(result.close)} · {new Date(result.asOf * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}</p>
+                <p className="text-sm text-brand-navy/60">Close ₹{formatPrice(result.close)} · {new Date(result.asOf * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}</p>
               </div>
-              {result.atr && <p className="text-sm text-brand-navy/60">Typical daily range: {formatPrice(result.atr.value)} ({result.atr.pct.toFixed(1)}% of the price)</p>}
+              {result.atr && <p className="text-sm text-brand-navy/60">Typical daily range: ₹{formatPrice(result.atr.value)} ({result.atr.pct.toFixed(1)}% of the price)</p>}
             </div>
             <div className="mt-4 flex h-3 w-full overflow-hidden rounded-full bg-slate-100" role="img" aria-label={`Up ${result.upPct}%, neutral ${result.neutralPct}%, down ${result.downPct}%`}>
               <div className="bg-emerald-500" style={{ width: `${result.upPct}%` }} />
@@ -110,7 +110,7 @@ export default async function AnalystSymbolPage({ params }: { params: Promise<{ 
                 {([["Resistance (above)", result.resistance, "text-rose-700"], ["Support (below)", result.support, "text-emerald-700"]] as const).map(([title, levels, tone]) => (
                   <div key={title}>
                     <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/50">{title}</p>
-                    {levels.length === 0 ? <p className="mt-1 text-brand-navy/50">None found</p> : levels.map((l) => <p key={l.price} className={`mt-1 font-semibold ${tone}`}>{formatPrice(l.price)} <span className="font-normal text-brand-navy/50">({l.distancePct > 0 ? "+" : ""}{l.distancePct.toFixed(1)}%)</span></p>)}
+                    {levels.length === 0 ? <p className="mt-1 text-brand-navy/50">None found</p> : levels.map((l) => <p key={l.price} className={`mt-1 font-semibold ${tone}`}>₹{formatPrice(l.price)} <span className="font-normal text-brand-navy/50">({l.distancePct > 0 ? "+" : ""}{l.distancePct.toFixed(1)}%)</span></p>)}
                   </div>
                 ))}
               </div>
