@@ -122,6 +122,10 @@ function validateOperand(v: unknown, path: string): asserts v is Operand {
         throw new Error(`${path}.params: expected each value to be a finite number between 0 and 500`);
       }
     }
+    // MACD-style settings: the fast average must be shorter than the slow one.
+    if (def.paramLabels[0] === "Fast" && def.paramLabels[1] === "Slow" && (v.params as number[])[0] >= (v.params as number[])[1]) {
+      throw new Error(`${path}.params: the Fast period must be shorter than the Slow period`);
+    }
     validateOverride(v, path);
     return;
   }

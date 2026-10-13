@@ -55,6 +55,16 @@ const COMPANIONS: Partial<Record<IndicatorKind, IndicatorKind[]>> = {
   ADX: ["PLUS_DI", "MINUS_DI"],
   AROON_UP: ["AROON_DOWN"],
   AROON_DOWN: ["AROON_UP"],
+  VWAP_UPPER_1: ["VWAP", "VWAP_LOWER_1"],
+  VWAP_LOWER_1: ["VWAP", "VWAP_UPPER_1"],
+  VWAP_UPPER_2: ["VWAP", "VWAP_LOWER_2"],
+  VWAP_LOWER_2: ["VWAP", "VWAP_UPPER_2"],
+  FIB_RET_382: ["FIB_RET_500", "FIB_RET_618"],
+  FIB_RET_500: ["FIB_RET_382", "FIB_RET_618"],
+  FIB_RET_618: ["FIB_RET_500", "FIB_RET_786"],
+  FIB_RET_786: ["FIB_RET_618"],
+  FIB_EXT_1272: ["FIB_EXT_1618"],
+  FIB_EXT_1618: ["FIB_EXT_1272"],
 };
 
 /** Levels rules commonly use for oscillators. */
@@ -74,6 +84,14 @@ const LEVELS: Partial<Record<IndicatorKind, number[]>> = {
   ROC: [0],
   AWESOME_OSCILLATOR: [0],
   CMF: [0],
+  BB_PERCENT_B: [0, 1],
+  BB_SQUEEZE: [1],
+  BB_KC_SQUEEZE: [1],
+  RSI_CHANGE: [0],
+  MACD_HIST_CHANGE: [0],
+  BB_MIDDLE_CHANGE: [0],
+  FIB_GOLDEN_ZONE: [1],
+  FIB_DIRECTION: [0],
 };
 
 const TEXT: Record<IndicatorKind, string> = {
@@ -123,10 +141,42 @@ const TEXT: Record<IndicatorKind, string> = {
   STDDEV: "Standard deviation: how widely closes vary around their average — a volatility measure. Rising values mean bigger swings.",
   SUPPORT: "Support level: the nearest price below where price has bounced up at least twice. Price tends not to fall far below it; a close under it is a breakdown.",
   RESISTANCE: "Resistance level: the nearest price above where price has failed to rise at least twice. A close above it is a breakout.",
+  BB_PERCENT_B: "Bollinger %B: where the close sits inside the bands. 0 = on the lower band, 1 = on the upper band, above 1 or below 0 = outside them. A flat price gives no value.",
+  BB_BANDWIDTH: "Bollinger BandWidth (%): how wide the bands are compared with the average. Low = a quiet, squeezed market; high = an expanded, volatile one.",
+  BB_SQUEEZE: "Bollinger squeeze: 1 while the bands are among the narrowest of the last N candles (the lowest few percent), otherwise 0. A squeeze shows quiet before a bigger move, but not which way. Needs the full lookback of history before it has a value.",
+  BB_KC_SQUEEZE: "Squeeze (Bollinger inside Keltner): 1 while the Bollinger Bands sit completely inside the Keltner Channels, otherwise 0. The classic \"squeeze on\" signal; it ends when the bands move back outside.",
+  VWAP_UPPER_1: "VWAP +1 SD: the volume-weighted average price plus one standard deviation of the day's volume-weighted prices. Restarts every session.",
+  VWAP_LOWER_1: "VWAP −1 SD: the volume-weighted average price minus one standard deviation. Restarts every session.",
+  VWAP_UPPER_2: "VWAP +2 SD: two standard deviations above VWAP. Price closing out here is stretched; it often drifts back toward VWAP on range days but can ride the band on strong trend days.",
+  VWAP_LOWER_2: "VWAP −2 SD: two standard deviations below VWAP. A close back inside from here is a common mean-reversion entry on range days.",
+  RSI_CHANGE: "RSI change over N bars: today's RSI minus its value N candles ago. Above zero = RSI turning or moving up; below zero = moving down.",
+  MACD_HIST_CHANGE: "MACD histogram change over N bars: how much the histogram has grown or shrunk. Above zero = momentum building; below zero = fading. Negative bars that keep rising warn of a bullish shift before the lines cross.",
+  BB_MIDDLE_CHANGE: "Bollinger middle band change over N bars: the average now minus the average N candles ago. Above zero = the middle band slopes up (a rising trend), below zero = down.",
+  FIB_RET_382: "Fibonacci 38.2% retracement of the latest confirmed swing: a shallow pullback level in a strong trend. Swings are only counted once confirmed, so nothing repaints.",
+  FIB_RET_500: "Fibonacci 50% retracement: the half-way pullback level, very widely watched. It is not a true Fibonacci ratio but is used everywhere.",
+  FIB_RET_618: "Fibonacci 61.8% retracement (the golden ratio): a deep pullback, often seen as the last normal support before the trend is in doubt.",
+  FIB_RET_786: "Fibonacci 78.6% retracement: a very deep pullback, a last-chance entry with a tight invalidation just beyond it.",
+  FIB_EXT_1272: "Fibonacci 1.272 extension: a first profit target beyond the swing high (or low).",
+  FIB_EXT_1618: "Fibonacci 1.618 extension: a second, further profit target beyond the swing.",
+  FIB_GOLDEN_ZONE: "In the Fibonacci golden zone: 1 while the candle has pulled back into the 50%–61.8% zone of a valid swing (within 0.3 ATR), otherwise 0. Use it as the location, together with a trigger such as a reversal candle or RSI turning up.",
+  FIB_DIRECTION: "Fibonacci swing direction: 1 after an up-swing (low then high), −1 after a down-swing, no value when there is no valid swing. The swing is void once price closes beyond its start.",
 };
 
 /** Settings used for the picture where the defaults find nothing on the short sample. */
-const PICTURE_PARAMS: Partial<Record<IndicatorKind, number[]>> = { SUPPORT: [2, 2, 2], RESISTANCE: [2, 2, 2] };
+const FIB_PICTURE = [3, 3, 1.5];
+const PICTURE_PARAMS: Partial<Record<IndicatorKind, number[]>> = {
+  SUPPORT: [2, 2, 2],
+  RESISTANCE: [2, 2, 2],
+  FIB_RET_382: FIB_PICTURE,
+  FIB_RET_500: FIB_PICTURE,
+  FIB_RET_618: FIB_PICTURE,
+  FIB_RET_786: FIB_PICTURE,
+  FIB_EXT_1272: FIB_PICTURE,
+  FIB_EXT_1618: FIB_PICTURE,
+  FIB_GOLDEN_ZONE: FIB_PICTURE,
+  FIB_DIRECTION: FIB_PICTURE,
+  BB_SQUEEZE: [20, 2, 40, 25],
+};
 
 export default function IndicatorIllustration({ kind, params }: { kind: IndicatorKind; params?: number[] }) {
   const def = INDICATOR_BY_KIND.get(kind);

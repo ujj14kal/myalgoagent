@@ -29,6 +29,7 @@ import {
   standardDeviation,
 } from "@/lib/indicators";
 import { supportResistance } from "@/lib/support-resistance";
+import { bollingerBandwidth, bollingerPercentB, bollingerSqueeze, changeOver, fibonacciLevels, keltnerSqueeze, sessionVwap } from "@/lib/indicators-study";
 import type { IndicatorKind } from "./types";
 import { INDICATOR_BY_KIND } from "./indicator-catalog";
 
@@ -37,7 +38,7 @@ import { INDICATOR_BY_KIND } from "./indicator-catalog";
  * condition evaluator and the strategy chart overlay so they can never
  * drift apart on what an indicator actually computes. */
 /** Settings that count bars (periods, lookbacks) — must be whole numbers ≥ 1. */
-const COUNT_PARAM = /period|fast|slow|signal|strength|touches/i;
+const COUNT_PARAM = /period|fast|slow|signal|strength|touches|left|right|lookback|bars|percentile/i;
 
 /**
  * Settings as typed by a user can be blank, 0 or nonsense (the chart lets
@@ -90,6 +91,14 @@ export function computeIndicatorSeries(candles: Candle[], type: IndicatorKind, r
       return bollingerBands(candles, params[0], params[1]).lower;
     case "VWAP":
       return vwap(candles);
+    case "VWAP_UPPER_1":
+      return sessionVwap(candles).upper1;
+    case "VWAP_LOWER_1":
+      return sessionVwap(candles).lower1;
+    case "VWAP_UPPER_2":
+      return sessionVwap(candles).upper2;
+    case "VWAP_LOWER_2":
+      return sessionVwap(candles).lower2;
     case "ATR":
       return atr(candles, params[0]);
     case "ADX":
@@ -158,5 +167,35 @@ export function computeIndicatorSeries(candles: Candle[], type: IndicatorKind, r
       return envelope(candles, params[0], params[1]).lower;
     case "STDDEV":
       return standardDeviation(candles, params[0]);
+    case "BB_PERCENT_B":
+      return bollingerPercentB(candles, params[0], params[1]);
+    case "BB_BANDWIDTH":
+      return bollingerBandwidth(candles, params[0], params[1]);
+    case "BB_SQUEEZE":
+      return bollingerSqueeze(candles, params[0], params[1], params[2], params[3]);
+    case "BB_KC_SQUEEZE":
+      return keltnerSqueeze(candles, params[0], params[1], params[2]);
+    case "RSI_CHANGE":
+      return changeOver(rsi(candles, params[0]), params[1]);
+    case "MACD_HIST_CHANGE":
+      return changeOver(macd(candles, params[0], params[1], params[2]).histogram, params[3]);
+    case "BB_MIDDLE_CHANGE":
+      return changeOver(sma(candles, params[0]), params[1]);
+    case "FIB_RET_382":
+      return fibonacciLevels(candles, params[0], params[1], params[2]).ret382;
+    case "FIB_RET_500":
+      return fibonacciLevels(candles, params[0], params[1], params[2]).ret500;
+    case "FIB_RET_618":
+      return fibonacciLevels(candles, params[0], params[1], params[2]).ret618;
+    case "FIB_RET_786":
+      return fibonacciLevels(candles, params[0], params[1], params[2]).ret786;
+    case "FIB_EXT_1272":
+      return fibonacciLevels(candles, params[0], params[1], params[2]).ext1272;
+    case "FIB_EXT_1618":
+      return fibonacciLevels(candles, params[0], params[1], params[2]).ext1618;
+    case "FIB_GOLDEN_ZONE":
+      return fibonacciLevels(candles, params[0], params[1], params[2]).goldenZone;
+    case "FIB_DIRECTION":
+      return fibonacciLevels(candles, params[0], params[1], params[2]).direction;
   }
 }

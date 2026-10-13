@@ -60,10 +60,11 @@ describe("VWAP — cumulative typical-price-weighted average", () => {
     expect(result[2].value).toBeCloseTo(4100 / 450, 10);
   });
 
-  it("falls back to the typical price itself when cumulative volume is 0", () => {
-    const candles = [candle(0, 9, 0)];
+  it("has no value until the session has traded some volume (never a made-up zero)", () => {
+    const candles = [candle(0, 9, 0), candle(1, 10, 100)];
     const result = vwap(candles);
-    expect(result[0].value).toBe(9);
+    expect(result).toHaveLength(1);
+    expect(result[0].value).toBe(10);
   });
 });
 

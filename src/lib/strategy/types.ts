@@ -51,7 +51,26 @@ export type IndicatorKind =
   | "ENVELOPE_LOWER"
   | "STDDEV"
   | "SUPPORT"
-  | "RESISTANCE";
+  | "RESISTANCE"
+  | "BB_PERCENT_B"
+  | "BB_BANDWIDTH"
+  | "BB_SQUEEZE"
+  | "BB_KC_SQUEEZE"
+  | "VWAP_UPPER_1"
+  | "VWAP_LOWER_1"
+  | "VWAP_UPPER_2"
+  | "VWAP_LOWER_2"
+  | "RSI_CHANGE"
+  | "MACD_HIST_CHANGE"
+  | "BB_MIDDLE_CHANGE"
+  | "FIB_RET_382"
+  | "FIB_RET_500"
+  | "FIB_RET_618"
+  | "FIB_RET_786"
+  | "FIB_EXT_1272"
+  | "FIB_EXT_1618"
+  | "FIB_GOLDEN_ZONE"
+  | "FIB_DIRECTION";
 
 export type PriceField = "OPEN" | "HIGH" | "LOW" | "CLOSE" | "VOLUME";
 export type ComparisonOperator = "GT" | "LT" | "GTE" | "LTE" | "EQ" | "CROSSES_ABOVE" | "CROSSES_BELOW";

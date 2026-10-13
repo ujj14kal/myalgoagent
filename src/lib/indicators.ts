@@ -1,4 +1,5 @@
 import type { Candle } from "@/lib/market-data";
+import { sessionVwap } from "@/lib/indicators-study";
 
 export interface IndicatorPoint {
   time: number;
@@ -77,8 +78,12 @@ export function rsi(candles: Candle[], period = 14): IndicatorPoint[] {
   let avgGain = gainSum / period;
   let avgLoss = lossSum / period;
 
-  const rsiAt = (avgG: number, avgL: number) =>
-    avgL === 0 ? 100 : 100 - 100 / (1 + avgG / avgL);
+  // No losses: 100. A completely flat price (no gains either) has no direction, so it keeps the previous reading (50 at the start).
+  let last = 50;
+  const rsiAt = (avgG: number, avgL: number) => {
+    last = avgL === 0 ? (avgG === 0 ? last : 100) : 100 - 100 / (1 + avgG / avgL);
+    return last;
+  };
 
   points.push({ time: candles[period].time, value: rsiAt(avgGain, avgLoss) });
 
@@ -142,22 +147,11 @@ export function bollingerBands(
   return { upper, middle, lower };
 }
 
-// Volume Weighted Average Price — cumulative over the fetched range, a
-// daily-bar approximation of true intraday VWAP (which needs intraday
-// data this platform doesn't have yet).
+// Volume Weighted Average Price. It restarts every trading session (the India calendar day), so on intraday candles
+// it is the day's fair-value line; on daily or longer candles every candle is its own session and it is just that
+// candle's typical price (use the anchored VWAP for longer horizons). See sessionVwap in indicators-study.ts.
 export function vwap(candles: Candle[]): IndicatorPoint[] {
-  const points: IndicatorPoint[] = [];
-  let cumulativePV = 0;
-  let cumulativeVolume = 0;
-
-  for (const c of candles) {
-    const typicalPrice = (c.high + c.low + c.close) / 3;
-    cumulativePV += typicalPrice * c.volume;
-    cumulativeVolume += c.volume;
-    points.push({ time: c.time, value: cumulativeVolume > 0 ? cumulativePV / cumulativeVolume : typicalPrice });
-  }
-
-  return points;
+  return sessionVwap(candles).vwap;
 }
 
 // Same cumulative volume-weighted typical-price formula as vwap() above, but

@@ -62,6 +62,27 @@ export const INDICATOR_CATALOG: IndicatorDef[] = [
   { kind: "ENVELOPE_UPPER", dslName: "envelopeupper", label: "Envelope Upper", paramLabels: ["Period", "Percent"], defaults: [20, 2.5] },
   { kind: "ENVELOPE_LOWER", dslName: "envelopelower", label: "Envelope Lower", paramLabels: ["Period", "Percent"], defaults: [20, 2.5] },
   { kind: "STDDEV", dslName: "stddev", label: "Std Deviation", paramLabels: ["Period"], defaults: [20] },
+  { kind: "BB_PERCENT_B", dslName: "bollingerpercentb", label: "Bollinger %B", paramLabels: ["Period", "Std Dev"], defaults: [20, 2] },
+  { kind: "BB_BANDWIDTH", dslName: "bollingerbandwidth", label: "Bollinger BandWidth %", paramLabels: ["Period", "Std Dev"], defaults: [20, 2] },
+  { kind: "BB_SQUEEZE", dslName: "bollingersqueeze", label: "Bollinger squeeze (narrowest bands)", paramLabels: ["Period", "Std Dev", "Lookback", "Percentile"], defaults: [20, 2, 120, 15] },
+  { kind: "BB_KC_SQUEEZE", dslName: "squeezebbkc", label: "Squeeze (Bollinger inside Keltner)", paramLabels: ["Period", "Std Dev", "Keltner Mult"], defaults: [20, 2, 1.5] },
+  { kind: "VWAP_UPPER_1", dslName: "vwapupper1", label: "VWAP +1 SD band", paramLabels: [], defaults: [] },
+  { kind: "VWAP_LOWER_1", dslName: "vwaplower1", label: "VWAP -1 SD band", paramLabels: [], defaults: [] },
+  { kind: "VWAP_UPPER_2", dslName: "vwapupper2", label: "VWAP +2 SD band", paramLabels: [], defaults: [] },
+  { kind: "VWAP_LOWER_2", dslName: "vwaplower2", label: "VWAP -2 SD band", paramLabels: [], defaults: [] },
+  { kind: "RSI_CHANGE", dslName: "rsichange", label: "RSI change over N bars", paramLabels: ["Period", "Bars"], defaults: [14, 3] },
+  { kind: "MACD_HIST_CHANGE", dslName: "macdhistogramchange", label: "MACD histogram change over N bars", paramLabels: ["Fast", "Slow", "Signal", "Bars"], defaults: [12, 26, 9, 1] },
+  { kind: "BB_MIDDLE_CHANGE", dslName: "bollingermiddlechange", label: "Bollinger middle band change over N bars", paramLabels: ["Period", "Bars"], defaults: [20, 3] },
+  // Fibonacci levels from the latest confirmed swing (lib/indicators-study.ts): Left/Right = bars either side that confirm a swing,
+  // Min swing ATR = ignore swings smaller than that many ATRs.
+  { kind: "FIB_RET_382", dslName: "fibretracement382", label: "Fibonacci 38.2% retracement", paramLabels: ["Left", "Right", "Min swing ATR"], defaults: [5, 5, 3] },
+  { kind: "FIB_RET_500", dslName: "fibretracement500", label: "Fibonacci 50% retracement", paramLabels: ["Left", "Right", "Min swing ATR"], defaults: [5, 5, 3] },
+  { kind: "FIB_RET_618", dslName: "fibretracement618", label: "Fibonacci 61.8% retracement", paramLabels: ["Left", "Right", "Min swing ATR"], defaults: [5, 5, 3] },
+  { kind: "FIB_RET_786", dslName: "fibretracement786", label: "Fibonacci 78.6% retracement", paramLabels: ["Left", "Right", "Min swing ATR"], defaults: [5, 5, 3] },
+  { kind: "FIB_EXT_1272", dslName: "fibextension1272", label: "Fibonacci 1.272 extension", paramLabels: ["Left", "Right", "Min swing ATR"], defaults: [5, 5, 3] },
+  { kind: "FIB_EXT_1618", dslName: "fibextension1618", label: "Fibonacci 1.618 extension", paramLabels: ["Left", "Right", "Min swing ATR"], defaults: [5, 5, 3] },
+  { kind: "FIB_GOLDEN_ZONE", dslName: "fibgoldenzone", label: "In Fibonacci golden zone (1 = yes)", paramLabels: ["Left", "Right", "Min swing ATR"], defaults: [5, 5, 3] },
+  { kind: "FIB_DIRECTION", dslName: "fibdirection", label: "Fibonacci swing direction (1 up, -1 down)", paramLabels: ["Left", "Right", "Min swing ATR"], defaults: [5, 5, 3] },
 ];
 
 export const INDICATOR_BY_KIND: Map<IndicatorKind, IndicatorDef> = new Map(
@@ -105,6 +126,16 @@ export const OSCILLATOR_KINDS: Set<IndicatorKind> = new Set([
   "CMF",
   "ATR",
   "STDDEV",
+  // Scale-free ratios, 0/1 flags and "change over N bars" values: compared with fixed numbers, never with price.
+  "BB_PERCENT_B",
+  "BB_BANDWIDTH",
+  "BB_SQUEEZE",
+  "BB_KC_SQUEEZE",
+  "RSI_CHANGE",
+  "MACD_HIST_CHANGE",
+  "BB_MIDDLE_CHANGE",
+  "FIB_GOLDEN_ZONE",
+  "FIB_DIRECTION",
 ]);
 
 /** A handful of oscillators are actually *paired* by construction — both

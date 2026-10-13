@@ -6,12 +6,13 @@ import { breadcrumbJsonLd, siteUrl, pageMetadata } from "@/lib/site";
 import Reveal from "@/components/reveal";
 import ComingSoonTag, { ComingSoonList } from "@/components/coming-soon-tag";
 import { ALL_BROKERS_SENTENCE, BROKER_COUNT } from "@/lib/brokers/public-copy";
+import { INDICATOR_CATALOG } from "@/lib/strategy/indicator-catalog";
 import BrokerLogos from "@/components/broker-logos";
 
 export const metadata: Metadata = pageMetadata({
   title: "Features",
   description:
-    `Strategy builder, 46 technical indicators, realistic backtesting, forward testing, risk controls, connections to ${BROKER_COUNT} Indian brokers and an AI agent — and live trading on your own broker, switched on account by account.`,
+    `Strategy builder, ${INDICATOR_CATALOG.length} technical indicators and levels, realistic backtesting, forward testing, risk controls, connections to ${BROKER_COUNT} Indian brokers and an AI agent — and live trading on your own broker, switched on account by account.`,
   path: "/features",
 });
 
@@ -50,7 +51,11 @@ const groups: Group[] = [
     title: "Technical Indicators",
     icon: Activity,
     items: [
-      "46 indicators in total, each with a picture of what it looks like",
+      `${INDICATOR_CATALOG.length} indicators and levels in total, each with a picture of what it looks like`,
+      "Bollinger Bands with %B, BandWidth and two kinds of squeeze (narrowest bands of the last N candles, or Bollinger inside Keltner)",
+      "VWAP that restarts every trading session, with one and two standard-deviation bands — made for intraday candles",
+      "Fibonacci retracement and extension levels drawn from the latest confirmed swing (no repainting), with a golden-zone flag and the swing direction",
+      "Momentum helpers: RSI change, MACD histogram change and band slope over N candles, so rules can say \"turning up\" or \"building for three bars\"",
       "Moving averages: SMA, EMA, WMA and Hull MA",
       "RSI, MACD, Bollinger Bands, ATR, Standard Deviation",
       "VWAP, ADX/DMI, Stochastic Oscillator, CCI, Williams %R, MFI, Awesome Oscillator, Aroon",
