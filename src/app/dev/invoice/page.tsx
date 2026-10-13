@@ -17,7 +17,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
     ...(kind === "credit" ? { creditNote: { against: "MAA/2026-27/000128", againstDate: new Date("2026-10-12T06:00:00Z") } } : {}),
     buyer: { name: "Asha Rao", email: "asha.rao@example.com", ...(kind === "business" ? { gstin: "29ABCDE1234F1Z5", address: "12 MG Road, Bengaluru 560001" } : {}) },
     seller: kind === "receipt" ? { name: "Shagoon Softech Pvt. Ltd.", email: "support@myalgoagent.com", website: "https://myalgoagent.com" } : { name: "Shagoon Softech Pvt. Ltd.", address: "Registered office address, City, State PIN", gstin: "27ABCDE1234F1Z5", pan: "ABCDE1234F", email: "support@myalgoagent.com", website: "https://myalgoagent.com" },
-    lines: kind === "topup" ? [{ description: "Credit top-up", detail: "750 credits · valid for a year", qty: 1, totalPaise: 79_900, sac: "998439" }] : [{ description: "MyAlgoAgent Trade plan", detail: "Monthly · 13 Oct 2026 – 12 Nov 2026", qty: 1, totalPaise: 199_900, sac: kind === "receipt" ? null : "998439" }],
+    lines: kind === "topup" ? [{ description: "Credit top-up", detail: "1,200 credits · valid for a year", qty: 1, totalPaise: 79_900, sac: "998439" }] : [{ description: "MyAlgoAgent Trade plan", detail: "Monthly · 13 Oct 2026 – 12 Nov 2026", qty: 1, totalPaise: 199_900, sac: kind === "receipt" ? null : "998439" }],
   };
   return (
     <main style={{ background: "#f7f9fc", padding: "24px 12px", minHeight: "100vh" }}>

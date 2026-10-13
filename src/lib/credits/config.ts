@@ -47,9 +47,9 @@ export type PlanSpec = {
 };
 
 export const PLANS: Record<CreditPlan, PlanSpec> = {
-  FREE: { label: "Free", price: null, monthlyCredits: 20, aiLifetimeReplies: 2, voice: false, bigBacktests: false, daily: { ai: 2, build: 2, voice: 0 }, slots: { live: 0, forward: 2 } },
-  TRADE: { label: "Trade", price: 1999, monthlyCredits: 1500, aiLifetimeReplies: null, voice: true, bigBacktests: true, daily: { ai: 40, build: 15, voice: 40 }, slots: { live: 3, forward: 15 } },
-  PRO: { label: "Pro", price: 3499, monthlyCredits: 4000, aiLifetimeReplies: null, voice: true, bigBacktests: true, daily: { ai: 100, build: 40, voice: 120 }, slots: { live: 10, forward: 40 } },
+  FREE: { label: "Free", price: null, monthlyCredits: 20, aiLifetimeReplies: 2, voice: false, bigBacktests: false, daily: { ai: 2, build: 2, voice: 0 }, slots: { live: 0, forward: 0 } },
+  TRADE: { label: "Trade", price: 1999, monthlyCredits: 3000, aiLifetimeReplies: null, voice: true, bigBacktests: true, daily: { ai: 60, build: 20, voice: 20 }, slots: { live: 5, forward: 30 } },
+  PRO: { label: "Pro", price: 3499, monthlyCredits: 8000, aiLifetimeReplies: null, voice: true, bigBacktests: true, daily: { ai: 150, build: 50, voice: 60 }, slots: { live: 20, forward: 100 } },
 };
 
 /**
@@ -74,12 +74,12 @@ export type PlanKey = CreditPlan | "TRIAL";
 export const specOf = (k: PlanKey): PlanSpec => (k === "TRIAL" ? TRIAL_SPEC : PLANS[k]);
 export const effectivePlan = (plan: CreditPlan, trialEndsAt: Date | null | undefined, now = new Date()): PlanKey => (plan === "FREE" && trialEndsAt && trialEndsAt > now ? "TRIAL" : plan);
 
-/** Top-up packs (paid plans): priced for at least a 54% margin even if every credit is spent at the worst-case cost. Rupees BEFORE GST (18% is added at checkout). */
+/** Top-up packs (paid plans): priced from ₹0.75 down to ₹0.50 a credit, always above Pro's plan rate (₹0.44) and at least 3x the realistic ₹0.14 cost of a credit (see docs/credit-pricing-research.md). Rupees BEFORE GST (18% is added at checkout). */
 export const TOPUP_PACKS = [
-  { credits: 250, price: 299 },
-  { credits: 750, price: 799 },
-  { credits: 2000, price: 1799 },
-  { credits: 5000, price: 3999 },
+  { credits: 400, price: 299 },
+  { credits: 1200, price: 799 },
+  { credits: 3000, price: 1799 },
+  { credits: 8000, price: 3999 },
 ] as const;
 
 const INTRADAY = new Set(["1m", "2m", "3m", "5m", "15m", "30m", "60m", "4h"]);
@@ -143,7 +143,7 @@ export function slotRefusal(plan: PlanKey, kind: "live" | "forward", used: numbe
   const cap = spec.slots[kind];
   if (used < cap) return null;
   const what = kind === "live" ? "live strategies" : "forward tests";
-  if (cap === 0) return { code: "NOT_ON_PLAN", message: `Going live is part of the Trade and Pro plans.` };
+  if (cap === 0) return { code: "NOT_ON_PLAN", message: kind === "live" ? "Going live is part of the Trade and Pro plans." : "Forward testing is part of the Trade and Pro plans (and the free trial)." };
   return { code: "SLOTS_FULL", message: `${spec.label} runs up to ${cap} ${what} at once and you have ${used}. Stop one first${plan === "PRO" ? "." : ", or move to Pro for more."}` };
 }
 

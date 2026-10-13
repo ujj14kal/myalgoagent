@@ -21,7 +21,7 @@ export type Bill = {
 
 const fmt = (n: number) => n.toLocaleString("en-IN");
 
-/** "plan:PRO" / "topup:750" from the address, or null when it isn't something we sell. */
+/** "plan:PRO" / "topup:1200" from the address, or null when it isn't something we sell. */
 export function parseItem(raw: string | string[] | undefined): CheckoutItem | null {
   const v = Array.isArray(raw) ? raw[0] : raw;
   const m = /^(plan|topup):([A-Za-z0-9]+)$/.exec(v ?? "");

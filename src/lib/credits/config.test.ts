@@ -42,10 +42,10 @@ describe("refusalFor — free plan", () => {
 describe("refusalFor — paid plans", () => {
   const bal = { monthly: 500, topup: 0 };
   it("stops at the daily ceilings whatever the balance", () => {
-    expect(refusalFor("TRADE", bal, { ...none, aiToday: 40 }, "ai_reply", 2)?.code).toBe("DAILY_CAP");
-    expect(refusalFor("TRADE", bal, { ...none, aiToday: 10, buildsToday: 15 }, "ai_build", 5)?.code).toBe("DAILY_CAP");
-    expect(refusalFor("TRADE", bal, { ...none, voiceToday: 40 }, "ai_voice", 6)?.code).toBe("DAILY_CAP");
-    expect(refusalFor("PRO", bal, { ...none, aiToday: 40 }, "ai_reply", 2)).toBeNull();
+    expect(refusalFor("TRADE", bal, { ...none, aiToday: 60 }, "ai_reply", 2)?.code).toBe("DAILY_CAP");
+    expect(refusalFor("TRADE", bal, { ...none, aiToday: 10, buildsToday: 20 }, "ai_build", 5)?.code).toBe("DAILY_CAP");
+    expect(refusalFor("TRADE", bal, { ...none, voiceToday: 20 }, "ai_voice", 6)?.code).toBe("DAILY_CAP");
+    expect(refusalFor("PRO", bal, { ...none, aiToday: 60 }, "ai_reply", 2)).toBeNull();
   });
   it("stops when the credits are gone and says how many are needed", () => {
     const r = refusalFor("TRADE", { monthly: 1, topup: 0 }, none, "ai_build", 5);
@@ -70,10 +70,17 @@ describe("the price list", () => {
     expect(PLANS.TRADE.price).toBe(1999);
     expect(PLANS.PRO.price).toBe(3499);
     expect(PLANS.FREE.aiLifetimeReplies).toBe(2);
-    // Every top-up pack keeps at least a 54% margin at the worst-case ₹0.30 of cost per credit, after 18% GST and 2.36% payment fees.
+    // Every pack stays above Pro's plan rate per credit (so upgrading is always the better deal) and keeps a 30% margin even at the worst-case ₹0.33 of cost per credit, after 18% GST and 2.36% payment fees.
+    const proRate = PLANS.PRO.price! / PLANS.PRO.monthlyCredits;
     for (const p of TOPUP_PACKS) {
-      const kept = p.price / 1.18 - p.price * 0.0236;
-      expect((kept - p.credits * 0.3) / kept).toBeGreaterThan(0.54);
+      expect(p.price / p.credits).toBeGreaterThan(proRate);
+      const kept = p.price - p.price * 0.0236;
+      expect((kept - p.credits * 0.33) / kept).toBeGreaterThan(0.3);
+    }
+    // Plans: at the realistic ₹0.14 a credit, spending every credit still leaves 40%+ of the price after the IP (₹640) and payment fees (3.5%).
+    for (const p of [PLANS.TRADE, PLANS.PRO]) {
+      const left = p.price! - 640 - p.price! * 1.18 * 0.0299 - 20 - p.monthlyCredits * 0.14;
+      expect(left / p.price!).toBeGreaterThan(0.4);
     }
   });
 });
@@ -81,10 +88,11 @@ describe("the price list", () => {
 describe("slot limits", () => {
   it("free cannot go live, paid plans stop at their cap", () => {
     expect(slotRefusal("FREE", "live", 0)?.code).toBe("NOT_ON_PLAN");
-    expect(slotRefusal("TRADE", "live", 2)).toBeNull();
-    expect(slotRefusal("TRADE", "live", 3)?.code).toBe("SLOTS_FULL");
-    expect(slotRefusal("PRO", "forward", 39)).toBeNull();
-    expect(slotRefusal("PRO", "forward", 40)?.code).toBe("SLOTS_FULL");
+    expect(slotRefusal("FREE", "forward", 0)?.code).toBe("NOT_ON_PLAN");
+    expect(slotRefusal("TRADE", "live", 4)).toBeNull();
+    expect(slotRefusal("TRADE", "live", 5)?.code).toBe("SLOTS_FULL");
+    expect(slotRefusal("PRO", "forward", 99)).toBeNull();
+    expect(slotRefusal("PRO", "forward", 100)?.code).toBe("SLOTS_FULL");
   });
 });
 

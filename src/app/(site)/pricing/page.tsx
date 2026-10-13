@@ -23,7 +23,7 @@ const plans = [
     features: [
       `${PLANS.FREE.monthlyCredits} credits a month for daily-candle backtests`,
       "2 AI replies to try the assistant",
-      `Up to ${PLANS.FREE.slots.forward} forward tests`,
+      "Build and backtest strategies; running them (forward tests or live) is on the paid plans",
       "Strategy builder, charts, indicators and risk controls",
       "Connect your own broker account",
     ],
