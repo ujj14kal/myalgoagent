@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request-ip";
 import { sendFeedbackNotice, sendSupportCaseNotice, sendSupportCaseConfirmation } from "@/lib/email";
+import { threadLink } from "@/lib/support/tickets";
 import { LIMITS, oneLine, text, tooLong } from "@/lib/text";
 
 export async function submitFeedbackAction(
@@ -60,9 +61,11 @@ export async function submitSupportCaseAction(input: {
 
   const session = await auth();
 
+  // Signed out but using an account's address: the request still belongs to that account.
+  const owner = session?.user?.id ?? (await prisma.user.findFirst({ where: { email: { equals: email, mode: "insensitive" } }, select: { id: true } }))?.id ?? null;
   const supportCase = await prisma.supportCase.create({
     data: {
-      userId: session?.user?.id ?? null,
+      userId: owner,
       email,
       subject,
       message,
@@ -72,7 +75,7 @@ export async function submitSupportCaseAction(input: {
   const caseId = `MAA-${supportCase.caseNumber + 100000}`;
 
   await sendSupportCaseNotice(caseId, subject, message, email).catch((err) => console.error("sendSupportCaseNotice failed:", err));
-  await sendSupportCaseConfirmation(email, caseId).catch((err) => console.error("sendSupportCaseConfirmation failed:", err));
+  await sendSupportCaseConfirmation(email, caseId, owner ? threadLink("case", supportCase.id) : null).catch((err) => console.error("sendSupportCaseConfirmation failed:", err));
 
   return { ok: true, caseId };
 }

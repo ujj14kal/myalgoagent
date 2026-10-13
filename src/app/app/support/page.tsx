@@ -9,7 +9,7 @@ import PageHeader from "@/components/ui/page-header";
 import SupportForm from "@/components/support-form";
 import SupportThread, { type ThreadMessage } from "@/components/support/thread";
 import SupportReplyBox from "@/components/support/reply-box";
-import { caseRef, feedbackRef } from "@/lib/support/tickets";
+import { caseRef, feedbackRef, linkCasesToAccount } from "@/lib/support/tickets";
 
 export const metadata = { title: "Help & Support", robots: { index: false } };
 
@@ -26,6 +26,8 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
   const userId = session?.user?.id;
   if (!userId) return null;
   const sp = await searchParams;
+  // Requests sent while signed out or by email carry only an address: attach them to this account first.
+  await linkCasesToAccount(userId, session.user?.email);
   const open = qText(sp.open, 80);
   const q = qText(sp.q);
   const status = qEnum(sp.status, ["all", "OPEN", "PENDING", "RESOLVED"] as const, "all");
@@ -102,6 +104,10 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
         <p className="text-sm text-brand-navy/55">No conversations yet. Anything you send us — here or with the feedback button — will appear on this page with our replies.</p>
       ) : (
         <>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-base font-bold text-brand-navy">Your requests</h2>
+          <p className="text-xs text-brand-navy/55">{allCount} in all — open one to read our replies and write back. Replies also reach you by email.</p>
+        </div>
         <ListToolbar
           params={params}
           search={{ placeholder: "Search your conversations…" }}

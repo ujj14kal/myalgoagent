@@ -25,14 +25,37 @@ export type TicketHead = {
   status: TicketStatus;
 };
 
+/**
+ * Requests sent while signed out, or by email, carry only an address. When that address belongs to an account, attach them to
+ * it, so they show on that person's Support page and our replies reach them there as well as by email.
+ */
+export async function linkCasesToAccount(userId: string, email: string | null | undefined) {
+  if (!email) return;
+  await prisma.supportCase.updateMany({ where: { userId: null, email: { equals: email, mode: "insensitive" } }, data: { userId } });
+}
+
+async function accountIdFor(email: string): Promise<string | null> {
+  const u = await prisma.user.findFirst({ where: { email: { equals: email, mode: "insensitive" } }, select: { id: true } });
+  return u?.id ?? null;
+}
+
 export async function ticketHead(kind: TicketKind, id: string): Promise<TicketHead | null> {
   if (kind === "case") {
     const c = await prisma.supportCase.findUnique({ where: { id }, select: { id: true, caseNumber: true, subject: true, userId: true, email: true, status: true } });
-    return c && { kind, id: c.id, ref: caseRef(c.caseNumber), topic: c.subject, userId: c.userId, email: c.email, status: c.status };
+    if (!c) return null;
+    let userId = c.userId;
+    if (!userId) {
+      userId = await accountIdFor(c.email);
+      if (userId) await prisma.supportCase.update({ where: { id: c.id }, data: { userId } });
+    }
+    return { kind, id: c.id, ref: caseRef(c.caseNumber), topic: c.subject, userId, email: c.email, status: c.status };
   }
   const f = await prisma.feedback.findUnique({ where: { id }, select: { id: true, page: true, userId: true, status: true, user: { select: { email: true } } } });
   return f && { kind, id: f.id, ref: feedbackRef(f.id), topic: `Your feedback on ${f.page || "MyAlgoAgent"}`, userId: f.userId, email: f.user.email, status: f.status };
 }
+
+/** Where one conversation opens in the app (signing in first when needed). */
+export const threadLink = (kind: TicketKind, id: string) => `${siteUrl}/app/support?open=${kind}-${id}`;
 
 const threadUrl = (t: TicketHead) => (t.userId ? `${siteUrl}/app/support?open=${t.kind}-${t.id}` : null);
 

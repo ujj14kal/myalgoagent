@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { sendInboundAck } from "@/lib/email";
 import { logError } from "@/lib/logger";
-import { caseRef, MAX_REPLY } from "@/lib/support/tickets";
+import { caseRef, MAX_REPLY, threadLink } from "@/lib/support/tickets";
 import { caseNumberIn, cleanSubject, freshText, isAutomated } from "./inbound-parse";
 
 // Mail that people send to the no-reply address (or reply to our support emails) becomes a support case, or a new message on
@@ -41,13 +41,13 @@ export async function handleInbound(m: Inbound): Promise<InboundResult> {
     if (c && (c.email.toLowerCase() === from || (user && c.userId === user.id))) {
       await prisma.supportMessage.create({ data: { caseId: c.id, author: "USER", authorId: user?.id ?? null, authorName: name, body } });
       await prisma.supportCase.update({ where: { id: c.id }, data: { status: "OPEN", lastActivityAt: new Date() } });
-      await sendInboundAck(from, caseRef(c.caseNumber), c.subject, true).catch((err) => logError("support.inbound-ack", err, { ref: caseRef(c.caseNumber) }));
+      await sendInboundAck(from, caseRef(c.caseNumber), c.subject, true, user ? threadLink("case", c.id) : null).catch((err) => logError("support.inbound-ack", err, { ref: caseRef(c.caseNumber) }));
       return { action: "added", ref: caseRef(c.caseNumber) };
     }
   }
 
   const created = await prisma.supportCase.create({ data: { userId: user?.id ?? null, email: from, subject: cleanSubject(m.subject), message: body } });
   const ref = caseRef(created.caseNumber);
-  await sendInboundAck(from, ref, created.subject, false).catch((err) => logError("support.inbound-ack", err, { ref }));
+  await sendInboundAck(from, ref, created.subject, false, user ? threadLink("case", created.id) : null).catch((err) => logError("support.inbound-ack", err, { ref }));
   return { action: "created", ref };
 }

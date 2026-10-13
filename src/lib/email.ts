@@ -219,12 +219,12 @@ export async function sendSupportCaseNotice(caseId: string, subject: string, mes
   });
 }
 
-export async function sendSupportCaseConfirmation(to: string, caseId: string) {
+export async function sendSupportCaseConfirmation(to: string, caseId: string, viewUrl: string | null = null) {
   await sendEmail({
     to,
     subject: `We received your request — ${caseId}`,
-    html: wrap(`<p>Thanks for reaching out. Your case ID is <strong>${caseId}</strong>.</p><p>Our support team will follow up at this email address within 2–3 days.</p>`),
-    text: `Thanks for reaching out. Your case ID is ${caseId}.\n\nOur support team will follow up at this email address within 2-3 days.`,
+    html: wrap(`<p>Thanks for reaching out. Your case ID is <strong>${caseId}</strong>.</p><p>Our support team will follow up at this email address within 2–3 days.</p>${viewUrl ? `<p>You can follow it, read our replies and write back from your Help &amp; Support page in MyAlgoAgent, or just reply to this email.</p>${emailButton(viewUrl, "View your request")}` : ""}`),
+    text: `Thanks for reaching out. Your case ID is ${caseId}.\n\nOur support team will follow up at this email address within 2-3 days.${viewUrl ? `\n\nFollow it and reply from your Help & Support page: ${viewUrl}` : ""}`,
     from: SUPPORT_FROM,
     replyTo: "support@myalgoagent.com",
   });
@@ -262,7 +262,7 @@ export async function sendAnnouncementEmail(to: string, opts: { title: string; b
  * The automatic answer to someone who wrote to the no-reply address: that mailbox isn't read, but their message has become a case.
  * Marked as automatic so mail systems never answer it (no loops).
  */
-export async function sendInboundAck(to: string, ref: string, topic: string, addedToExisting: boolean) {
+export async function sendInboundAck(to: string, ref: string, topic: string, addedToExisting: boolean, viewUrl: string | null = null) {
   const lead = addedToExisting
     ? `We've added your message to your existing request <strong>${e(ref)}</strong>.`
     : `We've opened a support request for you: <strong>${e(ref)}</strong>.`;
@@ -270,7 +270,7 @@ export async function sendInboundAck(to: string, ref: string, topic: string, add
     to,
     subject: oneLine(`Re: ${topic} [${ref}]`, 250),
     html: wrap(
-      `<h1 style="font-size:20px;margin:0 0 12px">We got your message</h1><p>The address you wrote to (<em>noreply@myalgoagent.com</em>) is automatic and nobody reads it. ${lead}</p><p>Our support team will reply from <strong>support@myalgoagent.com</strong> within 2–3 days. To add anything, reply to our email and keep <strong>${e(ref)}</strong> in the subject.</p>${emailButton("https://myalgoagent.com/app/support", "See your requests")}<p style="font-size:13px;color:#6b7788">Your request number is ${e(ref)}. Quote it if you write again.</p>`,
+      `<h1 style="font-size:20px;margin:0 0 12px">We got your message</h1><p>The address you wrote to (<em>noreply@myalgoagent.com</em>) is automatic and nobody reads it. ${lead}</p><p>Our support team will reply from <strong>support@myalgoagent.com</strong> within 2–3 days. To add anything, reply to our email and keep <strong>${e(ref)}</strong> in the subject.</p>${emailButton(viewUrl ?? "https://myalgoagent.com/app/support", "View your request")}<p style="font-size:13px;color:#6b7788">Your request number is ${e(ref)}. Quote it if you write again.</p>`,
       `Your request number is ${ref}`,
     ),
     text: `The address you wrote to (noreply@myalgoagent.com) is automatic and nobody reads it. ${addedToExisting ? `We've added your message to your existing request ${ref}.` : `We've opened a support request for you: ${ref}.`}\n\nOur support team will reply from support@myalgoagent.com within 2-3 days. To add anything, reply to our email and keep ${ref} in the subject.`,
