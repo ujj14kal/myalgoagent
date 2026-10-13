@@ -39,6 +39,7 @@ export default function GoLive({
   const [broker, setBroker] = useState(usable[0]?.id ?? "");
   const [capital, setCapital] = useState(100000);
   const [ack, setAck] = useState(false);
+  const [slices, setSlices] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const router = useRouter();
@@ -102,6 +103,18 @@ export default function GoLive({
                 Your per-order and daily limits in Risk Controls still apply.
               </span>
             </label>
+            <label className="block text-sm">
+              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-brand-navy/45">Spread each entry over the session (optional)</span>
+              <select value={slices} onChange={(e) => setSlices(Number(e.target.value))} className="w-full rounded-lg border border-brand-navy/15 px-3 py-2">
+                <option value={0}>No: send each entry at once (default)</option>
+                <option value={3}>3 slices</option>
+                <option value={5}>5 slices</option>
+                <option value={8}>8 slices</option>
+              </select>
+              <span className="mt-1 block text-xs text-brand-navy/50">
+                For larger orders: the first slice goes at once and the rest through the day, more of them when the market is busiest (a typical NSE volume curve, like a VWAP execution order). Only entries are spread; exits always go out at once, and the slices stop the moment the position closes. Not available with a multi-level entry plan.
+              </span>
+            </label>
             <p className="rounded-xl bg-brand-primary/[0.05] px-3 py-2 text-xs leading-relaxed text-brand-navy/70">
               <strong className="font-semibold text-brand-navy">Orders are sent automatically.</strong> When your strategy&apos;s entry or exit rules fire, the order goes straight to your broker — no extra tap needed. Pause or stop it any time from Live Trading.
             </p>
@@ -117,7 +130,7 @@ export default function GoLive({
               disabled={!ack || pending || !broker}
               onClick={() =>
                 start(async () => {
-                  const r = await goLive({ strategyId, broker, capital, acknowledged: ack });
+                  const r = await goLive({ strategyId, broker, capital, acknowledged: ack, ...(slices ? { slices } : {}) });
                   if (!r.ok) return setError(r.error);
                   router.push("/app/live-trading");
                 })

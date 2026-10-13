@@ -38,3 +38,10 @@ Checked 2026-10-13 against the five analyst study documents. "Phase 2" items are
 - 22 preset recipes in `lib/strategy/presets.ts`, offered on New Strategy ("Start from a ready-made recipe"): RSI (5), MACD (5), Bollinger (4), VWAP (4), Fibonacci (4).
 
 Still not built, on purpose or for lack of data: the opening-range-breakout + VWAP recipe (the platform has no opening-range indicator), Fibonacci harmonics and fans (the study defers them), a standalone Fibonacci extension "target manager" (the staged Targets 1-3 and an exit rule on an extension level cover it), and VWAP execution slicing (the study keeps it out of the signal indicator).
+
+## Update 2026-10-13 (third pass): the four deferred items were built
+
+- Opening-range breakout + VWAP: `OPENING_RANGE_HIGH/LOW` (first N minutes after 09:15 IST, no value until the range is complete, restarts daily) and a recipe.
+- Fibonacci target manager: a staged target can be a Fibonacci extension (1.272, 1.618…) of the swing in force when the position opened (`TargetLevel.fibExtension`); fixed at entry, used by backtests and forward tests; **blocked for live trading** because a restart of the live engine could not rebuild the swing exactly. A recipe uses it.
+- Harmonic patterns: Gartley, Bat, Butterfly, Crab, bullish and bearish, as chart patterns (XABCD ratios with 5% tolerance, fired once when D is confirmed, no look-ahead), plus a Fibonacci fan and time-zone chart drawings. Arcs are not built.
+- VWAP-style entry slicing: opt-in at Go Live (3, 5 or 8 slices), AUTO mode only, not with a multi-level entry plan. Slice times follow a typical NSE volume curve (`lib/live/slicing.ts`), exits are never sliced, and the queue is dropped when the position closes, on pause/resume/stop, or at the end of the day. Needs real-account verification.

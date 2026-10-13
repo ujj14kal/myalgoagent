@@ -16,7 +16,8 @@ import { closedCandles, syncPaperSession, type NewPaperOrder, type PaperSessionS
 import { inMarketWindow } from "@/lib/paper/market-window";
 import { rangeFor } from "@/lib/strategy/session";
 import type { ConditionNode } from "@/lib/strategy";
-import { event, LIVE_DEFAULTS, LiveCheckError, placeLiveOrder, refreshLiveOrder } from "./orders";
+import { event, LIVE_DEFAULTS, LiveCheckError, marketOpen, placeLiveOrder, refreshLiveOrder } from "./orders";
+import { MAX_SLICES, slicePlan } from "./slicing";
 import { liveLog, liveLogThrottled, plainReason } from "./engine-log";
 import { conditionToText } from "@/lib/strategy/format";
 import { resyncEntryPlan, resyncStaged } from "./resync";
@@ -35,6 +36,21 @@ import { parseSystemRuntime } from "@/lib/system/signals";
 export type PendingSignal = { side: "BUY" | "SELL"; quantity: number; reason: string; signalTime: number; createdAt: string; purpose: "strategy" | "exit"; /** A staged target's sale: only this many shares, not the whole position. */ targetLevel?: number };
 const READY_WITHIN_MS = 24 * 3_600_000;
 const FINAL = new Set(["FILLED", "CANCELLED", "REJECTED", "FAILED"]);
+
+// Optional VWAP-style entry slicing (opt-in at Go Live): a large entry goes out in several slices through the session.
+// Only entries are sliced; the queue of later slices lives in the deployment's engine state and is dropped the moment
+// the position closes, the strategy is paused or stopped, or the day ends.
+type SliceItem = { quantity: number; atMinute: number; day: number };
+const istMinuteNow = (now = new Date()) => {
+  const ist = new Date(now.getTime() + 330 * 60_000);
+  return ist.getUTCHours() * 60 + ist.getUTCMinutes();
+};
+const istDayNumber = (now = new Date()) => Math.floor((now.getTime() + 330 * 60_000) / 86_400_000);
+const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const sliceSettings = (state: unknown) => {
+  const o = (state ?? {}) as { vwapSlices?: number; sliceQueue?: SliceItem[] };
+  return { count: typeof o.vwapSlices === "number" ? o.vwapSlices : 0, queue: Array.isArray(o.sliceQueue) ? o.sliceQueue : [] };
+};
 /** An order with no broker id and no record at the broker this long after being sent never arrived. */
 const UNCONFIRMED_MS = 3 * 60_000;
 
@@ -74,7 +90,7 @@ async function notify(userId: string, message: string, type: "ORDER_FILLED" | "R
 
 // ---------- start / control ----------
 
-export async function startDeployment(userId: string, input: { strategyId: string; broker: string; capital: number; mode: "AUTO" | "CONFIRM" }): Promise<LiveDeployment> {
+export async function startDeployment(userId: string, input: { strategyId: string; broker: string; capital: number; mode: "AUTO" | "CONFIRM"; /** Optional: spread each entry over this many slices through the session (2–8); 0 or none = send it whole. */ slices?: number }): Promise<LiveDeployment> {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { liveTradingEnabledAt: true, status: true } });
   if (!user?.liveTradingEnabledAt || user.status !== "ACTIVE") throw new LiveCheckError("Live trading isn't switched on for your account.");
   if (!LIVE_BROKERS[input.broker as keyof typeof LIVE_BROKERS]) throw new LiveCheckError("Live orders aren't available for this broker yet.");
@@ -97,6 +113,9 @@ export async function startDeployment(userId: string, input: { strategyId: strin
   if (system && system.allowShort && system.concepts.some((c) => c.side === "BEARISH")) {
     throw new LiveCheckError("This trading system can open short positions, and live trading runs systems long-only for now. Forward test it, or set it to delivery (bearish setups then only close longs) to take it live.");
   }
+  const slices = input.slices && input.slices >= 2 ? Math.min(MAX_SLICES, Math.floor(input.slices)) : 0;
+  if (slices && input.mode !== "AUTO") throw new LiveCheckError("Spreading entries over the session only works when orders go out automatically.");
+  if (slices && parseEntryPlan(s.entryPlan)) throw new LiveCheckError("Spreading entries over the session can't be combined with a multi-level entry plan: the plan already builds the position in stages. Turn one of them off.");
   // A Fibonacci-extension target needs the swing it was set from, which a restart of the live engine could not rebuild exactly.
   if (parseTargets(s.targetsConfig).some((t) => t.fibExtension !== undefined)) throw new LiveCheckError("This strategy has a Fibonacci-extension target. Those work in backtests and forward tests; for live trading use a percent, points, ATR or R target instead.");
   const dup = await prisma.liveDeployment.findFirst({ where: { userId, strategyId: s.id, broker: input.broker, status: { in: ["ACTIVE", "PAUSED"] } } });
@@ -174,6 +193,7 @@ export async function startDeployment(userId: string, input: { strategyId: strin
     positionTargetPrice: null,
     lastSyncedTime: candles.at(-1)!.time,
     dataSource,
+    ...(slices ? { vwapSlices: slices } : {}),
   } as PaperSessionState;
 
   const d = await prisma.liveDeployment.create({
@@ -219,11 +239,14 @@ export async function setDeploymentStatus(userId: string, id: string, status: "A
     : real && real.qty > 0 && !real.working
       ? (resyncEntryPlan(resyncStaged(current, real.qty), real) as unknown as Prisma.InputJsonValue)
       : undefined;
+  // Any pause, resume or stop drops slices still waiting: the strategy is re-aligned with what is really held.
+  const queued = sliceSettings(engineState ?? d.engineState).queue.length > 0;
+  const cleared = queued ? ({ ...((engineState ?? d.engineState) as object), sliceQueue: [] } as unknown as Prisma.InputJsonValue) : engineState;
   return prisma.liveDeployment.update({
     where: { id },
     data: {
       status,
-      ...(engineState ? { engineState } : {}),
+      ...(cleared ? { engineState: cleared } : {}),
       ...(status === "STOPPED" ? { stoppedAt: new Date(), pendingSignals: [] } : {}),
       ...(status === "ACTIVE" ? { lastError: null } : {}),
     },
@@ -357,6 +380,14 @@ export async function runDeployment(id: string): Promise<"idle" | "acted" | "pau
 
   const pending = (d.pendingSignals as unknown as PendingSignal[]) ?? [];
   let acted = false;
+  const slicing = sliceSettings(state);
+  let queue: SliceItem[] = slicing.queue;
+  // A closed position (or any exit this pass) ends whatever was still to be bought.
+  const exitedNow = (result.newOrders as NewPaperOrder[]).some((o) => !(o.reason === "entry_rule" || o.reason === "pyramid" || o.reason === "entry_level"));
+  if (queue.length && (exitedNow || !result.position)) {
+    await lg(d, "INFO", `The position is closed, so the ${queue.length} remaining slice${queue.length === 1 ? "" : "s"} of the entry will not be sent.`);
+    queue = [];
+  }
   for (const o of result.newOrders as NewPaperOrder[]) {
     const level = o.reason === "entry_level";
     const opening = o.reason === "entry_rule" || o.reason === "pyramid" || level;
@@ -393,7 +424,15 @@ export async function runDeployment(id: string): Promise<"idle" | "acted" | "pau
     const sig: PendingSignal = { side: o.side, quantity, reason: (o.targetLevel ? `Target ${o.targetLevel}` : reasonText(o.reason)) + note, signalTime: o.signalTime, createdAt: new Date().toISOString(), purpose: opening ? "strategy" : "exit", ...(o.targetLevel ? { targetLevel: o.targetLevel } : {}) };
     if (d.mode === "AUTO") {
       try {
-        await send(d, sig);
+        const plan = opening && !level && sig.purpose === "strategy" && slicing.count >= 2 && !state.entryPlan ? slicePlan(sig.quantity, slicing.count, istMinuteNow()) : null;
+        if (plan) {
+          const today = istDayNumber();
+          queue = plan.slice(1).map((p) => ({ ...p, day: today }));
+          await lg(d, "INFO", `Spreading this entry of ${sig.quantity} shares over ${plan.length} slices through the session, like a VWAP order (more when the market is busiest): ${plan.map((p, k) => `${p.quantity} ${k === 0 ? "now" : `at ${hhmm(p.atMinute)}`}`).join(", ")}.`);
+          await send(d, { ...sig, quantity: plan[0].quantity, reason: `${sig.reason} (slice 1 of ${plan.length})` });
+        } else {
+          await send(d, sig);
+        }
         acted = true;
       } catch (err) {
         const why = err instanceof LiveCheckError ? err.message : err instanceof BrokerError ? (err.failure.detail ?? err.failure.code) : "unexpected error";
@@ -411,8 +450,38 @@ export async function runDeployment(id: string): Promise<"idle" | "acted" | "pau
     }
   }
 
+  // The next slice of a spread-out entry, once it is due (never while an earlier order is still working or the kill switch is on).
+  if (!acted && d.mode === "AUTO" && queue.length) {
+    queue = queue.filter((q) => q.day === istDayNumber());
+    const due = queue[0];
+    if (!due) {
+      await lg(d, "WARN", "The remaining slices of the entry were for an earlier day, so they were dropped.");
+    } else if (result.position && marketOpen() && !risk?.killSwitchEnabled && !real.working && due.atMinute <= istMinuteNow()) {
+      const fit = fitToOrderLimit(due.quantity, result.position.entryPrice, maxOrderValue);
+      if (fit.quantity < 1) {
+        await lg(d, "WARN", `The next slice would be above your per-order limit, so the rest of the entry was dropped. You hold ${real.qty} ${stock(d)}.`);
+        queue = [];
+      } else {
+        try {
+          await send(d, { side: state.direction === "SHORT" ? "SELL" : "BUY", quantity: fit.quantity, purpose: "strategy", reason: `next slice of the spread-out entry (${queue.length - 1} to go after this)` });
+          queue = queue.slice(1);
+          acted = true;
+          if (!queue.length) await lg(d, "OK", "The last slice of the entry has been sent.");
+        } catch (err) {
+          const why = err instanceof LiveCheckError ? err.message : err instanceof BrokerError ? (err.failure.detail ?? err.failure.code) : "unexpected error";
+          if (!(err instanceof LiveCheckError) && !(err instanceof BrokerError)) logError("live.deployment.slice", err, { id });
+          await lg(d, "ERROR", `A slice of the entry was not sent: ${plainReason(why, brokerName(d))}. Paused until you resume; the remaining slices are dropped.`);
+          await prisma.liveDeployment.update({ where: { id }, data: { status: "PAUSED", lastError: `A slice of the entry was not sent: ${why}` } });
+          await notify(d.userId, `“${d.strategyName}” paused — a slice of the entry couldn't be sent: ${why}`, "RISK_EVENT", "live_paused");
+          queue = [];
+        }
+      }
+    }
+  }
+
   const next: PaperSessionState = {
     ...state,
+    ...(queue.length || slicing.queue.length ? { sliceQueue: queue } : {}),
     cash: result.cash,
     positionEntryTime: result.position?.entryTime ?? null,
     positionEntryPrice: result.position?.entryPrice ?? null,
