@@ -1,4 +1,5 @@
 import type { Candle } from "@/lib/market-data";
+import { fibSwingLookup } from "@/lib/trading-engine/fib-swing";
 import { istDayAndMinute } from "@/lib/market-data/resample";
 import { evaluateConditionsPerBar } from "@/lib/strategy";
 import { levelSignalSeries } from "@/lib/strategy/plan-conditions";
@@ -218,6 +219,7 @@ export function runBacktest(
     riskBasis: risk?.riskBasis,
     maxCapitalUsePercent: risk?.maxCapitalUsePercent,
     atrAtEntry: atrByTimeFinal ? (entryIdx: number) => atrByTimeFinal.get(candles[entryIdx]?.time) : undefined,
+    fibSwingAtEntry: fibSwingLookup(candles, riskManagement),
     maxPyramidEntries: config.maxPyramidEntries,
     direction: config.direction,
     session: config.session,

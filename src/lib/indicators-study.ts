@@ -172,6 +172,9 @@ export type FibSeries = {
   confluence: IndicatorPoint[];
   /** Candles since the current swing's end was confirmed: rules can expire a setup after N candles. */
   age: IndicatorPoint[];
+  /** The current valid swing's start (A) and end (B) prices. */
+  swingStart: IndicatorPoint[];
+  swingEnd: IndicatorPoint[];
 };
 
 /**
@@ -184,7 +187,7 @@ export type FibSeries = {
  * The setup is void (no values) once a candle closes beyond the swing's start A, until a new swing is confirmed.
  */
 export function fibonacciLevels(candles: Candle[], left = 5, right = 5, minSwingAtr = 3): FibSeries {
-  const out: FibSeries = { ret382: [], ret500: [], ret618: [], ret786: [], ext1272: [], ext1618: [], goldenZone: [], direction: [], confluence: [], age: [] };
+  const out: FibSeries = { ret382: [], ret500: [], ret618: [], ret786: [], ext1272: [], ext1618: [], goldenZone: [], direction: [], confluence: [], age: [], swingStart: [], swingEnd: [] };
   const n = candles.length;
   if (n < left + right + 2) return out;
   const atrByTime = byTime(atr(candles, 14));
@@ -258,6 +261,8 @@ export function fibonacciLevels(candles: Candle[], left = 5, right = 5, minSwing
     const up = range > 0;
     out.direction.push({ time: c.time, value: up ? 1 : -1 });
     out.age.push({ time: c.time, value: t - bSetBar });
+    out.swingStart.push({ time: c.time, value: a.price });
+    out.swingEnd.push({ time: c.time, value: b.price });
     if (atrNow !== undefined) {
       // Cluster: retracement levels of two or more different swings sitting within 0.3 ATR of the close.
       let swingsNear = 0;

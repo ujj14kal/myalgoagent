@@ -97,6 +97,8 @@ export async function startDeployment(userId: string, input: { strategyId: strin
   if (system && system.allowShort && system.concepts.some((c) => c.side === "BEARISH")) {
     throw new LiveCheckError("This trading system can open short positions, and live trading runs systems long-only for now. Forward test it, or set it to delivery (bearish setups then only close longs) to take it live.");
   }
+  // A Fibonacci-extension target needs the swing it was set from, which a restart of the live engine could not rebuild exactly.
+  if (parseTargets(s.targetsConfig).some((t) => t.fibExtension !== undefined)) throw new LiveCheckError("This strategy has a Fibonacci-extension target. Those work in backtests and forward tests; for live trading use a percent, points, ATR or R target instead.");
   const dup = await prisma.liveDeployment.findFirst({ where: { userId, strategyId: s.id, broker: input.broker, status: { in: ["ACTIVE", "PAUSED"] } } });
   if (dup) throw new LiveCheckError(`This strategy is already live on ${name}.`);
 

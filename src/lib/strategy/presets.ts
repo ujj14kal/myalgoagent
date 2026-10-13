@@ -27,8 +27,8 @@ export type Preset = {
   entry: ConditionNode;
   exit: ConditionNode;
   stopLoss: { unit: "PERCENT" | "ATR_MULTIPLE"; value: number };
-  /** Optional take-profit as a multiple of the stop distance. */
-  targetR?: number;
+  /** Optional staged targets (Target 1–3). */
+  targets?: { unit: "PERCENT" | "POINTS" | "ATR_MULTIPLE" | "R_MULTIPLE"; value: number; exitPercent: number; lock: { mode: "FIXED" | "BREAKEVEN" | "PREVIOUS" | "KEEP" }; fibExtension?: number }[];
   /** For intraday presets: no new entries at/after this IST minute, and square-off. */
   noEntryAfterMinute?: number;
   squareOffMinute?: number;
@@ -284,6 +284,21 @@ export const PRESETS: Preset[] = [
     entry: and(recent(flag("FIB_GOLDEN_ZONE", 5, 5, 3), 3), flag("FIB_DIRECTION", 5, 5, 3), or(cmp(ind("MACD_LINE", 12, 26, 9), "CROSSES_ABOVE", ind("MACD_SIGNAL", 12, 26, 9)), and(cmp(ind("MACD_HISTOGRAM", 12, 26, 9), "LT", num(0)), cmp(ind("MACD_HIST_CHANGE", 12, 26, 9, 1), "GT", num(0))))),
     exit: or(cmp(ind("MACD_LINE", 12, 26, 9), "CROSSES_BELOW", ind("MACD_SIGNAL", 12, 26, 9)), cmp(price("HIGH"), "GTE", ind("FIB_EXT_1272", 5, 5, 3))),
     stopLoss: { unit: "ATR_MULTIPLE", value: 1.5 },
+  },
+  {
+    id: "fib-target-manager",
+    study: "Fibonacci",
+    name: "Fibonacci target manager (staged extension exits)",
+    summary: "Same golden-zone pullback entry, with the exits managed by Fibonacci: sells half at the 1.272 extension of the swing in force at entry and moves the stop to breakeven, then sells the rest at 1.618. Targets are fixed on the day the position opens. Works in backtests and forward tests; not yet in live trading.",
+    timeframe: "1d",
+    product: "DELIVERY",
+    entry: and(cmp(price("CLOSE"), "GT", ind("EMA", 200)), flag("FIB_DIRECTION", 5, 5, 3), flag("FIB_GOLDEN_ZONE", 5, 5, 3), cmp(price("CLOSE"), "GT", price("OPEN")), cmp(ind("RSI_CHANGE", 14, 1), "GT", num(0))),
+    exit: cmp(price("CLOSE"), "CROSSES_BELOW", ind("EMA", 50)),
+    stopLoss: { unit: "ATR_MULTIPLE", value: 1.5 },
+    targets: [
+      { unit: "POINTS", value: 1.272, fibExtension: 1.272, exitPercent: 50, lock: { mode: "BREAKEVEN" } },
+      { unit: "POINTS", value: 1.618, fibExtension: 1.618, exitPercent: 50, lock: { mode: "FIXED" } },
+    ],
   },
   {
     id: "fib-confluence-zone",

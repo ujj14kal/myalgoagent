@@ -132,6 +132,11 @@ export interface TargetLevel {
   /** Share of the original position sold at this target (1–100). */
   exitPercent: number;
   lock: TargetLock;
+  /**
+   * Set = the target is a Fibonacci extension of the swing in force when the position was opened: price = swing start +
+   * this ratio × (swing end - swing start) (1.272, 1.618…). `unit` and `value` are then only placeholders.
+   */
+  fibExtension?: number;
 }
 
 export const MAX_TARGETS = 3;
@@ -208,6 +213,9 @@ export interface EngineConfig {
   // ATR value at the bar a position was entered on — required to resolve
   // an ATR_MULTIPLE leg. Only needed when a risk leg uses that unit.
   atrAtEntry?: (entryIdx: number) => number | undefined;
+  // The Fibonacci swing (start and end price) in force at the bar a position was entered on — only needed when a staged target
+  // is a Fibonacci extension. Fixed at entry, so the target never moves afterwards.
+  fibSwingAtEntry?: (entryIdx: number) => { start: number; end: number } | undefined;
   // 1 (default) = today's behavior, a second entry signal while a position
   // is open is ignored. N > 1 allows up to N total entries to stack into
   // one blended position (pyramiding).
@@ -400,12 +408,15 @@ export function validateTargets(targets: TargetLevel[] | undefined, singleTarget
   for (const [i, t] of targets.entries()) {
     const n = i + 1;
     if (!Number.isFinite(t.value) || t.value <= 0) return `Target ${n} needs a distance above zero.`;
+    if (t.fibExtension !== undefined && (!Number.isFinite(t.fibExtension) || t.fibExtension <= 1 || t.fibExtension > 10)) return `Target ${n}: a Fibonacci extension must be above 1 (for example 1.272 or 1.618).`;
     if (!Number.isFinite(t.exitPercent) || t.exitPercent <= 0 || t.exitPercent > 100) return `Target ${n} must sell between 1% and 100% of the position.`;
     total += t.exitPercent;
     if ((t.lock.mode === "MARGIN" || t.lock.mode === "TRAIL") && (!Number.isFinite(t.lock.value) || t.lock.value <= 0)) return `Target ${n}'s ${t.lock.mode === "TRAIL" ? "trailing distance" : "margin"} needs a value above zero.`;
     if ((t.lock.mode === "MARGIN" || t.lock.mode === "TRAIL") && t.lock.unit === "R_MULTIPLE") return `Target ${n}'s ${t.lock.mode === "TRAIL" ? "trailing distance" : "margin"} must be in points, % or ATR.`;
-    if (t.lock.mode === "MARGIN" && t.lock.unit === t.unit && t.lock.value >= t.value) return `Target ${n}'s margin must be smaller than the target distance itself.`;
-    if (prev && prev.unit === t.unit && t.value <= prev.value) return `Target ${n} must be further from the entry than Target ${n - 1}.`;
+    if (t.fibExtension === undefined && t.lock.mode === "MARGIN" && t.lock.unit === t.unit && t.lock.value >= t.value) return `Target ${n}'s margin must be smaller than the target distance itself.`;
+    // Fibonacci targets are ordered by their ratio; they are not compared with distance targets (which sit at different prices).
+    if (prev && prev.fibExtension !== undefined && t.fibExtension !== undefined && t.fibExtension <= prev.fibExtension) return `Target ${n} must be further from the entry than Target ${n - 1}.`;
+    if (prev && prev.fibExtension === undefined && t.fibExtension === undefined && prev.unit === t.unit && t.value <= prev.value) return `Target ${n} must be further from the entry than Target ${n - 1}.`;
     prev = t;
   }
   if (total > 100.0001) return `The targets sell ${total}% of the position in total; the most is 100%.`;
@@ -413,7 +424,14 @@ export function validateTargets(targets: TargetLevel[] | undefined, singleTarget
 }
 
 /** Price of staged target `index` for a position entered at `entryPrice` (`stopDistance` for targets set as an R multiple). */
-export function targetPrice(level: TargetLevel, entryPrice: number, atr: number | undefined, direction: StrategyDirection, stopDistance?: number | null): number | null {
+export function targetPrice(level: TargetLevel, entryPrice: number, atr: number | undefined, direction: StrategyDirection, stopDistance?: number | null, fib?: { start: number; end: number }): number | null {
+  if (level.fibExtension !== undefined) {
+    if (!fib) return null;
+    const p = fib.start + level.fibExtension * (fib.end - fib.start);
+    // A long needs an up-swing and a target above the entry; a short the mirror. Anything else has no target.
+    const rightWay = direction === "SHORT" ? fib.end < fib.start && p < entryPrice : fib.end > fib.start && p > entryPrice;
+    return rightWay ? p : null;
+  }
   const dist = resolveRiskDistance({ enabled: true, unit: level.unit, value: level.value }, entryPrice, atr, stopDistance);
   if (dist === null) return null;
   return entryPrice + (direction === "SHORT" ? -1 : 1) * dist;
@@ -800,7 +818,8 @@ function stepBarCore(
       const level = staged[taken];
       const atr = config.atrAtEntry?.(pos.entryIdx);
       const stopDist = stopLossDistance(rm, pos.entryPrice, atr);
-      const tp = targetPrice(level, pos.entryPrice, atr, direction, stopDist);
+      const fibSwing = config.fibSwingAtEntry?.(pos.entryIdx);
+      const tp = targetPrice(level, pos.entryPrice, atr, direction, stopDist, fibSwing);
       if (tp !== null && (isShort ? bar.low <= tp : bar.high >= tp)) {
         const initial = pos.initialQuantity ?? pos.quantity;
         const sellQty = targetQuantity(level, initial, pos.quantity);
@@ -810,7 +829,7 @@ function stepBarCore(
           return { state: { cash: state.cash + trade.netPnl, position: null }, trade, exitReason: "target", targetLevel: taken + 1 };
         }
         const part = closeTrade(candles, { ...pos, quantity: sellQty }, i, tp, config.brokeragePercent, direction);
-        const previousTp = taken > 0 ? targetPrice(staged[taken - 1], pos.entryPrice, atr, direction, stopDist) : null;
+        const previousTp = taken > 0 ? targetPrice(staged[taken - 1], pos.entryPrice, atr, direction, stopDist, fibSwing) : null;
         const floor = lockFloor(level, tp, pos.entryPrice, atr, direction, previousTp);
         const nextLock = tighterStop(locked, floor, direction);
         const trailAfter = level.lock.mode === "TRAIL" ? { unit: level.lock.unit, value: level.lock.value } : (pos.trailAfter ?? null);

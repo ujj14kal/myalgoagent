@@ -11,11 +11,14 @@ export function targetsFrom(v: unknown): TargetLevel[] | undefined {
   const unitOf = (u: unknown, fallback: RiskUnitName): RiskUnitName => (u === "POINTS" || u === "ATR_MULTIPLE" || u === "PERCENT" || u === "R_MULTIPLE" ? u : fallback);
   const out = v.map((raw, i) => {
     const o = (raw ?? {}) as Record<string, unknown>;
-    const value = num(o.value);
+    // A Fibonacci extension target (1.272, 1.618…) of the swing in force at entry; backtests and forward tests only.
+    const fib = num(o.fib_extension);
+    const value = fib ?? num(o.value);
     const exitPercent = num(o.exit_percent);
     if (!value || value <= 0) throw new Error(`targets[${i + 1}]: value must be above zero.`);
+    if (fib !== undefined && fib <= 1) throw new Error(`targets[${i + 1}]: fib_extension must be above 1 (for example 1.272 or 1.618).`);
     if (!exitPercent) throw new Error(`targets[${i + 1}]: exit_percent is required (the share of the position to sell, 1–100).`);
-    const unit = unitOf(o.unit, "PERCENT");
+    const unit = fib !== undefined ? ("POINTS" as RiskUnitName) : unitOf(o.unit, "PERCENT");
     // What the stop on the rest does after this target: fixed (move to this target), breakeven, previous (previous
     // target), keep, trail (trail by margin_value) or margin (a set distance short of this target).
     const rule = String(o.lock ?? "fixed").toLowerCase();
@@ -23,10 +26,10 @@ export function targetsFrom(v: unknown): TargetLevel[] | undefined {
     if (rule === "margin" || rule === "trail") {
       const marginValue = num(o.margin_value);
       if (!marginValue || marginValue <= 0) throw new Error(`targets[${i + 1}]: a "${rule}" stop rule needs margin_value above zero (${rule === "trail" ? "how far the stop trails the best price" : "how far short of the target the stop sits"}).`);
-      return { unit, value, exitPercent, lock: { mode: rule === "trail" ? ("TRAIL" as const) : ("MARGIN" as const), unit: distanceUnit, value: marginValue } };
+      return { unit, value, exitPercent, ...(fib !== undefined ? { fibExtension: fib } : {}), lock: { mode: rule === "trail" ? ("TRAIL" as const) : ("MARGIN" as const), unit: distanceUnit, value: marginValue } };
     }
     const mode = rule === "breakeven" ? ("BREAKEVEN" as const) : rule === "previous" ? ("PREVIOUS" as const) : rule === "keep" ? ("KEEP" as const) : ("FIXED" as const);
-    return { unit, value, exitPercent, lock: { mode } };
+    return { unit, value, exitPercent, ...(fib !== undefined ? { fibExtension: fib } : {}), lock: { mode } };
   });
   const problem = validateTargets(out);
   if (problem) throw new Error(`targets: ${problem}`);

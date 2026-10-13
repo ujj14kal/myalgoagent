@@ -77,6 +77,7 @@ const targetsSchema = {
       value: { type: "number", description: "Distance from the entry, e.g. 5 for 5%" },
       unit: { type: "string", enum: ["PERCENT", "POINTS", "ATR_MULTIPLE", "R_MULTIPLE"] },
       exit_percent: { type: "number", description: "Share of the original position sold at this target, 1–100" },
+      fib_extension: { type: "number", description: "Optional. Makes this target a Fibonacci extension of the swing in force when the position opens (1.272 or 1.618), instead of a distance; value and unit are then ignored. Backtests and forward tests only, not live trading." },
       lock: { type: "string", enum: ["fixed", "breakeven", "previous", "keep", "trail", "margin"], description: "Where the stop on the rest moves once this target is taken; default fixed" },
       margin_value: { type: "number", description: "trail: how far behind the best price the stop trails; margin: how far short of the target the stop sits" },
       margin_unit: { type: "string", enum: ["PERCENT", "POINTS", "ATR_MULTIPLE"], description: "For trail/margin; default = the target's unit (% for R targets)" },

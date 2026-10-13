@@ -1,4 +1,5 @@
 import type { CandleInterval, MarketDataProvider } from "@/lib/market-data";
+import { fibSwingLookup } from "@/lib/trading-engine/fib-swing";
 import { engineEntryOrder, engineSession, paperSyncRange } from "@/lib/strategy/session";
 import { evaluateConditionsPerBar } from "@/lib/strategy";
 import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
@@ -343,6 +344,7 @@ export async function syncPaperSession(
     riskBasis: risk?.riskBasis,
     maxCapitalUsePercent: risk?.maxCapitalUsePercent,
     atrAtEntry: atrByTimeFinal ? (idx: number) => atrByTimeFinal.get(candles[idx]?.time) : undefined,
+    fibSwingAtEntry: fibSwingLookup(candles, riskManagement),
     maxPyramidEntries: session.maxPyramidEntries ?? DEFAULT_MAX_PYRAMID_ENTRIES,
     direction: session.direction,
     entryPlan: session.entryPlan ?? undefined,

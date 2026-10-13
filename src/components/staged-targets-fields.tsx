@@ -15,6 +15,8 @@ export interface TargetRow {
   /** MARGIN and TRAIL: the distance and its unit. */
   marginUnit: RiskUnit;
   marginValue: number;
+  /** The target is a Fibonacci extension of the swing at entry: `value` is then the ratio (1.272, 1.618…). */
+  fib?: boolean;
 }
 
 const DISTANCE_UNITS: { value: RiskUnit; label: string }[] = [
@@ -24,6 +26,8 @@ const DISTANCE_UNITS: { value: RiskUnit; label: string }[] = [
 ];
 /** Targets can also be a risk/reward multiple: R = the stop-loss distance. */
 const UNITS: { value: RiskUnit; label: string }[] = [...DISTANCE_UNITS, { value: "R_MULTIPLE", label: "R (× stop)" }];
+/** The extra unit choice for a Fibonacci extension (kept off the engine's units: it is stored as a ratio). */
+const FIB_CHOICE = "FIB";
 /** The same units, worded for what they are measured on. */
 const worded = (units: { value: RiskUnit; label: string }[], capital: boolean) => (capital ? units.map((u) => (u.value === "PERCENT" ? { ...u, label: "% of capital" } : u.value === "POINTS" ? { ...u, label: "₹ of capital" } : u)) : units);
 
@@ -40,7 +44,8 @@ const hasDistance = (m: TargetLock["mode"]) => m === "MARGIN" || m === "TRAIL";
 export function targetsToRows(levels: TargetLevel[] | undefined): TargetRow[] {
   return (levels ?? []).map((t) => ({
     unit: t.unit,
-    value: t.value,
+    value: t.fibExtension ?? t.value,
+    ...(t.fibExtension !== undefined ? { fib: true } : {}),
     exitPercent: t.exitPercent,
     lock: t.lock.mode,
     marginUnit: t.lock.mode === "MARGIN" || t.lock.mode === "TRAIL" ? t.lock.unit : t.unit === "R_MULTIPLE" ? "PERCENT" : t.unit,
@@ -49,7 +54,7 @@ export function targetsToRows(levels: TargetLevel[] | undefined): TargetRow[] {
 }
 
 export function rowsToTargets(rows: TargetRow[]): TargetLevel[] {
-  return rows.map((r) => ({ unit: r.unit, value: r.value, exitPercent: r.exitPercent, lock: hasDistance(r.lock) ? ({ mode: r.lock, unit: r.marginUnit, value: r.marginValue } as TargetLock) : ({ mode: r.lock } as TargetLock) }));
+  return rows.map((r) => ({ unit: r.fib ? ("POINTS" as RiskUnit) : r.unit, value: r.value, ...(r.fib ? { fibExtension: r.value } : {}), exitPercent: r.exitPercent, lock: hasDistance(r.lock) ? ({ mode: r.lock, unit: r.marginUnit, value: r.marginValue } as TargetLock) : ({ mode: r.lock } as TargetLock) }));
 }
 
 const numberCls =
@@ -61,7 +66,7 @@ const selectCls = "min-w-0 rounded-lg border border-brand-navy/15 px-2 py-1.5 te
  * directly), points targets on the stock's latest price when known (points only mean something against a real price).
  */
 function example(row: TargetRow, direction: "LONG" | "SHORT", latest: number | null): string | null {
-  if (row.unit === "ATR_MULTIPLE" || row.unit === "R_MULTIPLE" || row.lock !== "FIXED" && row.lock !== "MARGIN" || (row.lock === "MARGIN" && row.marginUnit !== row.unit)) return null;
+  if (row.fib || row.unit === "ATR_MULTIPLE" || row.unit === "R_MULTIPLE" || row.lock !== "FIXED" && row.lock !== "MARGIN" || (row.lock === "MARGIN" && row.marginUnit !== row.unit)) return null;
   const sign = direction === "SHORT" ? -1 : 1;
   const points = row.unit === "POINTS";
   const entry = points ? (latest ?? 1000) : 100;
@@ -110,7 +115,7 @@ export default function StagedTargetsFields({
             type="button"
             onClick={() => {
               const last = rows[rows.length - 1];
-              onChange([...rows, { unit: last?.unit ?? "PERCENT", value: last ? Math.round(last.value * 2 * 100) / 100 : 5, exitPercent: 25, lock: last?.lock ?? "FIXED", marginUnit: last?.marginUnit ?? "PERCENT", marginValue: last?.marginValue ?? 1 }]);
+              onChange([...rows, { unit: last?.unit ?? "PERCENT", ...(last?.fib ? { fib: true } : {}), value: last?.fib ? 1.618 : last ? Math.round(last.value * 2 * 100) / 100 : 5, exitPercent: 25, lock: last?.lock ?? "FIXED", marginUnit: last?.marginUnit ?? "PERCENT", marginValue: last?.marginValue ?? 1 }]);
             }}
             className="inline-flex shrink-0 items-center gap-1 rounded-full border border-brand-primary px-3 py-1.5 text-xs font-semibold text-brand-primary hover:bg-brand-primary/5 disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -129,12 +134,18 @@ export default function StagedTargetsFields({
                 <label className="flex items-center gap-1.5 text-xs text-brand-navy/60">
                   Profit of
                   <input type="number" min={0} step="any" value={r.value} aria-label={`Target ${i + 1} distance`} onChange={(e) => set(i, { value: Number(e.target.value) })} className={numberCls} />
-                  <select value={r.unit} aria-label={`Target ${i + 1} unit`} onChange={(e) => set(i, { unit: e.target.value as RiskUnit })} className={selectCls}>
+                  <select
+                    value={r.fib ? FIB_CHOICE : r.unit}
+                    aria-label={`Target ${i + 1} unit`}
+                    onChange={(e) => (e.target.value === FIB_CHOICE ? set(i, { fib: true, unit: "POINTS", value: 1.272 }) : set(i, { fib: false, unit: e.target.value as RiskUnit, ...(r.fib ? { value: 5 } : {}) }))}
+                    className={selectCls}
+                  >
                     {worded(UNITS, onCapital).map((u) => (
                       <option key={u.value} value={u.value}>
                         {u.label}
                       </option>
                     ))}
+                    <option value={FIB_CHOICE}>Fibonacci extension (×)</option>
                   </select>
                 </label>
                 <label className="flex items-center gap-1.5 text-xs text-brand-navy/60">
@@ -174,6 +185,11 @@ export default function StagedTargetsFields({
               </div>
               <p className="mt-1 text-[11px] text-brand-navy/45">{STOP_RULES.find((m) => m.value === r.lock)?.help}</p>
               {example(r, direction, latestPrice) && <p className="mt-2 text-xs text-brand-navy/50">{example(r, direction, latestPrice)}</p>}
+              {r.fib && (
+                <p className="mt-2 text-xs text-brand-navy/50">
+                  Sells at swing start + {r.value} × the size of the latest confirmed Fibonacci swing, fixed on the day the position opens (for example a swing from ₹100 to ₹200 gives ₹227.20 at 1.272 and ₹261.80 at 1.618). With no valid swing at entry, this target is not used. Works in backtests and forward tests; not yet in live trading.
+                </p>
+              )}
             </div>
           ))}
           <p className="flex items-center gap-1.5 text-xs text-brand-navy/50">

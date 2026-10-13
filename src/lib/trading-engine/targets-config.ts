@@ -27,7 +27,8 @@ export function parseTargets(json: unknown): TargetLevel[] {
   for (const raw of json.slice(0, MAX_TARGETS)) {
     const t = raw as Partial<TargetLevel> & { lock?: { mode?: string; unit?: unknown; value?: unknown } };
     if (!t || !isUnit(t.unit) || typeof t.value !== "number" || typeof t.exitPercent !== "number") continue;
-    out.push({ unit: t.unit, value: t.value, exitPercent: t.exitPercent, lock: lockOf(t.lock) });
+    const fib = typeof t.fibExtension === "number" && Number.isFinite(t.fibExtension) && t.fibExtension > 1 ? { fibExtension: t.fibExtension } : {};
+    out.push({ unit: t.unit, value: t.value, exitPercent: t.exitPercent, lock: lockOf(t.lock), ...fib });
   }
   return out;
 }

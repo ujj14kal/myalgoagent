@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { PRESETS } from "./presets";
 import { validateConditionNode } from "./validate";
 import { checkConditionFeasibility } from "./validate-sanity";
+import { validateTargets } from "@/lib/trading-engine/step";
 
 describe("strategy presets from the analyst studies", () => {
   it("has unique ids and plain-words summaries", () => {
@@ -14,6 +15,9 @@ describe("strategy presets from the analyst studies", () => {
       expect(() => validateConditionNode(p.exit, "exit")).not.toThrow();
       expect(checkConditionFeasibility(p.entry, "entry")).toEqual([]);
       expect(checkConditionFeasibility(p.exit, "exit")).toEqual([]);
+    });
+    it(`${p.id}: staged targets are valid`, () => {
+      if (p.targets) expect(validateTargets(p.targets.map((t) => ({ ...t, lock: t.lock })))).toBeNull();
     });
     it(`${p.id}: intraday presets use an intraday timeframe and square-off`, () => {
       if (p.product === "INTRADAY") {

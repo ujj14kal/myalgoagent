@@ -22,5 +22,5 @@ export function lockText(lock: TargetLock): string {
 
 /** One plain line per staged target, e.g. "Target 1: +5% — sells 25% of the position, then locks the rest at that price". */
 export function describeTargets(targets: TargetLevel[]): string[] {
-  return targets.map((t, i) => `Target ${i + 1}: ${unitText(t.unit, t.value)} from entry${t.unit === "R_MULTIPLE" ? " (a multiple of the stop-loss distance)" : ""} — sells ${t.exitPercent}% of the position, then ${lockText(t.lock)}`);
+  return targets.map((t, i) => `Target ${i + 1}: ${t.fibExtension !== undefined ? `the ${t.fibExtension} Fibonacci extension of the swing in force at entry` : `${unitText(t.unit, t.value)} from entry${t.unit === "R_MULTIPLE" ? " (a multiple of the stop-loss distance)" : ""}`} — sells ${t.exitPercent}% of the position, then ${lockText(t.lock)}`);
 }

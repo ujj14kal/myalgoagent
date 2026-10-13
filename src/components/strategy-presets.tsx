@@ -22,6 +22,7 @@ function draftFrom(p: Preset, instrument: InstrumentOption) {
     positionSizingValue: null,
     stopLoss: { enabled: true, unit: p.stopLoss.unit, value: p.stopLoss.value },
     target: { enabled: false, unit: "PERCENT", value: 5 },
+    ...(p.targets ? { targets: p.targets } : {}),
     trailingSl: { enabled: false, unit: "PERCENT", value: 2 },
     maxPyramidEntries: 1,
     timeframe: p.timeframe,
@@ -80,7 +81,7 @@ export default function StrategyPresets({ instruments }: { instruments: Instrume
                 <p className="mt-1 flex-1 text-xs leading-relaxed text-brand-navy/65">{p.summary}</p>
                 <p className="mt-2 text-[11px] text-brand-navy/45">
                   {TF_LABEL[p.timeframe] ?? p.timeframe} · {p.product === "INTRADAY" ? "Intraday" : "Delivery"} · long only · stop {p.stopLoss.value}
-                  {p.stopLoss.unit === "ATR_MULTIPLE" ? "×ATR" : "%"}
+                  {p.stopLoss.unit === "ATR_MULTIPLE" ? "×ATR" : "%"}{p.targets ? " · staged targets" : ""}
                 </p>
                 <button type="button" onClick={() => use(p)} className="mt-3 self-start rounded-full bg-brand-primary px-4 py-1.5 text-xs font-semibold text-white hover:bg-brand-primary-light">
                   Use this recipe
