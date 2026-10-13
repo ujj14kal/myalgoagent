@@ -29,11 +29,17 @@ export default function SecurityPage() {
           The broker API keys and daily session tokens you connect are
           encrypted with AES-256 before they&rsquo;re stored, locked to your
           account, and never sent back to your browser &mdash; not even to
-          you. You log in on your broker&rsquo;s own page, so MyAlgoAgent
-          never sees your broker password, PIN or login 2FA codes. If you
-          choose Groww&rsquo;s automatic login, its API TOTP secret gets the
-          same encryption and is used only to start your daily session. You can
-          disconnect at any time, and MyAlgoAgent never holds your money.
+          you. By default you log in on your broker&rsquo;s own page, so
+          MyAlgoAgent never sees your broker password, PIN or login 2FA codes.
+          If you choose Groww&rsquo;s automatic login, its API TOTP secret gets
+          the same encryption and is used only to start your daily session.
+          For Dhan and Angel One there is an optional automatic daily login
+          that, only if you tick a consent box, keeps your PIN and 2FA secret
+          sealed with a separate encryption key, used only to sign in for you
+          and never shown again; anyone holding both could log in to that
+          account, so turn it on only if you accept that. You can disconnect
+          at any time, which deletes them, and MyAlgoAgent never holds your
+          money.
         </p>
 
         <h2>Encryption</h2>

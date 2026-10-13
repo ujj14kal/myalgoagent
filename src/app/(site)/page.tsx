@@ -39,7 +39,7 @@ const capabilities = [
 const faqs = [
   { q: "Can I test without risking real capital?", a: "Yes. Forward testing runs a strategy forward on daily or intraday candles using notional capital only." },
   { q: "Does a successful backtest guarantee results?", a: "No. Historical and backtested results are illustrative and cannot guarantee future performance." },
-  { q: "Can I connect my broker?", a: "Yes — Dhan, Zerodha, Upstox, Fyers, Angel One, Groww, ICICI Direct, 5paisa and Alice Blue today, with your own API key. You log in on your broker’s own page; we never see your password or 2FA." },
+  { q: "Can I connect my broker?", a: "Yes — Dhan, Zerodha, Upstox, Fyers, Angel One, Groww, ICICI Direct, 5paisa and Alice Blue today, with your own API key. By default you log in on your broker’s own page and we never see your password or 2FA; for a few brokers there is an optional automatic login you can turn on yourself." },
   { q: "How is live trading authorized?", a: "You start it yourself. Live trading is switched on account by account; you connect your own broker, pass a readiness check that places no order, and press Go Live after acknowledging the risk. From then on the strategy’s orders go to your broker automatically whenever its rules trigger, checked first against your limits and the kill switch. You can pause it, exit the position, stop it or disconnect the broker at any time." },
 ];
 
