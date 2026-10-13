@@ -60,7 +60,9 @@ We would like access to the full set of endpoints our features use, so that a Ze
 
 **8. Additional services and functionality**
 
-Options analysis tools (payoff, Greeks, option chain from the user's own broker where available), a chart workspace with drawing tools, a technical-indicator reader ("Analyst Pro"), a watchlist, notifications and email alerts, plans and billing with GST invoices through Razorpay, and a support desk with numbered requests answered by our team.
+- **Options Lab (already live):** build multi-leg positions (spreads, straddles, strangles, iron condors and more), see payoff at expiry and today, net credit or debit, maximum profit and loss and breakevens; a contract picker with price, bid/ask, volume and open interest; a full **option chain** (open interest, change in OI, volume, IV, PCR, max pain) and **all six Greeks** (IV, delta, gamma, theta, vega, rho) for every contract, each labelled provided, calculated or estimated.
+- **Options strategies:** legs defined around the at-the-money strike, backtested on real historical option prices and forward tested on live prices, and sent as real orders after a priced preview.
+- A chart workspace with drawing tools and 60+ indicators, a technical-indicator reader ("Analyst Pro"), a watchlist, notifications and email alerts, plans and billing with GST invoices through Razorpay, and a support desk with numbered requests answered by our team.
 
 **9. Intended API use: limited to Holdings, Portfolio, Positions, Order Book and Trade Book, or more?**
 
@@ -81,9 +83,16 @@ We request all of these for the user who owns the session:
 
 We do not redistribute Zerodha data: it is shown and used only for the user who owns the session, kept only briefly in memory to avoid repeat requests, and never shown to anyone else or sold.
 
-**12. Options: how the data and orders are used**
+**12. Options: option chain and Greeks, and what we need for Zerodha users**
 
-Option legs the user chooses to trade are sent as ordinary orders on NFO through `POST /orders/regular`, with a priced, margin-checked preview and the user's explicit confirmation first. Buy legs go first, and if a leg fails the open legs are cancelled. Every chain figure on our pages is labelled with its source and with whether a Greek was provided, calculated or estimated.
+Our option chain and Greeks are built and live. Today the chain is read through each user's own broker session where that broker offers a chain API: Groww, Upstox and Dhan. Where none is available a free-trial view shows the exchange's real contracts with prices we estimate and label as estimates. Greeks are taken from the broker when it provides them and otherwise calculated by us from the contract's price (or estimated from an assumed volatility), always labelled. Zerodha users currently do not get a chain, because we are not using Kite for it.
+
+To give Zerodha users the same Options Lab, we request, per user and only for that user:
+- `GET /instruments` (NFO) for the contracts, expiries, strikes and lot sizes;
+- `GET /quote` (including open interest, volume, bid/ask and depth) for each contract in the chain, and the WebSocket for live updates;
+- historical candles of option contracts (with open interest) for options backtests.
+
+We then calculate the Greeks and IV ourselves. Option legs the user chooses to trade go as ordinary orders on NFO through `POST /orders/regular` after a priced, margin-checked preview and explicit confirmation: buy legs first, and if a leg fails the open legs are cancelled.
 
 We are happy to schedule a demo call at your convenience.
 
