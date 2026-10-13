@@ -21,7 +21,7 @@ const plans = [
     tagline: "To get to know the platform",
     cta: "Start free",
     features: [
-      `${PLANS.FREE.monthlyCredits} credits a month for daily-candle backtests`,
+      `${PLANS.FREE.monthlyCredits} daily-candle backtests a month`,
       "2 AI replies to try the assistant",
       "Build and backtest strategies; running them (forward tests or live) is on the paid plans",
       "Strategy builder, charts, indicators and risk controls",

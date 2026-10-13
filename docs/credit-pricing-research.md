@@ -89,7 +89,7 @@ Every pack stays above Pro's plan rate (₹0.44), so upgrading is always the bet
 |---|---|---|
 | Strategy builder, charts, risk tools | yes | yes |
 | Saved strategies | not capped | up to 3 |
-| Backtests | 20 credits a month, daily candles up to 1 year | same (about ₹0.5 of cost) |
+| Backtests | 20 credits a month, daily candles up to 1 year | **5 a month** (owner decision, 2026-10-13) |
 | AI replies | 2 for the life of the account | 2 for the life of the account |
 | Voice, intraday and long backtests | no | no |
 | Forward tests | 2 | **0** (a running strategy is a paid feature) |

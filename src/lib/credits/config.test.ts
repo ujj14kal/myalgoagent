@@ -34,7 +34,7 @@ describe("refusalFor — free plan", () => {
     expect(refusalFor("FREE", bal, none, "backtest", 2)?.code).toBe("NOT_ON_PLAN");
     expect(refusalFor("FREE", bal, none, "backtest", 1)).toBeNull();
   });
-  it("runs out of backtests when the 20 credits are spent", () => {
+  it("runs out of backtests when the 5 credits are spent", () => {
     expect(refusalFor("FREE", { monthly: 0, topup: 0 }, none, "backtest", 1)?.code).toBe("NO_CREDITS");
   });
 });

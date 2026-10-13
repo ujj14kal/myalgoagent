@@ -47,7 +47,7 @@ export type PlanSpec = {
 };
 
 export const PLANS: Record<CreditPlan, PlanSpec> = {
-  FREE: { label: "Free", price: null, monthlyCredits: 20, aiLifetimeReplies: 2, voice: false, bigBacktests: false, daily: { ai: 2, build: 2, voice: 0 }, slots: { live: 0, forward: 0 } },
+  FREE: { label: "Free", price: null, monthlyCredits: 5, aiLifetimeReplies: 2, voice: false, bigBacktests: false, daily: { ai: 2, build: 2, voice: 0 }, slots: { live: 0, forward: 0 } },
   TRADE: { label: "Trade", price: 1999, monthlyCredits: 3000, aiLifetimeReplies: null, voice: true, bigBacktests: true, daily: { ai: 60, build: 20, voice: 20 }, slots: { live: 5, forward: 30 } },
   PRO: { label: "Pro", price: 3499, monthlyCredits: 8000, aiLifetimeReplies: null, voice: true, bigBacktests: true, daily: { ai: 150, build: 50, voice: 60 }, slots: { live: 20, forward: 100 } },
 };
