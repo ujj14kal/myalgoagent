@@ -50,7 +50,8 @@ function Bar({ used, cap, label, icon }: { used: number; cap: number; label: str
 /** The credits left, always current: a chip in the top bar that opens the details — what is left, what renews and when, and today's limits. */
 export default function CreditMeter() {
   const { snap } = useCredits();
-  const total = useCountTo(snap.total);
+  const monthly = useCountTo(snap.monthly);
+  const topup = useCountTo(snap.topup);
   const [open, setOpen] = useState(false);
   const [delta, setDelta] = useState<number | null>(null);
   const last = useRef(snap.total);
@@ -90,15 +91,15 @@ export default function CreditMeter() {
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        aria-label={`${snap.total} credits left. Open usage details`}
+        aria-label={`${snap.monthly} monthly credits${snap.topup > 0 ? ` and ${snap.topup} top-up credits` : ""} left. Open usage details`}
         className={`relative flex items-center gap-2 rounded-full border px-2.5 py-1.5 text-xs font-semibold transition-colors ${empty ? "border-brand-sell/40 bg-brand-sell/[0.06] text-brand-sell" : "border-brand-navy/10 bg-white text-brand-navy hover:border-brand-primary/40"}`}
       >
         <Coins size={14} className={empty ? "text-brand-sell" : "text-brand-gold"} />
-        <span className="num tabular-nums">{fmt(total)}</span>
+        <span className="num tabular-nums">{fmt(monthly)}</span>
         <span className="hidden h-1.5 w-10 overflow-hidden rounded-full bg-brand-navy/10 sm:block">
           <span className={`block h-full rounded-full transition-all duration-700 ${tone(share)}`} style={{ width: `${Math.round(share * 100)}%` }} />
         </span>
-        {snap.topup > 0 && <span aria-hidden title="Top-up credits" className="hidden h-1.5 w-4 rounded-full bg-brand-gold sm:block" />}
+        {snap.topup > 0 && <span title="Top-up credits" className="num rounded-full bg-brand-gold/15 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-[#6f5a22]">+{fmt(topup)}</span>}
         {delta !== null && delta !== 0 && (
           <span aria-hidden className={`absolute -bottom-5 right-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold shadow-sm ${delta < 0 ? "bg-brand-navy text-white" : "bg-brand-buy text-white"}`}>
             {delta > 0 ? "+" : "−"}{Math.abs(delta)}
@@ -111,7 +112,7 @@ export default function CreditMeter() {
             <p className="text-sm font-bold">{snap.planLabel} plan</p>
             <p className="text-[11px] text-brand-navy/50">renews {day(snap.periodEnd)} · {days} day{days === 1 ? "" : "s"}</p>
           </div>
-          <p className="num mt-2 text-2xl font-bold tabular-nums">{fmt(snap.total)} <span className="text-sm font-medium text-brand-navy/50">credits left</span></p>
+          <p className="num mt-2 text-2xl font-bold tabular-nums">{fmt(snap.monthly)} <span className="text-sm font-medium text-brand-navy/50">monthly credits left</span></p>
           <div className="mt-3">
             <div className="flex items-baseline justify-between text-[11px]">
               <span className="font-semibold text-brand-navy/70">Monthly plan credits</span>

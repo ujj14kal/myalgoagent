@@ -46,7 +46,7 @@ export default function UsagePanel({ events, historyWindow, billing }: { events:
         <Card className="min-w-0 p-5 lg:col-span-2">
           <CardHeader title={`${snap.planLabel} plan`} subtitle={`Monthly credits renew on ${new Date(snap.periodEnd).toLocaleDateString("en-IN", { day: "numeric", month: "long", timeZone: "Asia/Kolkata" })}`} icon={Coins} />
           <p className="num mt-4 break-words text-4xl font-bold tabular-nums text-brand-navy">
-            {fmt(snap.total)} <span className="text-base font-medium text-brand-navy/50">credits left</span>
+            {fmt(snap.monthly)} <span className="text-base font-medium text-brand-navy/50">monthly credits left</span>
           </p>
           <div className="mt-4 space-y-3">
             <div>
