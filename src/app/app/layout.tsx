@@ -18,6 +18,9 @@ import CreditsProvider from "@/components/credits/credits-provider";
 import { snapshot as creditSnapshot } from "@/lib/credits/service";
 import AppShellSkeleton from "@/components/app-shell-skeleton";
 
+// Everything under /app is per-person and read live: never built ahead of time.
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   robots: { index: false, follow: false },
 };
