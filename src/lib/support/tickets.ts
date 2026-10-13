@@ -54,6 +54,21 @@ export async function ticketHead(kind: TicketKind, id: string): Promise<TicketHe
   return f && { kind, id: f.id, ref: feedbackRef(f.id), topic: `Your feedback on ${f.page || "MyAlgoAgent"}`, userId: f.userId, email: f.user.email, status: f.status };
 }
 
+/** Unresolved requests an account may have at once: a new one needs one of these solved first, so a few topics never turn into a pile of cases. */
+export const MAX_OPEN_CASES = 3;
+
+/** The unresolved requests of this person (by account or by email address), newest activity first. */
+export async function openCasesFor(userId: string | null, email: string) {
+  return prisma.supportCase.findMany({
+    where: { status: { not: "RESOLVED" }, OR: [...(userId ? [{ userId }] : []), { email: { equals: email, mode: "insensitive" as const } }] },
+    orderBy: { lastActivityAt: "desc" },
+    select: { id: true, caseNumber: true, subject: true },
+  });
+}
+
+export const openLimitMessage = (open: { caseNumber: number }[]) =>
+  `You already have ${MAX_OPEN_CASES} open requests (${open.slice(0, MAX_OPEN_CASES).map((c) => caseRef(c.caseNumber)).join(", ")}). Please add your message to one of them, or mark one as solved, on your Help & Support page before opening another.`;
+
 /** Where one conversation opens in the app (signing in first when needed). */
 export const threadLink = (kind: TicketKind, id: string) => `${siteUrl}/app/support?open=${kind}-${id}`;
 

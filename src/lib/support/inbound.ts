@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { sendInboundAck, sendSupportCaseNotice } from "@/lib/email";
 import { logError } from "@/lib/logger";
-import { caseRef, MAX_REPLY, threadLink } from "@/lib/support/tickets";
+import { caseRef, MAX_OPEN_CASES, MAX_REPLY, openCasesFor, threadLink } from "@/lib/support/tickets";
 import { caseNumberIn, cleanSubject, freshText, isAutomated } from "./inbound-parse";
 
 // Mail that people send to the no-reply address (or reply to our support emails) becomes a support case, or a new message on
@@ -34,19 +34,26 @@ export async function handleInbound(m: Inbound): Promise<InboundResult> {
   const name = m.name.trim() || from;
   const user = await prisma.user.findFirst({ where: { email: { equals: from, mode: "insensitive" } }, select: { id: true } });
 
+  type Known = { id: string; caseNumber: number; subject: string };
+  const addTo = async (c: Known): Promise<InboundResult> => {
+    await prisma.supportMessage.create({ data: { caseId: c.id, author: "USER", authorId: user?.id ?? null, authorName: name, body } });
+    await prisma.supportCase.update({ where: { id: c.id }, data: { status: "OPEN", lastActivityAt: new Date() } });
+    // The team's own mailbox gets a copy too, so nothing lives only in the admin portal.
+    await sendSupportCaseNotice(caseRef(c.caseNumber), `Reply: ${c.subject}`, body, from).catch((err) => logError("support.inbound-notice", err, { ref: caseRef(c.caseNumber) }));
+    await sendInboundAck(from, caseRef(c.caseNumber), c.subject, true, user ? threadLink("case", c.id) : null).catch((err) => logError("support.inbound-ack", err, { ref: caseRef(c.caseNumber) }));
+    return { action: "added", ref: caseRef(c.caseNumber) };
+  };
+
   // A reply that names a case we know, from the person who raised it, joins that case and reopens it.
   const n = caseNumberIn(m.subject);
   if (n) {
     const c = await prisma.supportCase.findUnique({ where: { caseNumber: n }, select: { id: true, caseNumber: true, subject: true, email: true, userId: true } });
-    if (c && (c.email.toLowerCase() === from || (user && c.userId === user.id))) {
-      await prisma.supportMessage.create({ data: { caseId: c.id, author: "USER", authorId: user?.id ?? null, authorName: name, body } });
-      await prisma.supportCase.update({ where: { id: c.id }, data: { status: "OPEN", lastActivityAt: new Date() } });
-      // The team's own mailbox gets a copy too, so nothing lives only in the admin portal.
-      await sendSupportCaseNotice(caseRef(c.caseNumber), `Reply: ${c.subject}`, body, from).catch((err) => logError("support.inbound-notice", err, { ref: caseRef(c.caseNumber) }));
-      await sendInboundAck(from, caseRef(c.caseNumber), c.subject, true, user ? threadLink("case", c.id) : null).catch((err) => logError("support.inbound-ack", err, { ref: caseRef(c.caseNumber) }));
-      return { action: "added", ref: caseRef(c.caseNumber) };
-    }
+    if (c && (c.email.toLowerCase() === from || (user && c.userId === user.id))) return addTo(c);
   }
+
+  // Someone with the maximum number of unresolved requests doesn't get a fourth: the message joins their most recent one.
+  const open = await openCasesFor(user?.id ?? null, from);
+  if (open.length >= MAX_OPEN_CASES) return addTo(open[0]);
 
   const created = await prisma.supportCase.create({ data: { userId: user?.id ?? null, email: from, subject: cleanSubject(m.subject), message: body } });
   const ref = caseRef(created.caseNumber);

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request-ip";
 import { sendFeedbackNotice, sendSupportCaseNotice, sendSupportCaseConfirmation } from "@/lib/email";
-import { threadLink } from "@/lib/support/tickets";
+import { MAX_OPEN_CASES, openCasesFor, openLimitMessage, threadLink } from "@/lib/support/tickets";
 import { LIMITS, oneLine, text, tooLong } from "@/lib/text";
 
 export async function submitFeedbackAction(
@@ -63,6 +63,9 @@ export async function submitSupportCaseAction(input: {
 
   // Signed out but using an account's address: the request still belongs to that account.
   const owner = session?.user?.id ?? (await prisma.user.findFirst({ where: { email: { equals: email, mode: "insensitive" } }, select: { id: true } }))?.id ?? null;
+  // One topic at a time: at most MAX_OPEN_CASES unresolved requests per person.
+  const open = await openCasesFor(owner, email);
+  if (open.length >= MAX_OPEN_CASES) return { ok: false, error: openLimitMessage(open) };
   const supportCase = await prisma.supportCase.create({
     data: {
       userId: owner,

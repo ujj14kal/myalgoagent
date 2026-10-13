@@ -9,7 +9,7 @@ import PageHeader from "@/components/ui/page-header";
 import SupportForm from "@/components/support-form";
 import SupportThread, { type ThreadMessage } from "@/components/support/thread";
 import SupportReplyBox from "@/components/support/reply-box";
-import { caseRef, feedbackRef, linkCasesToAccount } from "@/lib/support/tickets";
+import { MAX_OPEN_CASES, caseRef, feedbackRef, linkCasesToAccount, openCasesFor, openLimitMessage } from "@/lib/support/tickets";
 
 export const metadata = { title: "Help & Support", robots: { index: false } };
 
@@ -28,6 +28,8 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
   const sp = await searchParams;
   // Requests sent while signed out or by email carry only an address: attach them to this account first.
   await linkCasesToAccount(userId, session.user?.email);
+  const openNow = await openCasesFor(userId, session.user?.email ?? "");
+  const atLimit = openNow.length >= MAX_OPEN_CASES;
   const open = qText(sp.open, 80);
   const q = qText(sp.q);
   const status = qEnum(sp.status, ["all", "OPEN", "PENDING", "RESOLVED"] as const, "all");
@@ -88,7 +90,7 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
         description="Your conversations with our team — support requests and the feedback you've sent. Replies show up here and in your email."
       />
 
-      <details className="surface group p-5" open={allCount === 0}>
+      <details className="surface group p-5" open={allCount === 0 && !atLimit}>
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-brand-navy">
           <span className="inline-flex items-center gap-2">
             <MessageSquareText size={16} className="text-brand-primary" /> Ask for help
@@ -96,7 +98,11 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
           <span className="text-xs font-medium text-brand-primary group-open:hidden">New request</span>
         </summary>
         <div className="mt-4 max-w-2xl">
-          <SupportForm initialEmail={session.user?.email ?? ""} />
+          {atLimit ? (
+            <p className="rounded-xl border border-brand-gold/40 bg-brand-gold/10 px-4 py-3 text-sm text-brand-navy/80">{openLimitMessage(openNow)}</p>
+          ) : (
+            <SupportForm initialEmail={session.user?.email ?? ""} />
+          )}
         </div>
       </details>
 
