@@ -4,6 +4,8 @@ import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
 
 const REGION = "ap-south-1";
 const FROM_ADDRESS = "MyAlgoAgent <noreply@myalgoagent.com>";
+// Replies to automatic mail go here: Amazon SES receives them and the app turns each into a support case.
+const INBOUND_REPLY = "MyAlgoAgent <reply@mail.myalgoagent.com>";
 /** Anything a person may answer (support replies, case confirmations) comes from here, so a reply reaches a real inbox. */
 /** SES configuration set: reports bounces and complaints (to an alert topic) and feeds the reputation alarms. */
 const CONFIGURATION_SET = "myalgoagent-transactional";
@@ -37,7 +39,7 @@ async function sendViaSes(m: OutgoingEmail): Promise<void> {
       FromEmailAddress: m.from ?? FROM_ADDRESS,
       ConfigurationSetName: CONFIGURATION_SET,
       Destination: { ToAddresses: [m.to] },
-      ReplyToAddresses: m.replyTo ? [m.replyTo] : undefined,
+      ReplyToAddresses: m.replyTo ? [m.replyTo] : m.from ? undefined : [INBOUND_REPLY],
       Content: {
         Simple: {
           ...(m.headers ? { Headers: Object.entries(m.headers).map(([Name, Value]) => ({ Name, Value })) } : {}),
@@ -73,7 +75,7 @@ async function sendViaGoogle(m: OutgoingEmail): Promise<void> {
     connectionTimeout: 10_000,
     socketTimeout: 20_000,
   });
-  await transport.sendMail({ from: m.from ?? FROM_ADDRESS, to: m.to, replyTo: m.replyTo, subject: m.subject, html: m.html, text: m.text, headers: m.headers });
+  await transport.sendMail({ from: m.from ?? FROM_ADDRESS, to: m.to, replyTo: m.replyTo ?? (m.from ? undefined : INBOUND_REPLY), subject: m.subject, html: m.html, text: m.text, headers: m.headers });
 }
 
 type Route = "ses" | "google";
