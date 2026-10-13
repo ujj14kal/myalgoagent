@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import CustomIndicatorsRoot from "@/components/custom-indicators/root";
 import type { CustomIndicatorDef } from "@/lib/custom-indicator";
@@ -15,12 +16,23 @@ import { isBuiltInOwner } from "@/lib/admin/access";
 import CompanyLink from "@/components/company-link";
 import CreditsProvider from "@/components/credits/credits-provider";
 import { snapshot as creditSnapshot } from "@/lib/credits/service";
+import AppShellSkeleton from "@/components/app-shell-skeleton";
 
 export const metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function AppLayout({ children }: { children: React.ReactNode }) {
+// The layout itself is instant: the shell's data (account, credits, notifications…) loads behind a skeleton of the same shape,
+// so a click on Sign in or on a link shows the app frame straight away instead of a blank screen, and the real frame replaces it in place.
+export default function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={<AppShellSkeleton />}>
+      <AppShell>{children}</AppShell>
+    </Suspense>
+  );
+}
+
+async function AppShell({ children }: { children: React.ReactNode }) {
   const session = await auth();
   if (!session?.user?.id) {
     redirect("/login");

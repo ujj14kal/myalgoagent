@@ -247,3 +247,22 @@ body {
   .data-table tbody tr:hover { background: rgba(71, 24, 152, 0.025); }
   .data-table .num-cell { text-align: right; }
 }
+
+
+/* No sideways jump when a page gains or loses its scrollbar (the "screen shrinks" on sign-in). */
+html { scrollbar-gutter: stable; }
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+html { scroll-padding-top: 5rem; }
+
+/* Top progress bar while a page loads, and the sign-in overlay. */
+@keyframes nav-progress-run { from { transform: scaleX(0.05); } 20% { transform: scaleX(0.35); } 100% { transform: scaleX(0.92); } }
+@keyframes nav-progress-done { from { transform: scaleX(0.92); opacity: 1; } 60% { transform: scaleX(1); opacity: 1; } to { transform: scaleX(1); opacity: 0; } }
+.nav-progress-run { animation: nav-progress-run 9s cubic-bezier(0.1, 0.6, 0.2, 1) forwards; }
+.nav-progress-done { animation: nav-progress-done 0.4s ease-out forwards; }
+@keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+.overlay-in { animation: overlay-in 0.18s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .nav-progress-run, .overlay-in { animation: none; }
+}
