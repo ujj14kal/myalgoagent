@@ -127,12 +127,12 @@ ${rows}
 </table></td></tr></table></td></tr>
 <tr><td style="padding:6px 28px 0"><p style="margin:0;padding:10px 14px;background:#f6f3fc;border-radius:10px;color:${NAVY};font-size:12px"><span style="color:${MUTED}">Amount in words:</span> <strong>${e(amountInWords(total))}</strong></p></td></tr>
 <tr><td style="padding:22px 28px 8px">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-<td bgcolor="${NAVY}" style="background:${NAVY};padding:16px 18px;border-radius:12px;vertical-align:top;font-size:12px;line-height:1.6;color:#c9d2e0">
-<img src="${SITE}/brand/shagoon-softech-logo-white.png" width="170" alt="Shagoon Softech" style="display:block;border:0;width:170px;height:auto;margin:0 0 10px">
-<strong style="color:#ffffff">${e(seller.name)}</strong><br>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid ${LINE}"><tr>
+<td style="padding-top:14px;vertical-align:top;font-size:12px;line-height:1.6;color:${MUTED}">
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 12px"><tr><td bgcolor="#1d4991" style="background:#1d4991;padding:12px 18px;border-radius:10px"><img src="${SITE}/brand/shagoon-softech-logo-white.png" width="170" alt="Shagoon Softech" style="display:block;border:0;width:170px;height:auto"></td></tr></table>
+<strong style="color:${NAVY}">${e(seller.name)}</strong><br>
 ${seller.address ? `${e(seller.address)}<br>` : ""}${seller.gstin ? `GSTIN: ${e(seller.gstin)}` : ""}${seller.gstin && seller.pan ? " · " : ""}${seller.pan ? `PAN: ${e(seller.pan)}` : ""}${seller.gstin || seller.pan ? "<br>" : ""}
-<a href="mailto:${e(seller.email)}" style="color:#d9c9f7;text-decoration:none">${e(seller.email)}</a> · <a href="${e(seller.website)}" style="color:#d9c9f7;text-decoration:none">${e(seller.website.replace(/^https?:\/\//, ""))}</a>
+<a href="mailto:${e(seller.email)}" style="color:${PURPLE};text-decoration:none">${e(seller.email)}</a> · <a href="${e(seller.website)}" style="color:${PURPLE};text-decoration:none">${e(seller.website.replace(/^https?:\/\//, ""))}</a>
 </td></tr></table>
 <p style="margin:12px 0 0;font-size:11px;line-height:1.6;color:${MUTED}">GST is charged at ${GST_RATE}% on the value. This is a computer-generated ${m.title === "TAX INVOICE" ? "invoice" : m.title === "CREDIT NOTE" ? "credit note" : "receipt"} and needs no signature. MyAlgoAgent is software for building and testing your own strategies; it gives no investment advice, and trading involves risk of loss.</p>
 </td></tr></table>`;
