@@ -1,9 +1,10 @@
 import "server-only";
+import { pruneSiteEvents } from "@/lib/site-log";
 import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/logger";
 import { pruneJobRuns } from "@/lib/jobs";
 
-export type PurgeSummary = { purged: number; failed: number; prunedRuns: number; prunedAudit: number };
+export type PurgeSummary = { purged: number; failed: number; prunedRuns: number; prunedAudit: number; prunedEvents: number };
 
 /** Permanently deletes accounts whose deletion window has passed, and trims old operational records. */
 export async function runAccountPurge(): Promise<PurgeSummary> {
@@ -23,7 +24,7 @@ export async function runAccountPurge(): Promise<PurgeSummary> {
       // deletes strategies, backtests, forward tests, orders, etc. too.
       // Support cases are the exception (SetNull, so requests sent while
       // signed out survive) — the privacy policy promises they go with the account.
-      await prisma.$transaction([prisma.supportCase.deleteMany({ where: { userId: user.id } }), prisma.user.delete({ where: { id: user.id } })]);
+      await prisma.$transaction([prisma.supportCase.deleteMany({ where: { userId: user.id } }), prisma.siteEvent.deleteMany({ where: { userId: user.id } }), prisma.user.delete({ where: { id: user.id } })]);
       purged++;
     } catch (err) {
       failed++;
@@ -36,5 +37,7 @@ export async function runAccountPurge(): Promise<PurgeSummary> {
     .deleteMany({ where: { createdAt: { lt: new Date(Date.now() - 730 * 86_400_000) } } })
     .then((r) => r.count)
     .catch(() => 0);
-  return { purged, failed, prunedRuns, prunedAudit };
+  // The site log (errors, sign-ins) is kept 90 days (privacy policy, "Data retention").
+  const prunedEvents = await pruneSiteEvents().catch(() => 0);
+  return { purged, failed, prunedRuns, prunedAudit, prunedEvents };
 }

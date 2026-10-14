@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { clientIpFrom } from "@/lib/request-ip";
 import { enforceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { logError } from "@/lib/logger";
+import { auth } from "@/lib/auth";
 
 // Client-side errors (render crashes caught by an error boundary, uncaught
 // event-handler throws, unhandled promise rejections) otherwise vanish into
@@ -34,11 +35,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false }, { status: 400 });
     }
 
+    // Who it happened to, when they are signed in (the error can come from before sign-in, so this is optional).
+    const userId = (await auth().catch(() => null))?.user?.id;
+    // The page without its query string: the query can carry tokens (magic links, OAuth codes).
+    const url = clip(body.url)?.split("?")[0];
     logError("client-error", new Error(clip(body.message) ?? "Unknown client error"), {
       source: clip(body.source),
       digest: clip(body.digest),
       clientStack: clip(body.stack),
-      url: clip(body.url),
+      url,
+      userId,
       userAgent: clip(request.headers.get("user-agent")),
 
     });

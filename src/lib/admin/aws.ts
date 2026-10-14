@@ -1,5 +1,5 @@
 import "server-only";
-import { CloudWatchClient, DescribeAlarmsCommand, GetMetricDataCommand } from "@aws-sdk/client-cloudwatch";
+import { CloudWatchClient, DescribeAlarmHistoryCommand, DescribeAlarmsCommand, GetMetricDataCommand } from "@aws-sdk/client-cloudwatch";
 import { CloudWatchLogsClient, FilterLogEventsCommand } from "@aws-sdk/client-cloudwatch-logs";
 import { CostExplorerClient, GetCostAndUsageCommand, GetCostForecastCommand, type Expression } from "@aws-sdk/client-cost-explorer";
 import { SESv2Client, GetAccountCommand } from "@aws-sdk/client-sesv2";
@@ -93,6 +93,66 @@ export async function getRecentLogs(hours = 24, limit = 60): Promise<LogEntry[]>
     }
   }
   return out.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
+}
+
+// ---------- searching the raw server logs ----------
+export type RawLine = { at: string; group: "web" | "engine"; text: string; json: Record<string, unknown> | null };
+
+/**
+ * The raw server log (the website and the live engine) for a time range, newest first, optionally narrowed to lines that
+ * contain some text. `level` narrows to the structured error or warning lines. Read straight from CloudWatch, which keeps
+ * everything the site has written for years, so this reaches back further than the site log table does.
+ */
+export async function searchServerLogs(o: { hours: number; text?: string; level?: "error" | "warn" | "any"; limit?: number }): Promise<RawLine[]> {
+  const term = (o.text ?? "").trim().replace(/["\\]/g, "");
+  const pattern = [o.level === "error" ? '"level\\":\\"error"' : o.level === "warn" ? '"level\\":\\"warn"' : "", term ? `"${term}"` : ""].filter(Boolean).join(" ");
+  const settled = await Promise.allSettled(
+    LOG_GROUPS.map((logGroupName) =>
+      logs().send(new FilterLogEventsCommand({ logGroupName, startTime: Date.now() - o.hours * 3_600_000, ...(pattern ? { filterPattern: pattern } : {}), limit: 300 })),
+    ),
+  );
+  if (settled.every((r) => r.status === "rejected")) throw (settled[0] as PromiseRejectedResult).reason;
+  const out: RawLine[] = [];
+  settled.forEach((r, i) => {
+    if (r.status !== "fulfilled") return;
+    for (const e of r.value.events ?? []) {
+      const text = (e.message ?? "").trim();
+      let json: Record<string, unknown> | null = null;
+      try {
+        json = JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        /* a plain text line */
+      }
+      out.push({ at: new Date(e.timestamp ?? 0).toISOString(), group: i === 0 ? "web" : "engine", text: text.slice(0, 4000), json });
+    }
+  });
+  return out.sort((a, b) => b.at.localeCompare(a.at)).slice(0, o.limit ?? 200);
+}
+
+// ---------- outages: when an alarm went off and came back ----------
+export type AlarmChange = { at: string; name: string; to: string; from: string; summary: string };
+export async function getAlarmHistory(days = 14): Promise<AlarmChange[]> {
+  const startDate = new Date(Date.now() - days * 86_400_000);
+  const [a, b] = await Promise.allSettled([
+    cw().send(new DescribeAlarmHistoryCommand({ HistoryItemType: "StateUpdate", StartDate: startDate, MaxRecords: 100, ScanBy: "TimestampDescending" })),
+    cwUs().send(new DescribeAlarmHistoryCommand({ HistoryItemType: "StateUpdate", StartDate: startDate, MaxRecords: 100, ScanBy: "TimestampDescending" })),
+  ]);
+  if (a.status === "rejected" && b.status === "rejected") throw a.reason;
+  const items = [...(a.status === "fulfilled" ? (a.value.AlarmHistoryItems ?? []) : []), ...(b.status === "fulfilled" ? (b.value.AlarmHistoryItems ?? []) : [])];
+  return items
+    .map((i) => {
+      let to = "";
+      let from = "";
+      try {
+        const d = JSON.parse(i.HistoryData ?? "{}") as { newState?: { stateValue?: string }; oldState?: { stateValue?: string } };
+        to = d.newState?.stateValue ?? "";
+        from = d.oldState?.stateValue ?? "";
+      } catch {
+        /* keep the summary only */
+      }
+      return { at: (i.Timestamp ?? new Date(0)).toISOString(), name: i.AlarmName ?? "", to, from, summary: i.HistorySummary ?? "" };
+    })
+    .sort((x, y) => y.at.localeCompare(x.at));
 }
 
 // ---------- cost (Cost Explorer: $0.01 per call, so cached for a day) ----------

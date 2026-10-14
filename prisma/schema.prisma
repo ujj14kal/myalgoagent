@@ -444,6 +444,33 @@ model Announcement {
   @@index([active, startsAt])
 }
 
+// What happened on the site, kept so the team can work out why something broke and who it touched: errors the server and
+// the browser hit, sign-ins and failed sign-ins. Searchable in the admin portal (Logs); trimmed after 90 days. No foreign
+// key on purpose, so a row survives while its account exists and is removed with it (see account-purge).
+model SiteEvent {
+  id        String   @id @default(cuid())
+  at        DateTime @default(now())
+  kind      String // server_error, client_error, engine_error, warning, sign_in, sign_in_failed
+  level     String // error, warn, info
+  source    String // web, engine, browser
+  context   String
+  message   String
+  path      String?
+  method    String?
+  userId    String?
+  userAgent String?
+  ip        String?
+  digest    String?
+  /// How many times the same thing happened in the same minute (repeats are folded into one row).
+  count     Int      @default(1)
+  detail    Json?
+
+  @@index([at])
+  @@index([kind, at])
+  @@index([userId, at])
+  @@index([context, at])
+}
+
 // One run of a scheduled job (paper-trade sync, account purge), so the admin
 // portal can show whether they're healthy without opening AWS.
 model JobRun {

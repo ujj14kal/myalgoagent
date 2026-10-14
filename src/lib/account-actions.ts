@@ -10,6 +10,7 @@ import { checkRateLimit, enforceRateLimit, RateLimitError } from "@/lib/rate-lim
 import { clientIp } from "@/lib/request-ip";
 import { LIMITS, oneLine, text, tooLong } from "@/lib/text";
 import { isPasswordValid } from "@/lib/password";
+import { recordSignInFailure } from "@/lib/sign-in-log";
 import { normalizePhone, PHONE_ERROR } from "@/lib/phone";
 import { isUsernameAvailable, isValidUsername, suggestUsernames } from "@/lib/username";
 import { sendWelcomeEmail, sendPasswordResetEmail, sendMagicLinkEmail } from "@/lib/email";
@@ -83,7 +84,7 @@ export async function signupAction(input: SignupInput): Promise<{ ok: true } | {
   const verifyUrl = await newVerifyUrl(email).catch(() => undefined);
   await sendWelcomeEmail(email, input.fullName.trim(), verifyUrl).catch((err) => console.error("sendWelcomeEmail failed:", err));
 
-  await createSessionForUser(user.id);
+  await createSessionForUser(user.id, "signup");
 
   return { ok: true };
 }
@@ -104,11 +105,20 @@ export async function loginWithPasswordAction(
   }
 
   const user = await prisma.user.findUnique({ where: { username } });
-  if (!user?.passwordHash) return { ok: false, error: "Incorrect username or password." };
+  if (!user?.passwordHash) {
+    await recordSignInFailure("password", user ? "Account has no password" : "No account with that username", username);
+    return { ok: false, error: "Incorrect username or password." };
+  }
 
   const valid = await bcrypt.compare(password, user.passwordHash);
-  if (!valid) return { ok: false, error: "Incorrect username or password." };
-  if (user.status === "SUSPENDED") return { ok: false, error: SUSPENDED_MESSAGE };
+  if (!valid) {
+    await recordSignInFailure("password", "Wrong password", username, user.id);
+    return { ok: false, error: "Incorrect username or password." };
+  }
+  if (user.status === "SUSPENDED") {
+    await recordSignInFailure("password", "Account suspended", username, user.id);
+    return { ok: false, error: SUSPENDED_MESSAGE };
+  }
 
   await reactivateIfPending(user.id);
   await createSessionForUser(user.id);

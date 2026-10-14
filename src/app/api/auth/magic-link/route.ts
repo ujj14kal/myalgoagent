@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     if (user.status === "SUSPENDED") return NextResponse.redirect(new URL("/login?error=Suspended", req.url));
 
     await reactivateIfPending(user.id);
-    await createSessionForUser(user.id);
+    await createSessionForUser(user.id, "magic_link");
     return NextResponse.redirect(new URL("/app/dashboard", req.url));
   } catch (err) {
     if (err instanceof RateLimitError) return NextResponse.redirect(new URL("/login?error=Configuration", req.url));

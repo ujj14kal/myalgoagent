@@ -4,7 +4,7 @@ import { classifyCustom, type CustomIndicatorDef } from "@/lib/custom-indicator"
 
 /** Everything an account owns, for the user's own data export (and staff fulfilling a data request). Never includes broker keys or tokens. */
 export async function collectUserData(userId: string) {
-  const [user, watchlistItems, strategies, backtestRuns, paperSessions, riskSettings, riskEvents, notifications, feedback, supportCases, agentConversations, brokerConnections, workspaces, blocks, concepts, customIndicators, staticIp, subscriptions, payments, refundRequests] =
+  const [user, watchlistItems, strategies, backtestRuns, paperSessions, riskSettings, riskEvents, notifications, feedback, supportCases, agentConversations, brokerConnections, siteLog, workspaces, blocks, concepts, customIndicators, staticIp, subscriptions, payments, refundRequests] =
     await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
@@ -38,6 +38,8 @@ export async function collectUserData(userId: string) {
         where: { userId },
         select: { broker: true, status: true, apiKeyHint: true, brokerClientId: true, accountName: true, connectedAt: true, tokenExpiresAt: true, lastCheckedAt: true, createdAt: true },
       }),
+      // Sign-ins and the technical errors this account hit (kept 90 days): time, kind, where, device and IP. Never anything secret.
+      prisma.siteEvent.findMany({ where: { userId }, orderBy: { at: "desc" }, take: 500, select: { at: true, kind: true, context: true, message: true, path: true, userAgent: true, ip: true, count: true } }),
       prisma.workspace.findMany({ where: { userId }, include: { versions: { orderBy: { version: "asc" } } } }),
       prisma.block.findMany({ where: { userId }, orderBy: { name: "asc" } }),
       prisma.concept.findMany({ where: { userId }, orderBy: { name: "asc" } }),
@@ -66,6 +68,7 @@ export async function collectUserData(userId: string) {
     supportCases,
     agentConversations,
     brokerConnections,
+    siteLog,
     staticIp,
     subscriptions,
     payments,

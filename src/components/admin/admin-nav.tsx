@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, ArrowLeft, Bot, Inbox, LayoutDashboard, Megaphone, RotateCcw, ScrollText, Server, ShieldCheck, Users, Send } from "lucide-react";
+import { Activity, ArrowLeft, Bot, Bug, Inbox, LayoutDashboard, Megaphone, RotateCcw, ScrollText, Server, ShieldCheck, Users, Send } from "lucide-react";
 
-const ICONS = { overview: LayoutDashboard, inbox: Inbox, users: Users, announcements: Megaphone, outreach: Send, trading: Activity, ai: Bot, system: Server, audit: ScrollText, refunds: RotateCcw, team: ShieldCheck };
+const ICONS = { overview: LayoutDashboard, inbox: Inbox, users: Users, announcements: Megaphone, outreach: Send, trading: Activity, ai: Bot, system: Server, audit: ScrollText, logs: Bug, refunds: RotateCcw, team: ShieldCheck };
 export type AdminNavItem = { key: keyof typeof ICONS; href: string; label: string; badge?: number; alert?: boolean };
 
 export default function AdminNav({ items }: { items: AdminNavItem[] }) {

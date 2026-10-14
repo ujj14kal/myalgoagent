@@ -1,4 +1,5 @@
 import { sendWelcomeEmail } from "@/lib/email";
+import { recordSignIn } from "@/lib/sign-in-log";
 import NextAuth, { customFetch } from "next-auth";
 import Google from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
@@ -23,7 +24,10 @@ const adapter: Adapter = {
   ...baseAdapter,
   async createSession(data) {
     await prisma.session.deleteMany({ where: { userId: data.userId } });
-    return baseAdapter.createSession!(data);
+    const created = await baseAdapter.createSession!(data);
+    // Google (and any other Auth.js provider) sign-ins land here; password, magic link and passkey log in session-cookie.ts.
+    await recordSignIn(data.userId, "google").catch(() => {});
+    return created;
   },
 };
 

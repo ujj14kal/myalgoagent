@@ -52,6 +52,8 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
   if (!u) notFound();
   await audit(staff, "user.view", { type: "user", id: u.id }, `Viewed ${u.email}`);
 
+  // Their recent sign-ins and the errors they hit (the Logs page has the full trail); empty until the table exists.
+  const events = await prisma.siteEvent.findMany({ where: { userId: u.id }, orderBy: { at: "desc" }, take: 12, select: { id: true, at: true, kind: true, message: true, context: true, path: true, count: true } }).catch(() => []);
   const egress = await prisma.userEgress.findUnique({ where: { userId: u.id }, select: { status: true, publicIp: true } }).catch(() => null);
   const [sessions, strategies, paper, brokers, cases, feedback, riskEvents, agentStats, trail] = await Promise.all([
     prisma.session.count({ where: { userId: u.id, expires: { gt: new Date() } } }),
@@ -247,6 +249,25 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
           {can(staff.role, "users.manage") ? <CreditControls userId={u.id} plan={credits.plan} /> : <p className="px-5 py-3 text-xs text-brand-navy/45">Changing plans or adding credits needs an Admin.</p>}
         </Card>
       )}
+
+      <Card title="Recent sign-ins & errors" icon={Activity} pad={false} action={<Link href={`/admin/logs?user=${u.id}&range=30d&tab=signins`} className="text-xs font-semibold text-brand-primary hover:underline">All logs for this customer →</Link>}>
+        {events.length === 0 ? (
+          <p className="px-5 py-4 text-sm text-brand-navy/45">Nothing recorded yet.</p>
+        ) : (
+          <ul className="divide-y divide-black/[0.04]">
+            {events.map((e) => (
+              <li key={e.id} className="flex items-start gap-3 px-5 py-2.5">
+                <Pill tone={e.kind === "sign_in" ? "green" : e.kind === "sign_in_failed" || e.kind === "warning" ? "gold" : "red"}>{e.kind === "sign_in" ? "signed in" : e.kind === "sign_in_failed" ? "failed" : "error"}</Pill>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm text-brand-navy">{e.message}{e.count > 1 ? ` (${e.count}×)` : ""}</span>
+                  <span className="block truncate font-mono text-[11px] text-brand-navy/45">{e.context}{e.path ? ` · ${e.path}` : ""}</span>
+                </span>
+                <span className="whitespace-nowrap text-[11px] text-brand-navy/40">{ist(e.at)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       <Card title="Team notes & follow-ups" icon={NotebookPen} pad={false}>
         {notesReady ? (
