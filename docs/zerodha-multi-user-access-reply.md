@@ -6,7 +6,7 @@ Thank you for your reply. Our answers to each of your points are below.
 
 **What we are asking for, in one paragraph**
 
-Multi-user access for MyAlgoAgent so that every Zerodha user who connects through us gets the same, complete set of data and trading access, with no user getting a reduced version: the full account and trading APIs, and all Kite market data our features use (instrument master, full quotes with open interest and market depth, OHLC and LTP, historical candles for equities, indices and F&O contracts, and live WebSocket streaming). The details and the feature each item supports are in points 6, 9, 11 and 12 below.
+Multi-user access for MyAlgoAgent so that a Zerodha user gets the same data and trading access that users of our other connected brokers (Groww, Upstox, Dhan, Fyers, Angel One and others) get today. Every feature we offer (charts, backtests, forward tests, live strategies, Options Lab with option chain and Greeks, watchlist, portfolio, markets overview, Analyst Pro) runs on a defined set of data points. Section 11 lists each feature and every data point it needs, so you can see exactly what we ask Kite to provide. The same data points, for every Zerodha user, with nothing left out.
 
 **1. Complete workflow: how the platform functions and how trades are executed**
 
@@ -47,11 +47,11 @@ We would like access to the full set of endpoints our features use, so that a Ze
 - `GET /orders`, `GET /orders/{order_id}` and `GET /orders/{order_id}/trades` (order book, order history, fills), `GET /trades` (trade book)
 - `POST /margins/orders` and `POST /margins/basket` (order and basket margin: to show a priced, margin-checked preview before a multi-leg options order)
 
-*Market data*
-- `GET /instruments` and `GET /instruments/{exchange}` (the instrument master, including NFO, to identify equity and option contracts)
-- `GET /quote`, `GET /quote/ohlc` and `GET /quote/ltp` (live quotes, OHLC and last price, including bid/ask and market depth, volume and open interest)
-- `GET /instruments/historical/{instrument_token}/{interval}` (historical candles, minute to day, with open interest where available)
-- The WebSocket streaming API (KiteTicker) for live ticks, so live prices and option data update in real time instead of by polling
+*Market data* (every data point is listed per feature in section 11)
+- `GET /instruments` and `GET /instruments/{exchange}` (instrument master for NSE, BSE, NFO and indices: token, trading symbol, name, lot size, tick size, expiry, strike, instrument type)
+- `GET /quote`, `GET /quote/ohlc` and `GET /quote/ltp` (last price, OHLC, previous close, change, volume, average price, buy/sell quantity, 5-level market depth with bid/ask, open interest and its day high/low, 52-week and circuit limits where available, last trade time)
+- `GET /instruments/historical/{instrument_token}/{interval}` (candles from 1 minute to 1 day with open interest, for equities, indices and F&O contracts, including expired contracts where Kite offers them)
+- The WebSocket streaming API (KiteTicker) in full mode: ticks with depth and open interest for the instruments a user is viewing or trading
 
 **7. Unique features**
 
@@ -76,36 +76,43 @@ More. In addition to Holdings, Positions, Order Book and Trade Book (all read), 
 
 MyAlgoAgent does not provide investment research, recommendations or advisory services, and does not hold a SEBI RA registration. It does not tell users what to buy or sell, does not rank or pick stocks and does not predict prices. Strategy rules are written by the user. Our technical-indicator reader ("Analyst Pro") only shows what standard indicators read on a stock's chart today, with each indicator's value and weight; it states plainly that it is not a forecast or advice. Our AI assistant is instructed never to give advice and adds a note that its analysis is not trading advice. We would welcome your view if you see any of this differently. [CONFIRM with your own legal advice before sending.]
 
-**11. Market data endpoints required, and what each is used for**
+**11. Market data we need, feature by feature**
 
-We request all of these for the user who owns the session:
-- **Historical candles** (with the user's historical-data subscription): charts, backtests (up to five years), the forward tests and live strategies that read candles, and the technical-indicator reader ("Analyst Pro").
-- **Instrument master** (`/instruments`): to map a stock or an option contract to its Kite instrument, and to build the option chain.
-- **Quote, OHLC and LTP**: the watchlist, the portfolio's live value and P&L, the markets overview (index levels, advances and declines, top gainers and losers, volume leaders), the price shown on every order preview, protected limit prices for live orders, and key stats on each stock.
-- **WebSocket (KiteTicker)**: real-time ticks for the forming candle, live P&L, option-chain updates and the live order screens.
-- **Option chain and Greeks**: our Options Lab shows the option chain (open interest, change in OI, volume, IV, PCR, max pain) and Greeks (delta, gamma, theta, vega, rho). We build the chain from `/instruments` (NFO) plus `/quote` for the underlying's expiry and strikes, and calculate the Greeks ourselves from each contract's price (or estimate and label them): we do not need Greeks from Zerodha. Today, for users of other brokers, the chain comes from their own broker; we would like Zerodha users to get the same.
+This is the data our platform already uses for users of other brokers. We ask for the same data points for Zerodha users, so no Zerodha user gets a reduced version of any feature. Every item is requested only for the user who owns the session.
 
-We do not redistribute Zerodha data: it is shown and used only for the user who owns the session, kept only briefly in memory to avoid repeat requests, and never shown to anyone else or sold.
+| Feature | Data points it needs |
+|---|---|
+| **Charts and drawing tools** | Historical candles (open, high, low, close, volume, open interest) from 1 minute to 1 day for equities, indices and F&O contracts; the forming candle live (ticks with last price, volume and time) |
+| **Backtests (up to 5 years) and combined backtests** | Historical candles as above, for every symbol and timeframe a strategy uses, including index data; lot sizes and tick sizes from the instrument master |
+| **Forward tests and live strategies** | Latest candle each minute in market hours, last price and last trade time, previous close; live ticks for the forming candle; instrument token, lot size, tick size and circuit limits for order checks |
+| **Order preview and protected limit prices** | Last price, bid and ask, best 5 levels of market depth, upper and lower circuit limits, previous close |
+| **Watchlist** | Last price, change and change %, open, high, low, previous close, volume, for every symbol on the list, refreshed live |
+| **Portfolio and positions (live value and P&L)** | Last price per holding and position, previous close (for day change), holdings and positions from the account endpoints |
+| **Markets overview** | Index levels and day change for the main NSE indices; advances and declines; top gainers and top losers (price, previous close, change %, volume, turnover); most active by volume and by turnover; constituents of an index |
+| **Key stats on each stock** | 52-week high and low, day open, high, low, close, volume, average price, upper and lower circuit, previous close, corporate actions where available |
+| **Options Lab: contract picker and option chain** | Expiry list and strike list per underlying from the instrument master; per contract: last price, bid, ask, previous close, volume, open interest, previous-day open interest (for change in OI), lot size; the underlying's spot price and its last update time |
+| **Options Lab: Greeks** | Implied volatility, delta, gamma, theta, vega and rho for each contract, taken from the broker when provided and otherwise calculated by us from the contract's price. Every Greek is labelled provided, calculated or estimated |
+| **Options Lab: chain summary** | Put-call ratio and max pain, which we compute from open interest across the chain |
+| **Options strategies (backtest, forward test, live)** | Historical candles and open interest of option contracts (including expired contracts), live prices of every leg, spot price of the underlying for at-the-money strike selection |
+| **Analyst Pro (technical-indicator reader)** | Historical daily and intraday candles of the selected stock, with volume |
+| **Live order screens** | Order and trade updates for the user's own orders, and live ticks for the symbols on screen |
 
-**11a. The same data for every user**
+If any single item above is not available in Kite Connect for any reason, please tell us which one and why, so we can say so honestly in the product.
 
-We ask that the entitlement is the same for every user who connects through MyAlgoAgent, whatever plan they are on with us:
-- every connected user receives the same market-data set listed above (quotes with depth and open interest, historical candles for equities, indices and F&O, instrument master, and WebSocket streaming), so that charts, backtests, forward tests, live signals, the option chain and Analyst Pro behave identically for all of them, including users who do not hold a separate historical-data subscription;
+**11a. The same data for every user, and from every broker**
+
+Our principle is that a feature works the same whichever broker a user connects. For Zerodha that means:
+- every connected Zerodha user receives all the data points in section 11, including users who do not hold a separate historical-data subscription;
 - the same account and trading endpoints for every user: profile, margins, holdings, positions, orders, trades, order and basket margins, and order placement, modification and cancellation;
-- the same rate limits and the same WebSocket subscription limits per user, with our server making the calls on each user's own session and from the static IP registered for that user.
+- the same rate limits and WebSocket subscription limits per user, with our server making the calls on each user's own session and from the static IP registered for that user.
 
-If Zerodha prefers to charge for market data at the platform level, or per user, we are open to discussing the commercial terms.
+We do not redistribute Zerodha data: it is shown and used only for the user who owns the session, kept only briefly in memory to avoid repeat requests, and never shown to anyone else or sold. If Zerodha prefers to charge for market data at the platform level or per user, we are open to discussing the commercial terms.
 
-**12. Options: option chain and Greeks, and what we need for Zerodha users**
+**12. Options: option chain and Greeks**
 
-Our option chain and Greeks are built and live. Today the chain is read through each user's own broker session where that broker offers a chain API: Groww, Upstox and Dhan. Where none is available a free-trial view shows the exchange's real contracts with prices we estimate and label as estimates. Greeks are taken from the broker when it provides them and otherwise calculated by us from the contract's price (or estimated from an assumed volatility), always labelled. Zerodha users currently do not get a chain, because we are not using Kite for it.
+Our option chain and Greeks are built and live. Today the chain is read through each user's own broker session where that broker offers a chain API (Groww, Upstox and Dhan), with all the per-contract data points listed in section 11. Where no broker chain is available, a free-trial view shows the exchange's real contracts with prices we estimate and label as estimates. Zerodha users do not get the chain today because we do not yet use Kite for it. To give them the full Options Lab, we ask for every option-related data point in section 11: the instrument master for NFO, quotes with open interest, volume, bid/ask and depth for every contract in the chain, live updates over KiteTicker, and historical candles with open interest for option contracts. If Kite offers implied volatility or Greeks through any endpoint, we would use those as "provided"; otherwise we calculate them ourselves and label them as calculated.
 
-To give Zerodha users the same Options Lab, we request, per user and only for that user:
-- `GET /instruments` (NFO) for the contracts, expiries, strikes and lot sizes;
-- `GET /quote` (including open interest, volume, bid/ask and depth) for each contract in the chain, and the WebSocket for live updates;
-- historical candles of option contracts (with open interest) for options backtests.
-
-We then calculate the Greeks and IV ourselves. Option legs the user chooses to trade go as ordinary orders on NFO through `POST /orders/regular` after a priced, margin-checked preview and explicit confirmation: buy legs first, and if a leg fails the open legs are cancelled.
+Option legs the user chooses to trade go as ordinary orders on NFO through `POST /orders/regular` after a priced, margin-checked preview and explicit confirmation: buy legs first, and if a leg fails the open legs are cancelled.
 
 We are happy to schedule a demo call at your convenience.
 
