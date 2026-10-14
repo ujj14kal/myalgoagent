@@ -123,7 +123,7 @@ export async function startPaperSession(input: StartPaperSessionInput): Promise<
   const result = await startPaperSessionCore(session.user.id, input);
   if ("error" in result) return result;
 
-  revalidatePaperPaths();
+  await revalidatePaperPaths();
   revalidatePath("/app/strategies");
   redirect(`/app/forward-testing/${result.id}`);
 }
@@ -134,7 +134,7 @@ export async function startPaperSessionForAgent(input: StartPaperSessionInput): 
   if (!session?.user?.id) return { error: "Unauthorized" };
   const result = await startPaperSessionCore(session.user.id, input);
   if ("id" in result) {
-    revalidatePaperPaths();
+    await revalidatePaperPaths();
     revalidatePath("/app/strategies");
   }
   return result;
@@ -173,7 +173,7 @@ export async function stopDuplicateSessionsAction(strategyId: string, keepSessio
     data: { status: "STOPPED" },
   });
 
-  revalidatePaperPaths();
+  await revalidatePaperPaths();
   return {};
 }
 
@@ -186,6 +186,6 @@ export async function setPaperSessionStatus(id: string, status: "ACTIVE" | "PAUS
     data: { status },
   });
 
-  revalidatePaperPaths(id);
+  await revalidatePaperPaths(id);
   return {};
 }

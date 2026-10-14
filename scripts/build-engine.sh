@@ -11,7 +11,7 @@ mkdir -p "$WORK/app/dist" "$WORK/app/certs" "$WORK/app/node_modules/.prisma" "$W
 
 npx esbuild src/worker/live-engine.ts --bundle --platform=node --target=node22 --format=cjs \
   --outfile="$WORK/app/dist/engine.js" --alias:@=./src --conditions=react-server \
-  --external:@prisma/client --external:pg-native --define:process.env.ENGINE_VERSION="\"$VERSION\""
+  --external:@prisma/client --external:pg-native --external:next/cache --define:process.env.ENGINE_VERSION="\"$VERSION\""
 cp certs/rds-global-bundle.pem "$WORK/app/certs/"
 cp -R node_modules/.prisma/. "$WORK/app/node_modules/.prisma/"
 cp -R node_modules/@prisma/client "$WORK/app/node_modules/@prisma/"

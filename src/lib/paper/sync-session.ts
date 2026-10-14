@@ -1,4 +1,3 @@
-import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { marketDataFor, isIntraday, type CandleInterval } from "@/lib/market-data";
 import { syncPaperSession, type SystemMemo } from "@/lib/paper/sync";
@@ -23,14 +22,28 @@ type Tx = Prisma.TransactionClient;
 
 class SyncConflict extends Error {}
 
-export function revalidatePaperPaths(id?: string) {
-  revalidatePath("/app/forward-testing");
-  if (id) revalidatePath(`/app/forward-testing/${id}`);
-  revalidatePath("/app/orders");
-  revalidatePath("/app/positions");
-  revalidatePath("/app/portfolio");
-  revalidatePath("/app/notifications");
-  revalidatePath("/app/dashboard");
+/**
+ * Refreshes the pages that show forward-test data. next/cache is loaded only when needed: the always-on engine runs this same
+ * sync outside Next (there is no page cache there), and its bundle must not pull Next in.
+ */
+export async function revalidatePaperPaths(id?: string): Promise<void> {
+  let revalidatePath: (path: string) => void;
+  try {
+    ({ revalidatePath } = await import("next/cache"));
+  } catch {
+    return;
+  }
+  try {
+    revalidatePath("/app/forward-testing");
+    if (id) revalidatePath(`/app/forward-testing/${id}`);
+    revalidatePath("/app/orders");
+    revalidatePath("/app/positions");
+    revalidatePath("/app/portfolio");
+    revalidatePath("/app/notifications");
+    revalidatePath("/app/dashboard");
+  } catch {
+    /* outside a request (a scheduled job): there is nothing to refresh */
+  }
 }
 
 /**
@@ -305,6 +318,6 @@ export async function syncPaperSessionFor(id: string, userId: string, opts: { sc
     throw err;
   }
 
-  revalidatePaperPaths(id);
+  await revalidatePaperPaths(id);
   return {};
 }
