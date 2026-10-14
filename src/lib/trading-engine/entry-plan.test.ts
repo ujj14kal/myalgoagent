@@ -218,3 +218,24 @@ describe("sizing by risk per position", () => {
   });
   it("is limited to 100%", () => expect(() => validatePositionSizing({ mode: "RISK_PERCENT", value: 120 })).toThrow(/100%/));
 });
+
+describe("adding on a rise from the first entry (intraday, 1% breakout)", () => {
+  const p = plan([{ trigger: "BREAKOUT", unit: "PERCENT", value: 1, allocationPercent: 50 }], 50);
+  const session = { flatOvernight: true } as EngineConfig["session"];
+  const m = (i: number, open: number, high: number, low: number, close: number): Candle => ({ time: 1_700_000_000 + i * 900, open, high, low, close, volume: 1000 });
+
+  it("buys the second half when price is 1% above a 1415 entry, even if price runs on to +3%", () => {
+    const candles = [m(0, 1415, 1415, 1415, 1415), m(1, 1415, 1416, 1414, 1415), m(2, 1416, 1425, 1415, 1424), m(3, 1424, 1457, 1424, 1455), m(4, 1455, 1458, 1454, 1457)];
+    const { steps, state } = run(candles, config(p, { session }));
+    const add = steps.find((s) => s.entryLevel)?.entryLevel;
+    expect(add).toMatchObject({ level: 2, quantity: 50 });
+    expect(add!.price).toBeCloseTo(1415 * 1.01, 6);
+    expect(state.position?.quantity).toBe(100);
+  });
+
+  it("a gap straight through the level still fills at the open", () => {
+    const candles = [m(0, 1415, 1415, 1415, 1415), m(1, 1415, 1416, 1414, 1415), m(2, 1440, 1450, 1438, 1448), m(3, 1448, 1449, 1447, 1448)];
+    const { steps } = run(candles, config(p, { session }));
+    expect(steps.find((s) => s.entryLevel)?.entryLevel).toMatchObject({ level: 2, price: 1440 });
+  });
+});

@@ -284,7 +284,7 @@ export const AGENT_TOOLS: MantleTool[] = [
           direction: { type: "string", enum: ["LONG", "SHORT"] },
           entry: { anyOf: [{ type: "string" }, { type: "object" }], description: "Entry condition (see CONDITIONS)" },
           exit: { anyOf: [{ type: "string" }, { type: "object" }, { type: "null" }], description: "Exit condition (see CONDITIONS); null = no rule-based exit (needs a stop-loss, take-profit or trailing stop)" },
-          max_entries: { type: "number", description: "Max entries per position (pyramiding); default 1" },
+          max_entries: { type: "number", description: "Max entries per position; default 1. Each extra entry happens only when the ENTRY RULE fires again — it is not a price move. To add when price rises or falls a set distance from the first entry, use entry_plan instead" },
           timeframe: { type: "string", enum: ["1m", "3m", "5m", "15m", "30m", "60m", "4h", "1d", "1wk"], description: "Candle timeframe the strategy runs on (1wk = weekly: checked once a week after Friday's close, orders at the next Monday open; swing strategies suit 1d or 1wk). Use an intraday one (1m–4h) whenever the rules involve times of day; default 1d." },
           no_entry_after: { type: ["string", "null"], description: "Intraday only: no new entries at/after this IST time, e.g. \"14:30\"" },
           product: { type: "string", enum: ["intraday", "delivery"], description: "Intraday (squared off the same day; needs a 1m–4h timeframe; required for short selling) or delivery (may be held overnight, long only). Default: intraday for intraday timeframes, delivery for 1d. MTF isn't available yet." },

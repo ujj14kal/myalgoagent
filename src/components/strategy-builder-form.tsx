@@ -868,7 +868,7 @@ export default function StrategyBuilderForm({
             <div className="max-w-xs">
               <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">
                 Max entries per position
-                <InfoTip label="About max entries">1 = a single entry. Higher lets the strategy add to an open position (pyramiding).</InfoTip>
+                <InfoTip label="About max entries">1 = a single entry. Higher lets the strategy add to an open position each time its entry rule fires again. To add when price has moved a set distance (for example 1% above the first entry), use Multi-level entry below instead.</InfoTip>
               </label>
               <input
                 type="number"
