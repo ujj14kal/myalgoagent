@@ -1,4 +1,3 @@
-import "server-only";
 import { prisma } from "@/lib/prisma";
 
 // The site's own event log, in the database, so the team can search it from the admin portal: errors the server and the
