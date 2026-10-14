@@ -81,10 +81,13 @@ export default function SignupForm() {
       </div>
 
       <div>
-        <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Phone number</label>
+        <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Mobile number</label>
         <input
           required
           type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          placeholder="98765 43210"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           className="w-full rounded-lg border border-brand-navy/15 px-3 py-2 text-sm outline-none focus:border-brand-primary"

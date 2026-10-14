@@ -50,7 +50,7 @@ export default function ProfileForm({
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Phone number</label>
+        <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brand-navy/40">Mobile number</label>
         <input
           value={phone}
           onChange={(e) => setPhone(e.target.value)}

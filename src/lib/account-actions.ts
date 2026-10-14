@@ -10,6 +10,7 @@ import { checkRateLimit, enforceRateLimit, RateLimitError } from "@/lib/rate-lim
 import { clientIp } from "@/lib/request-ip";
 import { LIMITS, oneLine, text, tooLong } from "@/lib/text";
 import { isPasswordValid } from "@/lib/password";
+import { normalizePhone, PHONE_ERROR } from "@/lib/phone";
 import { isUsernameAvailable, isValidUsername, suggestUsernames } from "@/lib/username";
 import { sendWelcomeEmail, sendPasswordResetEmail, sendMagicLinkEmail } from "@/lib/email";
 import { newVerifyUrl } from "@/lib/email-verify";
@@ -50,7 +51,8 @@ export async function signupAction(input: SignupInput): Promise<{ ok: true } | {
 
   if (!input.fullName.trim()) return { ok: false, error: "Full name is required." };
   if (!/^\S+@\S+\.\S+$/.test(email)) return { ok: false, error: "Enter a valid email address." };
-  if (!input.phone.trim()) return { ok: false, error: "Phone number is required." };
+  const phone = normalizePhone(input.phone);
+  if (!phone) return { ok: false, error: PHONE_ERROR };
   if (!isValidUsername(username)) {
     return { ok: false, error: "Username must be 3-20 characters: lowercase letters, numbers, underscores." };
   }
@@ -72,7 +74,7 @@ export async function signupAction(input: SignupInput): Promise<{ ok: true } | {
     data: {
       name: input.fullName.trim(),
       email,
-      phone: input.phone.trim(),
+      phone,
       username,
       passwordHash,
     },

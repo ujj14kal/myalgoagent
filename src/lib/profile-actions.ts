@@ -1,5 +1,6 @@
 "use server";
 
+import { normalizePhone, PHONE_ERROR } from "@/lib/phone";
 import bcrypt from "bcryptjs";
 import { LIMITS, oneLine, text, tooLong } from "@/lib/text";
 import { revalidatePath } from "next/cache";
@@ -20,10 +21,10 @@ export async function updateProfileAction(input: {
 
   const username = text(input?.username).toLowerCase();
   const fullName = oneLine(input?.fullName, LIMITS.fullName + 1);
-  const phone = text(input?.phone);
+  const phone = normalizePhone(input?.phone);
   if (!fullName) return { ok: false, error: "Full name is required." };
   if (tooLong(fullName, LIMITS.fullName)) return { ok: false, error: `Full name must be ${LIMITS.fullName} characters or fewer.` };
-  if (phone && !/^\+?[0-9 ()-]{6,20}$/.test(phone)) return { ok: false, error: "Enter a valid phone number." };
+  if (!phone) return { ok: false, error: PHONE_ERROR };
   if (!isValidUsername(username)) {
     return { ok: false, error: "Username must be 3-20 characters: lowercase letters, numbers, underscores." };
   }
@@ -35,7 +36,7 @@ export async function updateProfileAction(input: {
 
   await prisma.user.update({
     where: { id: session.user.id },
-    data: { name: fullName, username, phone: phone || null },
+    data: { name: fullName, username, phone },
   });
   revalidatePath("/app/account");
   return { ok: true };
@@ -81,5 +82,16 @@ export async function signOutOtherSessionsAction(): Promise<{ ok: true }> {
   await prisma.session.deleteMany({
     where: { userId: session.user.id, sessionToken: { not: currentToken } },
   });
+  return { ok: true };
+}
+
+/** The prompt after sign-in for accounts with no mobile number yet (Google and email-link sign-ups don't ask for one). */
+export async function savePhoneAction(input: { phone: string }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, error: "Not signed in." };
+  const phone = normalizePhone(input?.phone);
+  if (!phone) return { ok: false, error: PHONE_ERROR };
+  await prisma.user.update({ where: { id: session.user.id }, data: { phone } });
+  revalidatePath("/app", "layout");
   return { ok: true };
 }

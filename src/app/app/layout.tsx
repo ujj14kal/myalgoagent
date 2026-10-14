@@ -18,6 +18,7 @@ import CompanyLink from "@/components/company-link";
 import CreditsProvider from "@/components/credits/credits-provider";
 import { snapshot as creditSnapshot } from "@/lib/credits/service";
 import AppShellSkeleton from "@/components/app-shell-skeleton";
+import PhonePrompt from "@/components/phone-prompt";
 
 // Everything under /app is per-person and read live: never built ahead of time.
 export const dynamic = "force-dynamic";
@@ -47,7 +48,7 @@ async function AppShell({ children }: { children: React.ReactNode }) {
 
   const dbUser = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { username: true, agentName: true, tutorialCompletedAt: true, status: true, adminRole: true, email: true, lastSeenAt: true },
+    select: { username: true, phone: true, agentName: true, tutorialCompletedAt: true, status: true, adminRole: true, email: true, lastSeenAt: true },
   });
 
   // Sessions are deleted when an account is suspended; this covers any that slipped through.
@@ -86,6 +87,7 @@ async function AppShell({ children }: { children: React.ReactNode }) {
     <AgentChatProvider agentName={agentName}>
     <TutorialProvider initialAgentName={dbUser.agentName} tutorialCompleted={!!dbUser.tutorialCompletedAt}>
       <AgentToastProvider agentName={agentName}>
+        {!dbUser.phone && <PhonePrompt />}
         <div className="app-canvas flex min-h-screen overflow-x-clip">
           <AppSidebar agentName={agentName} liveSessions={liveSessions} />
           <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
