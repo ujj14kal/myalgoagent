@@ -345,7 +345,7 @@ function ReplayPlayer({ preview, s }: { preview: StrategyPreview; s: Scenario })
       <div className="space-y-1.5 border-t border-black/5 px-3 py-2.5 text-[11.5px] text-brand-navy/60">
         <Legend preview={preview} s={s} />
         <p>
-          {s.plan ? (
+          {s.plan && !s.plan.real ? (
             <>
               <strong className="text-brand-navy">Demo:</strong> the chart up to the first entry is real — your entry condition matched on {when(s.candles[s.signalIdx].time, preview.intraday)}. After that the price path is made up, so you can watch each of your entry levels fill and each target be taken in turn.
               <span className="mt-1.5 block space-y-0.5 text-brand-navy/70">

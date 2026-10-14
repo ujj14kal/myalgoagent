@@ -22,7 +22,7 @@ export type ScenarioKind = "target" | "stop_loss" | "trailing_stop" | "exit_rule
 /** What the "Entries & targets" demo draws on top of the candles: level lines, and the fills as they happen. */
 export type PlanLine = { price: number; label: string; tone: "entry" | "avg" | "tp" | "sl"; fromIdx: number; /** Where the line stops (null = to the latest candle). */ toIdx: number | null };
 export type PlanFill = { idx: number; price: number; label: string; kind: "entry" | "exit" };
-export type PlanOverlay = { lines: PlanLine[]; fills: PlanFill[]; /** The story in plain words, one line each. */ summary: string[] };
+export type PlanOverlay = { /** True when the fills are the real ones from the trade, not a made-up path. */ real?: boolean; lines: PlanLine[]; fills: PlanFill[]; /** The story in plain words, one line each. */ summary: string[] };
 
 export type Scenario = {
   id: string;
@@ -72,6 +72,20 @@ function realScenario(p: StrategyPreview, t: PreviewTrade): Scenario {
   const start = Math.max(0, r.signalIdx - PRE_BARS);
   const end = Math.min(p.candles.length - 1, r.exitIdx + POST_BARS);
   const kind = (t.exitReason ?? "exit_rule") as ScenarioKind;
+  // A position built in stages: show every real fill, not only the blended average.
+  const fillIdx = (time: number) => p.candles.findIndex((c) => c.time === time) - start;
+  const first = t.firstFill ?? t.entryPrice;
+  const plan: PlanOverlay | undefined = t.entries?.length
+    ? {
+        real: true,
+        lines: [],
+        fills: [
+          { idx: r.entryIdx - start, price: first, label: "Entry 1", kind: "entry" },
+          ...t.entries.filter((e) => fillIdx(e.time) >= 0).map((e) => ({ idx: fillIdx(e.time), price: e.price, label: `Entry ${e.level}`, kind: "entry" as const })),
+        ],
+        summary: [],
+      }
+    : undefined;
   return {
     id: `real-${kind}-${t.entryTime}`,
     kind,
@@ -83,7 +97,7 @@ function realScenario(p: StrategyPreview, t: PreviewTrade): Scenario {
     signalIdx: r.signalIdx - start,
     entryIdx: r.entryIdx - start,
     exitIdx: r.exitIdx - start,
-    entryPrice: t.entryPrice,
+    entryPrice: plan ? first : t.entryPrice,
     exitPrice: t.exitPrice,
     stopLoss: r.stopLoss,
     target: r.target,
@@ -92,6 +106,7 @@ function realScenario(p: StrategyPreview, t: PreviewTrade): Scenario {
     pnlPct: t.netPnlPct,
     entryReason: t.entryReason,
     exitRuleReason: t.exitRuleReason,
+    ...(plan ? { plan } : {}),
   };
 }
 

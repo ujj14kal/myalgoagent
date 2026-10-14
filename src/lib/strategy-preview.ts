@@ -28,6 +28,9 @@ export type PreviewTrade = Pick<BacktestTradeResult, "entryTime" | "entryPrice" 
   entryReason: string;
   /** Same for a rule-based exit. */
   exitRuleReason?: string;
+  /** A position built in stages: the price of its first fill (`entryPrice` is the blended average) and each further entry. */
+  firstFill?: number;
+  entries?: { level: number; time: number; price: number; quantity: number }[];
   /** What the animated replay needs: signal/entry/exit candles and the risk levels on each. */
   replay: TradeReplay;
 };
@@ -157,7 +160,10 @@ export async function computeStrategyPreview(userId: string | null, input: Strat
       preview: {
         symbol: instrument.symbol,
         candles,
-        trades: result.trades.map(({ entryTime, entryPrice, exitTime, exitPrice, quantity, netPnl, netPnlPct, exitReason }) => {
+        trades: result.trades.map(({ entryTime, entryPrice, exitTime, exitPrice, quantity, netPnl, netPnlPct, exitReason, legs }) => {
+          const added = legs?.entries ?? [];
+          const addedQty = added.reduce((n, e) => n + e.quantity, 0);
+          const firstFill = added.length && quantity > addedQty ? (entryPrice * quantity - added.reduce((n, e) => n + e.price * e.quantity, 0)) / (quantity - addedQty) : undefined;
           // Fills happen at the next candle's open, so the rule was true on the candle before.
           const signalBar = (t: number) => (indexOf.get(t) ?? 0) - 1;
           const entryIdx = indexOf.get(entryTime) ?? 0;
@@ -171,6 +177,7 @@ export async function computeStrategyPreview(userId: string | null, input: Strat
             netPnl,
             netPnlPct,
             exitReason,
+            ...(added.length ? { entries: added, ...(firstFill !== undefined ? { firstFill } : {}) } : {}),
             entryReason: entryWhy(signalBar(entryTime)),
             ...(exitReason === "exit_rule" && exitWhy ? { exitRuleReason: exitWhy(signalBar(exitTime)) } : {}),
             replay: {
