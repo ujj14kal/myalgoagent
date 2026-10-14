@@ -159,7 +159,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
   if (!enabled) problem = "Online payment isn't switched on yet. Write to support and we'll set your plan up.";
   else if (item?.kind === "plan" && snap.plan === item.plan && !snap.trial) problem = `You're already on the ${PLANS[item.plan].label} plan.`;
   else if (item?.kind === "plan" && item.plan === "TRADE" && snap.plan === "PRO") problem = "You're on the Pro plan, which includes everything in Trade.";
-  else if (item?.kind === "topup" && snap.plan === "FREE" && !snap.trial) problem = "Top-ups are for Trade and Pro plans. Choose a plan first.";
+  else if (item?.kind === "topup" && snap.plan === "FREE") problem = "Top-ups are an add-on for the Trade and Pro plans, so they aren't available on Free or during the free trial. Choose a plan first.";
   else if (sp.item && !item) problem = "We couldn't find that item.";
 
   return (
@@ -173,12 +173,12 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
       {problem ? (
         <div className="space-y-4">
           <p role="status" className="rounded-xl bg-brand-gold/10 px-4 py-3 text-sm text-brand-navy">{problem} <Link href="/app/support" className="font-semibold text-brand-primary hover:underline">Contact support</Link></p>
-          <Chooser plan={snap.plan} canTopUp={snap.plan !== "FREE" || !!snap.trial} enabled={enabled} />
+          <Chooser plan={snap.plan} canTopUp={snap.plan !== "FREE"} enabled={enabled} />
         </div>
       ) : item ? (
         <BillCard bill={billFor(item)} name={user?.name ?? ""} email={user?.email ?? ""} testMode={testMode} />
       ) : (
-        <Chooser plan={snap.plan} canTopUp={snap.plan !== "FREE" || !!snap.trial} enabled={enabled} />
+        <Chooser plan={snap.plan} canTopUp={snap.plan !== "FREE"} enabled={enabled} />
       )}
     </div>
   );

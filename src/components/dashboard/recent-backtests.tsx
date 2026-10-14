@@ -1,17 +1,12 @@
 import Link from "next/link";
+import { FlaskConical } from "lucide-react";
+import EmptyCard from "@/components/dashboard/empty-card";
 import type { RecentBacktestRow } from "@/lib/portfolio";
 import { formatPct, toneOf, TONE_TEXT } from "@/lib/format";
 
 export default function RecentBacktests({ runs }: { runs: RecentBacktestRow[] }) {
   if (runs.length === 0) {
-    return (
-      <p className="py-8 text-center text-sm text-brand-navy/45">
-        No backtests yet.{" "}
-        <Link href="/app/backtests" className="font-semibold text-brand-primary hover:underline">
-          Run one →
-        </Link>
-      </p>
-    );
+    return <EmptyCard icon={FlaskConical} title="No backtests yet" hint="Test a strategy on real past prices before you forward test it." href="/app/backtests" cta="Run a backtest" />;
   }
   return (
     <ul className="-mx-2">

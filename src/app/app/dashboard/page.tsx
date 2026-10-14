@@ -19,6 +19,7 @@ import RiskGauge from "@/components/dashboard/risk-gauge";
 import LivePnlCard from "@/components/dashboard/live-pnl";
 import WatchlistSnippet from "@/components/dashboard/watchlist-snippet";
 import DashboardEmptyState from "@/components/dashboard/dashboard-empty-state";
+import EmptyCard from "@/components/dashboard/empty-card";
 import RecentBacktests from "@/components/dashboard/recent-backtests";
 import QuickActions from "@/components/dashboard/quick-actions";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -221,12 +222,7 @@ export default async function DashboardPage() {
           <Card className="p-5">
             <CardHeader title="Your broker account" icon={Landmark} action={<Link href="/app/portfolio" className="text-xs font-semibold text-brand-primary hover:underline">Portfolio →</Link>} />
             {brokerRows.length === 0 ? (
-              <p className="mt-3 text-sm text-brand-navy/55">
-                No broker connected.{" "}
-                <Link href="/app/broker-connections" className="font-semibold text-brand-primary">
-                  Connect one →
-                </Link>
-              </p>
+              <EmptyCard icon={Landmark} title="No broker connected" hint="Connect your broker to see your account, funds and holdings here." href="/app/broker-connections" cta="Connect a broker" />
             ) : (
               <ul className="mt-3 space-y-1.5 text-sm">
                 {brokerRows.map((b) => {

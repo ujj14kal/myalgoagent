@@ -55,13 +55,13 @@ export const PLANS: Record<CreditPlan, PlanSpec> = {
 /**
  * What every new account gets first: a 7-day taste of the paid features with no card. It is not a plan in the database (the
  * account is Free with a trial end date), so it can never be "bought". Going live is not part of it: a live strategy needs the
- * account's own static IP, which costs real money per user. Worst case it costs us about ₹100 per account (300 credits at ₹0.33).
+ * account's own static IP, which costs real money per user. Worst case it costs us about ₹17 per account (50 credits at ₹0.33).
  */
 export const TRIAL_DAYS = 7;
 export const TRIAL_SPEC: PlanSpec = {
   label: "Free trial",
   price: null,
-  monthlyCredits: 300,
+  monthlyCredits: 50,
   aiLifetimeReplies: null,
   voice: true,
   bigBacktests: true,

@@ -94,7 +94,7 @@ Every pack stays above Pro's plan rate (₹0.44), so upgrading is always the bet
 | Voice, intraday and long backtests | no | no |
 | Forward tests | 2 | **0** (a running strategy is a paid feature) |
 | Live trading | no | no (needs the paid plan and its own IP) |
-| 7-day trial | 300 credits, 5 forward tests, no live | keep as is; revisit after conversion data |
+| 7-day trial | 300 credits, 5 forward tests, no live | **50 credits** (owner decision, 2026-10-15), same forward tests |
 
 A Free account costs about ₹1 a month. The trial costs at most ₹100 (300 credits at the worst case) and realistically ₹30–40.
 

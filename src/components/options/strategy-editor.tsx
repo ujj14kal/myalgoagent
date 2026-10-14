@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { STRATEGY_TEMPLATES } from "@/lib/options/positions";
 import { saveOptionStrategy, type OptionStrategyInput } from "@/lib/option-strategy-actions";
+import { EMPTY_STRATEGY } from "@/lib/options/empty-strategy";
 import type { ExpiryRule, RiskUnit, StrategyLeg } from "@/lib/options/backtest-engine";
 
 const inputCls = "w-full rounded-lg border border-brand-navy/15 px-2.5 py-1.5 text-sm outline-none focus:border-brand-primary";
@@ -14,23 +15,6 @@ const toTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${
 const fromTime = (s: string) => {
   const [h, m] = s.split(":").map(Number);
   return h * 60 + m;
-};
-
-export const EMPTY_STRATEGY: OptionStrategyInput = {
-  name: "NIFTY short straddle",
-  underlying: "NIFTY",
-  legs: [
-    { type: "CE", side: "SELL", offset: 0, lots: 1 },
-    { type: "PE", side: "SELL", offset: 0, lots: 1 },
-  ],
-  expiryRule: "WEEKLY_CURRENT",
-  entryMinute: 9 * 60 + 20,
-  exitMinute: 15 * 60 + 15,
-  weekdays: [1, 2, 3, 4, 5],
-  stopLossUnit: "RUPEES",
-  stopLossValue: 3000,
-  targetUnit: null,
-  targetValue: null,
 };
 
 /** Create or edit a multi-leg options strategy (strikes relative to ATM). */

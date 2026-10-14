@@ -119,8 +119,8 @@ describe("the 7-day trial", () => {
     expect(r?.code).toBe("NO_CREDITS");
     expect(r?.message).toMatch(/Trade and Pro/);
   });
-  it("costs us at most about ₹100 per account (300 credits at the worst-case ₹0.33)", () => {
-    expect(TRIAL_SPEC.monthlyCredits * 0.33).toBeLessThanOrEqual(100);
+  it("costs us at most about ₹20 per account (50 credits at the worst-case ₹0.33)", () => {
+    expect(TRIAL_SPEC.monthlyCredits * 0.33).toBeLessThanOrEqual(20);
     expect(TRIAL_DAYS).toBe(7);
   });
 });

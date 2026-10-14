@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Info, ShieldCheck, ShieldAlert } from "lucide-react";
-import StrategyEditor, { EMPTY_STRATEGY } from "@/components/options/strategy-editor";
+import StrategyEditor from "@/components/options/strategy-editor";
+import { EMPTY_STRATEGY } from "@/lib/options/empty-strategy";
 import { readStrategy } from "@/lib/options/describe-strategy";
 import type { OptionStrategyInput } from "@/lib/option-strategy-actions";
 

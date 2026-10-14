@@ -2,7 +2,7 @@ import { Sigma } from "lucide-react";
 import PageHeader from "@/components/ui/page-header";
 import OptionsTabs from "@/components/options/options-tabs";
 import OptionStrategyPage from "@/components/options/strategy-page";
-import { EMPTY_STRATEGY } from "@/components/options/strategy-editor";
+import { EMPTY_STRATEGY } from "@/lib/options/empty-strategy";
 import { strategyFromQuery } from "@/lib/options/strategy-from-legs";
 
 export const metadata = { title: "New options strategy", robots: { index: false } };

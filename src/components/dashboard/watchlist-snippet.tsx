@@ -1,15 +1,10 @@
 import Link from "next/link";
+import { Star } from "lucide-react";
+import EmptyCard from "@/components/dashboard/empty-card";
 
 export default function WatchlistSnippet({ items }: { items: { symbol: string; name: string }[] }) {
   if (items.length === 0) {
-    return (
-      <p className="py-8 text-center text-sm text-brand-navy/45">
-        Nothing on your watchlist yet.{" "}
-        <Link href="/app/watchlist" className="font-semibold text-brand-primary hover:underline">
-          Add instruments →
-        </Link>
-      </p>
-    );
+    return <EmptyCard icon={Star} title="Nothing on your watchlist" hint="Follow stocks and coins to see them here." href="/app/watchlist" cta="Add instruments" />;
   }
   return (
     <ul className="-mx-2">
