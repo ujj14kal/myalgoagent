@@ -97,6 +97,14 @@ const sections: LegalSection[] = [
     ],
   },
   {
+    id: "crypto-risk",
+    title: "Crypto",
+    paragraphs: [
+      "Crypto assets are not regulated like stocks. Prices can move sharply at any hour, including weekends, and a coin can lose most of its value or stop trading. Exchanges can pause trading or withdrawals. In India, gains from virtual digital assets are taxed at a flat 30%, losses can't be set off against other income, and 1% TDS applies on sales. MyAlgoAgent does not work out your crypto tax.",
+      "Crypto charts, backtests and forward tests are hypothetical. Prices come from the CoinDCX exchange. Backtests and forward tests use that exchange's candle prices with the brokerage and slippage you set (the exchange's own trading fee is higher than the stock default, so set it to match), and real fills on a thin coin can differ a lot. Forward tests are checked about every 5 minutes, day and night; no orders are placed and no money is involved. Live crypto orders aren't available.",
+    ],
+  },
+  {
     id: "demos",
     title: "Demos and illustrations",
     paragraphs: [

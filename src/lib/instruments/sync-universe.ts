@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { CRYPTO_SOURCE, parseCryptoMarkets } from "./crypto-universe";
 import { INDEX_INSTRUMENTS, parseBseUniverseCsv, parseUniverseCsv } from "./universe";
 
 const SOURCE = "https://api.dhan.co/v2/instrument/NSE_EQ";
@@ -16,7 +17,12 @@ export async function syncInstrumentUniverse(): Promise<{ listed: number; added:
     .then(async (r) => (r.ok ? parseBseUniverseCsv(await r.text()) : []))
     .then((rows) => (rows.length >= 500 ? rows : []))
     .catch(() => []);
-  const rows = [...nse, ...bse, ...INDEX_INSTRUMENTS];
+  // Crypto is additional too: if CoinDCX can't be read today, the stock lists still sync.
+  const crypto = await fetch(CRYPTO_SOURCE, { signal: AbortSignal.timeout(30_000), cache: "no-store" })
+    .then(async (r) => (r.ok ? parseCryptoMarkets(await r.json()) : []))
+    .then((rows) => (rows.length >= 20 ? rows : []))
+    .catch(() => []);
+  const rows = [...nse, ...bse, ...INDEX_INSTRUMENTS, ...crypto];
   const { count } = await prisma.instrument.createMany({ data: rows, skipDuplicates: true });
   return { listed: rows.length, added: count };
 }

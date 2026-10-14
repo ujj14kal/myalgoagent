@@ -13,10 +13,11 @@ export type PaperSyncSummary = { total: number; synced: number; failed: number; 
  * when a stop-loss, target or trailing stop is hit. Least recently updated
  * first, so a pass cut short by the time budget resumes where it stopped.
  */
-export async function runScheduledPaperSync(): Promise<PaperSyncSummary> {
+export async function runScheduledPaperSync(scope: "stocks" | "crypto" = "stocks"): Promise<PaperSyncSummary> {
   const started = Date.now();
+  // Crypto forward tests (…-INR pairs) run around the clock on their own schedule; stock ones only in market hours.
   const sessions = await prisma.paperSession.findMany({
-    where: { status: "ACTIVE" },
+    where: { status: "ACTIVE", ...(scope === "crypto" ? { instrumentSymbol: { endsWith: "-INR" } } : { NOT: { instrumentSymbol: { endsWith: "-INR" } } }) },
     select: { id: true, userId: true },
     orderBy: { updatedAt: "asc" },
   });

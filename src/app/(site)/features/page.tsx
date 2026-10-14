@@ -119,7 +119,7 @@ const groups: Group[] = [
     title: "Market Data & Charts",
     icon: Activity,
     items: [
-      "Every NSE-listed stock and the main BSE stocks, plus NIFTY 50, NIFTY Bank, NIFTY IT and SENSEX, with interactive candlestick charts from 1 minute to 1 month",
+      "Every NSE-listed stock and the main BSE stocks, plus NIFTY 50, NIFTY Bank, NIFTY IT and SENSEX and about 300 crypto coins priced in rupees, with interactive candlestick charts from 1 minute to 1 month",
       "Zoom, pan and a crosshair readout, indicator overlays, your own custom indicators and drawing tools — trend lines, levels, zones and channels you can save with your layout",
       "Backtests, forward tests and charts use prices from your own broker account when it supplies data, and say plainly which source they used",
       "A markets overview with advances and declines, top gainers and losers, volume leaders and a NIFTY 50 heatmap, plus live quotes, 52-week range and corporate actions, on accounts with live market data",

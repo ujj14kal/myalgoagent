@@ -1,4 +1,5 @@
 import { describeRiskOptions, parseRiskOptions } from "@/lib/trading-engine/risk-options";
+import { isCryptoSymbol } from "@/lib/market-data/crypto";
 import Link from "next/link";
 import { describeEntryPlan } from "@/lib/describe-entry-plan";
 import { describeTargets } from "@/lib/describe-targets";
@@ -174,7 +175,7 @@ export default async function StrategyDetailPage({ params, searchParams }: { par
                 enabled={!!liveUser?.liveTradingEnabledAt}
                 liveOn={liveDeployments.map((d) => d.broker)}
                 intraday={strategy.productType === "INTRADAY"}
-                blocker={strategy.instrument.symbol.endsWith(".BO") ? "BSE stocks can be charted, backtested and forward tested here. Live orders go to NSE stocks for now — use this stock's NSE listing to go live." : !strategy.instrument.symbol.endsWith(".NS") ? "Indices can't be traded directly — live strategies trade NSE stocks." : strategy.status === "DELETED" ? "This strategy has been deleted." : null}
+                blocker={isCryptoSymbol(strategy.instrument.symbol) ? "Crypto strategies can be built, backtested and forward tested here. Live crypto orders aren't available yet." : strategy.instrument.symbol.endsWith(".BO") ? "BSE stocks can be charted, backtested and forward tested here. Live orders go to NSE stocks for now — use this stock's NSE listing to go live." : !strategy.instrument.symbol.endsWith(".NS") ? "Indices can't be traded directly — live strategies trade NSE stocks." : strategy.status === "DELETED" ? "This strategy has been deleted." : null}
               />
             )}
             <StrategyStatusControls strategyId={strategy.id} status={strategy.status} />

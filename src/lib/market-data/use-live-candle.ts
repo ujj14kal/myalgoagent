@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Candle, CandleInterval, Tick } from "./types";
 import { applyTicks, bucketStart } from "./live-candle";
-import { inMarketWindow } from "@/lib/paper/market-window";
+import { inMarketWindowFor } from "@/lib/paper/market-window";
 
 /**
  * The candle forming right now, from live trades polled every 2 s in market
@@ -42,7 +42,7 @@ export function useLiveCandle(opts: {
     let lastTick = 0;
     let first = true;
     const poll = async () => {
-      if (stopped || document.hidden || !inMarketWindow(new Date())) return;
+      if (stopped || document.hidden || !inMarketWindowFor(symbol, new Date())) return;
       try {
         const res = await fetch(`/api/instruments/${encodeURIComponent(symbol)}/live?after=${lastTick}`, { cache: "no-store" });
         if (!res.ok) return;
@@ -78,7 +78,7 @@ export function useLiveCandle(opts: {
     };
     void poll();
     const timer = setInterval(poll, 2000);
-    const resync = setInterval(() => !document.hidden && inMarketWindow(new Date()) && callbacks.current.onResync?.(), 5 * 60_000);
+    const resync = setInterval(() => !document.hidden && inMarketWindowFor(symbol, new Date()) && callbacks.current.onResync?.(), 5 * 60_000);
     return () => {
       stopped = true;
       clearInterval(timer);

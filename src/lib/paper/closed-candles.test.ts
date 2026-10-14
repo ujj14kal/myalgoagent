@@ -21,3 +21,17 @@ describe("closedCandles", () => {
     expect(closedCandles(daily, "1d", ist("15:31"))).toHaveLength(2);
   });
 });
+
+describe("crypto candles", () => {
+  const t0 = 1_800_000_000;
+  it("a 1h candle closes one hour after it opened, at any hour of the day", () => {
+    const candles = [{ time: t0 }, { time: t0 + 3600 }];
+    expect(closedCandles(candles, "60m", t0 + 3600 + 1800, true)).toHaveLength(1);
+    expect(closedCandles(candles, "60m", t0 + 7200, true)).toHaveLength(2);
+  });
+  it("a daily candle closes after 24 hours, not at the stock market's close", () => {
+    const candles = [{ time: t0 }];
+    expect(closedCandles(candles, "1d", t0 + 3600, true)).toHaveLength(0);
+    expect(closedCandles(candles, "1d", t0 + 86_400, true)).toHaveLength(1);
+  });
+});

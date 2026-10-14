@@ -6,3 +6,8 @@ export function inMarketWindow(now: Date): boolean {
   const minute = ist.getUTCHours() * 60 + ist.getUTCMinutes();
   return minute >= 9 * 60 + 15 && minute <= 15 * 60 + 45;
 }
+
+/** Like inMarketWindow, but crypto trades every hour of every day. */
+export function inMarketWindowFor(symbol: string, now: Date): boolean {
+  return /-INR$/i.test(symbol) || inMarketWindow(now);
+}

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { enforceRateLimit } from "@/lib/rate-limit";
-import { createStrategyRow, riskFields, type StrategyInput } from "@/lib/strategy-write";
+import { createStrategyRow, fitInput, riskFields, type StrategyInput } from "@/lib/strategy-write";
 import { compile } from "@/lib/strategy-compile";
 import { isUniqueConstraintViolation } from "@/lib/prisma-errors";
 import { Prisma } from "@prisma/client";
@@ -80,6 +80,7 @@ export async function updateStrategy(id: string, input: StrategyInput): Promise<
     await enforceRateLimit(`strategy-write:${session.user.id}`, 30, 60_000);
     const existing = await prisma.strategy.findFirst({ where: { id, userId: session.user.id }, select: { workspaceVersionId: true } });
     if (existing?.workspaceVersionId) return { error: "This strategy was built from a workspace, so its rules come from there. Change the workspace and publish a new version instead." };
+    input = await fitInput(input);
     const compiled = await compile(input);
     const name = input.name.trim();
 

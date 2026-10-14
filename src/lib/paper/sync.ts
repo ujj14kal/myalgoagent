@@ -1,4 +1,5 @@
 import type { CandleInterval, MarketDataProvider } from "@/lib/market-data";
+import { isCryptoSymbol } from "@/lib/market-data/crypto";
 import { fibSwingLookup } from "@/lib/trading-engine/fib-swing";
 import { engineEntryOrder, engineSession, paperSyncRange } from "@/lib/strategy/session";
 import { evaluateConditionsPerBar } from "@/lib/strategy";
@@ -178,9 +179,14 @@ const MARKET_CLOSE_MINUTE = 15 * 60 + 30;
 
 /** Drops a trailing candle that hasn't closed yet at `nowSec`. Intraday candles close after their interval
  * (the last one of the day at 15:30 IST); a daily candle closes at 15:30 IST on its day. */
-export function closedCandles<T extends { time: number }>(candles: T[], timeframe: CandleInterval, nowSec = Math.floor(Date.now() / 1000)): T[] {
+export function closedCandles<T extends { time: number }>(candles: T[], timeframe: CandleInterval, nowSec = Math.floor(Date.now() / 1000), crypto = false): T[] {
   const last = candles[candles.length - 1];
   if (!last) return candles;
+  // Crypto has no session: every candle, daily and weekly included, closes one full interval after it opened.
+  if (crypto) {
+    const span = timeframe === "1d" ? 86_400 : timeframe === "1mo" ? 31 * 86_400 : INTERVAL_SECONDS[timeframe];
+    return span && last.time + span <= nowSec ? candles : span ? candles.slice(0, -1) : candles;
+  }
   const istMidnight = Math.floor((last.time + IST_OFFSET) / 86_400) * 86_400 - IST_OFFSET;
   const sessionEnd = istMidnight + MARKET_CLOSE_MINUTE * 60;
   if (timeframe === "1wk") {
@@ -201,7 +207,8 @@ export function closedCandles<T extends { time: number }>(candles: T[], timefram
  * read. Snap it back onto the candle grid, counted from the previous candle, so a position entered on
  * it can be found again on the next pass.
  */
-export function snapFormingCandle<T extends { time: number }>(candles: T[], timeframe: CandleInterval): T[] {
+export function snapFormingCandle<T extends { time: number }>(candles: T[], timeframe: CandleInterval, crypto = false): T[] {
+  if (crypto) return candles; // the exchange stamps every candle on its exact start
   if (timeframe === "1wk") {
     // Yahoo stamps the still-forming week with its latest trade time (Monday 15:15) instead of the week's start (Monday
     // 00:00), so it would read differently on every pass. When the newest week's time of day differs from the one
@@ -241,14 +248,15 @@ export async function syncPaperSession(
 ): Promise<SyncResult> {
   const timeframe = (session.timeframe ?? "1d") as CandleInterval;
   const range = paperSyncRange(timeframe);
-  const fetched = snapFormingCandle(await market.getHistoricalCandles(session.instrumentSymbol, range, timeframe), timeframe);
+  const crypto = isCryptoSymbol(session.instrumentSymbol);
+  const fetched = snapFormingCandle(await market.getHistoricalCandles(session.instrumentSymbol, range, timeframe), timeframe, crypto);
   // A candle is only ever acted on once it has closed. A rule that fires on a
   // candle fills at the NEXT candle's open, so a candle is processed only once
   // its successor exists: forward tests wait for that next candle to close;
   // live deployments (includeForming) use the one forming right now, so the
   // order goes out at its open instead of a candle late.
-  const candles = opts.includeForming ? fetched : closedCandles(fetched, timeframe);
-  const actionable = opts.includeForming ? closedCandles(fetched, timeframe).length : candles.length - 1;
+  const candles = opts.includeForming ? fetched : closedCandles(fetched, timeframe, undefined, crypto);
+  const actionable = opts.includeForming ? closedCandles(fetched, timeframe, undefined, crypto).length : candles.length - 1;
   const system = session.system ?? null;
   const aux = await fetchAuxCandles(system ? systemConditions(system) : session.entryCondition, withLevelConditions(session.exitCondition, session.entryPlan), session.instrumentSymbol, range, timeframe, market);
 

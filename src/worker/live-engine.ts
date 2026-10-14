@@ -29,6 +29,7 @@ async function main() {
   const { logForActiveUsers, pruneEngineLog } = await import("@/lib/live/engine-log");
   const { egressEnabled, currentEgressIp } = await import("@/lib/brokers/egress");
   const { runBrokerKeepAlive } = await import("@/lib/brokers/keepalive");
+  const { runScheduledPaperSync } = await import("@/lib/paper/scheduled-sync");
 
   if (process.env.ENGINE_DRY_RUN === "1") {
     const { prisma } = await import("@/lib/prisma");
@@ -49,6 +50,7 @@ async function main() {
   let wasOpen: boolean | null = null;
   let prunedDay = "";
   let lastKeepAlive = 0;
+  let lastCrypto = 0;
   while (!stop) {
     const started = Date.now();
     try {
@@ -60,6 +62,12 @@ async function main() {
         lastKeepAlive = Date.now();
         const k = await runBrokerKeepAlive().catch((err) => (logError("broker.keepalive", err), null));
         if (k && (k.renewed || k.renewFailed || k.dropped || k.reminded)) log("broker keep-alive", k);
+      }
+      // Crypto never closes: its forward tests are checked every 5 minutes, day and night, weekends included.
+      if (Date.now() - lastCrypto >= 5 * 60_000) {
+        lastCrypto = Date.now();
+        const c = await runScheduledPaperSync("crypto").catch((err) => (logError("crypto.forward-sync", err), null));
+        if (c && (c.synced || c.failed)) log("crypto forward tests", c);
       }
       const day = new Date().toISOString().slice(0, 10);
       if (day !== prunedDay) {

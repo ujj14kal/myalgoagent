@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { toRiskLeg, type EntryPlan, type PositionSizingMode, type RiskLegInput, type TargetLevel } from "@/lib/trading-engine/step";
+import { fitToInstrument } from "@/lib/strategy/crypto-rules";
 import { entryPlanToStore } from "@/lib/trading-engine/entry-plan-config";
 import { parseStyle, styleProblem, type StrategyStyle } from "@/lib/strategy/style";
 import { targetsToStore } from "@/lib/trading-engine/targets-config";
@@ -50,6 +51,12 @@ export interface StrategyInput {
   limitValue?: number | null;
   /** TP/SL reference (price or margin), intraday leverage, break-even and the system's daily-loss / drawdown limits. */
   riskOptions?: RiskOptions;
+}
+
+/** The strategy as it will be saved for its instrument: crypto drops the stock-only settings (intraday product, session times) and refuses a short. */
+export async function fitInput(input: StrategyInput): Promise<StrategyInput> {
+  const instrument = await prisma.instrument.findUnique({ where: { id: input.instrumentId }, select: { symbol: true } });
+  return instrument ? fitToInstrument(input, instrument.symbol) : input;
 }
 
 export function riskFields(input: StrategyInput) {
@@ -109,6 +116,7 @@ export async function createStrategyRow(
 ): Promise<{ id: string } | { error: string }> {
   try {
     await enforceRateLimit(`strategy-write:${userId}`, 30, 60_000);
+    input = await fitInput(input);
     const compiled = await compile(input);
     const name = input.name.trim();
 

@@ -39,7 +39,7 @@ export default async function InstrumentsPage({ searchParams }: { searchParams: 
   const sp = await searchParams;
   const q = qText(sp.q, 40);
   const sector = qText(sp.sector, 60) ?? null;
-  const exch = qEnum(sp.exch, ["all", "NSE", "BSE"] as const, "all");
+  const exch = qEnum(sp.exch, ["all", "NSE", "BSE", "CRYPTO"] as const, "all");
   const like = q ? { contains: q, mode: "insensitive" as const } : undefined;
   const extras = marketExtrasFor(session?.user?.id);
   const market = marketDataFor(session?.user?.id, "view");
@@ -96,7 +96,7 @@ export default async function InstrumentsPage({ searchParams }: { searchParams: 
       <PageHeader
         title="Market Data"
         icon={CandlestickChart}
-        description={<>{total.toLocaleString("en-IN")} instruments — every NSE-listed stock, the main BSE stocks (groups A and B) and the main indices. Search by symbol or company name.</>}
+        description={<>{total.toLocaleString("en-IN")} instruments — every NSE-listed stock, the main BSE stocks (groups A and B), the main indices and the crypto coins traded against the rupee. Search by symbol or company name.</>}
       />
       {overview && (
         <div className="mt-6">

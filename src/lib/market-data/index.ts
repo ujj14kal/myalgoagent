@@ -1,6 +1,8 @@
 import { FeedDownError, TrueDataProvider } from "./providers/truedata";
 import { MarketExtras } from "./extras";
 import { YahooFinanceProvider } from "./providers/yahoo";
+import { CoinDcxProvider } from "./providers/coindcx";
+import { isCryptoSymbol } from "./crypto";
 import { parseAllowlist, selectProvider, type MarketDataUse } from "./select";
 import { fixedBucket, fourHourBucket, resampleCandles } from "./resample";
 import { clampRangeForInterval } from "./timeframes";
@@ -73,15 +75,38 @@ export function licensedFeedStatus() {
   return trueData ? { configured: true as const, ...trueData.status() } : { configured: false as const };
 }
 
+const coindcx = new CoinDcxProvider(); // builds its own derived timeframes, on a 24-hour grid
+
+/** Crypto pairs (BTC-INR…) always come from CoinDCX, whoever the account is and whatever feed it has; everything else goes to `p`. */
+function withCrypto(p: MarketDataProvider): MarketDataProvider {
+  return {
+    get name() {
+      return p.name;
+    },
+    get isOfficial() {
+      return p.isOfficial;
+    },
+    get depth() {
+      return p.depth;
+    },
+    get getRecentTicks() {
+      return p.getRecentTicks;
+    },
+    getHistoricalCandles(symbol, range, interval) {
+      return isCryptoSymbol(symbol) ? coindcx.getHistoricalCandles(symbol, clampRangeForInterval(range, interval, coindcx.depth), interval) : p.getHistoricalCandles(symbol, range, interval);
+    },
+  };
+}
+
 export function marketDataFor(userId: string | null | undefined, use: MarketDataUse): MarketDataProvider {
-  return selectProvider({
+  return withCrypto(selectProvider({
     userId,
     use,
     licensed,
     allowlist: parseAllowlist(process.env.MARKET_DATA_LICENSED_USER_IDS),
     licensedForTrading: process.env.MARKET_DATA_LICENSED_FOR_TRADING === "true",
     fallback: yahoo,
-  });
+  }));
 }
 
 const extras = trueData ? new MarketExtras(trueData) : null;

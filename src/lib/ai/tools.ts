@@ -498,7 +498,7 @@ async function findInstrument(symbol: string) {
   const s = symbol.trim().toUpperCase();
   if (!s) return null;
   return prisma.instrument.findFirst({
-    where: { OR: [{ symbol: s }, { symbol: `${s}.NS` }, { symbol: s.replace(/\.NS$/, "") + ".NS" }] },
+    where: { OR: [{ symbol: s }, { symbol: `${s}.NS` }, { symbol: s.replace(/\.NS$/, "") + ".NS" }, { symbol: `${s}-INR` }] },
     select: { id: true, symbol: true, name: true },
   });
 }
