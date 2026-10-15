@@ -100,3 +100,18 @@ describe("parts in rules", () => {
     expect(() => validateConditionNode(bad)).toThrow(/can be read as value/);
   });
 });
+
+describe("histogram style and extra output lines", () => {
+  const cs = Array.from({ length: 80 }, (_, i) => ({ time: 1_700_000_000 + i * 86400, open: 100 + i * 0.1, high: 102 + i * 0.1, low: 98 + i * 0.1, close: 100 + Math.sin(i / 5) * 3 + i * 0.1, volume: 1000 }));
+  it("keeps the histogram style for a graph line only", () => {
+    expect(validateCustomDef({ type: "formula", formula: "close - sma(close, 5)", pane: "separate", style: "histogram" })).toMatchObject({ style: "histogram" });
+    expect(validateCustomDef({ type: "formula", formula: "close", pane: "price", style: "histogram" })).not.toHaveProperty("style");
+    const v = customVisual(cs, { type: "formula", formula: "close - sma(close, 5)", pane: "separate", style: "histogram" }, "Bars");
+    expect(v.lines[0].type).toBe("histogram");
+  });
+  it("draws steps named plot_… as extra lines beside the main one", () => {
+    const v = customVisual(cs, { type: "formula", formula: "plot_fast = ema(close, 5)\nplot_slow = ema(close, 20)\nplot_fast - plot_slow", pane: "separate" }, "Spread");
+    expect(v.lines.map((l) => l.label)).toEqual(["Spread", "Spread · fast", "Spread · slow"]);
+    expect(v.lines[1].points.length).toBeGreaterThan(0);
+  });
+});

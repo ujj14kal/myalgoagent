@@ -656,7 +656,7 @@ export default function InstrumentChartPanel({
         .map((c) => (
           <div key={c.name} className="mt-4 surface p-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">{c.name} · custom</p>
-            <OscillatorPanel series={c.lines.map((l) => ({ label: l.label, color: c.color, points: l.points }))} />
+            <OscillatorPanel series={c.lines.map((l) => ({ label: l.label, color: c.color, points: l.points, type: l.type }))} />
           </div>
         ))}
 

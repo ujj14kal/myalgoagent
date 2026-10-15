@@ -166,6 +166,7 @@ describe("no look-ahead: a value never changes when later candles arrive", () =>
     "zscore(close, 20)", "median(close, 9)", "linreg(close, 12)", "slope(close, 12)", "percentrank(close, 15)", "normalize(close, 10)", "skew(close, 20)",
     "correlation(close, volume, 15)", "percentile(close, 20, 80)", "barssince(close > open)", "streak(close > open)", "cum(volume)", "valuewhen(close > open, close, 1)",
     "rising(close, 3)", "pivothigh(3)", "pivotlow(3)", "swinghigh(4)", "swinglow(4)", "htf(15, close)", "htf(60, ema(close, 3))", "htf(1440, close)", "tr", "minuteofday()",
+    "fvgbull()", "fvgbear()", "fvgbullmid()", "fvgbearmid()", "eqhigh(10, 0.2)", "eqlow(10, 0.2)", "sweephigh(10)", "sweeplow(10)", "bosup(3)", "bosdown(3)", "obbullhigh(3)", "obbulllow(3)", "obbearhigh(3)", "obbearlow(3)",
     "a = zscore(close, 10)\nb = htf(30, sma(close, 3))\na - b",
   ];
   it.each(formulas)("%s", (f) => {
@@ -177,5 +178,40 @@ describe("no look-ahead: a value never changes when later candles arrive", () =>
         else expect(part[i]).toBeCloseTo(full[i], 8);
       }
     }
+  });
+});
+
+describe("market structure", () => {
+  const bar = (i: number, o: number, h: number, l: number, c: number) => ({ time: 1_700_000_000 + i * 300, open: o, high: h, low: l, close: c, volume: 100 });
+  it("marks a bullish fair value gap on the candle that completes it", () => {
+    const cs = [bar(0, 10, 11, 9, 10), bar(1, 10, 14, 10, 13), bar(2, 13, 15, 12, 14)]; // candle 2's low (12) is above candle 0's high (11)
+    expect(run("fvgbull()", cs)).toEqual([NaN, NaN, 1]);
+    expect(run("fvgbear()", cs)[2]).toBe(0);
+    expect(run("fvgbullmid()", cs)[2]).toBeCloseTo(11.5);
+  });
+  it("forgets the gap once price closes through it", () => {
+    const cs = [bar(0, 10, 11, 9, 10), bar(1, 10, 14, 10, 13), bar(2, 13, 15, 12, 14), bar(3, 14, 14, 10, 10.5)];
+    expect(run("fvgbullmid()", cs)[3]).toBeNaN(); // closed below the gap's bottom (11)
+  });
+  it("sees equal highs and a liquidity sweep", () => {
+    const cs = [bar(0, 10, 20, 9, 11), bar(1, 11, 19, 10, 12), bar(2, 12, 20.01, 11, 12)];
+    expect(run("eqhigh(2, 0.1)", cs)[2]).toBe(1);
+    const sweep = [...cs.slice(0, 2), bar(2, 12, 21, 11, 18)]; // went above 20 and came back under it
+    expect(run("sweephigh(2)", sweep)[2]).toBe(1);
+    expect(run("sweephigh(2)", [...cs.slice(0, 2), bar(2, 12, 21, 11, 22)])[2]).toBe(0); // it closed above: a breakout, not a sweep
+  });
+  it("calls a break of structure when a close passes the latest confirmed swing high", () => {
+    const px = [10, 11, 12, 13, 12, 11, 10, 11, 12, 13.5, 15]; // swing high 13 at index 3, confirmed at index 6 (k = 3)
+    const cs = px.map((c, i) => bar(i, c, c + 0.2, c - 0.2, c));
+    const v = run("bosup(3)", cs);
+    expect(v[9]).toBe(1); // 13.5 closes above the swing high of 13.2
+    expect(v[8]).toBe(0);
+  });
+  it("keeps an order block until price closes through it", () => {
+    const px = [10, 11, 12, 13, 12, 11, 10, 11, 12, 13.5, 15, 9];
+    const cs = px.map((c, i) => bar(i, i === 8 ? 12.4 : c - 0.1, c + 0.2, c - 0.2, i === 8 ? 11.8 : c));
+    const hi = run("obbullhigh(3)", cs);
+    expect(Number.isFinite(hi[9])).toBe(true);
+    expect(hi[11]).toBeNaN(); // closing at 9 is below the block, so it is gone
   });
 });

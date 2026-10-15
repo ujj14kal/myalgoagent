@@ -1,5 +1,5 @@
 import type { Candle } from "@/lib/market-data";
-import { evaluateFormula, parseFormula } from "./formula";
+import { evaluateFormula, parseFormula, parseProgram } from "./formula";
 
 // A user's own indicator. Every kind is fully visible (white-box) — the
 // definition is the whole indicator, and it travels inside each condition
@@ -24,7 +24,7 @@ import { evaluateFormula, parseFormula } from "./formula";
 export type LinePoint = { time: number; price: number };
 export type CustomPane = "price" | "separate";
 /** Optional drawing colour (#rrggbb); charts pick one when it's not set. */
-type Look = { color?: string; entry?: CustomEntry };
+type Look = { color?: string; entry?: CustomEntry; /** How a graph line is drawn in its own pane: a line (default) or bars from zero. */ style?: "line" | "histogram" };
 
 /**
  * The indicator's own entry rule, added when it is made: "crosses above 0", or (no value) "price crosses above it". When the
@@ -253,7 +253,7 @@ function validateCore(def: unknown): CustomIndicatorDef {
       parseFormula(d.formula);
       const pane = paneOf(d.pane);
       if (!pane) throw new Error("Choose where the indicator is drawn.");
-      return { type: "formula", formula: d.formula.trim(), pane, ...look(d.color) };
+      return { type: "formula", formula: d.formula.trim(), pane, ...look(d.color), ...(d.style === "histogram" && pane === "separate" ? { style: "histogram" as const } : {}) };
     }
     case "signal":
       return { type: "signal", formula: formula(d.formula, "signal"), ...look(d.color) };
@@ -298,7 +298,7 @@ function validateCore(def: unknown): CustomIndicatorDef {
   throw new Error("Unknown custom indicator type.");
 }
 
-export type CustomVisualLine = { label: string; part: CustomPart; points: { time: number; value: number }[]; dashed?: boolean };
+export type CustomVisualLine = { label: string; part: CustomPart; points: { time: number; value: number }[]; dashed?: boolean; type?: "line" | "histogram" };
 /** How an indicator draws on a chart: its lines (one, or upper/middle/lower) and any markers. */
 export type CustomVisual = { pane: CustomPane; lines: CustomVisualLine[]; markers: number[] };
 
@@ -324,5 +324,13 @@ export function customVisual(candles: Candle[], def: CustomIndicatorDef, name: s
       ],
     };
   }
-  return { pane, markers: [], lines: [{ label: name, part: "value", points: pointsOf(candles, computeCustomSeries(candles, def)) }] };
+  const main: CustomVisualLine = { label: name, part: "value", points: pointsOf(candles, computeCustomSeries(candles, def)), ...(def.type === "formula" && def.style === "histogram" ? { type: "histogram" as const } : {}) };
+  // Steps named plot_something are drawn too, as extra lines beside the main one (a rule still reads the main output).
+  const extra: CustomVisualLine[] = [];
+  if (def.type === "formula") {
+    for (const st of parseProgram(def.formula).steps.filter((x) => x.name.startsWith("plot_")).slice(0, 5)) {
+      extra.push({ label: `${name} · ${st.name.slice(5) || st.name}`, part: "value", dashed: true, points: pointsOf(candles, evaluateFormula(st.tree, candles)) });
+    }
+  }
+  return { pane, markers: [], lines: [main, ...extra] };
 }

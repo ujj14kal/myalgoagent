@@ -31,6 +31,8 @@ const STAT_FNS = ["median", "variance", "zscore", "percentrank", "linreg", "slop
 const STATE_FNS = ["barssince", "streak", "cum", "valuewhen", "rising", "falling"] as const;
 /** Pivots confirmed `length` bars after they form, so a value never changes once shown. */
 const PIVOT_FNS = ["pivothigh", "pivotlow", "swinghigh", "swinglow"] as const;
+/** Price-action structure, each confirmed on the candle that completes it. */
+const STRUCTURE_FNS = ["fvgbull", "fvgbear", "fvgbullmid", "fvgbearmid", "eqhigh", "eqlow", "sweephigh", "sweeplow", "bosup", "bosdown", "obbullhigh", "obbulllow", "obbearhigh", "obbearlow"] as const;
 /** Clock of the candle, in IST. */
 const TIME_FNS = ["hour", "minute", "minuteofday", "dayofweek"] as const;
 const HTF_TIMEFRAMES = [5, 10, 15, 30, 60, 120, 240, 1440] as const;
@@ -44,6 +46,13 @@ export const FORMULA_FUNCTION_NOTES: Record<string, string> = {
   rising: "rising(source, n): 1 when the source rose on each of the last n bars", falling: "falling(source, n): 1 when it fell on each of the last n bars",
   pivothigh: "pivothigh(n): a swing high that was the highest of n bars either side, shown n bars after it formed", pivotlow: "pivotlow(n): same for a swing low", swinghigh: "swinghigh(n): the latest confirmed swing high, held until the next one", swinglow: "swinglow(n): the latest confirmed swing low",
   hour: "hour(): hour of day, IST", minute: "minute(): minute of the hour", minuteofday: "minuteofday(): minutes since midnight, IST (09:15 = 555)", dayofweek: "dayofweek(): 1 = Monday … 7 = Sunday",
+  fvgbull: "fvgbull(): 1 on the candle that completes a bullish fair value gap (this candle's low is above the high two candles back)", fvgbear: "fvgbear(): 1 on a bearish fair value gap (this candle's high is below the low two candles back)",
+  fvgbullmid: "fvgbullmid(): the middle of the latest bullish gap that price has not yet closed below; empty once it is filled", fvgbearmid: "fvgbearmid(): the middle of the latest bearish gap not yet closed above",
+  eqhigh: "eqhigh(n, tolerance%): 1 when this high is within the tolerance of the highest of the previous n highs (equal highs)", eqlow: "eqlow(n, tolerance%): equal lows",
+  sweephigh: "sweephigh(n): 1 when price pokes above the previous n highs but closes back below them (a liquidity sweep up)", sweeplow: "sweeplow(n): a sweep below the previous n lows that closes back above",
+  bosup: "bosup(n): 1 on the candle that closes above the latest confirmed n-bar swing high (break of structure up)", bosdown: "bosdown(n): closes below the latest confirmed swing low",
+  obbullhigh: "obbullhigh(n): top of the last down candle before a break of structure up, held until price closes below its bottom", obbulllow: "obbulllow(n): bottom of that bullish order block",
+  obbearhigh: "obbearhigh(n): top of the last up candle before a break of structure down, held until price closes above its top", obbearlow: "obbearlow(n): bottom of that bearish order block",
   htf: `htf(minutes, formula): the formula worked out on bigger candles (${HTF_TIMEFRAMES.join(", ")} minutes), using only candles that have fully closed`,
 };
 /** Built-in indicators callable by name with numeric settings, e.g. atr(14), supertrend(10, 3). */
@@ -94,7 +103,7 @@ function tokenize(src: string): Tok[] {
   return out;
 }
 
-const RESERVED = new Set<string>([...SERIES, ...WINDOW_FNS, ...MATH_FNS, ...MATH1_FNS, ...STAT_FNS, ...STATE_FNS, ...PIVOT_FNS, ...TIME_FNS, "htf", "nz", "pow", "mod", "clamp", "percentile", "correlation", "covariance", "and", "or"]);
+const RESERVED = new Set<string>([...SERIES, ...WINDOW_FNS, ...MATH_FNS, ...MATH1_FNS, ...STAT_FNS, ...STATE_FNS, ...PIVOT_FNS, ...STRUCTURE_FNS, ...TIME_FNS, "htf", "nz", "pow", "mod", "clamp", "percentile", "correlation", "covariance", "and", "or"]);
 
 /** How many nodes a tree has once every name is replaced by what it stands for (shared parts counted each time they're used). */
 const sizes = new WeakMap<object, number>();
@@ -328,6 +337,20 @@ function check(n: Node): void {
   }
   if ((PIVOT_FNS as readonly string[]).includes(f)) {
     want(1, `takes the number of bars each side, e.g. ${f}(5)`);
+    return constArg(0, "the number of bars each side", 1, 100);
+  }
+  if (f === "fvgbull" || f === "fvgbear" || f === "fvgbullmid" || f === "fvgbearmid") return want(0, "takes no values, just write it with empty brackets");
+  if (f === "eqhigh" || f === "eqlow") {
+    want(2, `takes a number of candles and a tolerance in percent, e.g. ${f}(20, 0.1)`);
+    constArg(0, "the number of candles", 2, MAX_WINDOW);
+    return constArg(1, "the tolerance", 0, 10, false);
+  }
+  if (f === "sweephigh" || f === "sweeplow") {
+    want(1, `takes the number of earlier candles, e.g. ${f}(20)`);
+    return constArg(0, "the number of candles", 2, MAX_WINDOW);
+  }
+  if (f === "bosup" || f === "bosdown" || f === "obbullhigh" || f === "obbulllow" || f === "obbearhigh" || f === "obbearlow") {
+    want(1, `takes the number of bars each side that define a swing, e.g. ${f}(5)`);
     return constArg(0, "the number of bars each side", 1, 100);
   }
   if ((TIME_FNS as readonly string[]).includes(f)) return want(0, "takes no values, just write it with empty brackets");
@@ -673,6 +696,72 @@ export function evaluateFormula(tree: Node, candles: Candle[]): Arr {
         let held = NaN;
         out = found.map((v) => (Number.isFinite(v) ? (held = v) : held));
       }
+    } else if (f === "fvgbull" || f === "fvgbear") {
+      out = candles.map((c, i) => (i < 2 ? NaN : +(f === "fvgbull" ? c.low > candles[i - 2].high : c.high < candles[i - 2].low)));
+    } else if (f === "fvgbullmid" || f === "fvgbearmid") {
+      const bull = f === "fvgbullmid";
+      let top = NaN;
+      let bottom = NaN;
+      out = candles.map((c, i) => {
+        if (i >= 2) {
+          if (bull && c.low > candles[i - 2].high) [top, bottom] = [c.low, candles[i - 2].high];
+          if (!bull && c.high < candles[i - 2].low) [top, bottom] = [candles[i - 2].low, c.high];
+        }
+        // A gap is filled (mitigated) when price closes through it; then there is no live gap until the next one forms.
+        if (Number.isFinite(top) && (bull ? c.close < bottom : c.close > top)) top = bottom = NaN;
+        return Number.isFinite(top) ? (top + bottom) / 2 : NaN;
+      });
+    } else if (f === "eqhigh" || f === "eqlow") {
+      const k = num(0);
+      const tol = num(1) / 100;
+      out = candles.map((c, i) => {
+        if (i < k) return NaN;
+        const prev = candles.slice(i - k, i).map((x) => (f === "eqhigh" ? x.high : x.low));
+        const ref = f === "eqhigh" ? Math.max(...prev) : Math.min(...prev);
+        const here = f === "eqhigh" ? c.high : c.low;
+        return +(Math.abs(here - ref) <= Math.abs(ref) * tol);
+      });
+    } else if (f === "sweephigh" || f === "sweeplow") {
+      const k = num(0);
+      out = candles.map((c, i) => {
+        if (i < k) return NaN;
+        const prev = candles.slice(i - k, i);
+        return f === "sweephigh" ? +(c.high > Math.max(...prev.map((x) => x.high)) && c.close < Math.max(...prev.map((x) => x.high))) : +(c.low < Math.min(...prev.map((x) => x.low)) && c.close > Math.min(...prev.map((x) => x.low)));
+      });
+    } else if (f === "bosup" || f === "bosdown" || f === "obbullhigh" || f === "obbulllow" || f === "obbearhigh" || f === "obbearlow") {
+      const k = num(0);
+      const up = f === "bosup" || f.startsWith("obbull");
+      // The latest confirmed swing (shown k candles after it forms), then a close through it is the break.
+      const swing = nan(len);
+      let held = NaN;
+      for (let i = 0; i < len; i++) {
+        const j = i - k;
+        if (j >= k) {
+          let ok = true;
+          for (let m = j - k; m <= j + k && ok; m++) if (m !== j && (up ? candles[m].high >= candles[j].high : candles[m].low <= candles[j].low)) ok = false;
+          if (ok) held = up ? candles[j].high : candles[j].low;
+        }
+        swing[i] = held;
+      }
+      const broke = candles.map((c, i) => (i > 0 && Number.isFinite(swing[i - 1]) ? (up ? c.close > swing[i - 1] && candles[i - 1].close <= swing[i - 1] : c.close < swing[i - 1] && candles[i - 1].close >= swing[i - 1]) : false));
+      if (f === "bosup" || f === "bosdown") out = candles.map((_, i) => (Number.isFinite(swing[i]) ? +broke[i] : NaN));
+      else {
+        // Order block: the last opposite-coloured candle before the break, kept until price closes through the far side of it.
+        const wantHigh = f.endsWith("high");
+        let zone: { high: number; low: number } | null = null;
+        out = candles.map((c, i) => {
+          if (broke[i]) {
+            for (let j = i - 1; j >= 0 && j >= i - 50; j--) {
+              if (up ? candles[j].close < candles[j].open : candles[j].close > candles[j].open) {
+                zone = { high: candles[j].high, low: candles[j].low };
+                break;
+              }
+            }
+          }
+          if (zone && (up ? c.close < zone.low : c.close > zone.high)) zone = null;
+          return zone ? (wantHigh ? zone.high : zone.low) : NaN;
+        });
+      }
     } else if ((TIME_FNS as readonly string[]).includes(f)) {
       out = candles.map((c) => (f === "hour" ? Math.floor(minuteOfDay(c.time) / 60) : f === "minute" ? minuteOfDay(c.time) % 60 : f === "minuteofday" ? minuteOfDay(c.time) : ((new Date((c.time + IST_SECONDS) * 1000).getUTCDay() + 6) % 7) + 1));
     } else if (f === "htf") {
@@ -698,6 +787,7 @@ export const FORMULA_REFERENCE = {
   statistics: [...STAT_FNS, "percentile", "correlation", "covariance"],
   memory: [...STATE_FNS],
   swings: [...PIVOT_FNS],
+  structure: [...STRUCTURE_FNS],
   clock: [...TIME_FNS],
   higherTimeframe: ["htf"],
   notes: FORMULA_FUNCTION_NOTES,

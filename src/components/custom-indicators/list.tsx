@@ -98,7 +98,7 @@ export default function CustomIndicatorList({
               <InspectIndicator def={i.def} />
               <ExportButton name={i.name} description={i.description} def={i.def} />
             </div>
-            {i.history && i.history.length > 0 && <Versions id={i.id} versions={i.history} />}
+            {i.history && i.history.length > 0 && <Versions id={i.id} versions={i.history} current={i.summary} />}
         </section>
       ))}
       {pager}
@@ -129,8 +129,9 @@ function ExportButton({ name, description, def }: { name: string; description: s
 }
 
 /** Earlier versions of an indicator, newest first; restoring one keeps the current one in the list. */
-function Versions({ id, versions }: { id: string; versions: IndicatorVersion[] }) {
+function Versions({ id, versions, current }: { id: string; versions: IndicatorVersion[]; current: string }) {
   const [open, setOpen] = useState(false);
+  const [compare, setCompare] = useState<number | null>(null);
   const [, start] = useTransition();
   const router = useRouter();
   return (
@@ -144,6 +145,10 @@ function Versions({ id, versions }: { id: string; versions: IndicatorVersion[] }
             <li key={v.at} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-brand-bg/60 px-3 py-1.5 text-xs">
               <span className="text-brand-navy/45">{new Date(v.at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}</span>
               <span className="min-w-0 flex-1 break-all font-mono text-brand-navy/70">{v.name}: {describeCustom(v.def)}</span>
+              <button type="button" onClick={() => setCompare(compare === n ? null : n)} className="font-semibold text-brand-navy/55 hover:text-brand-primary">
+                {compare === n ? "Hide changes" : "Compare"}
+              </button>
+              {compare === n && <Changes before={describeCustom(v.def)} after={current} />}
               <button type="button" onClick={() => window.confirm("Restore this version? The current one stays in the list.") && start(async () => (await restoreCustomIndicatorVersion(id, n), router.refresh()))} className="font-semibold text-brand-primary">
                 Restore
               </button>
@@ -194,6 +199,37 @@ function ImportBox() {
         </button>
         {msg && <span className="text-xs text-brand-navy/60">{msg}</span>}
       </div>
+    </div>
+  );
+}
+
+/** What changed between an earlier version and now, line by line: lines only in the old one are red, lines only in the new one are green. */
+function Changes({ before, after }: { before: string; after: string }) {
+  const a = before.split("\n");
+  const b = after.split("\n");
+  const inB = new Set(b);
+  const inA = new Set(a);
+  const identical = before === after;
+  return (
+    <div className="grid w-full gap-2 sm:grid-cols-2">
+      {identical ? (
+        <p className="text-[11px] text-brand-navy/50 sm:col-span-2">The definition is the same; only the name, colour or description changed.</p>
+      ) : (
+        <>
+          <div>
+            <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-navy/40">Then</p>
+            {a.map((l, i) => (
+              <p key={i} className={`break-all rounded px-1.5 py-0.5 font-mono ${inB.has(l) ? "" : "bg-brand-sell/10 text-[#9b1111]"}`}>{l}</p>
+            ))}
+          </div>
+          <div>
+            <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-navy/40">Now</p>
+            {b.map((l, i) => (
+              <p key={i} className={`break-all rounded px-1.5 py-0.5 font-mono ${inA.has(l) ? "" : "bg-brand-buy/10 text-[#0b6b30]"}`}>{l}</p>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

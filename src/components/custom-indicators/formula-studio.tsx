@@ -36,6 +36,7 @@ function buildReference(): Ref[] {
   for (const n of R.statistics) out.push({ group: "Statistics", name: n, hint: note(n), insert: n === "percentile" ? "percentile(close, 50, 80)" : n === "correlation" || n === "covariance" ? `${n}(close, volume, 20)` : `${n}(close, 20)` });
   for (const n of R.memory) out.push({ group: "Memory (what happened before)", name: n, hint: note(n), insert: n === "valuewhen" ? "valuewhen(close > open, close, 0)" : n === "rising" || n === "falling" ? `${n}(close, 3)` : `${n}(close > open)` });
   for (const n of R.swings) out.push({ group: "Swing points (confirmed)", name: n, hint: note(n), insert: `${n}(5)` });
+  for (const n of R.structure) out.push({ group: "Market structure", name: n, hint: note(n), insert: n.startsWith("fvg") ? `${n}()` : n.startsWith("eq") ? `${n}(20, 0.1)` : n.startsWith("sweep") ? `${n}(20)` : `${n}(5)` });
   for (const n of R.clock) out.push({ group: "Clock (IST)", name: n, hint: note(n), insert: `${n}()` });
   out.push({ group: "Bigger candles", name: "htf", hint: note("htf"), insert: "htf(60, ema(close, 20))" });
   for (const i of R.indicators) out.push({ group: "Built-in indicators", name: i.name, hint: `${i.label}${i.settings.length ? ` (${i.settings.join(", ")})` : ""}`, insert: `${i.name}(${i.defaults.join(", ")})` });
@@ -64,6 +65,8 @@ export default function FormulaStudio() {
   const [width, setWidth] = useState("2 * stdev(close, 20)");
   const [view, setView] = useState<"text" | "steps">("text");
   const [color, setColor] = useState(COLORS[0]);
+  const [bars, setBars] = useState(false);
+  const [caret, setCaret] = useState(0);
   const [entryOn, setEntryOn] = useState(false);
   const [entryOp, setEntryOp] = useState<EntryOperator>("CROSSES_ABOVE");
   const [entryValue, setEntryValue] = useState("0");
@@ -82,7 +85,7 @@ export default function FormulaStudio() {
   const look = { color, ...(entry ? { entry } : {}) };
   const def: CustomIndicatorDef =
     kind === "line"
-      ? { type: "formula", formula: text, pane: "separate", ...look }
+      ? { type: "formula", formula: text, pane: "separate", ...look, ...(bars ? { style: "histogram" as const } : {}) }
       : kind === "overlay"
         ? { type: "formula", formula: text, pane: "price", ...look }
         : kind === "signal"
@@ -137,9 +140,38 @@ export default function FormulaStudio() {
       </button>
     );
 
+  // Names that start like the word being typed (main formula only): click one to finish the word.
+  const word = /[a-z_][a-z0-9_]*$/i.exec(text.slice(0, caret))?.[0] ?? "";
+  const completions = word.length >= 2 ? [...new Map(reference.filter((r) => r.name.startsWith(word.toLowerCase()) && r.name !== word.toLowerCase()).map((r) => [r.name, r])).values()].slice(0, 6) : [];
+  const complete = (r: Ref) => {
+    const at = caret - word.length;
+    const call = r.insert.startsWith(r.name) ? r.insert : r.name;
+    setText(`${text.slice(0, at)}${call}${text.slice(caret)}`);
+  };
   const formulaBox = (id: "main" | "upper" | "lower" | "middle" | "width", value: string, onChange: (v: string) => void, err: string | null, rows = 2) => (
     <>
-      <textarea value={value} rows={rows} spellCheck={false} onFocus={() => setTarget(id)} onChange={(e) => onChange(e.target.value)} className={code} />
+      <textarea
+        value={value}
+        rows={rows}
+        spellCheck={false}
+        onFocus={() => setTarget(id)}
+        onChange={(e) => {
+          onChange(e.target.value);
+          if (id === "main") setCaret(e.target.selectionStart);
+        }}
+        onSelect={(e) => id === "main" && setCaret(e.currentTarget.selectionStart)}
+        className={code}
+      />
+      {id === "main" && completions.length > 0 && (
+        <div className="mt-1 flex flex-wrap gap-1">
+          {completions.map((r) => (
+            <button key={r.name} type="button" title={r.hint} onClick={() => complete(r)} className="rounded-md bg-brand-primary/[0.07] px-2 py-0.5 font-mono text-[11px] font-semibold text-brand-primary hover:bg-brand-primary/15">
+              {r.name}
+            </button>
+          ))}
+          <span className="self-center text-[11px] text-brand-navy/40">{completions[0].hint}</span>
+        </div>
+      )}
       {err && <p className="mt-1 text-xs text-brand-sell">{err}</p>}
     </>
   );
@@ -268,6 +300,12 @@ export default function FormulaStudio() {
             )}
           </div>
 
+          {kind === "line" && (
+            <label className="flex items-center gap-2 text-sm text-brand-navy">
+              <input type="checkbox" checked={bars} onChange={(e) => setBars(e.target.checked)} />
+              Draw it as bars from zero (a histogram) instead of a line
+            </label>
+          )}
           <div>
             <p className={label}>Colour</p>
             <div className="flex gap-1.5">
