@@ -13,7 +13,8 @@ import type { Candle, CandleInterval, CandleRange, HistoryDepth, Tick } from "@/
 import { useLiveCandle } from "@/lib/market-data/use-live-candle";
 import { CustomIndicatorToggle, SaveLineAsIndicator } from "@/components/custom-indicators/chart-tools";
 import { useCustomIndicators } from "@/components/custom-indicators/context";
-import { customDashboard, customVisual, type CustomVisual } from "@/lib/custom-indicator";
+import { customDashboard, customVisual, deepSymbols, type CustomVisual } from "@/lib/custom-indicator";
+import { loadIndicatorInstruments } from "@/lib/custom-indicator-actions";
 import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
 import { anchoredVwap } from "@/lib/indicators";
 import { INDICATOR_BY_KIND } from "@/lib/strategy/indicator-catalog";
@@ -287,6 +288,22 @@ export default function InstrumentChartPanel({
   // The user's own indicators toggled on this chart.
   const customs = useCustomIndicators();
   const [activeCustom, setActiveCustom] = useState<string[]>([]);
+  // Other instruments an active indicator reads with sym(): loaded to match the chart's range and candle size.
+  const neededSymbols = useMemo(() => [...new Set(customs.filter((c) => activeCustom.includes(c.name)).flatMap((c) => deepSymbols(c.def)))].sort(), [customs, activeCustom]);
+  const [otherInstruments, setOtherInstruments] = useState<Record<string, Candle[]>>({});
+  const neededKey = neededSymbols.join(",");
+  useEffect(() => {
+    if (!neededKey) return;
+    let cancelled = false;
+    loadIndicatorInstruments(neededKey.split(","), interval, range).then((r) => {
+      if (!cancelled && r.ok) setOtherInstruments(r.data ?? {});
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [neededKey, interval, range]);
+  const externals = useMemo(() => ({ instruments: otherInstruments }), [otherInstruments]);
+
   const customSeries = useMemo(
     () =>
       customs
@@ -294,13 +311,13 @@ export default function InstrumentChartPanel({
         .map((c, idx) => {
           let visual: CustomVisual = { pane: "price", lines: [], markers: [] };
           try {
-            visual = customVisual(candles, c.def, c.name);
+            visual = customVisual(candles, c.def, c.name, externals);
           } catch {
             // an unusable formula draws nothing
           }
           return { name: c.name, def: c.def, ...visual, color: c.def.color ?? ["#7c3aed", "#0891b2", "#ea580c", "#be185d"][idx % 4] };
         }),
-    [customs, activeCustom, candles],
+    [customs, activeCustom, candles, externals],
   );
 
   // Indicators that paint: candle colours and background shading from every active one, merged.
@@ -321,12 +338,12 @@ export default function InstrumentChartPanel({
         .filter((c) => c.def.type === "formula" || c.def.type === "signal" ? !!c.def.table : false)
         .map((c) => {
           try {
-            return { name: c.name, rows: customDashboard(candles, c.def, c.name) };
+            return { name: c.name, rows: customDashboard(candles, c.def, c.name, externals) };
           } catch {
             return { name: c.name, rows: [] };
           }
         }),
-    [customSeries, candles],
+    [customSeries, candles, externals],
   );
 
   const customNotes = useMemo(() => customSeries.flatMap((c) => c.markers.map((time) => ({ time, text: c.name, color: c.color }))), [customSeries]);

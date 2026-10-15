@@ -90,6 +90,7 @@ model User {
   liveEngineLogs      LiveEngineLog[]
   optionStrategies    OptionStrategy[]
   priceAlerts         PriceAlert[]
+  datasets            UserDataset[]
   optionBacktestRuns  OptionBacktestRun[]
   optionForwardTests  OptionForwardTest[]
   customIndicators    CustomIndicator[]
@@ -1408,4 +1409,23 @@ model PriceAlert {
 
   @@index([userId, status])
   @@index([status, symbol])
+}
+
+// A table the user uploaded (a time and a number per row, oldest first) for custom indicators to read with data(name).
+model UserDataset {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  // name with spaces as underscores, lower case: how a formula writes it.
+  slug        String
+  description String?
+  // Seconds since 1970, ascending; a row counts from its time onwards.
+  times       Json
+  values      Json
+  rows        Int
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, slug])
 }

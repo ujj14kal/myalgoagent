@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateFormula, FormulaError, parseFormula, parseProgram } from "./formula";
+import { evaluateFormula, FormulaError, parseFormula, parseProgram, type Externals } from "./formula";
 
 const candles = Array.from({ length: 60 }, (_, i) => {
   const close = 100 + Math.sin(i / 5) * 10 + i * 0.5;
@@ -253,8 +253,8 @@ describe("data that isn't there", () => {
     expect(() => parseFormula("bid - ask")).toThrow(/never given invented values/);
     expect(() => parseFormula("iv * 2")).toThrow(/implied volatility/);
   });
-  it("says why another instrument can't be read", () => {
-    expect(() => parseFormula("sym(close)")).toThrow(/another instrument/);
+  it("points other-instrument spellings to sym()", () => {
+    expect(() => parseFormula("security(close)")).toThrow(/write sym/);
     expect(() => parseFormula("foo(close)")).toThrow(/no function called foo/);
   });
 });
@@ -300,5 +300,55 @@ describe("live bigger candle (provisional)", () => {
   it("is flagged as provisional", async () => {
     const { timingNotes } = await import("./integrity");
     expect(timingNotes({ type: "formula", formula: "htflive(60, close)", pane: "separate" }).join(" ")).toMatch(/provisional/);
+  });
+});
+
+describe("other instruments and datasets", () => {
+  const other = intraday.map((c, i) => ({ ...c, close: 1000 + i, high: 1001 + i, low: 999 + i, open: 1000 + i }));
+  const ext: Externals = { instruments: { "^NSEI": other } };
+  const runX = (f: string, e: Externals = ext, c = intraday) => evaluateFormula(parseFormula(f), c, undefined, e);
+
+  it("reads another instrument on this chart's clock", () => {
+    expect(runX('sym("^NSEI", close)')[10]).toBe(1010);
+    expect(runX('close / sym("^NSEI", close)')[10]).toBeCloseTo(intraday[10].close / 1010);
+    expect(runX('sym("^NSEI", ema(close, 3))').at(-1)).toBeCloseTo(evaluateFormula(parseFormula("ema(close, 3)"), other).at(-1)!);
+  });
+  it("carries the latest earlier value across a gap and never reads ahead", () => {
+    const sparse = other.filter((_, i) => i % 5 === 0); // the other instrument has a candle only every 5th bar
+    const v = runX('sym("^NSEI", close)', { instruments: { "^NSEI": sparse } });
+    expect(v[7]).toBe(sparse[1].close); // bar 7 sees the bar-5 candle, not the bar-10 one
+    expect(v[4]).toBe(sparse[0].close);
+  });
+  it("explains what is missing or wrong", () => {
+    expect(() => runX('sym("^NSEI", close)', {})).toThrow(/isn't loaded/);
+    expect(() => parseFormula("sym(close)")).toThrow(/instrument in quotes/);
+    expect(() => parseFormula('sym("bad symbol!", close)')).toThrow(/instrument in quotes/);
+    expect(() => parseFormula('sym("A", sym("B", close))')).toThrow(/another sym/);
+    expect(() => parseFormula('close + "x"')).toThrow(/only allowed as the first part of sym/);
+    expect(() => parseFormula('"unterminated')).toThrow(/closing/);
+  });
+  it("reads a dataset from the time of each row onwards", () => {
+    const t0 = intraday[10].time;
+    const dataExt: Externals = { data: { score: { t: [t0, t0 + 3 * 300], v: [5, 9] } } };
+    const v = evaluateFormula(parseFormula("data(score)", undefined, ["score"]), intraday, undefined, dataExt);
+    expect(v[9]).toBeNaN(); // before the first row there is no value
+    expect(v[10]).toBe(5);
+    expect(v[12]).toBe(5);
+    expect(v[13]).toBe(9);
+    expect(v.at(-1)).toBe(9);
+  });
+  it("refuses a dataset that isn't attached", () => {
+    expect(() => parseFormula("data(score)", undefined, [])).toThrow(/no dataset called/);
+    expect(() => evaluateFormula(parseFormula("data(score)"), intraday)).toThrow(/isn't attached/);
+  });
+  it("never repaints with another instrument or a dataset", () => {
+    const f = 'sym("^NSEI", zscore(close, 10)) + data(score)';
+    const dataExt: Externals = { instruments: { "^NSEI": other }, data: { score: { t: [intraday[5].time, intraday[100].time], v: [1, 2] } } };
+    const full = evaluateFormula(parseFormula(f, undefined, ["score"]), intraday, undefined, dataExt);
+    const part = evaluateFormula(parseFormula(f, undefined, ["score"]), intraday.slice(0, 120), undefined, dataExt);
+    for (let i = 0; i < 120; i++) {
+      if (Number.isNaN(full[i])) expect(part[i]).toBeNaN();
+      else expect(part[i]).toBeCloseTo(full[i], 9);
+    }
   });
 });

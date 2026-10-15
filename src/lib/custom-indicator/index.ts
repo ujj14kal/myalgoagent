@@ -1,5 +1,5 @@
 import type { Candle } from "@/lib/market-data";
-import { evaluateFormula, parseFormula, parseProgram, type IndicatorResolver, type Node } from "./formula";
+import { evaluateFormula, parseFormula, parseProgram, type DatasetSnapshot, type Externals, type IndicatorResolver, type Node } from "./formula";
 
 // A user's own indicator. Every kind is fully visible (white-box) — the
 // definition is the whole indicator, and it travels inside each condition
@@ -24,7 +24,7 @@ import { evaluateFormula, parseFormula, parseProgram, type IndicatorResolver, ty
 export type LinePoint = { time: number; price: number };
 export type CustomPane = "price" | "separate";
 /** Optional drawing colour (#rrggbb); charts pick one when it's not set. */
-type Look = { color?: string; entry?: CustomEntry; /** How a graph line is drawn in its own pane: a line (default) or bars from zero. */ style?: "line" | "histogram" | "heat"; /** Colour the candles, or shade the chart background, where the value is true (signals) or by its sign (formulas: above 0 green, below 0 red). */ paint?: "candles" | "background"; /** Show a small table of the latest value of the indicator and each of its named steps. */ table?: boolean; /** Other custom indicators this one reads with ind(name): a copy of each, so later edits to them never change this one. */ uses?: Record<string, CustomIndicatorDef> };
+type Look = { color?: string; entry?: CustomEntry; /** How a graph line is drawn in its own pane: a line (default) or bars from zero. */ style?: "line" | "histogram" | "heat"; /** Colour the candles, or shade the chart background, where the value is true (signals) or by its sign (formulas: above 0 green, below 0 red). */ paint?: "candles" | "background"; /** Show a small table of the latest value of the indicator and each of its named steps. */ table?: boolean; /** Other custom indicators this one reads with ind(name): a copy of each, so later edits to them never change this one. */ uses?: Record<string, CustomIndicatorDef>; /** Uploaded datasets this one reads with data(name): a copy of each, so results never change when the dataset is later edited. */ data?: Record<string, DatasetSnapshot> };
 
 /**
  * The indicator's own entry rule, added when it is made: "crosses above 0", or (no value) "price crosses above it". When the
@@ -74,13 +74,16 @@ export function customParts(def: CustomIndicatorDef): CustomPart[] {
 export const defaultPart = (def: CustomIndicatorDef): CustomPart => (isMultiPart(def) ? "middle" : "value");
 
 const usesKeys = (def: CustomIndicatorDef): string[] => Object.keys(def.uses ?? {});
+const dataKeys = (def: CustomIndicatorDef): string[] => Object.keys(def.data ?? {});
+/** What a formula can read besides its chart: the caller's other instruments, plus the datasets attached to this indicator. */
+const extOf = (def: CustomIndicatorDef, ext?: Externals): Externals => ({ instruments: ext?.instruments, data: { ...(ext?.data ?? {}), ...(def.data ?? {}) } });
 
 /** How ind(name) finds the other indicator's values: its attached copy, worked out on the same candles. */
-function resolverOf(def: CustomIndicatorDef): IndicatorResolver {
+function resolverOf(def: CustomIndicatorDef, ext?: Externals): IndicatorResolver {
   return (name, candles) => {
     const used = def.uses?.[name];
     if (!used) throw new Error(`“${name}” isn't attached to this indicator.`);
-    return computeCustomSeries(candles, used);
+    return computeCustomSeries(candles, used, undefined, ext);
   };
 }
 
@@ -91,14 +94,18 @@ export function defFormulas(def: CustomIndicatorDef): string[] {
   return def.type === "formula" || def.type === "signal" ? [def.formula] : def.type === "channel" ? [def.upper, def.lower, ...(def.middle ? [def.middle] : [])] : def.type === "band" ? [def.middle, def.width] : [];
 }
 
-/** The other custom indicators this one reads with ind(name), by their underscore names. */
-export function indicatorRefs(def: CustomIndicatorDef): string[] {
-  const out = new Set<string>();
+/** The other indicators (ind), instruments (sym) and datasets (data) a definition reads. */
+export function externalRefs(def: CustomIndicatorDef): { inds: string[]; syms: string[]; datas: string[] } {
+  const inds = new Set<string>();
+  const syms = new Set<string>();
+  const datas = new Set<string>();
   const walk = (n: Node): void => {
     if (n.t === "neg") return walk(n.a);
     if (n.t === "bin") return (walk(n.a), walk(n.b));
     if (n.t === "call") {
-      if (n.fn === "ind" && n.ref) out.add(n.ref);
+      if (n.fn === "ind" && n.ref) inds.add(n.ref);
+      if (n.fn === "sym" && n.ref) syms.add(n.ref);
+      if (n.fn === "data" && n.ref) datas.add(n.ref);
       n.args.forEach(walk);
     }
   };
@@ -109,8 +116,18 @@ export function indicatorRefs(def: CustomIndicatorDef): string[] {
       /* reported when it is validated */
     }
   }
+  return { inds: [...inds], syms: [...syms], datas: [...datas] };
+}
+
+/** Every other instrument an indicator reads, including through the indicators it is built on. */
+export function deepSymbols(def: CustomIndicatorDef): string[] {
+  const out = new Set(externalRefs(def).syms);
+  for (const used of Object.values(def.uses ?? {})) for (const s of deepSymbols(used)) out.add(s);
   return [...out];
 }
+
+/** The other custom indicators this one reads with ind(name), by their underscore names. */
+export const indicatorRefs = (def: CustomIndicatorDef): string[] => externalRefs(def).inds;
 
 function drawnLine(candles: Candle[], points: [LinePoint, LinePoint]): number[] {
   const [a, b] = points[0].time <= points[1].time ? points : [points[1], points[0]];
@@ -119,8 +136,8 @@ function drawnLine(candles: Candle[], points: [LinePoint, LinePoint]): number[] 
 }
 
 /** Upper, middle and lower lines of a multi-part indicator (NaN where undefined). */
-function bands(candles: Candle[], def: CustomIndicatorDef): { upper: number[]; middle: number[]; lower: number[] } {
-  const f = (s: string) => evaluateFormula(parseFormula(s, usesKeys(def)), candles, resolverOf(def));
+function bands(candles: Candle[], def: CustomIndicatorDef, ext?: Externals): { upper: number[]; middle: number[]; lower: number[] } {
+  const f = (s: string) => evaluateFormula(parseFormula(s, usesKeys(def), dataKeys(def)), candles, resolverOf(def, ext), extOf(def, ext));
   const mid = (u: number[], l: number[]) => u.map((x, i) => (x + l[i]) / 2);
   switch (def.type) {
     case "zone": {
@@ -156,18 +173,18 @@ function bands(candles: Candle[], def: CustomIndicatorDef): { upper: number[]; m
  * one), and a rectangle only between its edges — a backtest never reads a
  * drawing before it could have been drawn.
  */
-export function computeCustomSeries(candles: Candle[], def: CustomIndicatorDef, part: CustomPart = defaultPart(def)): number[] {
+export function computeCustomSeries(candles: Candle[], def: CustomIndicatorDef, part: CustomPart = defaultPart(def), ext?: Externals): number[] {
   if (!customParts(def).includes(part)) throw new Error(`This indicator has no ${PART_LABEL[part] ?? part}.`);
   if (isMultiPart(def)) {
-    const b = bands(candles, def);
+    const b = bands(candles, def, ext);
     if (part === "inside") return candles.map((c, i) => (Number.isFinite(b.upper[i]) && Number.isFinite(b.lower[i]) ? (c.close >= b.lower[i] && c.close <= b.upper[i] ? 1 : 0) : NaN));
     return b[part as "upper" | "middle" | "lower"];
   }
   switch (def.type) {
     case "formula":
-      return evaluateFormula(parseFormula(def.formula, usesKeys(def)), candles, resolverOf(def));
+      return evaluateFormula(parseFormula(def.formula, usesKeys(def), dataKeys(def)), candles, resolverOf(def, ext), extOf(def, ext));
     case "signal":
-      return evaluateFormula(parseFormula(def.formula, usesKeys(def)), candles, resolverOf(def)).map((v) => (Number.isFinite(v) ? (v !== 0 ? 1 : 0) : NaN));
+      return evaluateFormula(parseFormula(def.formula, usesKeys(def), dataKeys(def)), candles, resolverOf(def, ext), extOf(def, ext)).map((v) => (Number.isFinite(v) ? (v !== 0 ? 1 : 0) : NaN));
     case "line":
       return drawnLine(candles, def.points);
     case "level":
@@ -264,10 +281,10 @@ const price = (p: unknown, what: string): number => {
   if (typeof p !== "number" || !Number.isFinite(p) || p <= 0) throw new Error(`${what} needs a price above 0.`);
   return p;
 };
-const formula = (s: unknown, what: string, keys: string[] = []): string => {
+const formula = (s: unknown, what: string, keys: string[] = [], datas: string[] = []): string => {
   if (typeof s !== "string" || !s.trim()) throw new Error(`Missing ${what} formula.`);
   try {
-    parseFormula(s, keys);
+    parseFormula(s, keys, datas);
   } catch (err) {
     throw new Error(`${what[0].toUpperCase()}${what.slice(1)}: ${err instanceof Error ? err.message : "invalid formula"}`);
   }
@@ -285,9 +302,10 @@ const sym = (s: unknown) => (typeof s === "string" && s ? { symbol: s } : {});
 export function validateCustomDef(def: unknown, depth = 0): CustomIndicatorDef {
   const raw = def as { entry?: unknown; uses?: unknown } | null;
   const uses = cleanUses(raw?.uses, depth);
-  const clean = validateCore(def, Object.keys(uses ?? {}));
+  const data = cleanData((def as { data?: unknown } | null)?.data);
+  const clean = validateCore(def, Object.keys(uses ?? {}), Object.keys(data ?? {}));
   const entry = parseEntry(raw?.entry);
-  return { ...clean, ...(entry ? { entry } : {}), ...(uses ? { uses } : {}) };
+  return { ...clean, ...(entry ? { entry } : {}), ...(uses ? { uses } : {}), ...(data ? { data } : {}) };
 }
 
 const MAX_USES = 8;
@@ -307,19 +325,19 @@ function cleanUses(raw: unknown, depth: number): Record<string, CustomIndicatorD
   return out;
 }
 
-function validateCore(def: unknown, keys: string[] = []): CustomIndicatorDef {
+function validateCore(def: unknown, keys: string[] = [], datas: string[] = []): CustomIndicatorDef {
   const d = def as Record<string, unknown> & { type?: string };
   if (!d || typeof d !== "object") throw new Error("Missing indicator definition.");
   switch (d.type) {
     case "formula": {
       if (typeof d.formula !== "string") throw new Error("Missing formula.");
-      parseFormula(d.formula, keys);
+      parseFormula(d.formula, keys, datas);
       const pane = paneOf(d.pane);
       if (!pane) throw new Error("Choose where the indicator is drawn.");
       return { type: "formula", formula: d.formula.trim(), pane, ...look(d.color), ...(d.style === "histogram" || d.style === "heat" ? (pane === "separate" ? { style: d.style as "histogram" | "heat" } : {}) : {}), ...extras(d) };
     }
     case "signal":
-      return { type: "signal", formula: formula(d.formula, "signal", keys), ...look(d.color), ...extras(d) };
+      return { type: "signal", formula: formula(d.formula, "signal", keys, datas), ...look(d.color), ...extras(d) };
     case "line": {
       const pts = d.points as LinePoint[] | undefined;
       const ok = Array.isArray(pts) && pts.length === 2 && pts.every((p) => Number.isFinite(p?.time) && Number.isFinite(p?.price) && p.price > 0);
@@ -346,16 +364,16 @@ function validateCore(def: unknown, keys: string[] = []): CustomIndicatorDef {
       const pane = paneOf(d.pane);
       return {
         type: "channel",
-        upper: formula(d.upper, "upper line", keys),
-        lower: formula(d.lower, "lower line", keys),
-        ...(typeof d.middle === "string" && d.middle.trim() ? { middle: formula(d.middle, "middle line", keys) } : {}),
+        upper: formula(d.upper, "upper line", keys, datas),
+        lower: formula(d.lower, "lower line", keys, datas),
+        ...(typeof d.middle === "string" && d.middle.trim() ? { middle: formula(d.middle, "middle line", keys, datas) } : {}),
         ...(pane ? { pane } : {}),
         ...look(d.color),
       };
     }
     case "band": {
       const pane = paneOf(d.pane);
-      return { type: "band", middle: formula(d.middle, "middle line", keys), width: formula(d.width, "width", keys), ...(pane ? { pane } : {}), ...look(d.color) };
+      return { type: "band", middle: formula(d.middle, "middle line", keys, datas), width: formula(d.width, "width", keys, datas), ...(pane ? { pane } : {}), ...look(d.color) };
     }
   }
   throw new Error("Unknown custom indicator type.");
@@ -369,15 +387,15 @@ const round = (v: number) => Math.round(v * 10000) / 10000;
 const pointsOf = (candles: Candle[], v: number[]) => candles.flatMap((c, i) => (Number.isFinite(v[i]) ? [{ time: c.time, value: round(v[i]) }] : []));
 
 /** Everything a chart needs to draw one custom indicator. Throws if a formula no longer parses. */
-export function customVisual(candles: Candle[], def: CustomIndicatorDef, name: string): CustomVisual {
+export function customVisual(candles: Candle[], def: CustomIndicatorDef, name: string, ext?: Externals): CustomVisual {
   const pane = customPane(def);
   if (def.type === "signal") {
-    const v = computeCustomSeries(candles, def);
+    const v = computeCustomSeries(candles, def, undefined, ext);
     if (def.paint) return { pane, lines: [], markers: [], ...paintOf(candles, v.map((x) => (x === 1 ? 1 : 0)), def, def.color ?? "#7c3aed") };
     return { pane, lines: [], markers: candles.filter((_, i) => v[i] === 1 && v[i - 1] !== 1).map((c) => c.time) };
   }
   if (isMultiPart(def)) {
-    const b = bands(candles, def);
+    const b = bands(candles, def, ext);
     return {
       pane,
       markers: [],
@@ -388,15 +406,15 @@ export function customVisual(candles: Candle[], def: CustomIndicatorDef, name: s
       ],
     };
   }
-  const main: CustomVisualLine = { label: name, part: "value", points: pointsOf(candles, computeCustomSeries(candles, def)), ...(def.type === "formula" && (def.style === "histogram" || def.style === "heat") ? { type: def.style } : {}) };
+  const main: CustomVisualLine = { label: name, part: "value", points: pointsOf(candles, computeCustomSeries(candles, def, undefined, ext)), ...(def.type === "formula" && (def.style === "histogram" || def.style === "heat") ? { type: def.style } : {}) };
   // Steps named plot_something are drawn too, as extra lines beside the main one (a rule still reads the main output).
   const extra: CustomVisualLine[] = [];
   if (def.type === "formula") {
-    for (const st of parseProgram(def.formula, usesKeys(def)).steps.filter((x) => x.name.startsWith("plot_")).slice(0, 5)) {
-      extra.push({ label: `${name} · ${st.name.slice(5) || st.name}`, part: "value", dashed: true, points: pointsOf(candles, evaluateFormula(st.tree, candles, resolverOf(def))) });
+    for (const st of parseProgram(def.formula, usesKeys(def), dataKeys(def)).steps.filter((x) => x.name.startsWith("plot_")).slice(0, 5)) {
+      extra.push({ label: `${name} · ${st.name.slice(5) || st.name}`, part: "value", dashed: true, points: pointsOf(candles, evaluateFormula(st.tree, candles, resolverOf(def, ext), extOf(def, ext))) });
     }
   }
-  const painted = def.type === "formula" && def.paint ? paintOf(candles, computeCustomSeries(candles, def), def, null) : {};
+  const painted = def.type === "formula" && def.paint ? paintOf(candles, computeCustomSeries(candles, def, undefined, ext), def, null) : {};
   return { pane, markers: [], lines: def.type === "formula" && def.paint ? [] : [main, ...extra], ...painted };
 }
 
@@ -419,11 +437,30 @@ function paintOf(candles: Candle[], v: number[], def: CustomIndicatorDef, one: s
 export type DashboardRow = { label: string; value: number | null; kind: "output" | "step" };
 
 /** The latest value of an indicator's outputs and each named step, for the table beside the chart. */
-export function customDashboard(candles: Candle[], def: CustomIndicatorDef, name: string): DashboardRow[] {
+export function customDashboard(candles: Candle[], def: CustomIndicatorDef, name: string, ext?: Externals): DashboardRow[] {
   const last = (v: number[]) => (Number.isFinite(v.at(-1) ?? NaN) ? Math.round(v.at(-1)! * 10000) / 10000 : null);
-  const rows: DashboardRow[] = customParts(def).map((p) => ({ label: p === "value" ? name : `${name} · ${PART_LABEL[p]}`, value: last(computeCustomSeries(candles, def, p)), kind: "output" as const }));
+  const rows: DashboardRow[] = customParts(def).map((p) => ({ label: p === "value" ? name : `${name} · ${PART_LABEL[p]}`, value: last(computeCustomSeries(candles, def, p, ext)), kind: "output" as const }));
   if (def.type === "formula" || def.type === "signal") {
-    for (const st of parseProgram(def.formula, usesKeys(def)).steps.slice(0, 12)) rows.push({ label: st.name, value: last(evaluateFormula(st.tree, candles, resolverOf(def))), kind: "step" });
+    for (const st of parseProgram(def.formula, usesKeys(def), dataKeys(def)).steps.slice(0, 12)) rows.push({ label: st.name, value: last(evaluateFormula(st.tree, candles, resolverOf(def, ext), extOf(def, ext))), kind: "step" });
   }
   return rows;
+}
+
+const MAX_DATASETS = 8;
+export const MAX_DATASET_ROWS = 1500;
+/** Attached dataset copies: a few small lists of times and values, oldest first. */
+function cleanData(raw: unknown): Record<string, DatasetSnapshot> | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== "object" || Array.isArray(raw)) throw new Error("The attached datasets aren't valid.");
+  const entries = Object.entries(raw as Record<string, unknown>);
+  if (!entries.length) return undefined;
+  if (entries.length > MAX_DATASETS) throw new Error(`One indicator can read at most ${MAX_DATASETS} datasets.`);
+  const out: Record<string, DatasetSnapshot> = {};
+  for (const [k, v] of entries) {
+    const d = v as { t?: unknown; v?: unknown };
+    if (!/^[a-z_][a-z0-9_]*$/.test(k) || !Array.isArray(d?.t) || !Array.isArray(d?.v) || d.t.length !== d.v.length || d.t.length === 0 || d.t.length > MAX_DATASET_ROWS) throw new Error(`The dataset “${k}” isn't valid (up to ${MAX_DATASET_ROWS} rows).`);
+    if (!d.t.every((x, i) => Number.isFinite(x) && Number.isFinite((d.v as number[])[i]) && (i === 0 || x > (d.t as number[])[i - 1]))) throw new Error(`The dataset “${k}” needs ascending times and numeric values.`);
+    out[k] = { t: d.t as number[], v: d.v as number[] };
+  }
+  return out;
 }

@@ -1,6 +1,6 @@
 import type { Candle, CandleInterval } from "@/lib/market-data";
 import { computeIndicatorSeries } from "./compute-series";
-import { computeCustomSeries } from "@/lib/custom-indicator";
+import { computeCustomSeries, deepSymbols } from "@/lib/custom-indicator";
 import { computeOrderTimeWindowSeries, computeTimeWindowSeries } from "./time-window";
 import { alignToBase, alignSignalToBase } from "./timeframe-align";
 import { computeCandlePatternSeries } from "@/lib/candle-patterns";
@@ -30,10 +30,16 @@ function seriesKey(op: Extract<Operand, { kind: "indicator" } | { kind: "custom"
 }
 
 /** An indicator operand's raw values on a candle set (NaN/undefined where not defined). */
-function rawIndicatorSeries(candles: Candle[], operand: Extract<Operand, { kind: "indicator" } | { kind: "custom" }>): (number | undefined)[] {
+function rawIndicatorSeries(candles: Candle[], operand: Extract<Operand, { kind: "indicator" } | { kind: "custom" }>, aux: AuxCandleMap = new Map()): (number | undefined)[] {
   if (operand.kind === "custom") {
     try {
-      return computeCustomSeries(candles, operand.def, operand.part).map((v) => (Number.isFinite(v) ? v : undefined));
+      // An indicator that reads other instruments (sym) gets their candles from the prefetched set, on the strategy's own candle size.
+      const instruments: Record<string, Candle[]> = {};
+      for (const sym of deepSymbols(operand.def)) {
+        const c = aux.get(auxKey(sym, undefined));
+        if (c) instruments[sym] = c;
+      }
+      return computeCustomSeries(candles, operand.def, operand.part, { instruments }).map((v) => (Number.isFinite(v) ? v : undefined));
     } catch {
       return candles.map(() => undefined); // a formula that no longer parses reads as "can't be evaluated"
     }
@@ -84,11 +90,11 @@ function buildSeries(candles: Candle[], operand: Operand, cache: Map<string, Ser
 
   let series: Series;
   if (!usesOverride) {
-    series = rawIndicatorSeries(candles, operand);
+    series = rawIndicatorSeries(candles, operand, aux);
   } else if (!overrideCandles) {
     series = candles.map(() => undefined);
   } else {
-    series = alignOverrideSeries(candles, overrideCandles, operand.timeframe, rawIndicatorSeries(overrideCandles, operand));
+    series = alignOverrideSeries(candles, overrideCandles, operand.timeframe, rawIndicatorSeries(overrideCandles, operand, aux));
   }
   cache.set(key, series);
   return series;
@@ -141,6 +147,17 @@ export function collectAuxRequirements(entry: ConditionNode, exit: ConditionNode
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({ instrumentSymbol: op.instrumentSymbol, timeframe: op.timeframe });
+  }
+
+  // An indicator of your own that reads another instrument with sym(): that instrument's candles are fetched like any other override.
+  for (const op of operands) {
+    if (op.kind !== "custom") continue;
+    for (const sym of deepSymbols(op.def)) {
+      const key = auxKey(sym, undefined);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ instrumentSymbol: sym, timeframe: undefined });
+    }
   }
 
   for (const signal of signals) {

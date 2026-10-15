@@ -39,6 +39,8 @@ function buildReference(): Ref[] {
   for (const n of R.structure) out.push({ group: "Market structure", name: n, hint: note(n), insert: n.startsWith("fvg") ? `${n}()` : n.startsWith("eq") ? `${n}(20, 0.1)` : n.startsWith("sweep") ? `${n}(20)` : `${n}(5)` });
   for (const n of R.clock) out.push({ group: "Clock (IST)", name: n, hint: note(n), insert: `${n}()` });
   out.push({ group: "Reusable", name: "fn", hint: "fn name(a, b) = expression — define a calculation once, use it with different inputs on later lines", insert: "fn name(x) = x" });
+  out.push({ group: "Other data", name: "sym", hint: note("sym"), insert: 'sym("^NSEI", close)' });
+  out.push({ group: "Other data", name: "data", hint: note("data"), insert: "data(name)" });
   out.push({ group: "Reusable", name: "ind", hint: R.notes.ind ?? "", insert: "ind(name)" });
   out.push({ group: "Bigger candles", name: "htf", hint: note("htf"), insert: "htf(60, ema(close, 20))" });
   out.push({ group: "Bigger candles", name: "htflive", hint: note("htflive"), insert: "htflive(60, ema(close, 20))" });

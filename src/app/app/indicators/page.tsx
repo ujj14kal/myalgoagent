@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import PageHeader from "@/components/ui/page-header";
 import CustomIndicatorList from "@/components/custom-indicators/list";
+import DatasetsPanel from "@/components/custom-indicators/datasets";
 import { classifyCustom, CUSTOM_CLASSES, describeCustom, type CustomClass, type CustomIndicatorDef } from "@/lib/custom-indicator";
 import Pager from "@/components/ui/pager";
 import type { IndicatorVersion } from "@/lib/custom-indicator-actions";
@@ -22,6 +23,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
   const kind = qEnum(sp.kind, ["all", ...CUSTOM_CLASSES] as const, "all");
   const q = qText(sp.q)?.toLowerCase();
   const sort = qEnum(sp.sort, ["updated", "name", "created"] as const, "updated");
+  const datasetRows = (await prisma.userDataset.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, select: { id: true, name: true, slug: true, description: true, rows: true, times: true } })).map((d) => {
+    const t = d.times as unknown as number[];
+    return { id: d.id, name: d.name, slug: d.slug, description: d.description, rows: d.rows, from: t[0], to: t[t.length - 1] };
+  });
   const items = await prisma.customIndicator.findMany({ where: { userId }, orderBy: sort === "name" ? { name: "asc" } : sort === "created" ? { createdAt: "desc" } : { updatedAt: "desc" } });
   const all = items.map((i) => {
     const def = i.def as unknown as CustomIndicatorDef;
@@ -40,7 +45,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
         icon={PencilRuler}
         description="Describe an indicator in your own words and your assistant builds it for you to review and save. Saved indicators appear under “Custom” in every indicator picker: on charts, in strategy rules, backtests, forward tests and the replay, always with their formula shown."
       />
-      <div className="mt-6">
+      <div className="mt-6 space-y-6">
+        <DatasetsPanel datasets={datasetRows} />
         <CustomIndicatorList
           items={shown.rows}
           total={all.length}

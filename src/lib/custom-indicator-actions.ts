@@ -7,9 +7,10 @@ import { prisma } from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { logError } from "@/lib/logger";
 import { type Candle } from "@/lib/market-data";
-import { computeCustomSeries, customParts, customVisual, defaultPart, indicatorRefs, indicatorSlug, PART_LABEL, validateCustomDef, type CustomIndicatorDef, type CustomVisual } from "@/lib/custom-indicator";
+import { computeCustomSeries, customParts, customVisual, deepSymbols, defaultPart, externalRefs, indicatorSlug, PART_LABEL, validateCustomDef, type CustomIndicatorDef, type CustomVisual } from "@/lib/custom-indicator";
 import { checkIntegrity, estimateCost, type CostReport, type IntegrityReport } from "@/lib/custom-indicator/integrity";
-import { evaluateFormula, parseProgram } from "@/lib/custom-indicator/formula";
+import { evaluateFormula, parseProgram, type Externals } from "@/lib/custom-indicator/formula";
+import { parseDataset } from "@/lib/custom-indicator/dataset";
 import { userMarketData } from "@/lib/market-data/for-user";
 
 // The user's own indicators: save, delete, and preview any kind on a real chart.
@@ -25,20 +26,35 @@ async function uid() {
  * indicator still works the same if the other one is later edited or deleted. Throws a plain-English error when one is missing.
  */
 async function attachUses(userId: string, def: CustomIndicatorDef, ownName?: string): Promise<CustomIndicatorDef> {
-  const { uses: _stale, ...bare } = def;
+  const { uses: _stale, data: _staleData, ...bare } = def;
   void _stale;
-  const refs = indicatorRefs(bare as CustomIndicatorDef);
-  if (!refs.length) return bare as CustomIndicatorDef;
-  const rows = await prisma.customIndicator.findMany({ where: { userId }, select: { name: true, def: true } });
-  const bySlug = new Map(rows.map((r) => [indicatorSlug(r.name), r] as const));
-  const uses: Record<string, CustomIndicatorDef> = {};
-  for (const ref of refs) {
-    if (ownName && indicatorSlug(ownName) === ref) throw new Error("An indicator can't read itself.");
-    const row = bySlug.get(ref);
-    if (!row) throw new Error(`You have no custom indicator called “${ref}”. Write the name of one you've saved, with spaces as _ (“Trend score” is trend_score).`);
-    uses[ref] = row.def as unknown as CustomIndicatorDef;
+  void _staleData;
+  const { inds, datas } = externalRefs(bare as CustomIndicatorDef);
+  let out = bare as CustomIndicatorDef;
+  if (inds.length) {
+    const rows = await prisma.customIndicator.findMany({ where: { userId }, select: { name: true, def: true } });
+    const bySlug = new Map(rows.map((r) => [indicatorSlug(r.name), r] as const));
+    const uses: Record<string, CustomIndicatorDef> = {};
+    for (const ref of inds) {
+      if (ownName && indicatorSlug(ownName) === ref) throw new Error("An indicator can't read itself.");
+      const row = bySlug.get(ref);
+      if (!row) throw new Error(`You have no custom indicator called “${ref}”. Write the name of one you've saved, with spaces as _ (“Trend score” is trend_score).`);
+      uses[ref] = row.def as unknown as CustomIndicatorDef;
+    }
+    out = { ...out, uses };
   }
-  return { ...bare, uses } as CustomIndicatorDef;
+  if (datas.length) {
+    // A copy of each dataset travels with the indicator, so every backtest and live run reads exactly the same numbers.
+    const sets = await prisma.userDataset.findMany({ where: { userId, slug: { in: datas } }, select: { slug: true, times: true, values: true } });
+    const data: Record<string, { t: number[]; v: number[] }> = {};
+    for (const ref of datas) {
+      const row = sets.find((s) => s.slug === ref);
+      if (!row) throw new Error(`You have no dataset called “${ref}”. Upload it under Your datasets (spaces in its name written as _).`);
+      data[ref] = { t: row.times as unknown as number[], v: row.values as unknown as number[] };
+    }
+    out = { ...out, data };
+  }
+  return out;
 }
 
 export async function saveCustomIndicator(input: { id?: string; name: string; description?: string; def: CustomIndicatorDef; /** The name is one the user already has: update that indicator (its old version goes to the history) instead of refusing. */ replaceExisting?: boolean }): Promise<CIResult<{ id: string }>> {
@@ -180,11 +196,12 @@ export async function inspectCustomIndicator(input: { def: CustomIndicatorDef; s
   try {
     const candles = await userMarketData(userId, "view").getHistoricalCandles(input.symbol, range, input.interval);
     if (candles.length < 5) return { ok: false, error: "That instrument has too few candles in this window." };
+    const ext: Externals = { instruments: await loadInstrumentCandles(userId, deepSymbols(def), input.interval, range) };
     const started = performance.now();
     const columns: InspectColumn[] = [];
     const num = (v: number) => (Number.isFinite(v) ? Math.round(v * 10000) / 10000 : null);
-    for (const part of customParts(def)) columns.push({ key: `out-${part}`, label: part === "value" ? "Indicator value" : (PART_LABEL[part] ?? part), kind: "output", values: computeCustomSeries(candles, def, part).map(num) });
-    if (def.type === "formula" || def.type === "signal") for (const st of parseProgram(def.formula, Object.keys(def.uses ?? {})).steps) columns.push({ key: `step-${st.name}`, label: st.name, kind: "step", values: evaluateFormula(st.tree, candles, (n, c) => computeCustomSeries(c, def.uses![n])).map(num) });
+    for (const part of customParts(def)) columns.push({ key: `out-${part}`, label: part === "value" ? "Indicator value" : (PART_LABEL[part] ?? part), kind: "output", values: computeCustomSeries(candles, def, part, ext).map(num) });
+    if (def.type === "formula" || def.type === "signal") for (const st of parseProgram(def.formula, Object.keys(def.uses ?? {}), Object.keys(def.data ?? {})).steps) columns.push({ key: `step-${st.name}`, label: st.name, kind: "step", values: evaluateFormula(st.tree, candles, (n, c) => computeCustomSeries(c, def.uses![n], undefined, ext), { instruments: ext.instruments, data: def.data }).map(num) });
     const computeMs = Math.round(performance.now() - started);
     const take = 40;
     return {
@@ -194,7 +211,7 @@ export async function inspectCustomIndicator(input: { def: CustomIndicatorDef; s
         interval: input.interval,
         bars: candles.length,
         computeMs,
-        integrity: checkIntegrity(candles, def),
+        integrity: checkIntegrity(candles, def, 5, (c, d, p) => computeCustomSeries(c, d, p, ext)),
         cost: estimateCost(def),
         times: candles.slice(-take).map((c) => c.time),
         closes: candles.slice(-take).map((c) => c.close),
@@ -232,13 +249,75 @@ export async function previewCustomIndicator(def: CustomIndicatorDef, symbol: st
   if (!instrument) return { ok: false, error: "Pick an instrument." };
   try {
     const candles = await userMarketData(userId, "view").getHistoricalCandles(symbol, "6mo", "1d");
-    const visual = customVisual(candles, clean, name.trim() || "Preview");
+    const ext: Externals = { instruments: await loadInstrumentCandles(userId, deepSymbols(clean), "1d", "6mo") };
+    const visual = customVisual(candles, clean, name.trim() || "Preview", ext);
     // The latest value a rule would read by default (the middle line for zones/bands, 1/0 for signals).
-    const raw = computeCustomSeries(candles, clean);
+    const raw = computeCustomSeries(candles, clean, undefined, ext);
     const lastRaw = raw.at(-1);
     return { ok: true, data: { candles, visual, last: lastRaw !== undefined && Number.isFinite(lastRaw) ? Math.round(lastRaw * 10000) / 10000 : null, lastLabel: PART_LABEL[defaultPart(clean)] } };
   } catch (err) {
     logError("custom-indicator.preview", err, { symbol });
     return { ok: false, error: "Couldn't load prices for the preview — try again." };
   }
+}
+
+// ---------- other instruments (sym) and uploaded datasets (data) ----------
+
+const SYMBOLS_AT_ONCE = 5;
+
+/** Candles of every other instrument an indicator reads with sym(), on the same candle size, for charts and tests. */
+async function loadInstrumentCandles(userId: string, symbols: string[], interval: string, range: string): Promise<Externals["instruments"]> {
+  if (!symbols.length) return {};
+  if (symbols.length > SYMBOLS_AT_ONCE) throw new Error(`An indicator can read at most ${SYMBOLS_AT_ONCE} other instruments at once.`);
+  const known = await prisma.instrument.findMany({ where: { symbol: { in: symbols } }, select: { symbol: true } });
+  const missing = symbols.filter((s) => !known.some((k) => k.symbol === s));
+  if (missing.length) throw new Error(`${missing.join(", ")} isn't an instrument on this platform (write it as it appears on the instrument page, like RELIANCE.NS or ^NSEI).`);
+  const market = userMarketData(userId, "view");
+  const entries = await Promise.all(
+    symbols.map(async (s) => [s, await market.getHistoricalCandles(s, range as Parameters<typeof market.getHistoricalCandles>[1], interval as Parameters<typeof market.getHistoricalCandles>[2])] as const),
+  );
+  return Object.fromEntries(entries);
+}
+
+/** For a chart: the candles of other instruments the active indicators read, matching the chart's range and candle size. */
+export async function loadIndicatorInstruments(symbols: string[], interval: string, range: string): Promise<CIResult<Record<string, Candle[]>>> {
+  const userId = await uid();
+  if (!userId) return { ok: false, error: "Sign in again." };
+  if (await checkRateLimit(`ci-instruments:${userId}`, 60, 60_000)) return { ok: false, error: "Loading too often — wait a moment." };
+  try {
+    return { ok: true, data: (await loadInstrumentCandles(userId, [...new Set(symbols)].slice(0, SYMBOLS_AT_ONCE + 1), interval, range)) ?? {} };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Couldn't load those instruments." };
+  }
+}
+
+export type DatasetRow = { id: string; name: string; slug: string; description: string | null; rows: number; from: number; to: number };
+
+export async function createDataset(input: { name: string; description?: string; csv: string }): Promise<CIResult<{ slug: string; skipped: number }>> {
+  const userId = await uid();
+  if (!userId) return { ok: false, error: "Sign in again." };
+  if (await checkRateLimit(`ci-dataset:${userId}`, 20, 10 * 60_000)) return { ok: false, error: "Uploading too often — wait a few minutes." };
+  const name = input.name?.trim();
+  const slug = name ? indicatorSlug(name) : "";
+  if (!name || name.length > 40 || !/^[a-z_][a-z0-9_]*$/.test(slug)) return { ok: false, error: "Give it a name that starts with a letter (up to 40 characters), e.g. Model score." };
+  if (["ind", "sym", "data", "fn", "self", "param"].includes(slug)) return { ok: false, error: "That name is used by the formula language; pick another." };
+  let parsed;
+  try {
+    parsed = parseDataset(input.csv);
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "That table can't be read." };
+  }
+  if ((await prisma.userDataset.count({ where: { userId } })) >= 20) return { ok: false, error: "You can keep up to 20 datasets." };
+  if (await prisma.userDataset.findUnique({ where: { userId_slug: { userId, slug } }, select: { id: true } })) return { ok: false, error: `You already have a dataset called “${name}”.` };
+  await prisma.userDataset.create({ data: { userId, name, slug, description: input.description?.trim().slice(0, 200) || null, times: parsed.times, values: parsed.values, rows: parsed.times.length } });
+  revalidatePath("/app/indicators");
+  return { ok: true, data: { slug, skipped: parsed.skipped } };
+}
+
+export async function deleteDataset(id: string): Promise<CIResult> {
+  const userId = await uid();
+  if (!userId) return { ok: false, error: "Sign in again." };
+  await prisma.userDataset.deleteMany({ where: { id, userId } });
+  revalidatePath("/app/indicators");
+  return { ok: true };
 }

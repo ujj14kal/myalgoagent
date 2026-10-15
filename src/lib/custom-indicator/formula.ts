@@ -61,6 +61,8 @@ export const FORMULA_FUNCTION_NOTES: Record<string, string> = {
   entropy: "entropy(source, n, bins): 0–1 disorder of the last n changes (0 = all alike, 1 = evenly spread). Statistical estimate", dominantcycle: "dominantcycle(source, n): length in bars of the strongest cycle in the last n values (Fourier). Statistical estimate",
   hurst: "hurst(source, n): trending (above 0.5) or mean-reverting (below 0.5) tendency over the last n bars. Statistical estimate", ewmstd: "ewmstd(source, n): standard deviation that weights recent values more. Statistical estimate",
   htflive: `htflive(minutes, formula): like htf but reads the bigger candle WHILE it forms, so each value is provisional until that candle closes (it can differ from what htf shows later)`,
+  sym: 'sym("SYMBOL", expression): the expression worked out on another instrument (same candle size) and lined up with this chart, e.g. sym("^NSEI", ema(close, 20)); each candle sees that instrument only up to its own time',
+  data: "data(name): one of your uploaded datasets (spaces in its name written as _). A value counts from the time you gave it onwards, never before; make sure your data is point-in-time accurate",
   ind: "ind(name): the values of another custom indicator of yours (spaces in its name written as _), so indicators can be built from indicators",
   htf: `htf(minutes, formula): the formula worked out on bigger candles (${HTF_TIMEFRAMES.join(", ")} minutes), using only candles that have fully closed`,
 };
@@ -77,7 +79,7 @@ const MAX_STATEMENTS = 30;
 
 // ---------- parsing ----------
 
-type Tok = { k: "num"; v: number } | { k: "id"; v: string } | { k: "op"; v: string } | { k: "(" } | { k: ")" } | { k: "," };
+type Tok = { k: "num"; v: number } | { k: "str"; v: string } | { k: "id"; v: string } | { k: "op"; v: string } | { k: "(" } | { k: ")" } | { k: "," };
 
 function tokenize(src: string): Tok[] {
   const out: Tok[] = [];
@@ -95,6 +97,11 @@ function tokenize(src: string): Tok[] {
       const m = /^[a-z_][a-z0-9_]*/i.exec(src.slice(i))!;
       out.push({ k: "id", v: m[0].toLowerCase() });
       i += m[0].length;
+    } else if (c === '"') {
+      const end = src.indexOf('"', i + 1);
+      if (end < 0) throw new FormulaError(`A quote is missing its closing " (position ${i + 1}).`);
+      out.push({ k: "str", v: src.slice(i + 1, end) });
+      i = end + 1;
     } else if (c === "(" || c === ")" || c === ",") {
       out.push({ k: c });
       i++;
@@ -112,7 +119,7 @@ function tokenize(src: string): Tok[] {
   return out;
 }
 
-const RESERVED = new Set<string>([...SERIES, ...WINDOW_FNS, ...MATH_FNS, ...MATH1_FNS, ...STAT_FNS, ...STATE_FNS, ...PIVOT_FNS, ...STRUCTURE_FNS, ...TIME_FNS, "htf", "htflive", "ind", "fn", "param", "recur", "self", ...ESTIMATE_FNS, "nz", "pow", "mod", "clamp", "percentile", "correlation", "covariance", "and", "or"]);
+const RESERVED = new Set<string>([...SERIES, ...WINDOW_FNS, ...MATH_FNS, ...MATH1_FNS, ...STAT_FNS, ...STATE_FNS, ...PIVOT_FNS, ...STRUCTURE_FNS, ...TIME_FNS, "htf", "htflive", "ind", "sym", "data", "fn", "param", "recur", "self", ...ESTIMATE_FNS, "nz", "pow", "mod", "clamp", "percentile", "correlation", "covariance", "and", "or"]);
 
 /** How many nodes a tree has once every name is replaced by what it stands for (shared parts counted each time they're used). */
 const sizes = new WeakMap<object, number>();
@@ -130,7 +137,7 @@ export type FormulaProgram = { tree: Node; /** Every name set with `name = …`,
  * Parses a formula, or several steps: lines (or `;`) like `momentum = close - ema(close, 50)` that later lines can use,
  * ending with the line that is the indicator itself. Throws FormulaError with a plain-English reason.
  */
-export function parseProgram(src: string, uses?: readonly string[]): FormulaProgram {
+export function parseProgram(src: string, uses?: readonly string[], datas?: readonly string[]): FormulaProgram {
   const text = src.trim();
   if (!text) throw new FormulaError("Write a formula, e.g. ema(close, 20) - ema(close, 50).");
   if (text.length > MAX_LENGTH) throw new FormulaError(`Keep formulas under ${MAX_LENGTH} characters.`);
@@ -154,7 +161,7 @@ export function parseProgram(src: string, uses?: readonly string[]): FormulaProg
       if (new Set(params).size !== params.length || params.some((x) => !/^[a-z_][a-z0-9_]*$/.test(x) || RESERVED.has(x))) throw new FormulaError(`The inputs of ${name}() must be different names that are not already used by the language, e.g. fn ${name}(x, n) = …`);
       const local = new Map<string, Node>(params.map((x) => [x, { t: "call", fn: "param", args: [], ref: x } as Node]));
       // The body is only read for mistakes here; it is checked in full where it is used, with real inputs.
-      fns.set(name, { params, body: parseExpr(def[3], local, budget, uses, fns, true) });
+      fns.set(name, { params, body: parseExpr(def[3], local, budget, uses, fns, true, datas) });
       return;
     }
     const m = /^([a-z_][a-z0-9_]*)\s*=(?!=)\s*(.*)$/i.exec(st);
@@ -163,12 +170,12 @@ export function parseProgram(src: string, uses?: readonly string[]): FormulaProg
       if (RESERVED.has(name)) throw new FormulaError(`“${name}” is already a name in the formula language — pick another name for this step.`);
       if (scope.has(name)) throw new FormulaError(`“${name}” is set twice — give each step its own name.`);
       if (i === statements.length - 1) throw new FormulaError("The last line must be the indicator itself, not a name being set — write the formula that uses your steps.");
-      const t = parseExpr(m[2], scope, budget, uses, fns);
+      const t = parseExpr(m[2], scope, budget, uses, fns, false, datas);
       scope.set(name, t);
       steps.push({ name, tree: t });
     } else {
       if (i !== statements.length - 1) throw new FormulaError(`Line ${i + 1} sets nothing: write “name = formula” for the steps, and put the indicator's own formula last.`);
-      tree = parseExpr(st, scope, budget, uses, fns);
+      tree = parseExpr(st, scope, budget, uses, fns, false, datas);
     }
   });
   if (!tree) throw new FormulaError("Write the indicator's own formula on the last line.");
@@ -177,8 +184,8 @@ export function parseProgram(src: string, uses?: readonly string[]): FormulaProg
 }
 
 /** Parses and checks a formula (see parseProgram for steps). Throws FormulaError with a plain-English reason. */
-export function parseFormula(src: string, uses?: readonly string[]): Node {
-  return parseProgram(src, uses).tree;
+export function parseFormula(src: string, uses?: readonly string[], datas?: readonly string[]): Node {
+  return parseProgram(src, uses, datas).tree;
 }
 
 type UserFn = { params: string[]; body: Node };
@@ -200,9 +207,9 @@ function substitute(n: Node, args: Map<string, Node>, memo = new Map<Node, Node>
 
 /** Names of data that candles here don't carry. Using one is an error, never a made-up value. */
 const UNAVAILABLE_DATA = new Set(["openinterest", "oi", "bid", "ask", "bidsize", "asksize", "depth", "tick", "ticks", "delta", "gamma", "theta", "vega", "iv", "impliedvolatility", "advances", "declines", "breadth", "delivery", "turnover", "fundamentals", "eps", "pe"]);
-const OTHER_INSTRUMENT_FNS = new Set(["sym", "symbol", "security", "request", "spread", "ratio", "pair", "compare"]);
+const OTHER_INSTRUMENT_FNS = new Set(["symbol", "security", "request", "spread", "ratio", "pair", "compare"]);
 
-function parseExpr(text: string, scope: Map<string, Node>, budget: { n: number }, uses?: readonly string[], fns: Map<string, UserFn> = new Map(), defer = false): Node {
+function parseExpr(text: string, scope: Map<string, Node>, budget: { n: number }, uses?: readonly string[], fns: Map<string, UserFn> = new Map(), defer = false, datas?: readonly string[]): Node {
   const toks = tokenize(text);
   let p = 0;
   const peek = () => toks[p];
@@ -288,6 +295,26 @@ function parseExpr(text: string, scope: Map<string, Node>, budget: { n: number }
       return e;
     }
     if (t.k === "id") {
+      if (t.v === "sym" && peek()?.k === "(") {
+        // sym("RELIANCE.NS", expression): the expression worked out on another instrument's candles, lined up with this chart's.
+        p++;
+        const q = toks[p++];
+        if (!q || q.k !== "str" || !/^[a-z0-9^.&_-]{1,30}$/i.test(q.v)) throw new FormulaError('sym() takes an instrument in quotes and an expression, e.g. sym("^NSEI", ema(close, 20)).');
+        if (peek()?.k !== ",") throw new FormulaError('sym() takes an instrument in quotes and an expression, e.g. sym("^NSEI", ema(close, 20)).');
+        p++;
+        const expr = or();
+        expectClose();
+        return node({ t: "call", fn: "sym", args: [expr], ref: q.v.toUpperCase() });
+      }
+      if (t.v === "data" && peek()?.k === "(") {
+        // data(name): one of your uploaded datasets, by its name with spaces written as _
+        p++;
+        const id = toks[p++];
+        if (!id || id.k !== "id") throw new FormulaError("data() takes the name of one of your datasets, with spaces written as _, e.g. data(model_score).");
+        expectClose();
+        if (datas && !datas.includes(id.v)) throw new FormulaError(`You have no dataset called “${id.v}”. Upload it under Your datasets on the Custom Indicators page; use its name with spaces written as _.`);
+        return node({ t: "call", fn: "data", args: [], ref: id.v });
+      }
       if (t.v === "recur" && peek()?.k === "(") {
         // recur(start, expression using self): the second part may read the series' own previous value.
         p++;
@@ -330,7 +357,7 @@ function parseExpr(text: string, scope: Map<string, Node>, budget: { n: number }
           if (args.length !== uf.params.length) throw new FormulaError(`${t.v}() takes ${uf.params.length} value${uf.params.length === 1 ? "" : "s"} (${uf.params.join(", ")}).`);
           return substitute(uf.body, new Map(uf.params.map((x, k) => [x, args[k]])));
         }
-        if (OTHER_INSTRUMENT_FNS.has(t.v)) throw new FormulaError(`${t.v}() would read another instrument, which indicators can't do yet: a formula works on the one chart it is drawn on. Use ind(name) to build on your other indicators.`);
+        if (OTHER_INSTRUMENT_FNS.has(t.v)) throw new FormulaError(`${t.v}() isn't a function here. To read another instrument write sym(\"SYMBOL\", expression), e.g. sym(\"^NSEI\", close) - ema(close, 20); to build on your other indicators use ind(name).`);
         return node({ t: "call", fn: t.v, args });
       }
       if (UNAVAILABLE_DATA.has(t.v)) throw new FormulaError(`“${t.v}” isn't available to indicators: candles here carry open, high, low, close and volume only. Open interest, bid/ask, order-book depth, implied volatility and Greeks, market breadth, delivery and uploaded data aren't connected yet, and a formula is never given invented values.`);
@@ -339,6 +366,7 @@ function parseExpr(text: string, scope: Map<string, Node>, budget: { n: number }
       if ((SERIES as readonly string[]).includes(t.v)) return node({ t: "series", name: t.v as SeriesName });
       throw new FormulaError(`Unknown name "${t.v}". Use open, high, low, close, volume, hl2, hlc3, ohlc4, range, body, upwick, lowwick, tr, barindex, a name you set earlier in the formula, or a function like sma(close, 20).`);
     }
+    if (t.k === "str") throw new FormulaError('Text in quotes is only allowed as the first part of sym("SYMBOL", …).');
     throw new FormulaError("Something's missing between the operators.");
   };
 
@@ -363,7 +391,12 @@ function check(n: Node): void {
   if (n.t !== "call") return;
   n.args.forEach(check);
   const f = n.fn;
-  if (f === "ind" || f === "param" || f === "self") return;
+  if (f === "ind" || f === "param" || f === "self" || f === "data") return;
+  if (f === "sym") {
+    const nested = (x: Node): boolean => (x.t === "call" ? x.fn === "sym" || x.fn === "htflive" || x.args.some(nested) : x.t === "neg" ? nested(x.a) : x.t === "bin" ? nested(x.a) || nested(x.b) : false);
+    if (nested(n.args[0])) throw new FormulaError("sym() can't contain another sym() or htflive().");
+    return;
+  }
   const len = (i: number) => {
     const a = n.args[i];
     if (!a || !isConst(a) || !Number.isInteger(constOf(a)) || constOf(a) < 1 || constOf(a) > MAX_WINDOW) throw new FormulaError(`${f}(): the length must be a whole number from 1 to ${MAX_WINDOW}.`);
@@ -701,7 +734,22 @@ const lag = (x: Arr, n: number): Arr => x.map((_, i) => (i >= n ? x[i - n] : NaN
 /** `resolve` supplies the values of another custom indicator for ind(name). */
 export type IndicatorResolver = (name: string, candles: Candle[]) => number[];
 
-export function evaluateFormula(tree: Node, candles: Candle[], resolve?: IndicatorResolver): Arr {
+/** What a formula may read besides its own chart: other instruments' candles (for sym) and uploaded datasets (for data). */
+export type DatasetSnapshot = { t: number[]; v: number[] };
+export type Externals = { instruments?: Record<string, Candle[]>; data?: Record<string, DatasetSnapshot> };
+
+/** A series on `other`'s clock, carried onto `base`'s clock: each base candle takes the latest value at or before its own time. */
+function alignByTime(base: Candle[], times: number[], values: Arr): Arr {
+  const out = nan(base.length);
+  let j = -1;
+  for (let i = 0; i < base.length; i++) {
+    while (j + 1 < times.length && times[j + 1] <= base[i].time) j++;
+    if (j >= 0) out[i] = values[j];
+  }
+  return out;
+}
+
+export function evaluateFormula(tree: Node, candles: Candle[], resolve?: IndicatorResolver, ext?: Externals): Arr {
   const len = candles.length;
   const cache = new Map<Node, Arr>();
   const ev = (n: Node): Arr => {
@@ -977,8 +1025,16 @@ export function evaluateFormula(tree: Node, candles: Candle[], resolve?: Indicat
           partial.volume += c.volume;
         }
         const series = [...groups.slice(0, g), { ...partial! }];
-        out[i] = evaluateFormula(n.args[1], series, resolve).at(-1)!;
+        out[i] = evaluateFormula(n.args[1], series, resolve, ext).at(-1)!;
       }
+    } else if (f === "sym") {
+      const other = ext?.instruments?.[n.ref!];
+      if (!other) throw new FormulaError(`${n.ref} isn't loaded for this indicator, so its candles can't be read here. They load on charts, in Test & inspect and in strategies.`);
+      out = alignByTime(candles, other.map((c) => c.time), evaluateFormula(n.args[0], other, resolve, ext));
+    } else if (f === "data") {
+      const d = ext?.data?.[n.ref!];
+      if (!d) throw new FormulaError(`The dataset “${n.ref}” isn't attached to this indicator. Save the indicator again so a copy of the dataset travels with it.`);
+      out = alignByTime(candles, d.t, d.v);
     } else if (f === "ind") {
       if (!resolve) throw new FormulaError(`“${n.ref}” is another custom indicator, which isn't attached to this one. Save this indicator again so it can be linked.`);
       out = resolve(n.ref!, candles);
@@ -1053,7 +1109,7 @@ export function evaluateFormula(tree: Node, candles: Candle[], resolve?: Indicat
     } else if (f === "htf") {
       // The bigger candle's value is shown only once that candle has closed: every base candle reads the PREVIOUS bigger candle, so nothing changes afterwards.
       const { groups, of } = groupCandles(candles, num(0));
-      const big = evaluateFormula(n.args[1], groups, resolve);
+      const big = evaluateFormula(n.args[1], groups, resolve, ext);
       out = of.map((g) => (g > 0 ? big[g - 1] : NaN));
     } else {
       const def = CATALOG.get(f)!;

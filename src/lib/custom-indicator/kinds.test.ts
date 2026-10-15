@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { computeCustomSeries, customParts, customVisual, defaultPart, customDashboard, describeCustom, indicatorRefs, indicatorSlug, validateCustomDef, type CustomIndicatorDef } from "./index";
-import { evaluateStrategy } from "@/lib/strategy/evaluate";
+import { computeCustomSeries, deepSymbols, externalRefs, customParts, customVisual, defaultPart, customDashboard, describeCustom, indicatorRefs, indicatorSlug, validateCustomDef, type CustomIndicatorDef } from "./index";
+import { auxKey, collectAuxRequirements, evaluateStrategy } from "@/lib/strategy/evaluate";
 import { validateConditionNode } from "@/lib/strategy/validate";
 import { conditionToText } from "@/lib/strategy/format";
 
@@ -181,5 +181,48 @@ describe("painting the chart and the table of values", () => {
     expect(rows.map((r) => r.label)).toEqual(["Score", "a", "b"]);
     expect(rows[0].kind).toBe("output");
     expect(rows.every((r) => r.value !== null)).toBe(true);
+  });
+});
+
+describe("datasets and instruments travel with the indicator", () => {
+  const cs = Array.from({ length: 60 }, (_, i) => ({ time: 1_700_000_000 + i * 86400, open: 100, high: 101, low: 99, close: 100 + i, volume: 1000 }));
+  const withData: CustomIndicatorDef = { type: "formula", formula: "close + data(model_score)", pane: "separate", data: { model_score: { t: [cs[10].time, cs[30].time], v: [1, 2] } } };
+
+  it("reads the attached copy of a dataset", () => {
+    const v = computeCustomSeries(cs, withData);
+    expect(v[9]).toBeNaN();
+    expect(v[10]).toBe(cs[10].close + 1);
+    expect(v[40]).toBe(cs[40].close + 2);
+  });
+  it("keeps valid datasets through validation and refuses bad ones", () => {
+    expect(validateCustomDef(withData).data?.model_score.v).toEqual([1, 2]);
+    expect(() => validateCustomDef({ ...withData, data: { model_score: { t: [5, 3], v: [1, 2] } } })).toThrow(/ascending/);
+    expect(() => validateCustomDef({ type: "formula", formula: "data(missing)", pane: "separate" })).toThrow(/no dataset called/);
+  });
+  it("lists every external an indicator reads, including through other indicators", () => {
+    const inner: CustomIndicatorDef = { type: "formula", formula: 'sym("^NSEI", close)', pane: "separate" };
+    const outer: CustomIndicatorDef = { type: "formula", formula: 'ind(inner) + sym("RELIANCE.NS", close) + data(model_score)', pane: "separate", uses: { inner }, data: withData.data };
+    expect(externalRefs(outer)).toEqual({ inds: ["inner"], syms: ["RELIANCE.NS"], datas: ["model_score"] });
+    expect(deepSymbols(outer).sort()).toEqual(["RELIANCE.NS", "^NSEI"]);
+  });
+  it("uses the other instruments handed in, also through an indicator it is built on", () => {
+    const inner: CustomIndicatorDef = { type: "formula", formula: 'sym("^NSEI", close)', pane: "separate" };
+    const outer: CustomIndicatorDef = { type: "formula", formula: "ind(inner) * 2", pane: "separate", uses: { inner } };
+    const index = cs.map((c) => ({ ...c, close: 5000 + c.close }));
+    expect(computeCustomSeries(cs, outer, undefined, { instruments: { "^NSEI": index } })[20]).toBe((5000 + cs[20].close) * 2);
+  });
+});
+
+describe("a strategy rule using an indicator that reads another instrument", () => {
+  const rel: CustomIndicatorDef = { type: "formula", formula: 'close - sym("^NSEI", close)', pane: "separate" };
+  const entry = { kind: "comparison" as const, left: { kind: "custom" as const, name: "Beat the index", def: rel }, operator: "GT" as const, right: { kind: "constant" as const, value: 0 } };
+  it("asks for the other instrument's candles to be fetched", () => {
+    expect(collectAuxRequirements(entry, never)).toEqual([{ instrumentSymbol: "^NSEI", timeframe: undefined }]);
+  });
+  it("uses them when they are supplied, and reads as not-yet-true without them", () => {
+    const index = candles.map((c) => ({ ...c, close: c.close + (c.close < 110 ? 5 : -5) })); // the stock trails the index, then leads it
+    const aux = new Map([[auxKey("^NSEI", undefined), index]]);
+    expect(evaluateStrategy(candles, entry, never, aux).find((s) => s.type === "entry")?.time).toBe(T(10));
+    expect(evaluateStrategy(candles, entry, never).find((s) => s.type === "entry")).toBeUndefined();
   });
 });

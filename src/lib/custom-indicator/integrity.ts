@@ -87,6 +87,8 @@ export function timingNotes(def: CustomIndicatorDef): string[] {
       if (c.fn === "htflive") notes.add(`htflive(${k}, …) reads the ${k}-minute candle WHILE it forms: each value is provisional and can differ from what the closed candle finally shows. Use htf() for confirmed values.`);
       if (["kalman", "fisher", "entropy", "dominantcycle", "hurst", "ewmstd"].includes(c.fn)) notes.add(`${c.fn}() is a statistical estimate. ${ESTIMATE_NOTE.replace("Statistical estimate: ", "")}`);
       if (c.fn === "recur") notes.add("recur() builds each value from the one before it, so a longer or shorter history can shift its early values slightly; it never uses later candles.");
+      if (c.fn === "sym") notes.add(`sym("${c.ref}", …) reads another instrument's candles up to each candle's own time, on this chart's candle size, so it never looks ahead. If ${c.ref} has no candle at a time, the latest earlier one is carried forward.`);
+      if (c.fn === "data") notes.add(`data(${c.ref}) is your uploaded dataset: each value counts from the time on its row. It is only point-in-time accurate if your numbers were known at those times — the platform can't check that.`);
       if (c.fn === "htf") notes.add(`htf(${k}, …) reads the last fully closed ${k}-minute candle: it never uses a bigger candle that is still forming.`);
     });
   }
