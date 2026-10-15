@@ -8,6 +8,7 @@ import { ENTRY_OPERATORS, validateCustomDef, type CustomEntry, type CustomIndica
 import { FORMULA_REFERENCE, FormulaError, parseProgram } from "@/lib/custom-indicator/formula";
 import { estimateCost } from "@/lib/custom-indicator/integrity";
 import InspectIndicator from "./inspect";
+import BlockBuilder from "./block-builder";
 
 // Write a custom indicator yourself: the formula as text, or step by step (a name per step, the last line is the indicator),
 // with a searchable list of everything the language can do, live checking as you type, a test on real candles and Save.
@@ -70,7 +71,7 @@ export default function FormulaStudio() {
   const [lower, setLower] = useState("lowest(low, 20)");
   const [middle, setMiddle] = useState("");
   const [width, setWidth] = useState("2 * stdev(close, 20)");
-  const [view, setView] = useState<"text" | "steps">("text");
+  const [view, setView] = useState<"text" | "steps" | "blocks">("text");
   const [color, setColor] = useState(COLORS[0]);
   const [style, setStyle] = useState<"line" | "histogram" | "heat">("line");
   const [paint, setPaint] = useState<"" | "candles" | "background">("");
@@ -243,14 +244,21 @@ export default function FormulaStudio() {
               <div className="mb-1 flex items-center justify-between">
                 <span className={`${label} mb-0`}>{kind === "band" ? "Middle line" : kind === "signal" ? "Formula (true / false)" : "Formula"}</span>
                 <span className="flex gap-1">
-                  {(["text", "steps"] as const).map((v) => (
+                  {(["text", "steps", "blocks"] as const).map((v) => (
                     <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)} className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${view === v ? "bg-brand-navy text-white" : "text-brand-navy/55 ring-1 ring-brand-navy/15"}`}>
-                      {v === "text" ? "Write it" : "Step by step"}
+                      {v === "text" ? "Write it" : v === "steps" ? "Step by step" : "Visual blocks"}
                     </button>
                   ))}
                 </span>
               </div>
-              {view === "text" ? (
+              {view === "blocks" ? (
+                <BlockBuilder
+                  onUse={(f) => {
+                    setText(f);
+                    setView("text");
+                  }}
+                />
+              ) : view === "text" ? (
                 formulaBox("main", text, setText, checks.main.error, 5)
               ) : (
                 <div className="space-y-2">
