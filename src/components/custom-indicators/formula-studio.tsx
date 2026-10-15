@@ -38,6 +38,8 @@ function buildReference(): Ref[] {
   for (const n of R.swings) out.push({ group: "Swing points (confirmed)", name: n, hint: note(n), insert: `${n}(5)` });
   for (const n of R.structure) out.push({ group: "Market structure", name: n, hint: note(n), insert: n.startsWith("fvg") ? `${n}()` : n.startsWith("eq") ? `${n}(20, 0.1)` : n.startsWith("sweep") ? `${n}(20)` : `${n}(5)` });
   for (const n of R.clock) out.push({ group: "Clock (IST)", name: n, hint: note(n), insert: `${n}()` });
+  out.push({ group: "Reusable", name: "fn", hint: "fn name(a, b) = expression — define a calculation once, use it with different inputs on later lines", insert: "fn name(x) = x" });
+  out.push({ group: "Reusable", name: "ind", hint: R.notes.ind ?? "", insert: "ind(name)" });
   out.push({ group: "Bigger candles", name: "htf", hint: note("htf"), insert: "htf(60, ema(close, 20))" });
   for (const i of R.indicators) out.push({ group: "Built-in indicators", name: i.name, hint: `${i.label}${i.settings.length ? ` (${i.settings.join(", ")})` : ""}`, insert: `${i.name}(${i.defaults.join(", ")})` });
   return out;
@@ -247,6 +249,15 @@ export default function FormulaStudio() {
                   {lines.map((l, i) => {
                     const p = parts(l);
                     const last = i === lines.length - 1;
+                    if (/^\s*fn\s/i.test(l))
+                      return (
+                        <div key={i} className="flex items-center gap-2">
+                          <input value={l} onFocus={() => setTarget("main")} onChange={(e) => setLine(i, e.target.value)} className={code} />
+                          <button type="button" aria-label="Remove function" onClick={() => setText(lines.filter((_, j) => j !== i).join("\n"))} className="text-brand-navy/35 hover:text-brand-sell">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      );
                     return (
                       <div key={i} className="flex items-center gap-2">
                         {!last || p ? (

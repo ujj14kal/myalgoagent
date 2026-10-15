@@ -215,3 +215,46 @@ describe("market structure", () => {
     expect(hi[11]).toBeNaN(); // closing at 9 is below the block, so it is gone
   });
 });
+
+describe("your own functions", () => {
+  it("defines a calculation once and uses it with different inputs", () => {
+    const v = run("fn dist(x, n) = (x - sma(x, n)) / atr(14)\ndist(close, 10) - dist(close, 30)");
+    const direct = run("(close - sma(close, 10)) / atr(14) - (close - sma(close, 30)) / atr(14)");
+    expect(v.at(-1)).toBeCloseTo(direct.at(-1)!);
+  });
+  it("lets an input be a window length", () => {
+    expect(run("fn avg(n) = sma(close, n)\navg(5)").at(-1)).toBeCloseTo(run("sma(close, 5)").at(-1)!);
+    expect(() => parseFormula("fn avg(n) = sma(close, n)\navg(close)")).toThrow(/whole number/);
+  });
+  it("can use functions defined before it", () => {
+    expect(run("fn sq(x) = x * x\nfn hyp(a, b) = sqrt(sq(a) + sq(b))\nhyp(3, 4)")[0]).toBe(5);
+  });
+  it("explains mistakes", () => {
+    expect(() => parseFormula("fn f(x) = x\nf(1, 2)")).toThrow(/takes 1 value/);
+    expect(() => parseFormula("fn sma(x) = x\n1")).toThrow(/already a name/);
+    expect(() => parseFormula("fn f(x, x) = x\n1")).toThrow(/different names/);
+    expect(() => parseFormula("fn f(x) = x")).toThrow(/last line/);
+    expect(() => parseFormula("fn f(x) = y\n1")).toThrow(/Unknown name "y"/);
+  });
+  it("never repaints", () => {
+    const f = "fn z(x, n) = zscore(x, n)\nz(close, 15) + htf(60, z(close, 5))";
+    const full = run(f);
+    const part = run(f, intraday.slice(0, 120));
+    for (let i = 0; i < 120; i++) {
+      if (Number.isNaN(full[i])) expect(part[i]).toBeNaN();
+      else expect(part[i]).toBeCloseTo(full[i], 9);
+    }
+  });
+});
+
+describe("data that isn't there", () => {
+  it("says so instead of inventing values", () => {
+    expect(() => parseFormula("openinterest > 100")).toThrow(/isn't available to indicators/);
+    expect(() => parseFormula("bid - ask")).toThrow(/never given invented values/);
+    expect(() => parseFormula("iv * 2")).toThrow(/implied volatility/);
+  });
+  it("says why another instrument can't be read", () => {
+    expect(() => parseFormula("sym(close)")).toThrow(/another instrument/);
+    expect(() => parseFormula("foo(close)")).toThrow(/no function called foo/);
+  });
+});

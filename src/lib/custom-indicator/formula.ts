@@ -104,7 +104,7 @@ function tokenize(src: string): Tok[] {
   return out;
 }
 
-const RESERVED = new Set<string>([...SERIES, ...WINDOW_FNS, ...MATH_FNS, ...MATH1_FNS, ...STAT_FNS, ...STATE_FNS, ...PIVOT_FNS, ...STRUCTURE_FNS, ...TIME_FNS, "htf", "ind", "nz", "pow", "mod", "clamp", "percentile", "correlation", "covariance", "and", "or"]);
+const RESERVED = new Set<string>([...SERIES, ...WINDOW_FNS, ...MATH_FNS, ...MATH1_FNS, ...STAT_FNS, ...STATE_FNS, ...PIVOT_FNS, ...STRUCTURE_FNS, ...TIME_FNS, "htf", "ind", "fn", "param", "nz", "pow", "mod", "clamp", "percentile", "correlation", "covariance", "and", "or"]);
 
 /** How many nodes a tree has once every name is replaced by what it stands for (shared parts counted each time they're used). */
 const sizes = new WeakMap<object, number>();
@@ -129,22 +129,38 @@ export function parseProgram(src: string, uses?: readonly string[]): FormulaProg
   const statements = text.split(/[\n;]+/).map((x) => x.trim()).filter(Boolean);
   if (statements.length > MAX_STATEMENTS) throw new FormulaError(`Use at most ${MAX_STATEMENTS} steps in one formula.`);
   const scope = new Map<string, Node>();
+  const fns = new Map<string, UserFn>();
   const steps: { name: string; tree: Node }[] = [];
   const budget = { n: 0 };
   let tree: Node | null = null;
   statements.forEach((st, i) => {
+    // fn name(a, b) = expression: a calculation you can use again with different inputs.
+    const def = /^fn\s+([a-z_][a-z0-9_]*)\s*\(([^)]*)\)\s*=\s*(.*)$/i.exec(st);
+    if (def) {
+      const name = def[1].toLowerCase();
+      const params = def[2].split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+      if (i === statements.length - 1) throw new FormulaError("The last line must be the indicator itself, not a function being defined.");
+      if (RESERVED.has(name) || CATALOG.has(name) || scope.has(name)) throw new FormulaError(`“${name}” is already a name in the formula language — pick another name for this function.`);
+      if (fns.has(name)) throw new FormulaError(`The function “${name}” is defined twice.`);
+      if (fns.size >= MAX_FUNCTIONS) throw new FormulaError(`Define at most ${MAX_FUNCTIONS} functions in one formula.`);
+      if (new Set(params).size !== params.length || params.some((x) => !/^[a-z_][a-z0-9_]*$/.test(x) || RESERVED.has(x))) throw new FormulaError(`The inputs of ${name}() must be different names that are not already used by the language, e.g. fn ${name}(x, n) = …`);
+      const local = new Map<string, Node>(params.map((x) => [x, { t: "call", fn: "param", args: [], ref: x } as Node]));
+      // The body is only read for mistakes here; it is checked in full where it is used, with real inputs.
+      fns.set(name, { params, body: parseExpr(def[3], local, budget, uses, fns, true) });
+      return;
+    }
     const m = /^([a-z_][a-z0-9_]*)\s*=(?!=)\s*(.*)$/i.exec(st);
     if (m) {
       const name = m[1].toLowerCase();
       if (RESERVED.has(name)) throw new FormulaError(`“${name}” is already a name in the formula language — pick another name for this step.`);
       if (scope.has(name)) throw new FormulaError(`“${name}” is set twice — give each step its own name.`);
       if (i === statements.length - 1) throw new FormulaError("The last line must be the indicator itself, not a name being set — write the formula that uses your steps.");
-      const t = parseExpr(m[2], scope, budget, uses);
+      const t = parseExpr(m[2], scope, budget, uses, fns);
       scope.set(name, t);
       steps.push({ name, tree: t });
     } else {
       if (i !== statements.length - 1) throw new FormulaError(`Line ${i + 1} sets nothing: write “name = formula” for the steps, and put the indicator's own formula last.`);
-      tree = parseExpr(st, scope, budget, uses);
+      tree = parseExpr(st, scope, budget, uses, fns);
     }
   });
   if (!tree) throw new FormulaError("Write the indicator's own formula on the last line.");
@@ -157,7 +173,28 @@ export function parseFormula(src: string, uses?: readonly string[]): Node {
   return parseProgram(src, uses).tree;
 }
 
-function parseExpr(text: string, scope: Map<string, Node>, budget: { n: number }, uses?: readonly string[]): Node {
+type UserFn = { params: string[]; body: Node };
+const MAX_FUNCTIONS = 10;
+
+/** The body of a user function with each input replaced by what was passed in. Shared parts stay shared. */
+function substitute(n: Node, args: Map<string, Node>, memo = new Map<Node, Node>()): Node {
+  const hit = memo.get(n);
+  if (hit) return hit;
+  let out: Node;
+  if (n.t === "call" && n.fn === "param") out = args.get(n.ref!)!;
+  else if (n.t === "neg") out = { t: "neg", a: substitute(n.a, args, memo) };
+  else if (n.t === "bin") out = { ...n, a: substitute(n.a, args, memo), b: substitute(n.b, args, memo) };
+  else if (n.t === "call") out = { ...n, args: n.args.map((a) => substitute(a, args, memo)) };
+  else out = n;
+  memo.set(n, out);
+  return out;
+}
+
+/** Names of data that candles here don't carry. Using one is an error, never a made-up value. */
+const UNAVAILABLE_DATA = new Set(["openinterest", "oi", "bid", "ask", "bidsize", "asksize", "depth", "tick", "ticks", "delta", "gamma", "theta", "vega", "iv", "impliedvolatility", "advances", "declines", "breadth", "delivery", "turnover", "fundamentals", "eps", "pe"]);
+const OTHER_INSTRUMENT_FNS = new Set(["sym", "symbol", "security", "request", "spread", "ratio", "pair", "compare"]);
+
+function parseExpr(text: string, scope: Map<string, Node>, budget: { n: number }, uses?: readonly string[], fns: Map<string, UserFn> = new Map(), defer = false): Node {
   const toks = tokenize(text);
   let p = 0;
   const peek = () => toks[p];
@@ -263,8 +300,15 @@ function parseExpr(text: string, scope: Map<string, Node>, budget: { n: number }
           }
         }
         expectClose();
+        const uf = fns.get(t.v);
+        if (uf) {
+          if (args.length !== uf.params.length) throw new FormulaError(`${t.v}() takes ${uf.params.length} value${uf.params.length === 1 ? "" : "s"} (${uf.params.join(", ")}).`);
+          return substitute(uf.body, new Map(uf.params.map((x, k) => [x, args[k]])));
+        }
+        if (OTHER_INSTRUMENT_FNS.has(t.v)) throw new FormulaError(`${t.v}() would read another instrument, which indicators can't do yet: a formula works on the one chart it is drawn on. Use ind(name) to build on your other indicators.`);
         return node({ t: "call", fn: t.v, args });
       }
+      if (UNAVAILABLE_DATA.has(t.v)) throw new FormulaError(`“${t.v}” isn't available to indicators: candles here carry open, high, low, close and volume only. Open interest, bid/ask, order-book depth, implied volatility and Greeks, market breadth, delivery and uploaded data aren't connected yet, and a formula is never given invented values.`);
       const own = scope.get(t.v);
       if (own) return own;
       if ((SERIES as readonly string[]).includes(t.v)) return node({ t: "series", name: t.v as SeriesName });
@@ -276,7 +320,7 @@ function parseExpr(text: string, scope: Map<string, Node>, budget: { n: number }
   const tree = or();
   if (p < toks.length) throw new FormulaError("There's extra text after the formula — check brackets and commas.");
   if (expanded(tree) > MAX_EXPANDED) throw new FormulaError("That formula expands to too much work — simplify it, or split it into two custom indicators.");
-  check(tree);
+  if (!defer) check(tree);
   return tree;
 }
 
@@ -294,7 +338,7 @@ function check(n: Node): void {
   if (n.t !== "call") return;
   n.args.forEach(check);
   const f = n.fn;
-  if (f === "ind") return;
+  if (f === "ind" || f === "param") return;
   const len = (i: number) => {
     const a = n.args[i];
     if (!a || !isConst(a) || !Number.isInteger(constOf(a)) || constOf(a) < 1 || constOf(a) > MAX_WINDOW) throw new FormulaError(`${f}(): the length must be a whole number from 1 to ${MAX_WINDOW}.`);
