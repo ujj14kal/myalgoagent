@@ -1,4 +1,5 @@
 import Link from "next/link";
+import AutoPager from "@/components/ui/auto-pager";
 import { notFound } from "next/navigation";
 import { Layers, LineChart, ListOrdered } from "lucide-react";
 import { auth } from "@/lib/auth";
@@ -119,6 +120,7 @@ export default async function CombinedBacktestPage({ searchParams }: { searchPar
               </tr>
             </thead>
             <tbody>
+              <AutoPager colSpan={8}>
               {allTrades.slice(0, 200).map((t) => (
                 <tr key={t.id}>
                   <td className="max-w-[12rem] truncate">{t.strategy}</td>
@@ -137,6 +139,7 @@ export default async function CombinedBacktestPage({ searchParams }: { searchPar
                   </td>
                 </tr>
               )}
+            </AutoPager>
             </tbody>
           </table>
         </div>

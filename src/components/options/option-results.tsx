@@ -1,4 +1,5 @@
 import StatCard from "@/components/ui/stat-card";
+import AutoPager from "@/components/ui/auto-pager";
 import EquityCurveChart from "@/components/equity-curve-chart";
 import type { DayTrade, OptionBacktestStats } from "@/lib/options/backtest-engine";
 import { formatSignedINR, toneOf, TONE_TEXT } from "@/lib/format";
@@ -97,6 +98,7 @@ export default function OptionResults({ stats, trades }: { stats: OptionBacktest
                 </tr>
               </thead>
               <tbody>
+<AutoPager colSpan={7}>
                 {trades.map((t) => (
                   <tr key={t.date} className="border-t border-black/[0.04] align-top">
                     <td className="whitespace-nowrap px-3 py-2 font-semibold text-brand-navy">
@@ -121,7 +123,8 @@ export default function OptionResults({ stats, trades }: { stats: OptionBacktest
                     <td className={`whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums ${TONE_TEXT[toneOf(t.netPnl)]}`}>{inr(t.netPnl)}</td>
                   </tr>
                 ))}
-              </tbody>
+              </AutoPager>
+</tbody>
             </table>
           </div>
         </section>

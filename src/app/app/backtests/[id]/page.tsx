@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import AutoPager from "@/components/ui/auto-pager";
 import { describeLegs, parseTradeLegs } from "@/lib/backtest/legs";
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
@@ -156,6 +157,7 @@ export default async function BacktestDetailPage({ params }: { params: Promise<{
               </tr>
             </thead>
             <tbody>
+<AutoPager colSpan={9}>
               {run.trades.map((t) => {
                 const tone = toneOf(t.netPnl);
                 const d = (sec: number) => new Date(sec * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "2-digit", timeZone: "Asia/Kolkata" });
@@ -191,7 +193,8 @@ export default async function BacktestDetailPage({ params }: { params: Promise<{
                   </td>
                 </tr>
               )}
-            </tbody>
+            </AutoPager>
+</tbody>
           </table>
         </div>
       </div>

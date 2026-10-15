@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import AutoPager from "@/components/ui/auto-pager";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { type CandleInterval, marketDataFor } from "@/lib/market-data";
@@ -125,6 +126,7 @@ export default async function PaperSessionDetailPage({ params }: { params: Promi
               </tr>
             </thead>
             <tbody>
+<AutoPager colSpan={9}>
               {paperSession.orders.map((o) => (
                 <tr key={o.id}>
                   <td>{new Date(o.time * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}</td>
@@ -151,7 +153,8 @@ export default async function PaperSessionDetailPage({ params }: { params: Promi
                   </td>
                 </tr>
               )}
-            </tbody>
+            </AutoPager>
+</tbody>
           </table>
         </div>
       </div>

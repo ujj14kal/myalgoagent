@@ -19,6 +19,7 @@ import CreditsProvider from "@/components/credits/credits-provider";
 import { snapshot as creditSnapshot } from "@/lib/credits/service";
 import AppShellSkeleton from "@/components/app-shell-skeleton";
 import PhonePrompt from "@/components/phone-prompt";
+import SpaceBalancer from "@/components/layout/space-balancer";
 
 // Everything under /app is per-person and read live: never built ahead of time.
 export const dynamic = "force-dynamic";
@@ -93,7 +94,10 @@ async function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
             <AppTopbar user={session.user} unreadCount={unreadCount} agentName={agentName} liveSessions={liveSessions} isStaff={isStaff} brokers={brokers} />
             {announcement && <AnnouncementBanner {...announcement} />}
-            <main className="mx-auto w-full max-w-[1400px] flex-1 p-4 md:p-6 lg:p-8">{children}</main>
+            <main data-app-main className="mx-auto w-full max-w-[1400px] flex-1 p-4 md:p-6 lg:p-8">
+              <SpaceBalancer />
+              {children}
+            </main>
             <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-black/5 px-6 pb-20 pt-3 text-xs text-brand-navy/40 md:py-3">
               <span>© {new Date().getFullYear()} MyAlgoAgent™, a product of <CompanyLink className="hover:text-brand-primary" /></span>
               <span className="flex items-center gap-3">

@@ -1,7 +1,7 @@
 import MarketRefresh from "@/components/markets/auto-refresh";
 import Link from "next/link";
 import FillList from "@/components/ui/fill-list";
-import { Braces, FlaskConical, Landmark, Radio, ShieldCheck, Sparkles, Star, TrendingUp, Zap } from "lucide-react";
+import { Braces, FlaskConical, Landmark, Radio, ShieldCheck, Sparkles, Star, TrendingUp } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getRecentBacktests } from "@/lib/portfolio";
@@ -21,7 +21,6 @@ import WatchlistSnippet from "@/components/dashboard/watchlist-snippet";
 import DashboardEmptyState from "@/components/dashboard/dashboard-empty-state";
 import EmptyCard from "@/components/dashboard/empty-card";
 import RecentBacktests from "@/components/dashboard/recent-backtests";
-import QuickActions from "@/components/dashboard/quick-actions";
 import { Card, CardHeader } from "@/components/ui/card";
 
 export const metadata = { title: "Dashboard", robots: { index: false } };
@@ -201,13 +200,7 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        <Card className="p-5">
-          <CardHeader title="Quick actions" icon={Zap} />
-          <div className="mt-4">
-            <QuickActions />
-          </div>
-        </Card>
+      <div className="grid gap-6 md:grid-cols-2">
         <Card className="flex flex-col p-5">
           <CardHeader
             title="Recent backtests"
@@ -218,7 +211,7 @@ export default async function DashboardPage() {
             <RecentBacktests runs={recentBacktests} />
           </FillList>
         </Card>
-        <div className="flex flex-col gap-6 md:col-span-2 xl:col-span-1">
+        <div className="flex flex-col gap-6">
           <Card className="p-5">
             <CardHeader title="Your broker account" icon={Landmark} action={<Link href="/app/portfolio" className="text-xs font-semibold text-brand-primary hover:underline">Portfolio →</Link>} />
             {brokerRows.length === 0 ? (

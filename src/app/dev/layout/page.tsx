@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Card, CardHeader } from "@/components/ui/card";
 import FillList from "@/components/ui/fill-list";
+import SpaceBalancer from "@/components/layout/space-balancer";
 
 // Development only: the dashboard's card rows with lists of very different lengths, to check that a
 // long list scrolls inside its card instead of leaving the card beside it hollow. Not served in production.
@@ -19,6 +20,7 @@ export default function Page() {
   if (process.env.NODE_ENV === "production") notFound();
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-4">
+      <SpaceBalancer />
       <div className="grid gap-6 lg:grid-cols-3" data-row="a">
         <Card className="flex flex-col p-5 lg:col-span-2">
           <CardHeader title="Long list (12)" />
@@ -49,6 +51,22 @@ export default function Page() {
           <Card className="p-5">
             <CardHeader title="Watchlist" />
             {items(5, "Stock")}
+          </Card>
+        </div>
+      </div>
+      <div className="grid gap-6 md:grid-cols-2" data-row="d">
+        <Card className="p-5">
+          <CardHeader title="Tall card (10 lines)" />
+          {items(10, "Line")}
+        </Card>
+        <div className="flex flex-col gap-6" data-col="d">
+          <Card className="p-5">
+            <CardHeader title="Short one" />
+            <p className="mt-3 text-sm">Nothing here yet.</p>
+          </Card>
+          <Card className="p-5">
+            <CardHeader title="Short two" />
+            <p className="mt-3 text-sm">Nothing here either.</p>
           </Card>
         </div>
       </div>
