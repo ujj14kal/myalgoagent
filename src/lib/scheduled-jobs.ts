@@ -7,6 +7,7 @@ import { syncInstrumentUniverse } from "@/lib/instruments/sync-universe";
 import { runLiveDeployments } from "@/lib/live/deployments";
 import { engineAlive } from "@/lib/live/engine-heartbeat";
 import { runBrokerKeepAlive } from "@/lib/brokers/keepalive";
+import { runPriceAlerts } from "@/lib/alerts/run-alerts";
 
 // What each scheduled job does — shared by the EventBridge-triggered routes and
 // the admin portal's "Run now", so both always do the same thing.
@@ -29,7 +30,12 @@ export async function runMarketHoursJob() {
     logError("broker.keepalive", err);
     return null;
   });
-  return { ...equity, options, brokers };
+  // The engine checks price alerts every minute; this is the backup that still catches them if it is down.
+  const alerts = await runPriceAlerts().catch((err) => {
+    logError("price-alerts", err);
+    return null;
+  });
+  return { ...equity, options, brokers, alerts };
 }
 
 /** Daily: purge accounts past their deletion date, then add newly listed NSE stocks. */

@@ -89,6 +89,7 @@ model User {
   liveDeployments     LiveDeployment[]
   liveEngineLogs      LiveEngineLog[]
   optionStrategies    OptionStrategy[]
+  priceAlerts         PriceAlert[]
   optionBacktestRuns  OptionBacktestRun[]
   optionForwardTests  OptionForwardTest[]
   customIndicators    CustomIndicator[]
@@ -1383,4 +1384,25 @@ model WorkspaceVersion {
   strategy  Strategy?
 
   @@unique([workspaceId, version])
+}
+
+// "Tell me when RELIANCE is above 3000": checked by the engine every minute while the instrument trades.
+model PriceAlert {
+  id             String    @id @default(cuid())
+  userId         String
+  symbol         String
+  // ABOVE: fires when the price is at or over `price`; BELOW: at or under it.
+  direction      String
+  price          Float
+  note           String?
+  // ACTIVE | TRIGGERED | CANCELLED
+  status         String    @default("ACTIVE")
+  createdAt      DateTime  @default(now())
+  triggeredAt    DateTime?
+  triggeredPrice Float?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([status, symbol])
 }

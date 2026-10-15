@@ -30,6 +30,7 @@ async function main() {
   const { egressEnabled, currentEgressIp } = await import("@/lib/brokers/egress");
   const { runBrokerKeepAlive } = await import("@/lib/brokers/keepalive");
   const { runScheduledPaperSync } = await import("@/lib/paper/scheduled-sync");
+  const { runPriceAlerts } = await import("@/lib/alerts/run-alerts");
 
   if (process.env.ENGINE_DRY_RUN === "1") {
     const { prisma } = await import("@/lib/prisma");
@@ -51,6 +52,7 @@ async function main() {
   let prunedDay = "";
   let lastKeepAlive = 0;
   let lastCrypto = 0;
+  let lastAlerts = 0;
   while (!stop) {
     const started = Date.now();
     try {
@@ -68,6 +70,12 @@ async function main() {
         lastCrypto = Date.now();
         const c = await runScheduledPaperSync("crypto").catch((err) => (logError("crypto.forward-sync", err), null));
         if (c && (c.synced || c.failed)) log("crypto forward tests", c);
+      }
+      // Price alerts: every minute; each instrument is only read while it trades (stocks in market hours, crypto always).
+      if (Date.now() - lastAlerts >= 60_000) {
+        lastAlerts = Date.now();
+        const a = await runPriceAlerts().catch((err) => (logError("price-alerts", err), null));
+        if (a && (a.fired || a.failed)) log("price alerts", a);
       }
       const day = new Date().toISOString().slice(0, 10);
       if (day !== prunedDay) {

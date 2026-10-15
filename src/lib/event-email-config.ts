@@ -1,6 +1,6 @@
 // Which events may send an email, and the user's say in it. Pure, so the rules are tested and shared with the settings screen.
 
-export type EventKind = "live_signal" | "live_order" | "live_paused" | "broker_session" | "credits_low" | "credits_out" | "plan_changed";
+export type EventKind = "live_signal" | "live_order" | "live_paused" | "broker_session" | "credits_low" | "credits_out" | "plan_changed" | "price_alert";
 
 export type EventInfo = {
   label: string;
@@ -21,6 +21,7 @@ export const EVENT_INFO: Record<EventKind, EventInfo> = {
   broker_session: { label: "Your broker login needs attention", description: "A broker session ended or is about to end, so live prices and orders stop until you sign in.", alwaysOn: true, max: 2, windowMs: 24 * 60 * MIN },
   credits_low: { label: "Credits are running low", description: "Your credits are almost used up for this month.", alwaysOn: false, max: 1, windowMs: 24 * 60 * MIN },
   credits_out: { label: "You are out of credits", description: "The AI assistant and backtests pause until your credits renew or you top up.", alwaysOn: false, max: 1, windowMs: 24 * 60 * MIN },
+  price_alert: { label: "A price alert fired", description: "An instrument reached a price you set an alert for.", alwaysOn: false, max: 10, windowMs: 60 * MIN },
   plan_changed: { label: "Your plan changed", description: "A confirmation when your plan is changed.", alwaysOn: false, max: 5, windowMs: 60 * MIN },
 };
 
