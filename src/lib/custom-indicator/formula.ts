@@ -71,6 +71,9 @@ const CATALOG = new Map(INDICATOR_CATALOG.map((d) => [d.dslName, d]));
 
 export class FormulaError extends Error {}
 
+/** The documented limits of the language (shown on the language guide). */
+export const FORMULA_LIMITS = { characters: 4000, calculations: 600, steps: 30, functions: 10, window: 1000 } as const;
+
 const MAX_LENGTH = 4000;
 const MAX_NODES = 600;
 const MAX_EXPANDED = 20_000;

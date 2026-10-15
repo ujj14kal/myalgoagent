@@ -8,18 +8,20 @@ import InspectIndicator from "./inspect";
 import Changes from "./changes";
 import FormulaStudio from "./formula-studio";
 import DescribeIndicator from "./describe";
+import { setCollection, publishIndicator } from "@/lib/custom-indicator/community-actions";
 import { deleteCustomIndicator, duplicateCustomIndicator, importCustomIndicator, restoreCustomIndicatorVersion, type IndicatorVersion } from "@/lib/custom-indicator-actions";
 import ListTabs from "@/components/ui/list-tabs";
 import ListToolbar from "@/components/ui/list-toolbar";
 import { CUSTOM_CLASSES, classifyCustom, customParts, describeCustom, PART_LABEL, type CustomClass, type CustomIndicatorDef } from "@/lib/custom-indicator";
 
-export type SavedIndicator = { id: string; name: string; description: string | null; def: CustomIndicatorDef; summary: string; history?: IndicatorVersion[] };
+export type SavedIndicator = { id: string; name: string; description: string | null; def: CustomIndicatorDef; summary: string; history?: IndicatorVersion[]; collection?: string | null; published?: boolean };
 
 export default function CustomIndicatorList({
   items,
   total,
   counts,
   kind,
+  collections = [],
   params,
   pager,
 }: {
@@ -30,6 +32,8 @@ export default function CustomIndicatorList({
   /** Per class, after the search. */
   counts: Record<CustomClass, number>;
   kind: CustomClass | "all";
+  /** The names the user has filed indicators under. */
+  collections?: string[];
   params: Record<string, string | undefined>;
   pager: React.ReactNode;
 }) {
@@ -61,7 +65,7 @@ export default function CustomIndicatorList({
             basePath="/app/indicators"
             params={params}
             search={{ placeholder: "Search name, formula or description…" }}
-            selects={[{ name: "sort", label: "Sort", options: [{ value: "updated", label: "Recently changed" }, { value: "created", label: "Newest first" }, { value: "name", label: "Name A–Z" }] }]}
+            selects={[{ name: "sort", label: "Sort", options: [{ value: "updated", label: "Recently changed" }, { value: "created", label: "Newest first" }, { value: "name", label: "Name A–Z" }] }, ...(collections.length ? [{ name: "col", label: "Collection", options: [{ value: "", label: "All" }, ...collections.map((c) => ({ value: c, label: c })), { value: "(none)", label: "Not filed" }] }] : [])]}
           />
         </div>
       )}
@@ -98,6 +102,8 @@ export default function CustomIndicatorList({
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <InspectIndicator def={i.def} />
               <ExportButton name={i.name} description={i.description} def={i.def} />
+              <Filing id={i.id} collection={i.collection ?? null} options={collections} />
+              <Publish id={i.id} name={i.name} description={i.description} published={!!i.published} />
             </div>
             {i.history && i.history.length > 0 && <Versions id={i.id} versions={i.history} current={i.summary} />}
         </section>
@@ -199,6 +205,75 @@ function ImportBox() {
           Close
         </button>
         {msg && <span className="text-xs text-brand-navy/60">{msg}</span>}
+      </div>
+    </div>
+  );
+}
+
+/** Files an indicator under a collection (a folder name you choose), so a long list stays easy to find things in. */
+function Filing({ id, collection, options }: { id: string; collection: string | null; options: string[] }) {
+  const [value, setValue] = useState(collection ?? "");
+  const [, start] = useTransition();
+  const router = useRouter();
+  const id2 = `collections-${id}`;
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-brand-navy/55">
+      <span>Collection</span>
+      <input
+        list={id2}
+        value={value}
+        maxLength={30}
+        placeholder="none"
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => value.trim() !== (collection ?? "") && start(async () => (await setCollection(id, value.trim() || null), router.refresh()))}
+        className="w-28 rounded-lg border border-brand-navy/15 px-2 py-1 text-xs outline-none focus:border-brand-primary"
+      />
+      <datalist id={id2}>
+        {options.map((o) => (
+          <option key={o} value={o} />
+        ))}
+      </datalist>
+    </span>
+  );
+}
+
+/** Publishes an indicator to the community library with a description and what to watch out for. */
+function Publish({ id, name, description, published }: { id: string; name: string; description: string | null; published: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState(description ?? "");
+  const [limits, setLimits] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pending, start] = useTransition();
+  if (!open)
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="rounded-full px-3 py-1.5 text-xs font-semibold text-brand-navy/60 ring-1 ring-brand-navy/15 hover:text-brand-primary">
+        {published ? "Update in library" : "Publish to library"}
+      </button>
+    );
+  return (
+    <div className="mt-2 w-full space-y-2 rounded-xl bg-brand-bg/60 p-3">
+      <p className="text-xs font-semibold text-brand-navy">Publish “{name}” to the community library</p>
+      <p className="text-[11px] text-brand-navy/55">Everyone can see its formula, your username and the result of a repainting check that is run now. It can&apos;t use your uploaded datasets. People who add it get their own copy.</p>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={600} placeholder="What it measures and how to read it (at least 20 characters)" className="w-full rounded-lg border border-brand-navy/15 px-2.5 py-1.5 text-sm outline-none focus:border-brand-primary" />
+      <input value={limits} onChange={(e) => setLimits(e.target.value)} maxLength={400} placeholder="Limits worth knowing (optional): where it misleads, what data it needs" className="w-full rounded-lg border border-brand-navy/15 px-2.5 py-1.5 text-sm outline-none focus:border-brand-primary" />
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          disabled={pending || text.trim().length < 20}
+          onClick={() =>
+            start(async () => {
+              const r = await publishIndicator({ id, description: text, limitations: limits });
+              setMsg(r.ok ? { ok: true, text: "Published." } : { ok: false, text: r.error });
+            })
+          }
+          className="rounded-full bg-brand-primary px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+        >
+          {pending ? "Checking and publishing…" : "Publish"}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="text-xs font-semibold text-brand-navy/50">
+          Close
+        </button>
+        {msg && <span className={`text-xs ${msg.ok ? "text-[#0b6b30]" : "text-brand-sell"}`}>{msg.text}</span>}
       </div>
     </div>
   );

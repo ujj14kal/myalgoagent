@@ -11,6 +11,7 @@ import { computeCustomSeries, customParts, customVisual, deepSymbols, defaultPar
 import { checkIntegrity, estimateCost, type CostReport, type IntegrityReport } from "@/lib/custom-indicator/integrity";
 import { evaluateFormula, parseProgram, type Externals } from "@/lib/custom-indicator/formula";
 import { parseDataset } from "@/lib/custom-indicator/dataset";
+import { loadInstrumentCandles, SYMBOLS_AT_ONCE } from "@/lib/custom-indicator/load";
 import { userMarketData } from "@/lib/market-data/for-user";
 
 // The user's own indicators: save, delete, and preview any kind on a real chart.
@@ -262,22 +263,6 @@ export async function previewCustomIndicator(def: CustomIndicatorDef, symbol: st
 }
 
 // ---------- other instruments (sym) and uploaded datasets (data) ----------
-
-const SYMBOLS_AT_ONCE = 5;
-
-/** Candles of every other instrument an indicator reads with sym(), on the same candle size, for charts and tests. */
-async function loadInstrumentCandles(userId: string, symbols: string[], interval: string, range: string): Promise<Externals["instruments"]> {
-  if (!symbols.length) return {};
-  if (symbols.length > SYMBOLS_AT_ONCE) throw new Error(`An indicator can read at most ${SYMBOLS_AT_ONCE} other instruments at once.`);
-  const known = await prisma.instrument.findMany({ where: { symbol: { in: symbols } }, select: { symbol: true } });
-  const missing = symbols.filter((s) => !known.some((k) => k.symbol === s));
-  if (missing.length) throw new Error(`${missing.join(", ")} isn't an instrument on this platform (write it as it appears on the instrument page, like RELIANCE.NS or ^NSEI).`);
-  const market = userMarketData(userId, "view");
-  const entries = await Promise.all(
-    symbols.map(async (s) => [s, await market.getHistoricalCandles(s, range as Parameters<typeof market.getHistoricalCandles>[1], interval as Parameters<typeof market.getHistoricalCandles>[2])] as const),
-  );
-  return Object.fromEntries(entries);
-}
 
 /** For a chart: the candles of other instruments the active indicators read, matching the chart's range and candle size. */
 export async function loadIndicatorInstruments(symbols: string[], interval: string, range: string): Promise<CIResult<Record<string, Candle[]>>> {

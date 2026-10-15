@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateFormula, FormulaError, parseFormula, parseProgram, type Externals } from "./formula";
+import { evaluateFormula, FORMULA_LIMITS, FormulaError, parseFormula, parseProgram, type Externals } from "./formula";
 
 const candles = Array.from({ length: 60 }, (_, i) => {
   const close = 100 + Math.sin(i / 5) * 10 + i * 0.5;
@@ -350,5 +350,17 @@ describe("other instruments and datasets", () => {
       if (Number.isNaN(full[i])) expect(part[i]).toBeNaN();
       else expect(part[i]).toBeCloseTo(full[i], 9);
     }
+  });
+});
+
+describe("the documented limits are the real ones", () => {
+  it("characters, lines, functions and window length", () => {
+    expect(() => parseFormula("1" + " + 1".repeat(Math.ceil(FORMULA_LIMITS.characters / 4)))).toThrow(new RegExp(`${FORMULA_LIMITS.characters}`));
+    const lines = Array.from({ length: FORMULA_LIMITS.steps }, (_, i) => `a${i} = close`);
+    expect(() => parseProgram([...lines, "a0"].join("\n"))).toThrow(new RegExp(`${FORMULA_LIMITS.steps} steps`));
+    const fns = Array.from({ length: FORMULA_LIMITS.functions + 1 }, (_, i) => `fn f${i}(x) = x`);
+    expect(() => parseProgram([...fns, "1"].join("\n"))).toThrow(new RegExp(`${FORMULA_LIMITS.functions} functions`));
+    expect(() => parseFormula(`sma(close, ${FORMULA_LIMITS.window + 1})`)).toThrow(/whole number/);
+    expect(() => parseFormula(`sma(close, ${FORMULA_LIMITS.window})`)).not.toThrow();
   });
 });

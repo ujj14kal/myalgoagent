@@ -91,6 +91,9 @@ model User {
   optionStrategies    OptionStrategy[]
   priceAlerts         PriceAlert[]
   datasets            UserDataset[]
+  communityIndicators CommunityIndicator[]
+  communityRatings    CommunityRating[]
+  communityReports    CommunityReport[]
   optionBacktestRuns  OptionBacktestRun[]
   optionForwardTests  OptionForwardTest[]
   customIndicators    CustomIndicator[]
@@ -1244,6 +1247,8 @@ model CustomIndicator {
   def         Json
   // Earlier versions, newest first: [{ at, name, description, def }], at most 20.
   history     Json?
+  // A folder the user files it under ("Momentum", "Intraday"…); null = not filed.
+  collection  String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -1428,4 +1433,64 @@ model UserDataset {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, slug])
+}
+
+// An indicator its author published for other users to add to their own list. A copy is made when someone adds it.
+model CommunityIndicator {
+  id            String   @id @default(cuid())
+  authorId      String
+  // The author's username when they published it.
+  authorName    String
+  name          String
+  description   String
+  // What the author says it can't do or where it misleads (optional).
+  limitations   String?
+  // A self-contained definition (linked indicators attached; never one that reads private datasets).
+  def           Json
+  // The repainting check run when it was published, and how its parts behave in time.
+  repaints      Boolean
+  integrityNote String
+  timing        Json
+  installs      Int      @default(0)
+  ratingSum     Int      @default(0)
+  ratingCount   Int      @default(0)
+  reportCount   Int      @default(0)
+  // PUBLISHED | HIDDEN (after reports, or by the team)
+  status        String   @default("PUBLISHED")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  author  User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  ratings CommunityRating[]
+  reports CommunityReport[]
+
+  @@unique([authorId, name])
+  @@index([status, createdAt])
+}
+
+model CommunityRating {
+  id          String   @id @default(cuid())
+  indicatorId String
+  userId      String
+  stars       Int
+  review      String?
+  createdAt   DateTime @default(now())
+
+  indicator CommunityIndicator @relation(fields: [indicatorId], references: [id], onDelete: Cascade)
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([indicatorId, userId])
+}
+
+model CommunityReport {
+  id          String   @id @default(cuid())
+  indicatorId String
+  userId      String
+  reason      String
+  createdAt   DateTime @default(now())
+
+  indicator CommunityIndicator @relation(fields: [indicatorId], references: [id], onDelete: Cascade)
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([indicatorId, userId])
 }
