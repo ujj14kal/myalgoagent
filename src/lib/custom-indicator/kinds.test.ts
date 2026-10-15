@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeCustomSeries, customParts, customVisual, defaultPart, describeCustom, validateCustomDef, type CustomIndicatorDef } from "./index";
+import { computeCustomSeries, customParts, customVisual, defaultPart, describeCustom, indicatorRefs, indicatorSlug, validateCustomDef, type CustomIndicatorDef } from "./index";
 import { evaluateStrategy } from "@/lib/strategy/evaluate";
 import { validateConditionNode } from "@/lib/strategy/validate";
 import { conditionToText } from "@/lib/strategy/format";
@@ -113,5 +113,43 @@ describe("histogram style and extra output lines", () => {
     const v = customVisual(cs, { type: "formula", formula: "plot_fast = ema(close, 5)\nplot_slow = ema(close, 20)\nplot_fast - plot_slow", pane: "separate" }, "Spread");
     expect(v.lines.map((l) => l.label)).toEqual(["Spread", "Spread · fast", "Spread · slow"]);
     expect(v.lines[1].points.length).toBeGreaterThan(0);
+  });
+});
+
+describe("indicators built on other indicators", () => {
+  const cs = Array.from({ length: 90 }, (_, i) => ({ time: 1_700_000_000 + i * 86400, open: 100 + i * 0.1, high: 102 + i * 0.1, low: 98 + i * 0.1, close: 100 + Math.sin(i / 5) * 3 + i * 0.1, volume: 1000 }));
+  const base: CustomIndicatorDef = { type: "formula", formula: "(close - sma(close, 20)) / atr(14)", pane: "separate" };
+  const top: CustomIndicatorDef = { type: "formula", formula: "ind(trend_score) * 2 + 1", pane: "separate", uses: { trend_score: base } };
+
+  it("reads the other indicator's values", () => {
+    const own = computeCustomSeries(cs, base);
+    const v = computeCustomSeries(cs, top);
+    expect(v[60]).toBeCloseTo(own[60] * 2 + 1);
+  });
+  it("names the indicators a formula reads and makes a readable slug", () => {
+    expect(indicatorRefs(top)).toEqual(["trend_score"]);
+    expect(indicatorSlug("Trend score (v2)")).toBe("trend_score_v2");
+  });
+  it("refuses a link that isn't attached, with a plain message", () => {
+    expect(() => validateCustomDef({ type: "formula", formula: "ind(missing) + 1", pane: "separate" })).toThrow(/no custom indicator of yours called/);
+    expect(() => validateCustomDef({ ...top, formula: "ind(another)" })).toThrow(/no custom indicator of yours called/);
+  });
+  it("keeps the attached copy through validation, so a later edit of the other one changes nothing", () => {
+    const clean = validateCustomDef(top);
+    expect(clean.uses?.trend_score).toMatchObject({ type: "formula" });
+    expect(computeCustomSeries(cs, clean)[60]).toBeCloseTo(computeCustomSeries(cs, top)[60]);
+  });
+  it("limits how deep the chain can go", () => {
+    let d: CustomIndicatorDef = base;
+    for (let i = 0; i < 4; i++) d = { type: "formula", formula: "ind(a) + 1", pane: "separate", uses: { a: d } };
+    expect(() => validateCustomDef(d)).toThrow(/levels deep/);
+  });
+  it("never repaints", () => {
+    const full = computeCustomSeries(cs, top);
+    const part = computeCustomSeries(cs.slice(0, 70), top);
+    for (let i = 0; i < 70; i++) {
+      if (Number.isNaN(full[i])) expect(part[i]).toBeNaN();
+      else expect(part[i]).toBeCloseTo(full[i], 9);
+    }
   });
 });

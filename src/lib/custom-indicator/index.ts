@@ -1,5 +1,5 @@
 import type { Candle } from "@/lib/market-data";
-import { evaluateFormula, parseFormula, parseProgram } from "./formula";
+import { evaluateFormula, parseFormula, parseProgram, type IndicatorResolver, type Node } from "./formula";
 
 // A user's own indicator. Every kind is fully visible (white-box) — the
 // definition is the whole indicator, and it travels inside each condition
@@ -24,7 +24,7 @@ import { evaluateFormula, parseFormula, parseProgram } from "./formula";
 export type LinePoint = { time: number; price: number };
 export type CustomPane = "price" | "separate";
 /** Optional drawing colour (#rrggbb); charts pick one when it's not set. */
-type Look = { color?: string; entry?: CustomEntry; /** How a graph line is drawn in its own pane: a line (default) or bars from zero. */ style?: "line" | "histogram" };
+type Look = { color?: string; entry?: CustomEntry; /** How a graph line is drawn in its own pane: a line (default) or bars from zero. */ style?: "line" | "histogram"; /** Other custom indicators this one reads with ind(name): a copy of each, so later edits to them never change this one. */ uses?: Record<string, CustomIndicatorDef> };
 
 /**
  * The indicator's own entry rule, added when it is made: "crosses above 0", or (no value) "price crosses above it". When the
@@ -73,6 +73,45 @@ export function customParts(def: CustomIndicatorDef): CustomPart[] {
 /** What a rule reads when it doesn't name a part. */
 export const defaultPart = (def: CustomIndicatorDef): CustomPart => (isMultiPart(def) ? "middle" : "value");
 
+const usesKeys = (def: CustomIndicatorDef): string[] => Object.keys(def.uses ?? {});
+
+/** How ind(name) finds the other indicator's values: its attached copy, worked out on the same candles. */
+function resolverOf(def: CustomIndicatorDef): IndicatorResolver {
+  return (name, candles) => {
+    const used = def.uses?.[name];
+    if (!used) throw new Error(`“${name}” isn't attached to this indicator.`);
+    return computeCustomSeries(candles, used);
+  };
+}
+
+export const indicatorSlug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+
+/** Every formula an indicator is made of (a formula, a signal, a channel's lines, a band's middle and width). */
+export function defFormulas(def: CustomIndicatorDef): string[] {
+  return def.type === "formula" || def.type === "signal" ? [def.formula] : def.type === "channel" ? [def.upper, def.lower, ...(def.middle ? [def.middle] : [])] : def.type === "band" ? [def.middle, def.width] : [];
+}
+
+/** The other custom indicators this one reads with ind(name), by their underscore names. */
+export function indicatorRefs(def: CustomIndicatorDef): string[] {
+  const out = new Set<string>();
+  const walk = (n: Node): void => {
+    if (n.t === "neg") return walk(n.a);
+    if (n.t === "bin") return (walk(n.a), walk(n.b));
+    if (n.t === "call") {
+      if (n.fn === "ind" && n.ref) out.add(n.ref);
+      n.args.forEach(walk);
+    }
+  };
+  for (const src of defFormulas(def)) {
+    try {
+      walk(parseProgram(src).tree);
+    } catch {
+      /* reported when it is validated */
+    }
+  }
+  return [...out];
+}
+
 function drawnLine(candles: Candle[], points: [LinePoint, LinePoint]): number[] {
   const [a, b] = points[0].time <= points[1].time ? points : [points[1], points[0]];
   const slope = b.time === a.time ? 0 : (b.price - a.price) / (b.time - a.time);
@@ -81,7 +120,7 @@ function drawnLine(candles: Candle[], points: [LinePoint, LinePoint]): number[] 
 
 /** Upper, middle and lower lines of a multi-part indicator (NaN where undefined). */
 function bands(candles: Candle[], def: CustomIndicatorDef): { upper: number[]; middle: number[]; lower: number[] } {
-  const f = (s: string) => evaluateFormula(parseFormula(s), candles);
+  const f = (s: string) => evaluateFormula(parseFormula(s, usesKeys(def)), candles, resolverOf(def));
   const mid = (u: number[], l: number[]) => u.map((x, i) => (x + l[i]) / 2);
   switch (def.type) {
     case "zone": {
@@ -126,9 +165,9 @@ export function computeCustomSeries(candles: Candle[], def: CustomIndicatorDef, 
   }
   switch (def.type) {
     case "formula":
-      return evaluateFormula(parseFormula(def.formula), candles);
+      return evaluateFormula(parseFormula(def.formula, usesKeys(def)), candles, resolverOf(def));
     case "signal":
-      return evaluateFormula(parseFormula(def.formula), candles).map((v) => (Number.isFinite(v) ? (v !== 0 ? 1 : 0) : NaN));
+      return evaluateFormula(parseFormula(def.formula, usesKeys(def)), candles, resolverOf(def)).map((v) => (Number.isFinite(v) ? (v !== 0 ? 1 : 0) : NaN));
     case "line":
       return drawnLine(candles, def.points);
     case "level":
@@ -225,10 +264,10 @@ const price = (p: unknown, what: string): number => {
   if (typeof p !== "number" || !Number.isFinite(p) || p <= 0) throw new Error(`${what} needs a price above 0.`);
   return p;
 };
-const formula = (s: unknown, what: string): string => {
+const formula = (s: unknown, what: string, keys: string[] = []): string => {
   if (typeof s !== "string" || !s.trim()) throw new Error(`Missing ${what} formula.`);
   try {
-    parseFormula(s);
+    parseFormula(s, keys);
   } catch (err) {
     throw new Error(`${what[0].toUpperCase()}${what.slice(1)}: ${err instanceof Error ? err.message : "invalid formula"}`);
   }
@@ -238,25 +277,44 @@ const paneOf = (p: unknown): CustomPane | undefined => (p === "price" || p === "
 const sym = (s: unknown) => (typeof s === "string" && s ? { symbol: s } : {});
 
 /** Throws a plain-English error if the definition can't be used; returns a clean copy. */
-export function validateCustomDef(def: unknown): CustomIndicatorDef {
-  const clean = validateCore(def);
-  const entry = parseEntry((def as { entry?: unknown } | null)?.entry);
-  return entry ? { ...clean, entry } : clean;
+export function validateCustomDef(def: unknown, depth = 0): CustomIndicatorDef {
+  const raw = def as { entry?: unknown; uses?: unknown } | null;
+  const uses = cleanUses(raw?.uses, depth);
+  const clean = validateCore(def, Object.keys(uses ?? {}));
+  const entry = parseEntry(raw?.entry);
+  return { ...clean, ...(entry ? { entry } : {}), ...(uses ? { uses } : {}) };
 }
 
-function validateCore(def: unknown): CustomIndicatorDef {
+const MAX_USES = 8;
+const MAX_DEPTH = 3;
+function cleanUses(raw: unknown, depth: number): Record<string, CustomIndicatorDef> | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== "object" || Array.isArray(raw)) throw new Error("The linked indicators aren't valid.");
+  const entries = Object.entries(raw as Record<string, unknown>);
+  if (!entries.length) return undefined;
+  if (depth >= MAX_DEPTH) throw new Error(`Indicators can be built on other indicators up to ${MAX_DEPTH} levels deep.`);
+  if (entries.length > MAX_USES) throw new Error(`One indicator can read at most ${MAX_USES} others.`);
+  const out: Record<string, CustomIndicatorDef> = {};
+  for (const [k, v] of entries) {
+    if (!/^[a-z_][a-z0-9_]*$/.test(k)) throw new Error("A linked indicator has an invalid name.");
+    out[k] = validateCustomDef(v, depth + 1);
+  }
+  return out;
+}
+
+function validateCore(def: unknown, keys: string[] = []): CustomIndicatorDef {
   const d = def as Record<string, unknown> & { type?: string };
   if (!d || typeof d !== "object") throw new Error("Missing indicator definition.");
   switch (d.type) {
     case "formula": {
       if (typeof d.formula !== "string") throw new Error("Missing formula.");
-      parseFormula(d.formula);
+      parseFormula(d.formula, keys);
       const pane = paneOf(d.pane);
       if (!pane) throw new Error("Choose where the indicator is drawn.");
       return { type: "formula", formula: d.formula.trim(), pane, ...look(d.color), ...(d.style === "histogram" && pane === "separate" ? { style: "histogram" as const } : {}) };
     }
     case "signal":
-      return { type: "signal", formula: formula(d.formula, "signal"), ...look(d.color) };
+      return { type: "signal", formula: formula(d.formula, "signal", keys), ...look(d.color) };
     case "line": {
       const pts = d.points as LinePoint[] | undefined;
       const ok = Array.isArray(pts) && pts.length === 2 && pts.every((p) => Number.isFinite(p?.time) && Number.isFinite(p?.price) && p.price > 0);
@@ -283,16 +341,16 @@ function validateCore(def: unknown): CustomIndicatorDef {
       const pane = paneOf(d.pane);
       return {
         type: "channel",
-        upper: formula(d.upper, "upper line"),
-        lower: formula(d.lower, "lower line"),
-        ...(typeof d.middle === "string" && d.middle.trim() ? { middle: formula(d.middle, "middle line") } : {}),
+        upper: formula(d.upper, "upper line", keys),
+        lower: formula(d.lower, "lower line", keys),
+        ...(typeof d.middle === "string" && d.middle.trim() ? { middle: formula(d.middle, "middle line", keys) } : {}),
         ...(pane ? { pane } : {}),
         ...look(d.color),
       };
     }
     case "band": {
       const pane = paneOf(d.pane);
-      return { type: "band", middle: formula(d.middle, "middle line"), width: formula(d.width, "width"), ...(pane ? { pane } : {}), ...look(d.color) };
+      return { type: "band", middle: formula(d.middle, "middle line", keys), width: formula(d.width, "width", keys), ...(pane ? { pane } : {}), ...look(d.color) };
     }
   }
   throw new Error("Unknown custom indicator type.");
@@ -328,8 +386,8 @@ export function customVisual(candles: Candle[], def: CustomIndicatorDef, name: s
   // Steps named plot_something are drawn too, as extra lines beside the main one (a rule still reads the main output).
   const extra: CustomVisualLine[] = [];
   if (def.type === "formula") {
-    for (const st of parseProgram(def.formula).steps.filter((x) => x.name.startsWith("plot_")).slice(0, 5)) {
-      extra.push({ label: `${name} · ${st.name.slice(5) || st.name}`, part: "value", dashed: true, points: pointsOf(candles, evaluateFormula(st.tree, candles)) });
+    for (const st of parseProgram(def.formula, usesKeys(def)).steps.filter((x) => x.name.startsWith("plot_")).slice(0, 5)) {
+      extra.push({ label: `${name} · ${st.name.slice(5) || st.name}`, part: "value", dashed: true, points: pointsOf(candles, evaluateFormula(st.tree, candles, resolverOf(def))) });
     }
   }
   return { pane, markers: [], lines: [main, ...extra] };

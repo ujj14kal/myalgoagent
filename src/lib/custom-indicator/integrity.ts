@@ -1,5 +1,5 @@
 import type { Candle } from "@/lib/market-data";
-import { computeCustomSeries, customParts, PART_LABEL, type CustomIndicatorDef, type CustomPart } from "./index";
+import { computeCustomSeries, customParts, defFormulas, PART_LABEL, type CustomIndicatorDef, type CustomPart } from "./index";
 import { parseProgram, type Node } from "./formula";
 
 // Historical integrity for custom indicators: does a value that was shown for a past candle ever change once newer candles
@@ -68,7 +68,7 @@ function walk(n: Node, f: (c: Extract<Node, { t: "call" }>) => void): void {
   }
 }
 
-const formulasOf = (def: CustomIndicatorDef): string[] => (def.type === "formula" || def.type === "signal" ? [def.formula] : def.type === "channel" ? [def.upper, def.lower, ...(def.middle ? [def.middle] : [])] : def.type === "band" ? [def.middle, def.width] : []);
+const formulasOf = defFormulas;
 
 export function timingNotes(def: CustomIndicatorDef): string[] {
   const notes = new Set<string>();

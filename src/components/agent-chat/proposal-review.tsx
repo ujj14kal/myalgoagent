@@ -51,6 +51,7 @@ import { toggleKillSwitch, updateRiskSettings } from "@/lib/risk-actions";
 import { createWorkspace, publishWorkspace, saveWorkspaceDraft } from "@/lib/workspace-actions";
 import { saveBlock, saveConcept } from "@/lib/system-actions";
 import { saveCustomIndicator } from "@/lib/custom-indicator-actions";
+import Changes from "@/components/custom-indicators/changes";
 import { describeCustom, classifyCustom } from "@/lib/custom-indicator";
 import { NEW_STRATEGY_DRAFT_FROM_KEY, NEW_STRATEGY_DRAFT_KEY } from "@/lib/strategy-draft-key";
 import { addToWatchlist, removeFromWatchlist } from "@/lib/watchlist-actions";
@@ -137,7 +138,7 @@ function confirmLabel(p: AgentProposal): string {
     case "strategy_update":
       return "Save changes";
     case "indicator":
-      return "Save indicator";
+      return p.draft.replaces ? "Save changes" : "Save indicator";
     case "block":
       return p.draft.blockId ? "Save block" : "Create block";
     case "concept":
@@ -244,7 +245,7 @@ async function execute(p: AgentProposal, instrumentId: string | null, go: (path:
       return null;
     }
     case "indicator": {
-      const r = await saveCustomIndicator({ name: p.draft.name, description: p.draft.description, def: p.draft.def });
+      const r = await saveCustomIndicator({ name: p.draft.name, description: p.draft.description, def: p.draft.def, replaceExisting: !!p.draft.replaces });
       if (!r.ok) return r.error;
       go("/app/indicators");
       return null;
@@ -778,9 +779,17 @@ function ProposalFields({
           <Field label="Indicator name">
             <input value={p.draft.name} maxLength={60} onChange={(e) => onChange({ ...p, draft: { ...p.draft, name: e.target.value } })} className={inputCls} />
           </Field>
-          <Statement>
-            <strong>{classifyCustom(p.draft.def)}:</strong> <span className="break-words font-mono text-[12px] [overflow-wrap:anywhere]">{describeCustom(p.draft.def)}</span>
-          </Statement>
+          {p.draft.replaces && p.draft.before ? (
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-brand-navy">What changes in “{p.draft.replaces}”</p>
+              <Changes before={p.draft.before} after={describeCustom(p.draft.def)} />
+              <p className="text-[11px] text-brand-navy/45">The version you have now is kept in its history, so you can restore it from the Custom Indicators page.</p>
+            </div>
+          ) : (
+            <Statement>
+              <strong>{classifyCustom(p.draft.def)}:</strong> <span className="break-words font-mono text-[12px] [overflow-wrap:anywhere]">{describeCustom(p.draft.def)}</span>
+            </Statement>
+          )}
           {p.draft.description && <p className="text-xs text-brand-navy/55">{p.draft.description}</p>}
           <p className="text-xs text-brand-navy/40">Saved to your Custom Indicators. It then appears under “Custom” in every indicator picker — charts, strategy rules, backtests and forward tests — always with its formula shown.</p>
         </div>

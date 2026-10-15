@@ -127,7 +127,8 @@ export type AgentProposal =
       kind: "indicator";
       status: ProposalStatus;
       resultId?: string;
-      draft: { name: string; description?: string; def: CustomIndicatorDef };
+      /** `replaces` names an existing indicator this edits (its history keeps the old version); `before` is how it read. */
+      draft: { name: string; description?: string; def: CustomIndicatorDef; replaces?: string; before?: string };
     }
   | {
       // Workspace layer 1: a block — one reusable market component as a rule (created or updated).

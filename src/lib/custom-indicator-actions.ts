@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { logError } from "@/lib/logger";
 import { type Candle } from "@/lib/market-data";
-import { computeCustomSeries, customParts, customVisual, defaultPart, PART_LABEL, validateCustomDef, type CustomIndicatorDef, type CustomVisual } from "@/lib/custom-indicator";
+import { computeCustomSeries, customParts, customVisual, defaultPart, indicatorRefs, indicatorSlug, PART_LABEL, validateCustomDef, type CustomIndicatorDef, type CustomVisual } from "@/lib/custom-indicator";
 import { checkIntegrity, estimateCost, type CostReport, type IntegrityReport } from "@/lib/custom-indicator/integrity";
 import { evaluateFormula, parseProgram } from "@/lib/custom-indicator/formula";
 import { userMarketData } from "@/lib/market-data/for-user";
@@ -20,20 +20,42 @@ async function uid() {
   return (await auth())?.user?.id ?? null;
 }
 
-export async function saveCustomIndicator(input: { id?: string; name: string; description?: string; def: CustomIndicatorDef }): Promise<CIResult<{ id: string }>> {
+/**
+ * Links the other indicators a formula reads with ind(name): each is looked up among the user's own and a copy is attached, so the
+ * indicator still works the same if the other one is later edited or deleted. Throws a plain-English error when one is missing.
+ */
+async function attachUses(userId: string, def: CustomIndicatorDef, ownName?: string): Promise<CustomIndicatorDef> {
+  const { uses: _stale, ...bare } = def;
+  void _stale;
+  const refs = indicatorRefs(bare as CustomIndicatorDef);
+  if (!refs.length) return bare as CustomIndicatorDef;
+  const rows = await prisma.customIndicator.findMany({ where: { userId }, select: { name: true, def: true } });
+  const bySlug = new Map(rows.map((r) => [indicatorSlug(r.name), r] as const));
+  const uses: Record<string, CustomIndicatorDef> = {};
+  for (const ref of refs) {
+    if (ownName && indicatorSlug(ownName) === ref) throw new Error("An indicator can't read itself.");
+    const row = bySlug.get(ref);
+    if (!row) throw new Error(`You have no custom indicator called “${ref}”. Write the name of one you've saved, with spaces as _ (“Trend score” is trend_score).`);
+    uses[ref] = row.def as unknown as CustomIndicatorDef;
+  }
+  return { ...bare, uses } as CustomIndicatorDef;
+}
+
+export async function saveCustomIndicator(input: { id?: string; name: string; description?: string; def: CustomIndicatorDef; /** The name is one the user already has: update that indicator (its old version goes to the history) instead of refusing. */ replaceExisting?: boolean }): Promise<CIResult<{ id: string }>> {
   const userId = await uid();
   if (!userId) return { ok: false, error: "Sign in again." };
   const name = input.name?.trim();
   if (!name || name.length > 60) return { ok: false, error: "Give it a name (up to 60 characters)." };
   let def: CustomIndicatorDef;
   try {
-    def = validateCustomDef(input.def);
+    def = validateCustomDef(await attachUses(userId, input.def, name));
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "That definition can't be used." };
   }
   const description = input.description?.trim().slice(0, 300) || null;
   const clash = await prisma.customIndicator.findFirst({ where: { userId, name, ...(input.id ? { NOT: { id: input.id } } : {}) }, select: { id: true } });
-  if (clash) return { ok: false, error: `You already have a custom indicator called “${name}”.` };
+  if (clash && input.replaceExisting && !input.id) input = { ...input, id: clash.id };
+  else if (clash) return { ok: false, error: `You already have a custom indicator called “${name}”.` };
   if (input.id) {
     const found = await prisma.customIndicator.findFirst({ where: { id: input.id, userId }, select: { id: true, name: true, description: true, def: true, history: true } });
     if (!found) return { ok: false, error: "Not found." };
@@ -149,7 +171,7 @@ export async function inspectCustomIndicator(input: { def: CustomIndicatorDef; s
   if (!range) return { ok: false, error: "Pick a candle size." };
   let def: CustomIndicatorDef;
   try {
-    def = validateCustomDef(input.def);
+    def = validateCustomDef(await attachUses(userId, input.def));
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "That definition can't be used." };
   }
@@ -162,7 +184,7 @@ export async function inspectCustomIndicator(input: { def: CustomIndicatorDef; s
     const columns: InspectColumn[] = [];
     const num = (v: number) => (Number.isFinite(v) ? Math.round(v * 10000) / 10000 : null);
     for (const part of customParts(def)) columns.push({ key: `out-${part}`, label: part === "value" ? "Indicator value" : (PART_LABEL[part] ?? part), kind: "output", values: computeCustomSeries(candles, def, part).map(num) });
-    if (def.type === "formula" || def.type === "signal") for (const st of parseProgram(def.formula).steps) columns.push({ key: `step-${st.name}`, label: st.name, kind: "step", values: evaluateFormula(st.tree, candles).map(num) });
+    if (def.type === "formula" || def.type === "signal") for (const st of parseProgram(def.formula, Object.keys(def.uses ?? {})).steps) columns.push({ key: `step-${st.name}`, label: st.name, kind: "step", values: evaluateFormula(st.tree, candles, (n, c) => computeCustomSeries(c, def.uses![n])).map(num) });
     const computeMs = Math.round(performance.now() - started);
     const take = 40;
     return {
@@ -202,7 +224,7 @@ export async function previewCustomIndicator(def: CustomIndicatorDef, symbol: st
   if (await checkRateLimit(`ci-preview:${userId}`, 60, 60_000)) return { ok: false, error: "Previewing too often — wait a moment." };
   let clean: CustomIndicatorDef;
   try {
-    clean = validateCustomDef(def);
+    clean = validateCustomDef(await attachUses(userId, def));
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "That definition can't be used." };
   }

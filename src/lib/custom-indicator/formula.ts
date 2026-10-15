@@ -15,7 +15,7 @@ export type Node =
   | { t: "series"; name: SeriesName }
   | { t: "neg"; a: Node }
   | { t: "bin"; op: "+" | "-" | "*" | "/" | "^" | ">" | "<" | ">=" | "<=" | "==" | "!=" | "and" | "or"; a: Node; b: Node }
-  | { t: "call"; fn: string; args: Node[] };
+  | { t: "call"; fn: string; args: Node[]; /** For ind(name): the other custom indicator being read. */ ref?: string };
 
 const SERIES = ["open", "high", "low", "close", "volume", "hl2", "hlc3", "ohlc4", "range", "body", "upwick", "lowwick", "tr", "barindex"] as const;
 type SeriesName = (typeof SERIES)[number];
@@ -53,6 +53,7 @@ export const FORMULA_FUNCTION_NOTES: Record<string, string> = {
   bosup: "bosup(n): 1 on the candle that closes above the latest confirmed n-bar swing high (break of structure up)", bosdown: "bosdown(n): closes below the latest confirmed swing low",
   obbullhigh: "obbullhigh(n): top of the last down candle before a break of structure up, held until price closes below its bottom", obbulllow: "obbulllow(n): bottom of that bullish order block",
   obbearhigh: "obbearhigh(n): top of the last up candle before a break of structure down, held until price closes above its top", obbearlow: "obbearlow(n): bottom of that bearish order block",
+  ind: "ind(name): the values of another custom indicator of yours (spaces in its name written as _), so indicators can be built from indicators",
   htf: `htf(minutes, formula): the formula worked out on bigger candles (${HTF_TIMEFRAMES.join(", ")} minutes), using only candles that have fully closed`,
 };
 /** Built-in indicators callable by name with numeric settings, e.g. atr(14), supertrend(10, 3). */
@@ -103,7 +104,7 @@ function tokenize(src: string): Tok[] {
   return out;
 }
 
-const RESERVED = new Set<string>([...SERIES, ...WINDOW_FNS, ...MATH_FNS, ...MATH1_FNS, ...STAT_FNS, ...STATE_FNS, ...PIVOT_FNS, ...STRUCTURE_FNS, ...TIME_FNS, "htf", "nz", "pow", "mod", "clamp", "percentile", "correlation", "covariance", "and", "or"]);
+const RESERVED = new Set<string>([...SERIES, ...WINDOW_FNS, ...MATH_FNS, ...MATH1_FNS, ...STAT_FNS, ...STATE_FNS, ...PIVOT_FNS, ...STRUCTURE_FNS, ...TIME_FNS, "htf", "ind", "nz", "pow", "mod", "clamp", "percentile", "correlation", "covariance", "and", "or"]);
 
 /** How many nodes a tree has once every name is replaced by what it stands for (shared parts counted each time they're used). */
 const sizes = new WeakMap<object, number>();
@@ -121,7 +122,7 @@ export type FormulaProgram = { tree: Node; /** Every name set with `name = …`,
  * Parses a formula, or several steps: lines (or `;`) like `momentum = close - ema(close, 50)` that later lines can use,
  * ending with the line that is the indicator itself. Throws FormulaError with a plain-English reason.
  */
-export function parseProgram(src: string): FormulaProgram {
+export function parseProgram(src: string, uses?: readonly string[]): FormulaProgram {
   const text = src.trim();
   if (!text) throw new FormulaError("Write a formula, e.g. ema(close, 20) - ema(close, 50).");
   if (text.length > MAX_LENGTH) throw new FormulaError(`Keep formulas under ${MAX_LENGTH} characters.`);
@@ -138,12 +139,12 @@ export function parseProgram(src: string): FormulaProgram {
       if (RESERVED.has(name)) throw new FormulaError(`“${name}” is already a name in the formula language — pick another name for this step.`);
       if (scope.has(name)) throw new FormulaError(`“${name}” is set twice — give each step its own name.`);
       if (i === statements.length - 1) throw new FormulaError("The last line must be the indicator itself, not a name being set — write the formula that uses your steps.");
-      const t = parseExpr(m[2], scope, budget);
+      const t = parseExpr(m[2], scope, budget, uses);
       scope.set(name, t);
       steps.push({ name, tree: t });
     } else {
       if (i !== statements.length - 1) throw new FormulaError(`Line ${i + 1} sets nothing: write “name = formula” for the steps, and put the indicator's own formula last.`);
-      tree = parseExpr(st, scope, budget);
+      tree = parseExpr(st, scope, budget, uses);
     }
   });
   if (!tree) throw new FormulaError("Write the indicator's own formula on the last line.");
@@ -152,11 +153,11 @@ export function parseProgram(src: string): FormulaProgram {
 }
 
 /** Parses and checks a formula (see parseProgram for steps). Throws FormulaError with a plain-English reason. */
-export function parseFormula(src: string): Node {
-  return parseProgram(src).tree;
+export function parseFormula(src: string, uses?: readonly string[]): Node {
+  return parseProgram(src, uses).tree;
 }
 
-function parseExpr(text: string, scope: Map<string, Node>, budget: { n: number }): Node {
+function parseExpr(text: string, scope: Map<string, Node>, budget: { n: number }, uses?: readonly string[]): Node {
   const toks = tokenize(text);
   let p = 0;
   const peek = () => toks[p];
@@ -242,6 +243,15 @@ function parseExpr(text: string, scope: Map<string, Node>, budget: { n: number }
       return e;
     }
     if (t.k === "id") {
+      if (t.v === "ind" && peek()?.k === "(") {
+        // ind(name): another custom indicator of yours, by its name with spaces written as _
+        p++;
+        const id = toks[p++];
+        if (!id || id.k !== "id") throw new FormulaError("ind() takes the name of one of your custom indicators, with spaces written as _, e.g. ind(trend_score).");
+        expectClose();
+        if (uses && !uses.includes(id.v)) throw new FormulaError(`There's no custom indicator of yours called “${id.v}”. Use its name with spaces written as _ (for example “Trend score” is trend_score).`);
+        return node({ t: "call", fn: "ind", args: [], ref: id.v });
+      }
       if (peek()?.k === "(") {
         p++;
         const args: Node[] = [];
@@ -284,6 +294,7 @@ function check(n: Node): void {
   if (n.t !== "call") return;
   n.args.forEach(check);
   const f = n.fn;
+  if (f === "ind") return;
   const len = (i: number) => {
     const a = n.args[i];
     if (!a || !isConst(a) || !Number.isInteger(constOf(a)) || constOf(a) < 1 || constOf(a) > MAX_WINDOW) throw new FormulaError(`${f}(): the length must be a whole number from 1 to ${MAX_WINDOW}.`);
@@ -506,7 +517,10 @@ function groupCandles(candles: Candle[], minutes: number): { groups: Candle[]; o
 const lag = (x: Arr, n: number): Arr => x.map((_, i) => (i >= n ? x[i - n] : NaN));
 
 /** Evaluates a parsed formula on candles: one value per candle (NaN where it isn't defined yet). */
-export function evaluateFormula(tree: Node, candles: Candle[]): Arr {
+/** `resolve` supplies the values of another custom indicator for ind(name). */
+export type IndicatorResolver = (name: string, candles: Candle[]) => number[];
+
+export function evaluateFormula(tree: Node, candles: Candle[], resolve?: IndicatorResolver): Arr {
   const len = candles.length;
   const cache = new Map<Node, Arr>();
   const ev = (n: Node): Arr => {
@@ -696,6 +710,9 @@ export function evaluateFormula(tree: Node, candles: Candle[]): Arr {
         let held = NaN;
         out = found.map((v) => (Number.isFinite(v) ? (held = v) : held));
       }
+    } else if (f === "ind") {
+      if (!resolve) throw new FormulaError(`“${n.ref}” is another custom indicator, which isn't attached to this one. Save this indicator again so it can be linked.`);
+      out = resolve(n.ref!, candles);
     } else if (f === "fvgbull" || f === "fvgbear") {
       out = candles.map((c, i) => (i < 2 ? NaN : +(f === "fvgbull" ? c.low > candles[i - 2].high : c.high < candles[i - 2].low)));
     } else if (f === "fvgbullmid" || f === "fvgbearmid") {
@@ -767,7 +784,7 @@ export function evaluateFormula(tree: Node, candles: Candle[]): Arr {
     } else if (f === "htf") {
       // The bigger candle's value is shown only once that candle has closed: every base candle reads the PREVIOUS bigger candle, so nothing changes afterwards.
       const { groups, of } = groupCandles(candles, num(0));
-      const big = evaluateFormula(n.args[1], groups);
+      const big = evaluateFormula(n.args[1], groups, resolve);
       out = of.map((g) => (g > 0 ? big[g - 1] : NaN));
     } else {
       const def = CATALOG.get(f)!;
