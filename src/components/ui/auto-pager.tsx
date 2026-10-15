@@ -1,6 +1,6 @@
 "use client";
 
-import { Children, useEffect, useState } from "react";
+import { Children, useState } from "react";
 
 // Pages a long list on its own once it passes `limit` rows: pass the rows as children and they are cut into pages
 // here, in the browser (for lists that arrive whole, such as a backtest's trades; lists loaded page by page from
@@ -15,10 +15,7 @@ export default function AutoPager({ children, limit = 25, colSpan = 1, as = "tab
   const [size, setSize] = useState<number>(limit);
   const [page, setPage] = useState(1);
   const pages = Math.max(1, Math.ceil(rows.length / size));
-  // A shorter list (a filter, new data) can leave the current page past the end.
-  useEffect(() => {
-    if (page > pages) setPage(pages);
-  }, [page, pages]);
+  // A shorter list (a filter, new data) can leave the stored page past the end: it is clamped when read below.
   if (rows.length <= limit) return <>{rows}</>;
 
   const at = Math.min(page, pages);
