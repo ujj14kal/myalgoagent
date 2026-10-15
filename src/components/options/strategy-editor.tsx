@@ -60,7 +60,7 @@ export default function StrategyEditor({ initial = EMPTY_STRATEGY, onDone, onCan
       onDone?.();
     });
 
-  const risk = (label: string, unitKey: "stopLossUnit" | "targetUnit", valueKey: "stopLossValue" | "targetValue") => (
+  const risk = (label: string, unitKey: "stopLossUnit" | "targetUnit" | "trailUnit", valueKey: "stopLossValue" | "targetValue" | "trailValue") => (
     <label className="block">
       <span className={labelCls}>{label}</span>
       <div className="flex gap-1.5">
@@ -272,6 +272,7 @@ export default function StrategyEditor({ initial = EMPTY_STRATEGY, onDone, onCan
         <div className="grid gap-3 sm:grid-cols-2">
           {risk("Stop-loss (whole position)", "stopLossUnit", "stopLossValue")}
           {risk("Target (whole position)", "targetUnit", "targetValue")}
+          {risk("Trailing stop (from the best profit so far)", "trailUnit", "trailValue")}
         </div>
       </Step>
 

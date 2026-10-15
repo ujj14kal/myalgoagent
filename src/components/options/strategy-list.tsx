@@ -89,6 +89,7 @@ export default function StrategyList({ strategies, total, canTest = true }: { st
                     {s.underlying} · {EXPIRY[s.expiryRule]} · enter {toTime(s.entryMinute)}, exit {toTime(s.exitMinute)}
                     {s.stopLossUnit && ` · SL ${s.stopLossUnit === "RUPEES" ? `₹${s.stopLossValue}` : `${s.stopLossValue}% of premium`}`}
                     {s.targetUnit && ` · target ${s.targetUnit === "RUPEES" ? `₹${s.targetValue}` : `${s.targetValue}% of premium`}`}
+                    {s.trailUnit && ` · trailing stop ${s.trailUnit === "RUPEES" ? `₹${s.trailValue}` : `${s.trailValue}% of premium`}`}
                   </p>
                   <p className="mt-1 text-xs text-brand-navy/70">{s.legs.map(legText).join(" · ")}</p>
                 </div>

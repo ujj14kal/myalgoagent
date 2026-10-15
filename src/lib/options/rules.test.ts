@@ -76,3 +76,26 @@ describe("an exit rule", () => {
     expect(t.exitReason).toBe("TIME");
   });
 });
+
+describe("a trailing stop", () => {
+  const base = { entryMinute: 560, exitMinute: 900, stopLossUnit: null, stopLossValue: null, targetUnit: null, targetValue: null };
+  const costs = { brokeragePerOrder: 0, slippagePct: 0 };
+  // A sold option: the premium falls (profit), then climbs back (profit shrinks).
+  const bars = (px: (m: number) => number) => [{ leg: { type: "CE" as const, side: "SELL" as const, offset: 0, lots: 1 }, symbol: "X", strike: 100, bars: minutes(555, 930, px) }];
+  const input = (px: (m: number) => number) => ({ date: "2026-03-10", expiry: "2026-03-12", spot: 100, atm: 100, legs: bars(px) });
+  const px = (m: number) => (m < 600 ? 100 : m < 700 ? 100 - (m - 600) * 0.2 : 80 + (m - 700) * 0.2);
+  it("leaves when the profit has fallen the set amount from its best", () => {
+    const t = simulateDay(input(px), { ...base, trailUnit: "RUPEES" as const, trailValue: 5 }, costs, 1)!;
+    expect(t.exitReason).toBe("TRAILING_STOP");
+    expect(t.peak).toBeGreaterThan(15);
+    expect(t.grossPnl).toBeGreaterThan(10); // it kept most of the gain a plain time exit would have given back
+  });
+  it("is just a stop-loss until there is a profit", () => {
+    const t = simulateDay(input((m) => 100 + (m - 560) * 0.1), { ...base, trailUnit: "RUPEES" as const, trailValue: 3 }, costs, 1)!;
+    expect(t.exitReason).toBe("TRAILING_STOP");
+    expect(t.grossPnl).toBeLessThan(0);
+  });
+  it("does nothing when not set", () => {
+    expect(simulateDay(input(px), base, costs, 1)!.exitReason).toBe("TIME");
+  });
+});

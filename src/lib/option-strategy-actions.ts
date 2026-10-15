@@ -31,6 +31,8 @@ export type OptionStrategyInput = {
   stopLossValue: number | null;
   targetUnit: RiskUnit | null;
   targetValue: number | null;
+  trailUnit?: RiskUnit | null;
+  trailValue?: number | null;
   /** Optional entry/exit rules; null or absent = timed entry and exit. */
   rules?: OptionRules | null;
 };
@@ -56,8 +58,9 @@ function validate(i: OptionStrategyInput): string | null {
   for (const [unit, value] of [
     [i.stopLossUnit, i.stopLossValue],
     [i.targetUnit, i.targetValue],
+    [i.trailUnit ?? null, i.trailValue ?? null],
   ] as const) {
-    if (unit && (!UNITS.includes(unit) || !(value && value > 0))) return "Stop-loss and target need a positive amount.";
+    if (unit && (!UNITS.includes(unit) || !(value && value > 0))) return "Stop-loss, target and trailing stop need a positive amount.";
   }
   return validateRules(i.rules, i.entryMinute, i.exitMinute);
 }
@@ -101,6 +104,8 @@ export async function saveOptionStrategy(input: OptionStrategyInput): Promise<Op
     stopLossValue: clean.stopLossUnit ? clean.stopLossValue : null,
     targetUnit: clean.targetUnit,
     targetValue: clean.targetUnit ? clean.targetValue : null,
+    trailUnit: clean.trailUnit ?? null,
+    trailValue: clean.trailUnit ? (clean.trailValue ?? null) : null,
     rules: clean.rules && (clean.rules.entry || clean.rules.exit) ? (clean.rules as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
   };
   if (clean.id) {
@@ -155,6 +160,8 @@ export async function startOptionBacktest(input: { strategyId: string; fromDate:
       stopLossValue: strategy.stopLossValue,
       targetUnit: strategy.targetUnit as RiskUnit | null,
       targetValue: strategy.targetValue,
+      trailUnit: strategy.trailUnit as RiskUnit | null,
+      trailValue: strategy.trailValue,
       rules: (strategy.rules as unknown as OptionRules | null) ?? null,
       lotSize,
     };
@@ -227,6 +234,8 @@ export async function startOptionForwardTest(strategyId: string): Promise<OptRes
     stopLossValue: strategy.stopLossValue,
     targetUnit: strategy.targetUnit as RiskUnit | null,
     targetValue: strategy.targetValue,
+    trailUnit: strategy.trailUnit as RiskUnit | null,
+    trailValue: strategy.trailValue,
     rules: (strategy.rules as unknown as OptionRules | null) ?? null,
     lotSize,
   };

@@ -108,6 +108,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
                   stopLossValue: s.stopLossValue,
                   targetUnit: s.targetUnit as OptionStrategyInput["targetUnit"],
                   targetValue: s.targetValue,
+                  trailUnit: s.trailUnit as OptionStrategyInput["trailUnit"],
+                  trailValue: s.trailValue,
                   rules: s.rules as unknown as OptionStrategyInput["rules"],
                 }))}
               />

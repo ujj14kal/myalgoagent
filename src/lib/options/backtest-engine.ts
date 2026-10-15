@@ -24,6 +24,9 @@ export type OptionStrategyConfig = {
   stopLossValue: number | null;
   targetUnit: RiskUnit | null;
   targetValue: number | null;
+  /** Trailing stop: the trade leaves when its open profit has fallen this far from its best so far. */
+  trailUnit?: RiskUnit | null;
+  trailValue?: number | null;
   /** Optional entry/exit rules on the underlying's chart or the combined premium (see rules.ts); null = timed entry and exit only. */
   rules?: OptionRules | null;
 };
@@ -31,7 +34,7 @@ export type OptionStrategyConfig = {
 export type Costs = { brokeragePerOrder: number; slippagePct: number };
 
 export type TradeLeg = { symbol: string; type: OptionType; side: Side; strike: number; qty: number; entry: number; exit: number };
-export type ExitReason = "TIME" | "STOP_LOSS" | "TARGET" | "RULE";
+export type ExitReason = "TIME" | "STOP_LOSS" | "TARGET" | "RULE" | "TRAILING_STOP";
 export type DayTrade = {
   date: string;
   expiry: string;
@@ -121,7 +124,7 @@ export type DayLegInput = { leg: StrategyLeg; symbol: string; strike: number; ba
  */
 export function simulateDay(
   input: { date: string; expiry: string; spot: number; atm: number; legs: DayLegInput[] },
-  cfg: Pick<OptionStrategyConfig, "entryMinute" | "exitMinute" | "stopLossUnit" | "stopLossValue" | "targetUnit" | "targetValue">,
+  cfg: Pick<OptionStrategyConfig, "entryMinute" | "exitMinute" | "stopLossUnit" | "stopLossValue" | "targetUnit" | "targetValue" | "trailUnit" | "trailValue">,
   costs: Costs,
   lotSize: number,
   /** The minute the exit rule fires, when there is one: the trade leaves then unless the stop-loss or target came first. */
@@ -142,6 +145,7 @@ export function simulateDay(
   const limit = (unit: RiskUnit | null, value: number | null) => (unit && value && value > 0 ? (unit === "RUPEES" ? value : (value / 100) * premiumAbs) : null);
   const sl = limit(cfg.stopLossUnit, cfg.stopLossValue);
   const tgt = limit(cfg.targetUnit, cfg.targetValue);
+  const trail = limit(cfg.trailUnit ?? null, cfg.trailValue ?? null);
   const pnlAt = (minute: number) => legs.reduce((s, l) => s + dir(l.leg.side) * ((priceAt(l.bars, minute, "close") ?? l.entry!) - l.entry!) * l.qty, 0);
 
   const ruleExit = ruleExitMinute !== null && ruleExitMinute > cfg.entryMinute && ruleExitMinute < cfg.exitMinute ? ruleExitMinute : null;
@@ -166,6 +170,12 @@ export function simulateDay(
     if (tgt != null && pnl >= tgt) {
       exitMinute = m;
       exitReason = "TARGET";
+      break;
+    }
+    // The trailing stop follows the best open profit so far (peak starts at zero, so at first it acts as a plain stop-loss).
+    if (trail != null && pnl <= peak - trail) {
+      exitMinute = m;
+      exitReason = "TRAILING_STOP";
       break;
     }
   }
@@ -214,6 +224,7 @@ export type OptionBacktestStats = {
   worstDay: number;
   stopLossHits: number;
   targetHits: number;
+  trailingStopHits?: number;
   /** Days that ended because the exit rule fired (absent in runs saved before rules existed). */
   ruleExits?: number;
   byWeekday: { weekday: number; days: number; netPnl: number }[];
@@ -256,6 +267,7 @@ export function summarizeOptionBacktest(trades: DayTrade[]): OptionBacktestStats
     stopLossHits: sorted.filter((t) => t.exitReason === "STOP_LOSS").length,
     targetHits: sorted.filter((t) => t.exitReason === "TARGET").length,
     ruleExits: sorted.filter((t) => t.exitReason === "RULE").length,
+    trailingStopHits: sorted.filter((t) => t.exitReason === "TRAILING_STOP").length,
     byWeekday,
     equity,
   };
