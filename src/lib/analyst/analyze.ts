@@ -1,4 +1,4 @@
-import { adx, atr, bollingerBands, cci, macd, mfi, obv, rsi, roc, sma, stochastic, supertrend, type IndicatorPoint } from "@/lib/indicators";
+import { adx, atr, bollingerBands, cci, ema, macd, mfi, obv, rsi, roc, sma, stochastic, supertrend, type IndicatorPoint } from "@/lib/indicators";
 import { findSwingPoints } from "@/lib/chart-patterns";
 import type { Candle } from "@/lib/market-data";
 
@@ -12,6 +12,8 @@ export type Group = "Trend" | "Momentum" | "Volume" | "Volatility";
 
 export type Factor = { name: string; group: Group; lean: Lean; weight: number; reading: string };
 export type Level = { price: number; distancePct: number };
+/** A price where the chart has reacted before or where a move would be confirmed: a spot to watch, never an instruction. */
+export type EntrySpot = { label: string; side: "long" | "short"; kind: "pullback" | "breakout"; price: number; distancePct: number; basis: string };
 export type Analysis = {
   asOf: number;
   close: number;
@@ -22,6 +24,8 @@ export type Analysis = {
   verdict: "Mostly up" | "Leaning up" | "Mixed" | "Leaning down" | "Mostly down";
   support: Level[];
   resistance: Level[];
+  /** The nearest spots to watch on each side, from the same swing levels and moving averages. */
+  entrySpots: EntrySpot[];
   /** Average daily range over 14 days, in rupees and as a share of the close, to give the moves some scale. */
   atr: { value: number; pct: number } | null;
   warnings: string[];
@@ -136,6 +140,21 @@ export function analyze(candles: Candle[]): Analysis | null {
   const support = swings.filter((s) => s.type === "low" && s.price < close).map((s) => s.price).sort((x, y) => y - x).slice(0, 3).map(levelOf);
   const resistance = swings.filter((s) => s.type === "high" && s.price > close).map((s) => s.price).sort((x, y) => x - y).slice(0, 3).map(levelOf);
 
+  // Nearest possible entry spots: where price has turned before (swing levels, 20/50-day averages) and the levels whose break would confirm a move.
+  const spots: EntrySpot[] = [];
+  const spot = (label: string, side: EntrySpot["side"], kind: EntrySpot["kind"], price: number, basis: string) => spots.push({ label, side, kind, price, distancePct: ((price - close) / close) * 100, basis });
+  if (support[0]) spot("Pullback to support", "long", "pullback", support[0].price, "The nearest recent swing low below the close, a level price has turned up from before.");
+  const e20 = last(ema(candles, 20));
+  const e50 = last(ema(candles, 50));
+  for (const [n, v] of [[20, e20], [50, e50]] as const) {
+    if (v !== null && v < close * 0.998) spot(`Pullback to ${n}-day average`, "long", "pullback", v, `The ${n}-day exponential average sits below the close and often acts as a support in a rising trend.`);
+    if (v !== null && v > close * 1.002) spot(`Bounce into ${n}-day average`, "short", "pullback", v, `The ${n}-day exponential average sits above the close and often acts as a resistance in a falling trend.`);
+  }
+  if (resistance[0]) spot("Break above resistance", "long", "breakout", resistance[0].price, "The nearest recent swing high above the close. A close beyond it is what a breakout reading looks for.");
+  if (resistance[0]) spot("Rejection at resistance", "short", "pullback", resistance[0].price, "The same swing high seen from below: a level price has turned down from before.");
+  if (support[0]) spot("Break below support", "short", "breakout", support[0].price, "The nearest recent swing low. A close beneath it is what a breakdown reading looks for.");
+  const entrySpots = spots.sort((x, y) => Math.abs(x.distancePct) - Math.abs(y.distancePct)).slice(0, 6);
+
   return {
     asOf: candles[candles.length - 1].time,
     close,
@@ -146,6 +165,7 @@ export function analyze(candles: Candle[]): Analysis | null {
     verdict,
     support,
     resistance,
+    entrySpots,
     atr: a === null ? null : { value: a, pct: (a / close) * 100 },
     warnings,
   };

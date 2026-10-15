@@ -9,6 +9,7 @@ import ReadinessCheck from "@/components/live/readiness-check";
 import CopyIp from "@/components/live/copy-ip";
 import EngineFeed from "@/components/live/engine-feed";
 import AutoRefresh from "@/components/live/auto-refresh";
+import DeployPicker from "@/components/live/deploy-picker";
 import { DeploymentControls, PendingSignalActions } from "@/components/live/deployment-controls";
 import { CancelOrder, RefreshOrders } from "@/components/live/order-actions";
 import { registeredStaticIp } from "@/lib/brokers/egress";
@@ -54,12 +55,14 @@ export default async function Page() {
   const userId = session?.user?.id;
   if (!userId) return null;
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { liveTradingEnabledAt: true, liveStaticIp: true, riskSettings: true } });
-  const [conns, orders, deployments, orderCount] = await Promise.all([
+  const [conns, orders, deployments, orderCount, strategyRows] = await Promise.all([
     prisma.brokerConnection.findMany({ where: { userId }, orderBy: { createdAt: "asc" }, select: { broker: true, status: true, tokenExpiresAt: true, liveReadyAt: true, liveReadyDetail: true, accountName: true } }),
     prisma.liveOrder.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: RECENT_ORDERS, include: { events: { orderBy: { at: "asc" } } } }),
     prisma.liveDeployment.findMany({ where: { userId }, orderBy: [{ status: "asc" }, { startedAt: "desc" }], take: 30 }),
     prisma.liveOrder.count({ where: { userId } }),
+    prisma.strategy.findMany({ where: { userId, status: { notIn: ["DELETED", "ARCHIVED"] }, instrument: { symbol: { endsWith: ".NS" } } }, select: { id: true, name: true, instrument: { select: { symbol: true } } }, orderBy: { updatedAt: "desc" }, take: 100 }),
   ]);
+  const deployChoices = strategyRows.map((r) => ({ id: r.id, name: r.name, symbol: r.instrument.symbol }));
   const nowMs = new Date().getTime();
   const egress = await prisma.userEgress.findUnique({ where: { userId }, select: { status: true, publicIp: true, lastError: true } }).catch(() => null);
   const staticIp = registeredStaticIp(user?.liveStaticIp ?? egress?.publicIp);
@@ -205,11 +208,11 @@ export default async function Page() {
           <p className="flex items-center gap-2 text-sm font-semibold text-brand-navy">
             <Rocket size={16} className="text-brand-primary" /> Live strategies
           </p>
-          <span className="text-xs text-brand-navy/45">Deploy a strategy from its page with Go live</span>
+          <DeployPicker choices={deployChoices} />
         </div>
         {liveNow.length === 0 ? (
           <p className="px-5 py-8 text-center text-sm text-brand-navy/50">
-            No strategy is live yet. Open a strategy you&apos;ve backtested and forward tested, then press <strong>Go live</strong>.
+            No strategy is live yet. Choose one above and press <strong>Deploy</strong>, or open a strategy and press <strong>Go live</strong>.
           </p>
         ) : (
           <ul className="divide-y divide-black/[0.05]">

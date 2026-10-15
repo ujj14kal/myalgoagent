@@ -32,14 +32,15 @@ export default async function NotificationsPage({ searchParams }: { searchParams
   const read = qEnum(sp.read, ["all", "unread", "read"] as const, "all");
   const where: Prisma.NotificationWhereInput = {
     userId: session.user.id,
+    paperSessionId: null, // forward-test events live on the Forward Testing page only
     ...(q ? { message: { contains: q, mode: "insensitive" } } : {}),
     ...(type !== "all" ? { type: type as Prisma.NotificationWhereInput["type"] } : {}),
     ...(read !== "all" ? { read: read === "read" } : {}),
   };
   const [all, total, unreadCount] = await Promise.all([
-    prisma.notification.count({ where: { userId: session.user.id } }),
+    prisma.notification.count({ where: { userId: session.user.id, paperSessionId: null } }),
     prisma.notification.count({ where }),
-    prisma.notification.count({ where: { userId: session.user.id, read: false } }),
+    prisma.notification.count({ where: { userId: session.user.id, paperSessionId: null, read: false } }),
   ]);
   const { page, size } = readPageQuery(sp);
   const win = pageWindow(total, page, size);
@@ -56,7 +57,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
       <PageHeader
         title="Notifications"
         icon={Bell}
-        description="Order fills and risk events from your forward testing, replies from our support team, and announcements."
+        description="Replies from our support team, billing and account notices, and announcements. Forward-test activity stays on the Forward Testing page."
         actions={unreadCount > 0 ? <NotificationActions markAll /> : undefined}
       />
 
@@ -75,7 +76,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
       {all > 0 && notifications.length === 0 && <p className="rounded-2xl border border-dashed border-black/10 px-4 py-8 text-center text-sm text-brand-navy/50">No notifications match.</p>}
       {all === 0 && (
         <div className="mt-8">
-          <EmptyState pose="alert" title="No notifications yet." description="Order fills, risk events, and session changes from your forward testing will show up here." />
+          <EmptyState pose="alert" title="No notifications yet." description="Replies from our support team and account notices will show up here." />
         </div>
       )}
 

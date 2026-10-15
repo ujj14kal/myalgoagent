@@ -27,4 +27,12 @@ describe("analyze", () => {
     expect(a.upPct + a.downPct + a.neutralPct).toBe(100);
     expect(a.factors.every((f) => f.reading.length > 10 && f.weight > 0)).toBe(true);
   });
+  it("lists the nearest entry spots, closest first, with a reason for each", () => {
+    const a = analyze(series(160, (i) => Math.sin(i / 5) * 2 + 0.1))!;
+    expect(a.entrySpots.length).toBeGreaterThan(0);
+    const d = a.entrySpots.map((e) => Math.abs(e.distancePct));
+    expect([...d].sort((x, y) => x - y)).toEqual(d);
+    expect(a.entrySpots.every((e) => e.basis.length > 10 && e.price > 0)).toBe(true);
+    expect(a.entrySpots.every((e) => (e.side === "long") === (e.label.startsWith("Pullback") || e.label.startsWith("Break above")))).toBe(true);
+  });
 });

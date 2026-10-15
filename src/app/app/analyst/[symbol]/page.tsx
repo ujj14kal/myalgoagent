@@ -103,6 +103,30 @@ export default async function AnalystSymbolPage({ params }: { params: Promise<{ 
                 </section>
               );
             })}
+            <section className="rounded-2xl border border-brand-navy/10 bg-white p-5 shadow-sm lg:col-span-2">
+              <h2 className="text-base font-bold text-brand-navy">Nearest possible entry spots</h2>
+              <p className="text-sm text-brand-navy/60">Prices where the chart has reacted before, or whose break a pattern would need, closest to today&apos;s close first. It&apos;s an analysis of the chart, not a recommendation.</p>
+              {result.entrySpots.length === 0 ? (
+                <p className="mt-3 text-sm text-brand-navy/50">No clear spots found on this chart.</p>
+              ) : (
+                <ul className="mt-3 divide-y divide-brand-navy/5">
+                  {result.entrySpots.map((e) => (
+                    <li key={`${e.label}-${e.price}`} className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 py-2.5 text-sm">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-brand-navy">
+                          {e.label} <span className={`ml-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${e.side === "long" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{e.side === "long" ? "upside setup" : "downside setup"}</span>
+                        </p>
+                        <p className="text-xs text-brand-navy/55">{e.basis}</p>
+                      </div>
+                      <p className="shrink-0 text-right font-semibold tabular-nums text-brand-navy">
+                        ₹{formatPrice(e.price)} <span className="block text-xs font-normal text-brand-navy/50">{e.distancePct >= 0 ? "+" : ""}{e.distancePct.toFixed(1)}% from close</span>
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-3 text-xs text-brand-navy/50">This is just an analysis based on market data. Don&apos;t consider it as trading advice. Trading carries risk.</p>
+            </section>
             <section className="rounded-2xl border border-brand-navy/10 bg-white p-5 shadow-sm">
               <h2 className="text-base font-bold text-brand-navy">Nearest levels</h2>
               <p className="text-sm text-brand-navy/60">Recent swing lows below and swing highs above today&apos;s close.</p>

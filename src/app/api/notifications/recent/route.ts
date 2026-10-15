@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     }
 
     const notifications = await prisma.notification.findMany({
-      where: { userId: session.user.id, createdAt: { gt: sinceDate } },
+      where: { userId: session.user.id, paperSessionId: null, createdAt: { gt: sinceDate } },
       orderBy: { createdAt: "asc" },
       take: 10,
     });

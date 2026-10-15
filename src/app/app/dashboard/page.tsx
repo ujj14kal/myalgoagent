@@ -53,7 +53,8 @@ export default async function DashboardPage() {
       }),
       prisma.strategy.count({ where: { userId, status: { not: "DELETED" } } }),
       getRecentBacktests(userId, 8),
-      getHealthAlerts(userId),
+      // Forward-test session alerts (stuck, duplicate, stale) belong on the Forward Testing page, not here.
+      getHealthAlerts(userId).then((a) => a.filter((x) => !/^(orphaned|duplicate|stale)-/.test(x.id))),
     ]);
 
   const agentName = user?.agentName ?? DEFAULT_AGENT_NAME;

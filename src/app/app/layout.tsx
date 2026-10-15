@@ -61,8 +61,8 @@ async function AppShell({ children }: { children: React.ReactNode }) {
 
   const now = new Date();
   const [unreadCount, liveSessions, announcement, brokerRows, customRows, credits] = await Promise.all([
-    prisma.notification.count({ where: { userId: session.user.id, read: false } }),
-    prisma.paperSession.count({ where: { userId: session.user.id, status: "ACTIVE" } }),
+    prisma.notification.count({ where: { userId: session.user.id, paperSessionId: null, read: false } }),
+    prisma.liveDeployment.count({ where: { userId: session.user.id, status: "ACTIVE" } }),
     prisma.announcement.findFirst({
       where: { active: true, startsAt: { lte: now }, OR: [{ endsAt: null }, { endsAt: { gt: now } }] },
       orderBy: { createdAt: "desc" },
