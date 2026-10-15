@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Copy, History, Trash2 } from "lucide-react";
 import { useState } from "react";
 import InspectIndicator from "./inspect";
+import FormulaStudio from "./formula-studio";
 import DescribeIndicator from "./describe";
 import { deleteCustomIndicator, duplicateCustomIndicator, importCustomIndicator, restoreCustomIndicatorVersion, type IndicatorVersion } from "@/lib/custom-indicator-actions";
 import ListTabs from "@/components/ui/list-tabs";
@@ -42,6 +43,7 @@ export default function CustomIndicatorList({
         <div className="mt-4">
           <DescribeIndicator />
         </div>
+        <FormulaStudio />
         <ImportBox />
       </section>
       {total > 0 && (
