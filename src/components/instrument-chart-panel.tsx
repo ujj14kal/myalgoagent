@@ -13,7 +13,7 @@ import type { Candle, CandleInterval, CandleRange, HistoryDepth, Tick } from "@/
 import { useLiveCandle } from "@/lib/market-data/use-live-candle";
 import { CustomIndicatorToggle, SaveLineAsIndicator } from "@/components/custom-indicators/chart-tools";
 import { useCustomIndicators } from "@/components/custom-indicators/context";
-import { customVisual, type CustomVisual } from "@/lib/custom-indicator";
+import { customDashboard, customVisual, type CustomVisual } from "@/lib/custom-indicator";
 import { computeIndicatorSeries } from "@/lib/strategy/compute-series";
 import { anchoredVwap } from "@/lib/indicators";
 import { INDICATOR_BY_KIND } from "@/lib/strategy/indicator-catalog";
@@ -298,9 +298,35 @@ export default function InstrumentChartPanel({
           } catch {
             // an unusable formula draws nothing
           }
-          return { name: c.name, ...visual, color: c.def.color ?? ["#7c3aed", "#0891b2", "#ea580c", "#be185d"][idx % 4] };
+          return { name: c.name, def: c.def, ...visual, color: c.def.color ?? ["#7c3aed", "#0891b2", "#ea580c", "#be185d"][idx % 4] };
         }),
     [customs, activeCustom, candles],
+  );
+
+  // Indicators that paint: candle colours and background shading from every active one, merged.
+  const customPaint = useMemo(() => {
+    const candleColors: Record<number, string> = {};
+    const shades: { time: number; color: string }[] = [];
+    for (const c of customSeries) {
+      Object.assign(candleColors, c.candleColors);
+      shades.push(...(c.shades ?? []));
+    }
+    return { candleColors, shades };
+  }, [customSeries]);
+
+  // Indicators that ask for a table of their latest values.
+  const customTables = useMemo(
+    () =>
+      customSeries
+        .filter((c) => c.def.type === "formula" || c.def.type === "signal" ? !!c.def.table : false)
+        .map((c) => {
+          try {
+            return { name: c.name, rows: customDashboard(candles, c.def, c.name) };
+          } catch {
+            return { name: c.name, rows: [] };
+          }
+        }),
+    [customSeries, candles],
   );
 
   const customNotes = useMemo(() => customSeries.flatMap((c) => c.markers.map((time) => ({ time, text: c.name, color: c.color }))), [customSeries]);
@@ -616,6 +642,8 @@ export default function InstrumentChartPanel({
               candles={candles}
               overlays={overlays}
               notes={customNotes}
+              candleColors={customPaint.candleColors}
+              shades={customPaint.shades}
               chartType={chartType}
               showVolume={showVolume}
               drawings={drawings}
@@ -659,6 +687,22 @@ export default function InstrumentChartPanel({
             <OscillatorPanel series={c.lines.map((l) => ({ label: l.label, color: c.color, points: l.points, type: l.type }))} />
           </div>
         ))}
+
+      {customTables.map((t) => (
+        <div key={t.name} className="mt-4 surface p-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-navy/40">{t.name} · latest values</p>
+          <table className="w-full text-sm">
+            <tbody>
+              {t.rows.map((r) => (
+                <tr key={r.label} className="border-t border-black/[0.05]">
+                  <td className={`py-1.5 pr-3 ${r.kind === "step" ? "text-brand-navy/50" : "font-semibold text-brand-navy"}`}>{r.kind === "step" ? `step: ${r.label}` : r.label}</td>
+                  <td className="py-1.5 text-right tabular-nums">{r.value === null ? "–" : r.value.toLocaleString("en-IN", { maximumFractionDigits: 4 })}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
 
       {comparePanel && (
         <div className="mt-4 surface p-4">

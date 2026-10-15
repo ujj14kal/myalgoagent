@@ -70,7 +70,9 @@ export default function FormulaStudio() {
   const [width, setWidth] = useState("2 * stdev(close, 20)");
   const [view, setView] = useState<"text" | "steps">("text");
   const [color, setColor] = useState(COLORS[0]);
-  const [bars, setBars] = useState(false);
+  const [style, setStyle] = useState<"line" | "histogram" | "heat">("line");
+  const [paint, setPaint] = useState<"" | "candles" | "background">("");
+  const [table, setTable] = useState(false);
   const [caret, setCaret] = useState(0);
   const [entryOn, setEntryOn] = useState(false);
   const [entryOp, setEntryOp] = useState<EntryOperator>("CROSSES_ABOVE");
@@ -88,13 +90,14 @@ export default function FormulaStudio() {
 
   const entry: CustomEntry | undefined = entryOn ? { operator: entryOp, ...(ENTRY_NEEDS_NUMBER(kind) && entryValue !== "" ? { value: Number(entryValue) } : {}) } : undefined;
   const look = { color, ...(entry ? { entry } : {}) };
+  const display = { ...(paint ? { paint } : {}), ...(table ? { table: true } : {}) };
   const def: CustomIndicatorDef =
     kind === "line"
-      ? { type: "formula", formula: text, pane: "separate", ...look, ...(bars ? { style: "histogram" as const } : {}) }
+      ? { type: "formula", formula: text, pane: "separate", ...look, ...(style !== "line" && !paint ? { style } : {}), ...display }
       : kind === "overlay"
-        ? { type: "formula", formula: text, pane: "price", ...look }
+        ? { type: "formula", formula: text, pane: "price", ...look, ...display }
         : kind === "signal"
-          ? { type: "signal", formula: text, ...look }
+          ? { type: "signal", formula: text, ...look, ...display }
           : kind === "channel"
             ? { type: "channel", upper, lower, ...(middle.trim() ? { middle } : {}), pane: "price", ...look }
             : { type: "band", middle: text, width, pane: "price", ...look };
@@ -314,10 +317,32 @@ export default function FormulaStudio() {
             )}
           </div>
 
-          {kind === "line" && (
+          {kind === "line" && !paint && (
+            <div>
+              <p className={label}>How it is drawn</p>
+              <div className="flex flex-wrap gap-1.5">
+                {([["line", "Line"], ["histogram", "Bars from zero"], ["heat", "Heat bars (deeper colour = bigger)"]] as const).map(([v, t]) => (
+                  <button key={v} type="button" aria-pressed={style === v} onClick={() => setStyle(v)} className={`rounded-full px-3 py-1 text-xs font-semibold ${style === v ? "bg-brand-navy text-white" : "bg-white text-brand-navy/60 ring-1 ring-brand-navy/15"}`}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {(kind === "line" || kind === "overlay" || kind === "signal") && (
+            <div>
+              <p className={label}>Paint the chart with it</p>
+              <select value={paint} onChange={(e) => setPaint(e.target.value as typeof paint)} className={field}>
+                <option value="">No — draw it as a line or markers</option>
+                <option value="candles">Colour the candles ({kind === "signal" ? "where it is true" : "green above 0, red below"})</option>
+                <option value="background">Shade the background ({kind === "signal" ? "where it is true" : "green above 0, red below"})</option>
+              </select>
+            </div>
+          )}
+          {(kind === "line" || kind === "overlay" || kind === "signal") && (
             <label className="flex items-center gap-2 text-sm text-brand-navy">
-              <input type="checkbox" checked={bars} onChange={(e) => setBars(e.target.checked)} />
-              Draw it as bars from zero (a histogram) instead of a line
+              <input type="checkbox" checked={table} onChange={(e) => setTable(e.target.checked)} />
+              Show a table of the latest values (the indicator and each named step) under the chart
             </label>
           )}
           <div>

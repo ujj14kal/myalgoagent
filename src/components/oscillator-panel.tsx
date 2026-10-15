@@ -9,7 +9,7 @@ export interface OscillatorSeries {
   label: string;
   color: string;
   points: IndicatorPoint[];
-  type?: "line" | "histogram";
+  type?: "line" | "histogram" | "heat";
 }
 
 // A `= []` default parameter (or an inline `[...]` literal at a call site)
@@ -48,7 +48,17 @@ export default function OscillatorPanel({
     });
 
     for (const s of series) {
-      if (s.type === "histogram") {
+      if (s.type === "heat") {
+        // Bars from zero whose colour deepens with the size of the value: green above zero, red below.
+        const peak = Math.max(1e-9, ...s.points.map((p) => Math.abs(p.value)));
+        const heat = chart.addSeries(HistogramSeries, { color: s.color });
+        heat.setData(
+          s.points.map((p) => {
+            const a = 0.2 + 0.8 * (Math.abs(p.value) / peak);
+            return { time: p.time as UTCTimestamp, value: p.value, color: p.value >= 0 ? `rgba(0,168,62,${a.toFixed(2)})` : `rgba(214,0,0,${a.toFixed(2)})` };
+          }),
+        );
+      } else if (s.type === "histogram") {
         const hist = chart.addSeries(HistogramSeries, { color: s.color });
         hist.setData(
           s.points.map((p) => ({ time: p.time as UTCTimestamp, value: p.value, color: p.value >= 0 ? "#00a83e" : "#d60000" })),

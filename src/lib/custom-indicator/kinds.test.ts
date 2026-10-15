@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeCustomSeries, customParts, customVisual, defaultPart, describeCustom, indicatorRefs, indicatorSlug, validateCustomDef, type CustomIndicatorDef } from "./index";
+import { computeCustomSeries, customParts, customVisual, defaultPart, customDashboard, describeCustom, indicatorRefs, indicatorSlug, validateCustomDef, type CustomIndicatorDef } from "./index";
 import { evaluateStrategy } from "@/lib/strategy/evaluate";
 import { validateConditionNode } from "@/lib/strategy/validate";
 import { conditionToText } from "@/lib/strategy/format";
@@ -151,5 +151,35 @@ describe("indicators built on other indicators", () => {
       if (Number.isNaN(full[i])) expect(part[i]).toBeNaN();
       else expect(part[i]).toBeCloseTo(full[i], 9);
     }
+  });
+});
+
+describe("painting the chart and the table of values", () => {
+  const cs = Array.from({ length: 90 }, (_, i) => ({ time: 1_700_000_000 + i * 86400, open: 100 + i * 0.1, high: 102 + i * 0.1, low: 98 + i * 0.1, close: 100 + Math.sin(i / 5) * 3 + i * 0.1, volume: 1000 }));
+  it("keeps heat bars, paint and table settings, and drops them where they make no sense", () => {
+    expect(validateCustomDef({ type: "formula", formula: "close - sma(close, 5)", pane: "separate", style: "heat", table: true })).toMatchObject({ style: "heat", table: true });
+    expect(validateCustomDef({ type: "signal", formula: "close > open", paint: "candles" })).toMatchObject({ paint: "candles" });
+    expect(validateCustomDef({ type: "signal", formula: "close > open", paint: "weird" })).not.toHaveProperty("paint");
+    expect(validateCustomDef({ type: "formula", formula: "close", pane: "price", style: "heat" })).not.toHaveProperty("style");
+  });
+  it("a signal can colour the candles where it is true", () => {
+    const v = customVisual(cs, { type: "signal", formula: "close > ema(close, 10)", paint: "candles", color: "#7c3aed" }, "Above EMA");
+    expect(v.markers).toEqual([]);
+    expect(Object.values(v.candleColors ?? {}).every((c) => c === "#7c3aed")).toBe(true);
+    expect(Object.keys(v.candleColors ?? {}).length).toBeGreaterThan(10);
+  });
+  it("a formula colours candles green above zero and red below, or shades the background", () => {
+    const v = customVisual(cs, { type: "formula", formula: "close - sma(close, 10)", pane: "separate", paint: "candles" }, "Mom");
+    const colours = new Set(Object.values(v.candleColors ?? {}));
+    expect([...colours].sort()).toEqual(["#16a34a", "#dc2626"]);
+    const b = customVisual(cs, { type: "formula", formula: "close - sma(close, 10)", pane: "separate", paint: "background" }, "Mom");
+    expect(b.shades?.length).toBeGreaterThan(10);
+    expect(b.lines).toEqual([]);
+  });
+  it("a table lists the indicator and each named step with its latest value", () => {
+    const rows = customDashboard(cs, { type: "formula", formula: "a = close - sma(close, 10)\nb = a * 2\nb + 1", pane: "separate", table: true }, "Score");
+    expect(rows.map((r) => r.label)).toEqual(["Score", "a", "b"]);
+    expect(rows[0].kind).toBe("output");
+    expect(rows.every((r) => r.value !== null)).toBe(true);
   });
 });

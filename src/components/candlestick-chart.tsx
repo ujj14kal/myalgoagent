@@ -52,6 +52,8 @@ type EditableField = "from" | "to" | "price" | "at" | "anchor" | "entry" | "stop
 const EMPTY_OVERLAYS: Overlay[] = [];
 const EMPTY_MARKERS: Signal[] = [];
 const EMPTY_NOTES: ChartNote[] = [];
+const EMPTY_COLORS: Record<number, string> = {};
+const EMPTY_SHADES: { time: number; color: string }[] = [];
 const EMPTY_DRAWINGS: Drawing[] = [];
 
 type PriceSeries = ISeriesApi<"Candlestick"> | ISeriesApi<"Line"> | ISeriesApi<"Area"> | ISeriesApi<"Bar">;
@@ -106,6 +108,8 @@ export default function CandlestickChart({
   overlays = EMPTY_OVERLAYS,
   markers = EMPTY_MARKERS,
   notes = EMPTY_NOTES,
+  candleColors = EMPTY_COLORS,
+  shades = EMPTY_SHADES,
   chartType = "candlestick",
   showVolume = false,
   drawings = EMPTY_DRAWINGS,
@@ -125,6 +129,10 @@ export default function CandlestickChart({
   overlays?: Overlay[];
   markers?: Signal[];
   notes?: ChartNote[];
+  /** Candle colours by time (an indicator that paints candles). */
+  candleColors?: Record<number, string>;
+  /** Background shading by time (an indicator that shades the chart). */
+  shades?: { time: number; color: string }[];
   chartType?: ChartType;
   showVolume?: boolean;
   drawings?: Drawing[];
@@ -579,7 +587,7 @@ export default function CandlestickChart({
     const data =
       chartType === "line" || chartType === "area"
         ? candles.map((c) => ({ time: c.time as UTCTimestamp, value: c.close }))
-        : candles.map((c) => ({ time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close }));
+        : candles.map((c) => ({ time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close, ...(candleColors[c.time] ? { color: candleColors[c.time], borderColor: candleColors[c.time], wickColor: candleColors[c.time] } : {}) }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (series as any).setData(data);
     chart.timeScale().fitContent();
@@ -657,7 +665,7 @@ export default function CandlestickChart({
     const priceData =
       chartType === "line" || chartType === "area"
         ? candles.map((c) => ({ time: c.time as UTCTimestamp, value: c.close }))
-        : candles.map((c) => ({ time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close }));
+        : candles.map((c) => ({ time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close, ...(candleColors[c.time] ? { color: candleColors[c.time], borderColor: candleColors[c.time], wickColor: candleColors[c.time] } : {}) }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (series as any).setData(priceData);
 
@@ -705,7 +713,23 @@ export default function CandlestickChart({
     if (granularityChanged || firstTime !== lastFirstTimeRef.current) chart.timeScale().fitContent();
     lastFirstTimeRef.current = firstTime;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `drawings` is only read on the rare granularity-change path above; the dedicated Drawings effect below keeps it in sync on every other render
-  }, [candles, overlays, showVolume, chartType]);
+  }, [candles, overlays, showVolume, chartType, candleColors]);
+
+  // Background shading: a full-height translucent histogram on its own hidden scale, one bar per shaded candle.
+  const shadeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    if (shadeSeriesRef.current) {
+      chart.removeSeries(shadeSeriesRef.current);
+      shadeSeriesRef.current = null;
+    }
+    if (!shades.length) return;
+    const s = chart.addSeries(HistogramSeries, { priceScaleId: "shade", priceLineVisible: false, lastValueVisible: false });
+    chart.priceScale("shade").applyOptions({ scaleMargins: { top: 0, bottom: 0 }, visible: false });
+    s.setData(shades.map((x) => ({ time: x.time as UTCTimestamp, value: 1, color: `${x.color}33` })));
+    shadeSeriesRef.current = s;
+  }, [shades, candles]);
 
   // Live: update (or append) just the forming candle — cheap, and it never touches the view.
   useEffect(() => {

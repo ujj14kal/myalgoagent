@@ -24,7 +24,7 @@ import { evaluateFormula, parseFormula, parseProgram, type IndicatorResolver, ty
 export type LinePoint = { time: number; price: number };
 export type CustomPane = "price" | "separate";
 /** Optional drawing colour (#rrggbb); charts pick one when it's not set. */
-type Look = { color?: string; entry?: CustomEntry; /** How a graph line is drawn in its own pane: a line (default) or bars from zero. */ style?: "line" | "histogram"; /** Other custom indicators this one reads with ind(name): a copy of each, so later edits to them never change this one. */ uses?: Record<string, CustomIndicatorDef> };
+type Look = { color?: string; entry?: CustomEntry; /** How a graph line is drawn in its own pane: a line (default) or bars from zero. */ style?: "line" | "histogram" | "heat"; /** Colour the candles, or shade the chart background, where the value is true (signals) or by its sign (formulas: above 0 green, below 0 red). */ paint?: "candles" | "background"; /** Show a small table of the latest value of the indicator and each of its named steps. */ table?: boolean; /** Other custom indicators this one reads with ind(name): a copy of each, so later edits to them never change this one. */ uses?: Record<string, CustomIndicatorDef> };
 
 /**
  * The indicator's own entry rule, added when it is made: "crosses above 0", or (no value) "price crosses above it". When the
@@ -273,6 +273,11 @@ const formula = (s: unknown, what: string, keys: string[] = []): string => {
   }
   return s.trim();
 };
+/** The optional display settings every formula-based kind may carry. */
+const extras = (d: Record<string, unknown>): { paint?: "candles" | "background"; table?: boolean } => ({
+  ...(d.paint === "candles" || d.paint === "background" ? { paint: d.paint } : {}),
+  ...(d.table === true ? { table: true } : {}),
+});
 const paneOf = (p: unknown): CustomPane | undefined => (p === "price" || p === "separate" ? p : undefined);
 const sym = (s: unknown) => (typeof s === "string" && s ? { symbol: s } : {});
 
@@ -311,10 +316,10 @@ function validateCore(def: unknown, keys: string[] = []): CustomIndicatorDef {
       parseFormula(d.formula, keys);
       const pane = paneOf(d.pane);
       if (!pane) throw new Error("Choose where the indicator is drawn.");
-      return { type: "formula", formula: d.formula.trim(), pane, ...look(d.color), ...(d.style === "histogram" && pane === "separate" ? { style: "histogram" as const } : {}) };
+      return { type: "formula", formula: d.formula.trim(), pane, ...look(d.color), ...(d.style === "histogram" || d.style === "heat" ? (pane === "separate" ? { style: d.style as "histogram" | "heat" } : {}) : {}), ...extras(d) };
     }
     case "signal":
-      return { type: "signal", formula: formula(d.formula, "signal", keys), ...look(d.color) };
+      return { type: "signal", formula: formula(d.formula, "signal", keys), ...look(d.color), ...extras(d) };
     case "line": {
       const pts = d.points as LinePoint[] | undefined;
       const ok = Array.isArray(pts) && pts.length === 2 && pts.every((p) => Number.isFinite(p?.time) && Number.isFinite(p?.price) && p.price > 0);
@@ -356,9 +361,9 @@ function validateCore(def: unknown, keys: string[] = []): CustomIndicatorDef {
   throw new Error("Unknown custom indicator type.");
 }
 
-export type CustomVisualLine = { label: string; part: CustomPart; points: { time: number; value: number }[]; dashed?: boolean; type?: "line" | "histogram" };
+export type CustomVisualLine = { label: string; part: CustomPart; points: { time: number; value: number }[]; dashed?: boolean; type?: "line" | "histogram" | "heat" };
 /** How an indicator draws on a chart: its lines (one, or upper/middle/lower) and any markers. */
-export type CustomVisual = { pane: CustomPane; lines: CustomVisualLine[]; markers: number[] };
+export type CustomVisual = { pane: CustomPane; lines: CustomVisualLine[]; markers: number[]; /** Candle colours by time, when the indicator paints candles. */ candleColors?: Record<number, string>; /** Background shading by time, when it shades the chart. */ shades?: { time: number; color: string }[] };
 
 const round = (v: number) => Math.round(v * 10000) / 10000;
 const pointsOf = (candles: Candle[], v: number[]) => candles.flatMap((c, i) => (Number.isFinite(v[i]) ? [{ time: c.time, value: round(v[i]) }] : []));
@@ -368,6 +373,7 @@ export function customVisual(candles: Candle[], def: CustomIndicatorDef, name: s
   const pane = customPane(def);
   if (def.type === "signal") {
     const v = computeCustomSeries(candles, def);
+    if (def.paint) return { pane, lines: [], markers: [], ...paintOf(candles, v.map((x) => (x === 1 ? 1 : 0)), def, def.color ?? "#7c3aed") };
     return { pane, lines: [], markers: candles.filter((_, i) => v[i] === 1 && v[i - 1] !== 1).map((c) => c.time) };
   }
   if (isMultiPart(def)) {
@@ -382,7 +388,7 @@ export function customVisual(candles: Candle[], def: CustomIndicatorDef, name: s
       ],
     };
   }
-  const main: CustomVisualLine = { label: name, part: "value", points: pointsOf(candles, computeCustomSeries(candles, def)), ...(def.type === "formula" && def.style === "histogram" ? { type: "histogram" as const } : {}) };
+  const main: CustomVisualLine = { label: name, part: "value", points: pointsOf(candles, computeCustomSeries(candles, def)), ...(def.type === "formula" && (def.style === "histogram" || def.style === "heat") ? { type: def.style } : {}) };
   // Steps named plot_something are drawn too, as extra lines beside the main one (a rule still reads the main output).
   const extra: CustomVisualLine[] = [];
   if (def.type === "formula") {
@@ -390,5 +396,34 @@ export function customVisual(candles: Candle[], def: CustomIndicatorDef, name: s
       extra.push({ label: `${name} · ${st.name.slice(5) || st.name}`, part: "value", dashed: true, points: pointsOf(candles, evaluateFormula(st.tree, candles, resolverOf(def))) });
     }
   }
-  return { pane, markers: [], lines: [main, ...extra] };
+  const painted = def.type === "formula" && def.paint ? paintOf(candles, computeCustomSeries(candles, def), def, null) : {};
+  return { pane, markers: [], lines: def.type === "formula" && def.paint ? [] : [main, ...extra], ...painted };
+}
+
+const GREEN = "#16a34a";
+const RED = "#dc2626";
+/** What a painting indicator colours: where a signal is true (one colour), or by the sign of a formula (above 0 green, below 0 red). */
+function paintOf(candles: Candle[], v: number[], def: CustomIndicatorDef, one: string | null): Pick<CustomVisual, "candleColors" | "shades"> {
+  const colorAt = (x: number) => (!Number.isFinite(x) || x === 0 ? null : one ?? (x > 0 ? GREEN : RED));
+  if ((def as { paint?: string }).paint === "background") {
+    return { shades: candles.flatMap((c, i) => (colorAt(v[i]) ? [{ time: c.time, color: colorAt(v[i])! }] : [])) };
+  }
+  const colors: Record<number, string> = {};
+  candles.forEach((c, i) => {
+    const col = colorAt(v[i]);
+    if (col) colors[c.time] = col;
+  });
+  return { candleColors: colors };
+}
+
+export type DashboardRow = { label: string; value: number | null; kind: "output" | "step" };
+
+/** The latest value of an indicator's outputs and each named step, for the table beside the chart. */
+export function customDashboard(candles: Candle[], def: CustomIndicatorDef, name: string): DashboardRow[] {
+  const last = (v: number[]) => (Number.isFinite(v.at(-1) ?? NaN) ? Math.round(v.at(-1)! * 10000) / 10000 : null);
+  const rows: DashboardRow[] = customParts(def).map((p) => ({ label: p === "value" ? name : `${name} · ${PART_LABEL[p]}`, value: last(computeCustomSeries(candles, def, p)), kind: "output" as const }));
+  if (def.type === "formula" || def.type === "signal") {
+    for (const st of parseProgram(def.formula, usesKeys(def)).steps.slice(0, 12)) rows.push({ label: st.name, value: last(evaluateFormula(st.tree, candles, resolverOf(def))), kind: "step" });
+  }
+  return rows;
 }
