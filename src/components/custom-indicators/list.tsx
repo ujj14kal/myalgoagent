@@ -2,14 +2,16 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2 } from "lucide-react";
+import { Copy, History, Trash2 } from "lucide-react";
+import { useState } from "react";
+import InspectIndicator from "./inspect";
 import DescribeIndicator from "./describe";
-import { deleteCustomIndicator } from "@/lib/custom-indicator-actions";
+import { deleteCustomIndicator, duplicateCustomIndicator, importCustomIndicator, restoreCustomIndicatorVersion, type IndicatorVersion } from "@/lib/custom-indicator-actions";
 import ListTabs from "@/components/ui/list-tabs";
 import ListToolbar from "@/components/ui/list-toolbar";
-import { CUSTOM_CLASSES, classifyCustom, customParts, PART_LABEL, type CustomClass, type CustomIndicatorDef } from "@/lib/custom-indicator";
+import { CUSTOM_CLASSES, classifyCustom, customParts, describeCustom, PART_LABEL, type CustomClass, type CustomIndicatorDef } from "@/lib/custom-indicator";
 
-export type SavedIndicator = { id: string; name: string; description: string | null; def: CustomIndicatorDef; summary: string };
+export type SavedIndicator = { id: string; name: string; description: string | null; def: CustomIndicatorDef; summary: string; history?: IndicatorVersion[] };
 
 export default function CustomIndicatorList({
   items,
@@ -40,6 +42,7 @@ export default function CustomIndicatorList({
         <div className="mt-4">
           <DescribeIndicator />
         </div>
+        <ImportBox />
       </section>
       {total > 0 && (
         <div className="space-y-3 pt-2">
@@ -76,6 +79,9 @@ export default function CustomIndicatorList({
                 {i.description && <p className="mt-1 text-xs text-brand-navy/55">{i.description}</p>}
               </div>
               <div className="flex gap-1">
+                <button type="button" aria-label="Duplicate" title="Duplicate" onClick={() => start(async () => (await duplicateCustomIndicator(i.id), router.refresh()))} className="rounded-full p-2 text-brand-navy/45 hover:text-brand-primary">
+                  <Copy size={14} />
+                </button>
                 <button
                   type="button"
                   aria-label="Delete"
@@ -86,9 +92,106 @@ export default function CustomIndicatorList({
                 </button>
               </div>
             </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <InspectIndicator def={i.def} />
+              <ExportButton name={i.name} description={i.description} def={i.def} />
+            </div>
+            {i.history && i.history.length > 0 && <Versions id={i.id} versions={i.history} />}
         </section>
       ))}
       {pager}
+    </div>
+  );
+}
+
+/** Copies the indicator as text another account can import. */
+function ExportButton({ name, description, def }: { name: string; description: string | null; def: CustomIndicatorDef }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(JSON.stringify({ name, description, def }, null, 2));
+          setDone(true);
+          setTimeout(() => setDone(false), 2000);
+        } catch {
+          window.prompt("Copy this text:", JSON.stringify({ name, description, def }));
+        }
+      }}
+      className="rounded-full px-3 py-1.5 text-xs font-semibold text-brand-navy/60 ring-1 ring-brand-navy/15 hover:text-brand-primary"
+    >
+      {done ? "Copied" : "Copy as text"}
+    </button>
+  );
+}
+
+/** Earlier versions of an indicator, newest first; restoring one keeps the current one in the list. */
+function Versions({ id, versions }: { id: string; versions: IndicatorVersion[] }) {
+  const [open, setOpen] = useState(false);
+  const [, start] = useTransition();
+  const router = useRouter();
+  return (
+    <div className="mt-3">
+      <button type="button" onClick={() => setOpen(!open)} className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-navy/55 hover:text-brand-primary">
+        <History size={13} /> {versions.length} earlier version{versions.length === 1 ? "" : "s"}
+      </button>
+      {open && (
+        <ul className="mt-2 space-y-1.5">
+          {versions.map((v, n) => (
+            <li key={v.at} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-brand-bg/60 px-3 py-1.5 text-xs">
+              <span className="text-brand-navy/45">{new Date(v.at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}</span>
+              <span className="min-w-0 flex-1 break-all font-mono text-brand-navy/70">{v.name}: {describeCustom(v.def)}</span>
+              <button type="button" onClick={() => window.confirm("Restore this version? The current one stays in the list.") && start(async () => (await restoreCustomIndicatorVersion(id, n), router.refresh()))} className="font-semibold text-brand-primary">
+                Restore
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** Paste text copied with “Copy as text” to add that indicator to this account. */
+function ImportBox() {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const router = useRouter();
+  if (!open)
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="mt-3 text-xs font-semibold text-brand-primary">
+        Import an indicator from text
+      </button>
+    );
+  return (
+    <div className="mt-3 space-y-2">
+      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} placeholder="Paste the text copied with “Copy as text”" className="w-full rounded-lg border border-brand-navy/15 p-2 font-mono text-xs outline-none focus:border-brand-primary" />
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={pending || !text.trim()}
+          onClick={() =>
+            start(async () => {
+              const r = await importCustomIndicator(text);
+              setMsg(r.ok ? "Added." : r.error);
+              if (r.ok) {
+                setText("");
+                router.refresh();
+              }
+            })
+          }
+          className="rounded-full bg-brand-primary px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+        >
+          Add it
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="text-xs font-semibold text-brand-navy/50">
+          Close
+        </button>
+        {msg && <span className="text-xs text-brand-navy/60">{msg}</span>}
+      </div>
     </div>
   );
 }

@@ -1237,6 +1237,8 @@ model CustomIndicator {
   description String?
   // { type: "formula", formula, pane } | { type: "line", points: [{time, price}, {time, price}], symbol? }
   def         Json
+  // Earlier versions, newest first: [{ at, name, description, def }], at most 20.
+  history     Json?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

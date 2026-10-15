@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateFormula, FormulaError, parseFormula } from "./formula";
+import { evaluateFormula, FormulaError, parseFormula, parseProgram } from "./formula";
 
 const candles = Array.from({ length: 60 }, (_, i) => {
   const close = 100 + Math.sin(i / 5) * 10 + i * 0.5;
@@ -23,7 +23,8 @@ describe("formula parsing", () => {
       ["sma(close, 0)", /whole number/],
       ["foo(close)", /no function called foo/],
       ["price", /Unknown name "price"/],
-      ["close; drop", /isn't allowed/],
+      ["close $ 2", /isn't allowed/],
+      ["close; drop", /sets nothing/],
       ["(close", /closing/],
     ] as const)
       expect(() => parseFormula(f)).toThrow(msg);
@@ -49,5 +50,132 @@ describe("formula values", () => {
     expect(at("close > open", 5)).toBe(1);
     expect(at("if(close > open, 10, 20)", 5)).toBe(10);
     expect(at("close > open and volume > 5000", 5)).toBe(0);
+  });
+});
+
+// A longer intraday series (3 sessions of 5-minute candles) so the clock and higher-timeframe functions have something to work on.
+const IST = 19_800;
+const intraday = Array.from({ length: 3 * 75 }, (_, i) => {
+  const day = Math.floor(i / 75);
+  const slot = i % 75;
+  const t = Date.parse("2026-03-09T00:00:00Z") / 1000 - IST + day * 86400 + (555 + slot * 5) * 60;
+  const close = 100 + Math.sin(i / 7) * 6 + i * 0.05;
+  return { time: t, open: close - 0.4, high: close + 1.2, low: close - 1.1, close, volume: 500 + (i % 9) * 40 };
+});
+const run = (f: string, c = intraday) => evaluateFormula(parseFormula(f), c);
+
+describe("steps (named formulas)", () => {
+  it("lets later lines use earlier names", () => {
+    const v = run("fast = ema(close, 5)\nslow = ema(close, 20)\n(fast - slow) / atr(14)");
+    expect(v.at(-1)).toBeCloseTo(run("(ema(close, 5) - ema(close, 20)) / atr(14)").at(-1)!);
+    const prog = parseProgram("a = close - open; b = a * 2; b + 1");
+    expect(prog.steps.map((x) => x.name)).toEqual(["a", "b"]);
+  });
+  it("explains mistakes in plain English", () => {
+    expect(() => parseProgram("a = close")).toThrow(/last line must be the indicator/);
+    expect(() => parseProgram("close = 3; close")).toThrow(/already a name/);
+    expect(() => parseProgram("a = 1; a = 2; a")).toThrow(/set twice/);
+    expect(() => parseProgram("x + 1")).toThrow(/Unknown name "x"/);
+  });
+  it("refuses a formula that grows out of control", () => {
+    const lines = ["v0 = close", ...Array.from({ length: 28 }, (_, i) => `v${i + 1} = v${i} + v${i}`), "v28 + 1"];
+    expect(() => parseProgram(lines.join("\n"))).toThrow(/too much work/);
+  });
+});
+
+describe("new functions", () => {
+  it("statistics match hand calculations", () => {
+    const w = intraday.slice(30, 40).map((c) => c.close);
+    const mean = w.reduce((a, b) => a + b, 0) / 10;
+    const sd = Math.sqrt(w.reduce((a, b) => a + (b - mean) ** 2, 0) / 10);
+    expect(run("zscore(close, 10)")[39]).toBeCloseTo((w[9] - mean) / sd);
+    expect(run("variance(close, 10)")[39]).toBeCloseTo(sd ** 2);
+    const sorted = [...w].sort((a, b) => a - b);
+    expect(run("median(close, 10)")[39]).toBeCloseTo((sorted[4] + sorted[5]) / 2);
+    expect(run("percentrank(close, 10)")[39]).toBeCloseTo((w.filter((v) => v <= w[9]).length / 10) * 100);
+    expect(run("normalize(close, 10)")[39]).toBeCloseTo((w[9] - Math.min(...w)) / (Math.max(...w) - Math.min(...w)));
+  });
+  it("regression gives an exact slope on a straight line and correlation of 1 with itself", () => {
+    const line = intraday.map((c, i) => ({ ...c, close: 50 + 2 * i }));
+    expect(run("slope(close, 10)", line)[40]).toBeCloseTo(2);
+    expect(run("linreg(close, 10)", line)[40]).toBeCloseTo(line[40].close);
+    expect(run("correlation(close, close, 10)")[40]).toBeCloseTo(1);
+  });
+  it("math helpers", () => {
+    expect(run("clamp(close, 100, 101)").every((v) => v >= 100 && v <= 101)).toBe(true);
+    expect(run("pow(2, 3) + mod(7, 4) + floor(2.9) + sign(-5)")[0]).toBe(8 + 3 + 2 - 1);
+    expect(run("nz(ref(close, 3), 7)")[1]).toBe(7);
+    expect(run("isna(ref(close, 3))")[1]).toBe(1);
+  });
+  it("memory functions", () => {
+    const v = run("barssince(close > ref(close))");
+    expect(v.slice(1).every((x) => Number.isFinite(x) || x !== x)).toBe(true);
+    const up = run("streak(close > open)");
+    expect(up[10]).toBeGreaterThanOrEqual(0);
+    expect(run("cum(1)")[9]).toBe(10);
+    const vw = run("valuewhen(close > open, close, 0)");
+    const first = intraday.findIndex((c) => c.close > c.open);
+    expect(vw[first]).toBe(intraday[first].close);
+    expect(run("rising(close, 2)")[3]).toBe(+(intraday[3].close > intraday[2].close && intraday[2].close > intraday[1].close));
+  });
+  it("candle geometry and clock", () => {
+    expect(run("range")[5]).toBeCloseTo(intraday[5].high - intraday[5].low);
+    expect(run("body")[5]).toBeCloseTo(0.4);
+    expect(run("minuteofday()")[0]).toBe(555);
+    expect(run("hour()")[0]).toBe(9);
+    expect(run("dayofweek()")[0]).toBe(1);
+    expect(run("barindex")[7]).toBe(7);
+  });
+  it("pivots are confirmed after their right-hand bars and never move", () => {
+    const k = 3;
+    const v = run(`pivothigh(${k})`);
+    const first = v.findIndex((x) => Number.isFinite(x));
+    expect(first).toBeGreaterThanOrEqual(2 * k);
+    expect(v[first]).toBe(intraday[first - k].high);
+    const held = run(`swinghigh(${k})`);
+    expect(held[first]).toBe(v[first]);
+    expect(held[first + 1]).toBe(v[first]); // held until the next one
+  });
+});
+
+describe("higher timeframe", () => {
+  it("shows a bigger candle only after it has closed", () => {
+    const v = run("htf(60, close)");
+    // Day 1's first hour is bars 0..11 on 5-minute candles; during it there is no previous hour yet.
+    expect(v[0]).toBeNaN();
+    expect(v[11]).toBeNaN();
+    // Bar 12 starts the second hour: it shows the first hour's close (bar 11's close).
+    expect(v[12]).toBeCloseTo(intraday[11].close);
+    expect(v[23]).toBeCloseTo(intraday[11].close);
+    expect(v[24]).toBeCloseTo(intraday[23].close);
+  });
+  it("works for daily candles and for indicators on them", () => {
+    const d = run("htf(1440, close)");
+    expect(d[74]).toBeNaN();
+    expect(d[75]).toBeCloseTo(intraday[74].close);
+    expect(Number.isFinite(run("htf(60, ema(close, 3))").at(-1)!)).toBe(true);
+  });
+  it("rejects unsupported sizes and nesting", () => {
+    expect(() => parseFormula("htf(7, close)")).toThrow(/candle size must be one of/);
+    expect(() => parseFormula("htf(60, htf(15, close))")).toThrow(/inside another htf/);
+  });
+});
+
+describe("no look-ahead: a value never changes when later candles arrive", () => {
+  const formulas = [
+    "zscore(close, 20)", "median(close, 9)", "linreg(close, 12)", "slope(close, 12)", "percentrank(close, 15)", "normalize(close, 10)", "skew(close, 20)",
+    "correlation(close, volume, 15)", "percentile(close, 20, 80)", "barssince(close > open)", "streak(close > open)", "cum(volume)", "valuewhen(close > open, close, 1)",
+    "rising(close, 3)", "pivothigh(3)", "pivotlow(3)", "swinghigh(4)", "swinglow(4)", "htf(15, close)", "htf(60, ema(close, 3))", "htf(1440, close)", "tr", "minuteofday()",
+    "a = zscore(close, 10)\nb = htf(30, sma(close, 3))\na - b",
+  ];
+  it.each(formulas)("%s", (f) => {
+    const full = run(f);
+    for (const cut of [40, 80, 130, 200]) {
+      const part = run(f, intraday.slice(0, cut));
+      for (let i = 0; i < cut; i++) {
+        if (Number.isNaN(full[i])) expect(part[i]).toBeNaN();
+        else expect(part[i]).toBeCloseTo(full[i], 8);
+      }
+    }
   });
 });

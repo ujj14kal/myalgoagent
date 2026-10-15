@@ -5,6 +5,7 @@ import PageHeader from "@/components/ui/page-header";
 import CustomIndicatorList from "@/components/custom-indicators/list";
 import { classifyCustom, CUSTOM_CLASSES, describeCustom, type CustomClass, type CustomIndicatorDef } from "@/lib/custom-indicator";
 import Pager from "@/components/ui/pager";
+import type { IndicatorVersion } from "@/lib/custom-indicator-actions";
 import { readPageQuery } from "@/lib/pagination";
 import { keepParams, pageRows, qEnum, qText } from "@/lib/list-query";
 
@@ -24,7 +25,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
   const items = await prisma.customIndicator.findMany({ where: { userId }, orderBy: sort === "name" ? { name: "asc" } : sort === "created" ? { createdAt: "desc" } : { updatedAt: "desc" } });
   const all = items.map((i) => {
     const def = i.def as unknown as CustomIndicatorDef;
-    return { id: i.id, name: i.name, description: i.description, def, summary: describeCustom(def) };
+    return { id: i.id, name: i.name, description: i.description, def, summary: describeCustom(def), history: Array.isArray(i.history) ? (i.history as unknown as IndicatorVersion[]) : [] };
   });
   const searched = all.filter((i) => !q || `${i.name} ${i.description ?? ""} ${i.summary}`.toLowerCase().includes(q));
   const counts = Object.fromEntries(CUSTOM_CLASSES.map((c) => [c, searched.filter((i) => classifyCustom(i.def) === c).length])) as Record<CustomClass, number>;
