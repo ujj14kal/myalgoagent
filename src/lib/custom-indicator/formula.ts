@@ -33,6 +33,9 @@ const STATE_FNS = ["barssince", "streak", "cum", "valuewhen", "rising", "falling
 const PIVOT_FNS = ["pivothigh", "pivotlow", "swinghigh", "swinglow"] as const;
 /** Price-action structure, each confirmed on the candle that completes it. */
 const STRUCTURE_FNS = ["fvgbull", "fvgbear", "fvgbullmid", "fvgbearmid", "eqhigh", "eqlow", "sweephigh", "sweeplow", "bosup", "bosdown", "obbullhigh", "obbulllow", "obbearhigh", "obbearlow"] as const;
+/** Statistical estimators: smooth, model-based readings of the data, not exact counts. They are labelled as estimates. */
+const ESTIMATE_FNS = ["kalman", "fisher", "entropy", "dominantcycle", "hurst", "ewmstd"] as const;
+export const ESTIMATE_NOTE = "Statistical estimate: a model-based reading of the candles, not an exact count.";
 /** Clock of the candle, in IST. */
 const TIME_FNS = ["hour", "minute", "minuteofday", "dayofweek"] as const;
 const HTF_TIMEFRAMES = [5, 10, 15, 30, 60, 120, 240, 1440] as const;
@@ -53,6 +56,11 @@ export const FORMULA_FUNCTION_NOTES: Record<string, string> = {
   bosup: "bosup(n): 1 on the candle that closes above the latest confirmed n-bar swing high (break of structure up)", bosdown: "bosdown(n): closes below the latest confirmed swing low",
   obbullhigh: "obbullhigh(n): top of the last down candle before a break of structure up, held until price closes below its bottom", obbulllow: "obbulllow(n): bottom of that bullish order block",
   obbearhigh: "obbearhigh(n): top of the last up candle before a break of structure down, held until price closes above its top", obbearlow: "obbearlow(n): bottom of that bearish order block",
+  recur: "recur(start, expression): a value built from its own previous value; write `self` for it, e.g. recur(close, 0.9 * self + 0.1 * close). Only + - * / ^, comparisons, if, min, max, abs, sqrt, log, exp, clamp, pow, nz, sign, floor, ceil and round may touch self",
+  kalman: "kalman(source, q, r): Kalman-filter estimate of the source (q = how fast the true level may move, r = how noisy the readings are). Statistical estimate", fisher: "fisher(source, n): Fisher transform of where the source sits in its n-bar range, for sharp turning points. Statistical estimate",
+  entropy: "entropy(source, n, bins): 0–1 disorder of the last n changes (0 = all alike, 1 = evenly spread). Statistical estimate", dominantcycle: "dominantcycle(source, n): length in bars of the strongest cycle in the last n values (Fourier). Statistical estimate",
+  hurst: "hurst(source, n): trending (above 0.5) or mean-reverting (below 0.5) tendency over the last n bars. Statistical estimate", ewmstd: "ewmstd(source, n): standard deviation that weights recent values more. Statistical estimate",
+  htflive: `htflive(minutes, formula): like htf but reads the bigger candle WHILE it forms, so each value is provisional until that candle closes (it can differ from what htf shows later)`,
   ind: "ind(name): the values of another custom indicator of yours (spaces in its name written as _), so indicators can be built from indicators",
   htf: `htf(minutes, formula): the formula worked out on bigger candles (${HTF_TIMEFRAMES.join(", ")} minutes), using only candles that have fully closed`,
 };
@@ -104,7 +112,7 @@ function tokenize(src: string): Tok[] {
   return out;
 }
 
-const RESERVED = new Set<string>([...SERIES, ...WINDOW_FNS, ...MATH_FNS, ...MATH1_FNS, ...STAT_FNS, ...STATE_FNS, ...PIVOT_FNS, ...STRUCTURE_FNS, ...TIME_FNS, "htf", "ind", "fn", "param", "nz", "pow", "mod", "clamp", "percentile", "correlation", "covariance", "and", "or"]);
+const RESERVED = new Set<string>([...SERIES, ...WINDOW_FNS, ...MATH_FNS, ...MATH1_FNS, ...STAT_FNS, ...STATE_FNS, ...PIVOT_FNS, ...STRUCTURE_FNS, ...TIME_FNS, "htf", "htflive", "ind", "fn", "param", "recur", "self", ...ESTIMATE_FNS, "nz", "pow", "mod", "clamp", "percentile", "correlation", "covariance", "and", "or"]);
 
 /** How many nodes a tree has once every name is replaced by what it stands for (shared parts counted each time they're used). */
 const sizes = new WeakMap<object, number>();
@@ -280,6 +288,23 @@ function parseExpr(text: string, scope: Map<string, Node>, budget: { n: number }
       return e;
     }
     if (t.k === "id") {
+      if (t.v === "recur" && peek()?.k === "(") {
+        // recur(start, expression using self): the second part may read the series' own previous value.
+        p++;
+        const first = or();
+        if (peek()?.k !== ",") throw new FormulaError("recur() takes a starting value and an expression that uses self, e.g. recur(close, 0.9 * self + 0.1 * close).");
+        p++;
+        const selfNode: Node = { t: "call", fn: "self", args: [] };
+        scope.set("self", selfNode);
+        let body: Node;
+        try {
+          body = or();
+        } finally {
+          scope.delete("self");
+        }
+        expectClose();
+        return node({ t: "call", fn: "recur", args: [first, body] });
+      }
       if (t.v === "ind" && peek()?.k === "(") {
         // ind(name): another custom indicator of yours, by its name with spaces written as _
         p++;
@@ -338,7 +363,7 @@ function check(n: Node): void {
   if (n.t !== "call") return;
   n.args.forEach(check);
   const f = n.fn;
-  if (f === "ind" || f === "param") return;
+  if (f === "ind" || f === "param" || f === "self") return;
   const len = (i: number) => {
     const a = n.args[i];
     if (!a || !isConst(a) || !Number.isInteger(constOf(a)) || constOf(a) < 1 || constOf(a) > MAX_WINDOW) throw new FormulaError(`${f}(): the length must be a whole number from 1 to ${MAX_WINDOW}.`);
@@ -364,6 +389,25 @@ function check(n: Node): void {
     const v = a && isConst(a) ? constOf(a) : NaN;
     if (!Number.isFinite(v) || v < lo || v > hi || (whole && !Number.isInteger(v))) throw new FormulaError(`${f}(): ${what} must be ${whole ? "a whole number" : "a number"} from ${lo} to ${hi}.`);
   };
+  if (f === "recur") return want(2, "takes a starting value and an expression that uses self, e.g. recur(close, 0.9 * self + 0.1 * close)");
+  if (f === "kalman") {
+    want(3, "takes a source, how fast the level may move and how noisy readings are, e.g. kalman(close, 0.01, 1)");
+    constArg(1, "the first number", 0.000001, 1000, false);
+    return constArg(2, "the second number", 0.000001, 1000, false);
+  }
+  if (f === "fisher" || f === "ewmstd" || f === "hurst") {
+    want(2, `takes a source and a length, e.g. ${f}(close, 10)`);
+    return constArg(1, "the length", f === "hurst" ? 10 : 2, MAX_WINDOW);
+  }
+  if (f === "entropy") {
+    want(3, "takes a source, a length and a number of bins, e.g. entropy(close, 30, 8)");
+    constArg(1, "the length", 10, MAX_WINDOW);
+    return constArg(2, "the number of bins", 2, 20);
+  }
+  if (f === "dominantcycle") {
+    want(2, "takes a source and a length, e.g. dominantcycle(close, 64)");
+    return constArg(1, "the length", 8, 256);
+  }
   if ((MATH1_FNS as readonly string[]).includes(f)) return want(1);
   if (f === "nz") return want([1, 2], "takes a value and, if you like, what to use instead when it isn't available");
   if (f === "pow" || f === "mod") return want(2);
@@ -409,12 +453,12 @@ function check(n: Node): void {
     return constArg(0, "the number of bars each side", 1, 100);
   }
   if ((TIME_FNS as readonly string[]).includes(f)) return want(0, "takes no values, just write it with empty brackets");
-  if (f === "htf") {
-    want(2, `takes a candle size in minutes and a formula, e.g. htf(60, ema(close, 20))`);
+  if (f === "htf" || f === "htflive") {
+    want(2, `takes a candle size in minutes and a formula, e.g. ${f}(60, ema(close, 20))`);
     const m = n.args[0] && isConst(n.args[0]) ? constOf(n.args[0]) : NaN;
-    if (!(HTF_TIMEFRAMES as readonly number[]).includes(m)) throw new FormulaError(`htf(): the candle size must be one of ${HTF_TIMEFRAMES.join(", ")} minutes.`);
-    const hasHtf = (x: Node): boolean => (x.t === "call" ? x.fn === "htf" || x.args.some(hasHtf) : x.t === "neg" ? hasHtf(x.a) : x.t === "bin" ? hasHtf(x.a) || hasHtf(x.b) : false);
-    if (hasHtf(n.args[1])) throw new FormulaError("htf() can't be used inside another htf().");
+    if (!(HTF_TIMEFRAMES as readonly number[]).includes(m)) throw new FormulaError(`${f}(): the candle size must be one of ${HTF_TIMEFRAMES.join(", ")} minutes.`);
+    const hasHtf = (x: Node): boolean => (x.t === "call" ? x.fn === "htf" || x.fn === "htflive" || x.args.some(hasHtf) : x.t === "neg" ? hasHtf(x.a) : x.t === "bin" ? hasHtf(x.a) || hasHtf(x.b) : false);
+    if (hasHtf(n.args[1])) throw new FormulaError(`${f}() can't be used inside another htf() or htflive().`);
     return;
   }
   const def = CATALOG.get(f);
@@ -526,6 +570,99 @@ function windowed2(a: Arr, b: Arr, n: number, f: (x: number[], y: number[]) => n
     if (x.every(Number.isFinite) && y.every(Number.isFinite)) out[i] = f(x, y);
   }
   return out;
+}
+/** 1-D Kalman filter on a random-walk level: q is how fast the true level may move, r how noisy each reading is. */
+function kalman(x: Arr, q: number, r: number): Arr {
+  const out = nan(x.length);
+  let level = NaN;
+  let p = 1;
+  for (let i = 0; i < x.length; i++) {
+    if (!Number.isFinite(x[i])) continue;
+    if (!Number.isFinite(level)) {
+      level = x[i];
+    } else {
+      p += q;
+      const k = p / (p + r);
+      level += k * (x[i] - level);
+      p *= 1 - k;
+    }
+    out[i] = level;
+  }
+  return out;
+}
+/** Ehlers' Fisher transform of the position inside the last n bars' range. */
+function fisher(x: Arr, n: number): Arr {
+  const out = nan(x.length);
+  let v = 0;
+  let f = 0;
+  for (let i = n - 1; i < x.length; i++) {
+    const w = x.slice(i - n + 1, i + 1);
+    if (!w.every(Number.isFinite)) continue;
+    const hi = Math.max(...w);
+    const lo = Math.min(...w);
+    const pos = hi === lo ? 0 : (x[i] - lo) / (hi - lo) - 0.5;
+    v = Math.max(-0.999, Math.min(0.999, 0.66 * pos + 0.67 * v));
+    f = 0.5 * Math.log((1 + v) / (1 - v)) + 0.5 * f;
+    out[i] = f;
+  }
+  return out;
+}
+/** Shannon entropy of the last n changes in `bins` equal bins, scaled to 0–1. */
+function entropy(x: Arr, n: number, bins: number): Arr {
+  const out = nan(x.length);
+  for (let i = n; i < x.length; i++) {
+    const d: number[] = [];
+    for (let k = i - n + 1; k <= i; k++) d.push(x[k] - x[k - 1]);
+    if (!d.every(Number.isFinite)) continue;
+    const lo = Math.min(...d);
+    const hi = Math.max(...d);
+    if (hi === lo) {
+      out[i] = 0;
+      continue;
+    }
+    const count = new Array<number>(bins).fill(0);
+    for (const v of d) count[Math.min(bins - 1, Math.floor(((v - lo) / (hi - lo)) * bins))]++;
+    out[i] = -count.filter((c) => c > 0).reduce((s, c) => s + (c / d.length) * Math.log2(c / d.length), 0) / Math.log2(bins);
+  }
+  return out;
+}
+/** Length in bars of the strongest cycle in the last n values (discrete Fourier transform of the detrended window). */
+function dominantCycle(x: Arr, n: number): Arr {
+  return windowed(x, n, (w) => {
+    const m = w.reduce((s, v) => s + v, 0) / n;
+    const { slope } = fit(w);
+    const d = w.map((v, i) => v - m - slope * (i - (n - 1) / 2));
+    let best = 0;
+    let bestPower = -1;
+    for (let k = 2; k <= Math.floor(n / 2); k++) {
+      let re = 0;
+      let im = 0;
+      for (let t = 0; t < n; t++) {
+        re += d[t] * Math.cos((2 * Math.PI * k * t) / n);
+        im -= d[t] * Math.sin((2 * Math.PI * k * t) / n);
+      }
+      const power = re * re + im * im;
+      if (power > bestPower) [best, bestPower] = [k, power];
+    }
+    return n / best;
+  });
+}
+/** Rescaled-range estimate of the Hurst exponent over the last n values. */
+function hurst(x: Arr, n: number): Arr {
+  return windowed(x, n, (w) => {
+    const r = w.slice(1).map((v, i) => v - w[i]);
+    const m = r.reduce((s, v) => s + v, 0) / r.length;
+    let cum = 0;
+    let hi = 0;
+    let lo = 0;
+    for (const v of r) {
+      cum += v - m;
+      hi = Math.max(hi, cum);
+      lo = Math.min(lo, cum);
+    }
+    const sd = Math.sqrt(r.reduce((s, v) => s + (v - m) ** 2, 0) / r.length);
+    return sd === 0 || hi === lo ? NaN : Math.log((hi - lo) / sd) / Math.log(r.length);
+  });
 }
 const IST_SECONDS = 19_800;
 const minuteOfDay = (t: number) => Math.floor((((t + IST_SECONDS) % 86400) + 86400) % 86400 / 60);
@@ -754,6 +891,94 @@ export function evaluateFormula(tree: Node, candles: Candle[], resolve?: Indicat
         let held = NaN;
         out = found.map((v) => (Number.isFinite(v) ? (held = v) : held));
       }
+    } else if (f === "recur") {
+      // out[i] = expression(self = out[i-1]); until there is a previous value it starts from the first argument.
+      const init = ev(n.args[0]);
+      const body = n.args[1];
+      const dep = new Map<Node, boolean>();
+      const depends = (x: Node): boolean => {
+        const hit = dep.get(x);
+        if (hit !== undefined) return hit;
+        const r = x.t === "call" && x.fn === "self" ? true : x.t === "neg" ? depends(x.a) : x.t === "bin" ? depends(x.a) || depends(x.b) : x.t === "call" ? x.args.some(depends) : false;
+        dep.set(x, r);
+        return r;
+      };
+      const SCALAR: Record<string, (a: number[]) => number> = {
+        abs: (a) => Math.abs(a[0]), sqrt: (a) => (a[0] >= 0 ? Math.sqrt(a[0]) : NaN), log: (a) => (a[0] > 0 ? Math.log(a[0]) : NaN), exp: (a) => Math.exp(a[0]), sign: (a) => Math.sign(a[0]), floor: (a) => Math.floor(a[0]), ceil: (a) => Math.ceil(a[0]), round: (a) => Math.round(a[0]),
+        min: (a) => Math.min(a[0], a[1]), max: (a) => Math.max(a[0], a[1]), pow: (a) => a[0] ** a[1], if: (a) => (a[0] ? a[1] : a[2]), clamp: (a) => Math.min(Math.max(a[0], a[1]), a[2]), nz: (a) => (Number.isFinite(a[0]) ? a[0] : (a[1] ?? 0)),
+      };
+      const at = (x: Node, i: number, prev: number): number => {
+        if (!depends(x)) return ev(x)[i];
+        if (x.t === "call" && x.fn === "self") return prev;
+        if (x.t === "neg") return -at(x.a, i, prev);
+        if (x.t === "bin") {
+          const a = at(x.a, i, prev);
+          const b = at(x.b, i, prev);
+          if (!Number.isFinite(a) || !Number.isFinite(b)) return NaN;
+          switch (x.op) {
+            case "+": return a + b;
+            case "-": return a - b;
+            case "*": return a * b;
+            case "/": return b === 0 ? NaN : a / b;
+            case "^": return a ** b;
+            case ">": return +(a > b);
+            case "<": return +(a < b);
+            case ">=": return +(a >= b);
+            case "<=": return +(a <= b);
+            case "==": return +(a === b);
+            case "!=": return +(a !== b);
+            case "and": return +(!!a && !!b);
+            case "or": return +(!!a || !!b);
+          }
+        }
+        if (x.t === "call" && SCALAR[x.fn]) return SCALAR[x.fn](x.args.map((a) => at(a, i, prev)));
+        throw new FormulaError(`recur(): self can only be combined with + - * / ^, comparisons, if, min, max, abs, sqrt, log, exp, clamp, pow, nz, sign, floor, ceil and round, not with ${x.t === "call" ? `${x.fn}()` : "this"}. Work out the other parts on their own line first.`);
+      };
+      out = nan(len);
+      for (let i = 0; i < len; i++) out[i] = i === 0 || !Number.isFinite(out[i - 1]) ? init[i] : at(body, i, out[i - 1]);
+    } else if (f === "kalman") out = kalman(ev(n.args[0]), num(1), num(2));
+    else if (f === "fisher") out = fisher(ev(n.args[0]), num(1));
+    else if (f === "entropy") out = entropy(ev(n.args[0]), num(1), num(2));
+    else if (f === "dominantcycle") out = dominantCycle(ev(n.args[0]), num(1));
+    else if (f === "hurst") out = hurst(ev(n.args[0]), num(1));
+    else if (f === "ewmstd") {
+      const x = ev(n.args[0]);
+      const a = 2 / (num(1) + 1);
+      let mean = NaN;
+      let varr = 0;
+      out = x.map((v) => {
+        if (!Number.isFinite(v)) return NaN;
+        if (!Number.isFinite(mean)) {
+          mean = v;
+          return NaN;
+        }
+        const diff = v - mean;
+        mean += a * diff;
+        varr = (1 - a) * (varr + a * diff * diff);
+        return Math.sqrt(varr);
+      });
+    } else if (f === "htflive") {
+      // The bigger candle as it forms: every base candle sees the bigger candle built from its first candle up to this one. Provisional by nature.
+      const { groups, of } = groupCandles(candles, num(0));
+      if (len * groups.length > 4_000_000) throw new FormulaError("htflive() over this many candles is too heavy: use fewer candles, a bigger size, or htf().");
+      out = nan(len);
+      let partial: Candle | null = null;
+      let last = -1;
+      for (let i = 0; i < len; i++) {
+        const g = of[i];
+        const c = candles[i];
+        if (g !== last) {
+          partial = { ...c };
+          last = g;
+        } else if (partial) {
+          partial.high = Math.max(partial.high, c.high);
+          partial.low = Math.min(partial.low, c.low);
+          partial.close = c.close;
+          partial.volume += c.volume;
+        }
+        const series = [...groups.slice(0, g), { ...partial! }];
+        out[i] = evaluateFormula(n.args[1], series, resolve).at(-1)!;
+      }
     } else if (f === "ind") {
       if (!resolve) throw new FormulaError(`“${n.ref}” is another custom indicator, which isn't attached to this one. Save this indicator again so it can be linked.`);
       out = resolve(n.ref!, candles);
@@ -850,7 +1075,9 @@ export const FORMULA_REFERENCE = {
   swings: [...PIVOT_FNS],
   structure: [...STRUCTURE_FNS],
   clock: [...TIME_FNS],
-  higherTimeframe: ["htf"],
+  higherTimeframe: ["htf", "htflive"],
+  estimates: [...ESTIMATE_FNS],
+  recursion: ["recur"],
   notes: FORMULA_FUNCTION_NOTES,
   indicators: INDICATOR_CATALOG.map((d) => ({ name: d.dslName, settings: d.paramLabels, defaults: d.defaults, label: d.label })),
 };

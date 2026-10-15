@@ -165,7 +165,7 @@ describe("no look-ahead: a value never changes when later candles arrive", () =>
   const formulas = [
     "zscore(close, 20)", "median(close, 9)", "linreg(close, 12)", "slope(close, 12)", "percentrank(close, 15)", "normalize(close, 10)", "skew(close, 20)",
     "correlation(close, volume, 15)", "percentile(close, 20, 80)", "barssince(close > open)", "streak(close > open)", "cum(volume)", "valuewhen(close > open, close, 1)",
-    "rising(close, 3)", "pivothigh(3)", "pivotlow(3)", "swinghigh(4)", "swinglow(4)", "htf(15, close)", "htf(60, ema(close, 3))", "htf(1440, close)", "tr", "minuteofday()",
+    "rising(close, 3)", "recur(close, 0.9 * self + 0.1 * close)", "kalman(close, 0.01, 1)", "fisher(close, 10)", "entropy(close, 20, 6)", "dominantcycle(close, 32)", "hurst(close, 30)", "ewmstd(close, 10)", "htflive(30, close)", "htflive(60, ema(close, 3))", "pivothigh(3)", "pivotlow(3)", "swinghigh(4)", "swinglow(4)", "htf(15, close)", "htf(60, ema(close, 3))", "htf(1440, close)", "tr", "minuteofday()",
     "fvgbull()", "fvgbear()", "fvgbullmid()", "fvgbearmid()", "eqhigh(10, 0.2)", "eqlow(10, 0.2)", "sweephigh(10)", "sweeplow(10)", "bosup(3)", "bosdown(3)", "obbullhigh(3)", "obbulllow(3)", "obbearhigh(3)", "obbearlow(3)",
     "a = zscore(close, 10)\nb = htf(30, sma(close, 3))\na - b",
   ];
@@ -256,5 +256,49 @@ describe("data that isn't there", () => {
   it("says why another instrument can't be read", () => {
     expect(() => parseFormula("sym(close)")).toThrow(/another instrument/);
     expect(() => parseFormula("foo(close)")).toThrow(/no function called foo/);
+  });
+});
+
+describe("own previous value and estimators", () => {
+  it("recur builds a value from its previous one", () => {
+    const v = run("recur(close, 0.9 * self + 0.1 * close)");
+    let want = intraday[0].close;
+    for (let i = 1; i < 20; i++) want = 0.9 * want + 0.1 * intraday[i].close;
+    expect(v[19]).toBeCloseTo(want);
+    expect(run("recur(0, self + 1)")[9]).toBe(9);
+    expect(run("recur(1, if(self > 100, 1, self * 2))")[10]).toBe(4); // 1, 2, 4 … 128, then back to 1, 2, 4
+  });
+  it("recur only lets self meet simple arithmetic", () => {
+    expect(() => run("recur(close, sma(self, 3))")).toThrow(/self can only be combined/);
+    expect(() => parseFormula("self + 1")).toThrow(/Unknown name "self"/);
+  });
+  it("kalman follows a steady series and smooths noise", () => {
+    expect(run("kalman(close, 0.01, 1)").at(-1)).toBeCloseTo(intraday.at(-1)!.close, -1);
+    const noisy = intraday.map((c, i) => ({ ...c, close: 100 + (i % 2 ? 3 : -3) }));
+    const k = run("kalman(close, 0.01, 1)", noisy);
+    expect(Math.abs(k.at(-1)! - 100)).toBeLessThan(3);
+  });
+  it("entropy is 0 to 1 and a sine has a dominant cycle of its period", () => {
+    const e = run("entropy(close, 30, 8)").filter(Number.isFinite);
+    expect(e.every((x) => x >= 0 && x <= 1)).toBe(true);
+    const sine = intraday.map((c, i) => ({ ...c, close: 100 + 5 * Math.sin((2 * Math.PI * i) / 16) }));
+    expect(run("dominantcycle(close, 64)", sine).at(-1)).toBeCloseTo(16, 0);
+  });
+  it("fisher, hurst and ewmstd give finite readings", () => {
+    for (const f of ["fisher(close, 10)", "hurst(close, 40)", "ewmstd(close, 10)"]) expect(Number.isFinite(run(f).at(-1)!)).toBe(true);
+  });
+});
+
+describe("live bigger candle (provisional)", () => {
+  it("shows the forming candle and agrees with htf once it has closed", () => {
+    const live = run("htflive(60, close)");
+    const closed = run("htf(60, close)");
+    expect(live[0]).toBeCloseTo(intraday[0].close); // the first candle of the hour so far
+    expect(live[5]).toBeCloseTo(intraday[5].close); // the hour so far ends at this candle
+    expect(live[11]).toBeCloseTo(closed[12]); // the hour's last candle = what htf shows after it closed
+  });
+  it("is flagged as provisional", async () => {
+    const { timingNotes } = await import("./integrity");
+    expect(timingNotes({ type: "formula", formula: "htflive(60, close)", pane: "separate" }).join(" ")).toMatch(/provisional/);
   });
 });

@@ -41,6 +41,9 @@ function buildReference(): Ref[] {
   out.push({ group: "Reusable", name: "fn", hint: "fn name(a, b) = expression — define a calculation once, use it with different inputs on later lines", insert: "fn name(x) = x" });
   out.push({ group: "Reusable", name: "ind", hint: R.notes.ind ?? "", insert: "ind(name)" });
   out.push({ group: "Bigger candles", name: "htf", hint: note("htf"), insert: "htf(60, ema(close, 20))" });
+  out.push({ group: "Bigger candles", name: "htflive", hint: note("htflive"), insert: "htflive(60, ema(close, 20))" });
+  out.push({ group: "Own previous value", name: "recur", hint: note("recur"), insert: "recur(close, 0.9 * self + 0.1 * close)" });
+  for (const n of R.estimates) out.push({ group: "Statistical estimates", name: n, hint: note(n), insert: n === "kalman" ? "kalman(close, 0.01, 1)" : n === "entropy" ? "entropy(close, 30, 8)" : n === "dominantcycle" ? "dominantcycle(close, 64)" : `${n}(close, 20)` });
   for (const i of R.indicators) out.push({ group: "Built-in indicators", name: i.name, hint: `${i.label}${i.settings.length ? ` (${i.settings.join(", ")})` : ""}`, insert: `${i.name}(${i.defaults.join(", ")})` });
   return out;
 }

@@ -1,6 +1,6 @@
 import type { Candle } from "@/lib/market-data";
 import { computeCustomSeries, customParts, defFormulas, PART_LABEL, type CustomIndicatorDef, type CustomPart } from "./index";
-import { parseProgram, type Node } from "./formula";
+import { ESTIMATE_NOTE, parseProgram, type Node } from "./formula";
 
 // Historical integrity for custom indicators: does a value that was shown for a past candle ever change once newer candles
 // arrive? That is what "repainting" and "look-ahead" both look like from the outside, so it is tested directly: the indicator
@@ -84,6 +84,9 @@ export function timingNotes(def: CustomIndicatorDef): string[] {
       const k = c.args[0] && c.args[0].t === "num" ? c.args[0].v : null;
       if (c.fn === "pivothigh" || c.fn === "pivotlow") notes.add(`${c.fn}(${k}) shows a swing only ${k} candles after it formed, so it is confirmed, not guessed.`);
       if (c.fn === "swinghigh" || c.fn === "swinglow") notes.add(`${c.fn}(${k}) holds the latest swing that is already confirmed (${k} candles late).`);
+      if (c.fn === "htflive") notes.add(`htflive(${k}, …) reads the ${k}-minute candle WHILE it forms: each value is provisional and can differ from what the closed candle finally shows. Use htf() for confirmed values.`);
+      if (["kalman", "fisher", "entropy", "dominantcycle", "hurst", "ewmstd"].includes(c.fn)) notes.add(`${c.fn}() is a statistical estimate. ${ESTIMATE_NOTE.replace("Statistical estimate: ", "")}`);
+      if (c.fn === "recur") notes.add("recur() builds each value from the one before it, so a longer or shorter history can shift its early values slightly; it never uses later candles.");
       if (c.fn === "htf") notes.add(`htf(${k}, …) reads the last fully closed ${k}-minute candle: it never uses a bigger candle that is still forming.`);
     });
   }
