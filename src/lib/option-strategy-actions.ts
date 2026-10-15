@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -10,6 +10,8 @@ import { marketExtrasFor } from "@/lib/market-data";
 import { continueRun, tradingDays, type RunConfig } from "@/lib/options/backtest-runner";
 import { checkOptionForwardTest } from "@/lib/options/forward-runner";
 import type { ExpiryRule, RiskUnit, StrategyLeg } from "@/lib/options/backtest-engine";
+import { RULE_TIMEFRAMES, type OptionRules } from "@/lib/options/rules";
+import { validateConditionNode } from "@/lib/strategy/validate";
 
 // Options strategies (multi-leg, ATM-relative) and their backtests on real
 // option prices. Results are returned, not thrown, so messages survive production builds.
@@ -29,6 +31,8 @@ export type OptionStrategyInput = {
   stopLossValue: number | null;
   targetUnit: RiskUnit | null;
   targetValue: number | null;
+  /** Optional entry/exit rules; null or absent = timed entry and exit. */
+  rules?: OptionRules | null;
 };
 
 const RULES: ExpiryRule[] = ["WEEKLY_CURRENT", "WEEKLY_NEXT", "MONTHLY"];
@@ -55,6 +59,23 @@ function validate(i: OptionStrategyInput): string | null {
   ] as const) {
     if (unit && (!UNITS.includes(unit) || !(value && value > 0))) return "Stop-loss and target need a positive amount.";
   }
+  return validateRules(i.rules, i.entryMinute, i.exitMinute);
+}
+
+/** The rules are optional; when present they must be a well-formed pair of conditions on a known chart and timeframe. */
+function validateRules(r: OptionRules | null | undefined, entryMinute: number, exitMinute: number): string | null {
+  if (!r) return null;
+  if (r.chart !== "FUTURE" && r.chart !== "OPTION") return "Pick which chart the rules are read on.";
+  if (!(RULE_TIMEFRAMES as readonly number[]).includes(r.timeframe)) return "Pick a candle size for the rules.";
+  if (!Number.isInteger(r.lastEntryMinute) || r.lastEntryMinute <= entryMinute || r.lastEntryMinute >= exitMinute) return "The latest entry time must fall between the entry time and the square-off.";
+  for (const [label, node] of [["entry", r.entry], ["exit", r.exit]] as const) {
+    if (!node) continue;
+    try {
+      validateConditionNode(node, label);
+    } catch (e) {
+      return `The ${label} rule isn't complete: ${e instanceof Error ? e.message : "check it"}.`;
+    }
+  }
   return null;
 }
 
@@ -80,6 +101,7 @@ export async function saveOptionStrategy(input: OptionStrategyInput): Promise<Op
     stopLossValue: clean.stopLossUnit ? clean.stopLossValue : null,
     targetUnit: clean.targetUnit,
     targetValue: clean.targetUnit ? clean.targetValue : null,
+    rules: clean.rules && (clean.rules.entry || clean.rules.exit) ? (clean.rules as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
   };
   if (clean.id) {
     const found = await prisma.optionStrategy.findFirst({ where: { id: clean.id, userId: uid }, select: { id: true } });
@@ -133,6 +155,7 @@ export async function startOptionBacktest(input: { strategyId: string; fromDate:
       stopLossValue: strategy.stopLossValue,
       targetUnit: strategy.targetUnit as RiskUnit | null,
       targetValue: strategy.targetValue,
+      rules: (strategy.rules as unknown as OptionRules | null) ?? null,
       lotSize,
     };
     const run = await prisma.optionBacktestRun.create({
@@ -204,6 +227,7 @@ export async function startOptionForwardTest(strategyId: string): Promise<OptRes
     stopLossValue: strategy.stopLossValue,
     targetUnit: strategy.targetUnit as RiskUnit | null,
     targetValue: strategy.targetValue,
+    rules: (strategy.rules as unknown as OptionRules | null) ?? null,
     lotSize,
   };
   const test = await prisma.optionForwardTest.create({ data: { userId: uid, strategyId: strategy.id, strategyName: strategy.name, config: config as unknown as Prisma.InputJsonValue } });

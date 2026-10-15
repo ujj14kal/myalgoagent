@@ -108,6 +108,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
                   stopLossValue: s.stopLossValue,
                   targetUnit: s.targetUnit as OptionStrategyInput["targetUnit"],
                   targetValue: s.targetValue,
+                  rules: s.rules as unknown as OptionStrategyInput["rules"],
                 }))}
               />
               {q && strategies.length === 0 && none("No options strategies match.")}

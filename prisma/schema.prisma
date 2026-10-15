@@ -1155,6 +1155,8 @@ model OptionStrategy {
   stopLossValue Float?
   targetUnit    String?
   targetValue   Float?
+  // Optional entry/exit rules (conditions on the underlying's chart or the combined premium); null = timed entry and exit.
+  rules         Json?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

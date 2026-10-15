@@ -1,4 +1,5 @@
 import type { Candle } from "@/lib/market-data";
+import type { OptionRules } from "./rules";
 
 // Multi-leg options backtesting on real option prices, one trading day at a
 // time: pick the expiry and at-the-money strike at the entry minute, price
@@ -23,12 +24,14 @@ export type OptionStrategyConfig = {
   stopLossValue: number | null;
   targetUnit: RiskUnit | null;
   targetValue: number | null;
+  /** Optional entry/exit rules on the underlying's chart or the combined premium (see rules.ts); null = timed entry and exit only. */
+  rules?: OptionRules | null;
 };
 
 export type Costs = { brokeragePerOrder: number; slippagePct: number };
 
 export type TradeLeg = { symbol: string; type: OptionType; side: Side; strike: number; qty: number; entry: number; exit: number };
-export type ExitReason = "TIME" | "STOP_LOSS" | "TARGET";
+export type ExitReason = "TIME" | "STOP_LOSS" | "TARGET" | "RULE";
 export type DayTrade = {
   date: string;
   expiry: string;
@@ -121,6 +124,8 @@ export function simulateDay(
   cfg: Pick<OptionStrategyConfig, "entryMinute" | "exitMinute" | "stopLossUnit" | "stopLossValue" | "targetUnit" | "targetValue">,
   costs: Costs,
   lotSize: number,
+  /** The minute the exit rule fires, when there is one: the trade leaves then unless the stop-loss or target came first. */
+  ruleExitMinute: number | null = null,
 ): DayTrade | null {
   const slip = costs.slippagePct / 100;
   const legs = input.legs.map((l) => {
@@ -139,11 +144,17 @@ export function simulateDay(
   const tgt = limit(cfg.targetUnit, cfg.targetValue);
   const pnlAt = (minute: number) => legs.reduce((s, l) => s + dir(l.leg.side) * ((priceAt(l.bars, minute, "close") ?? l.entry!) - l.entry!) * l.qty, 0);
 
+  const ruleExit = ruleExitMinute !== null && ruleExitMinute > cfg.entryMinute && ruleExitMinute < cfg.exitMinute ? ruleExitMinute : null;
   let exitMinute = cfg.exitMinute;
   let exitReason: ExitReason = "TIME";
   let peak = 0;
   let trough = 0;
   for (let m = cfg.entryMinute; m < cfg.exitMinute; m++) {
+    if (ruleExit !== null && m >= ruleExit) {
+      exitMinute = ruleExit;
+      exitReason = "RULE";
+      break;
+    }
     const pnl = pnlAt(m);
     peak = Math.max(peak, pnl);
     trough = Math.min(trough, pnl);
@@ -160,7 +171,7 @@ export function simulateDay(
   }
 
   const tradeLegs: TradeLeg[] = legs.map((l) => {
-    const raw = (exitReason === "TIME" ? priceAt(l.bars, exitMinute, "open") : priceAt(l.bars, exitMinute, "close")) ?? l.entry!;
+    const raw = (exitReason === "TIME" || exitReason === "RULE" ? priceAt(l.bars, exitMinute, "open") : priceAt(l.bars, exitMinute, "close")) ?? l.entry!;
     const exit = l.leg.side === "BUY" ? raw * (1 - slip) : raw * (1 + slip);
     return { symbol: l.symbol, type: l.leg.type, side: l.leg.side, strike: l.strike, qty: l.qty, entry: round(l.entry!), exit: round(exit) };
   });
@@ -203,6 +214,8 @@ export type OptionBacktestStats = {
   worstDay: number;
   stopLossHits: number;
   targetHits: number;
+  /** Days that ended because the exit rule fired (absent in runs saved before rules existed). */
+  ruleExits?: number;
   byWeekday: { weekday: number; days: number; netPnl: number }[];
   equity: { date: string; value: number }[];
 };
@@ -242,6 +255,7 @@ export function summarizeOptionBacktest(trades: DayTrade[]): OptionBacktestStats
     worstDay: sorted.length ? Math.min(...sorted.map((t) => t.netPnl)) : 0,
     stopLossHits: sorted.filter((t) => t.exitReason === "STOP_LOSS").length,
     targetHits: sorted.filter((t) => t.exitReason === "TARGET").length,
+    ruleExits: sorted.filter((t) => t.exitReason === "RULE").length,
     byWeekday,
     equity,
   };

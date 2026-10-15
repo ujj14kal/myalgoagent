@@ -12,7 +12,7 @@ const WEEKDAY = ["", "Mon", "Tue", "Wed", "Thu", "Fri"];
 const REASON = {
   TIME: "Square-off",
   STOP_LOSS: "Stop-loss",
-  TARGET: "Target",
+  TARGET: "Target", RULE: "Exit rule",
 } as const;
 const inr = (n: number) => formatSignedINR(n);
 const day = (d: string) =>
@@ -63,9 +63,10 @@ export default function OptionResults({ stats, trades }: { stats: OptionBacktest
             </section>
             <section className="surface p-4 lg:col-span-2">
               <p className="mb-2 text-sm font-semibold text-brand-navy">Exits</p>
-              <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="grid grid-cols-3 gap-3 text-center sm:grid-cols-4">
                 {[
-                  ["Square-off", stats.days - stats.stopLossHits - stats.targetHits],
+                  ["Square-off", stats.days - stats.stopLossHits - stats.targetHits - (stats.ruleExits ?? 0)],
+                  ...((stats.ruleExits ?? 0) > 0 ? [["Exit rule", stats.ruleExits ?? 0]] : []),
                   ["Stop-loss", stats.stopLossHits],
                   ["Target", stats.targetHits],
                 ].map(([k, v]) => (

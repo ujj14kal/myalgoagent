@@ -29,6 +29,7 @@ export default async function EditOptionStrategyPage({ params }: { params: Promi
     stopLossValue: s.stopLossValue,
     targetUnit: s.targetUnit as OptionStrategyInput["targetUnit"],
     targetValue: s.targetValue,
+    rules: s.rules as unknown as OptionStrategyInput["rules"],
   };
   return (
     <div>

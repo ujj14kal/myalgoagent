@@ -17,6 +17,7 @@ import {
   type DayTrade,
   type OptionStrategyConfig,
 } from "./backtest-engine";
+import { aggregateBars, firstRuleMinute, premiumSeries } from "./rules";
 
 // Runs an options backtest a chunk of trading days at a time, so each request
 // stays well inside the hosting time limit; the page keeps calling until the
@@ -61,8 +62,23 @@ export async function simulateDate(extras: MarketExtras, cfg: RunConfig, date: s
   if (!expiry) return null;
   const open = dayStart(date) + 9 * 3600;
   const close = dayStart(date) + 16 * 3600;
-  const spotBars = await extras.bars(spotName(cfg.underlying), open, close, "1min");
-  const spotBar = spotBars.find((b) => istMinuteOf(b.time) >= cfg.entryMinute);
+  const rules = cfg.rules && (cfg.rules.entry || cfg.rules.exit) ? cfg.rules : null;
+  const lastEntry = rules ? Math.min(rules.lastEntryMinute, cfg.exitMinute - 1) : cfg.exitMinute;
+  // On the underlying's chart the rules also get a few earlier days, so indicators have a warm-up; today's own candles are cut out of it.
+  const fetched = await extras.bars(spotName(cfg.underlying), rules?.chart === "FUTURE" ? open - 5 * 86400 : open, close, "1min");
+  const spotBars = rules?.chart === "FUTURE" ? fetched.filter((b) => b.time >= open) : fetched;
+  let entryMinute = cfg.entryMinute;
+  let ruleExit: number | null = null;
+  if (rules?.chart === "FUTURE") {
+    const series = aggregateBars(fetched, rules.timeframe);
+    if (rules.entry) {
+      const at = firstRuleMinute(series, rules.entry, date, rules.timeframe, cfg.entryMinute, lastEntry);
+      if (at === null) return null; // the entry rule never fired today: no trade
+      entryMinute = at;
+    }
+    if (rules.exit) ruleExit = firstRuleMinute(series, rules.exit, date, rules.timeframe, entryMinute + 1, cfg.exitMinute);
+  }
+  const spotBar = spotBars.find((b) => istMinuteOf(b.time) >= entryMinute);
   if (!spotBar) return null;
   const strikes = ctx.contracts.get(expiry) ?? [];
   const picked = cfg.legs.map((leg) => ({ leg, at: strikeAt(strikes, spotBar.open, leg.offset) }));
@@ -73,7 +89,17 @@ export async function simulateDate(extras: MarketExtras, cfg: RunConfig, date: s
       return { leg, symbol, strike: at!.strike, bars: await extras.bars(symbol, open, close, "1min") };
     }),
   );
-  return simulateDay({ date, expiry, spot: spotBar.open, atm: picked[0].at!.atm, legs }, cfg, costs, cfg.lotSize);
+  if (rules?.chart === "OPTION") {
+    // The strikes were picked at the window's start; the rules are read on what those legs cost together.
+    const series = aggregateBars(premiumSeries(legs.map((l) => ({ side: l.leg.side, lots: l.leg.lots, bars: l.bars }))), rules.timeframe);
+    if (rules.entry) {
+      const at = firstRuleMinute(series, rules.entry, date, rules.timeframe, cfg.entryMinute, lastEntry);
+      if (at === null) return null;
+      entryMinute = at;
+    }
+    if (rules.exit) ruleExit = firstRuleMinute(series, rules.exit, date, rules.timeframe, entryMinute + 1, cfg.exitMinute);
+  }
+  return simulateDay({ date, expiry, spot: spotBar.open, atm: picked[0].at!.atm, legs }, { ...cfg, entryMinute }, costs, cfg.lotSize, ruleExit);
 }
 
 const DAYS_PER_CHUNK = 10;
